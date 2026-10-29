@@ -13,6 +13,8 @@ import I18N from './nucleo-i18n.js';                  // centralized OS-wide int
 import { makeFetchJSON, makeLoadState } from './boot-fetch.js';   // resilient boot fetch + typed user-state load (shell-boot-fetch.test)
 import { rankApps, rankActions, looksLikeNL, clipAnswer } from './search-rank.js';   // pure search ranking (host-tested)
 import { createBroker, sanitizeApp, brokerEvent, themeInfo } from './appbroker.js';
+import { createFileDialog, OPEN_MAX_BYTES } from './filedialog.js';
+import fs from './nucleo-fs.js';                     // the one way to the device's disk (docs/files.md)   // the OS Open/Save sheet behind file.open / file.save
 import Caps from './nucleo-caps.js';                               // what this device can do (contract/api.yaml)        // capability broker for sandboxed (agent-written) apps
 import { initSystemUI } from './system-ui.js';        // night light, lock screen, shortcuts sheet, widgets
 
@@ -65,10 +67,10 @@ WM.setOnTrustHold(() => { if (trustRetryTimer) retryTrustNow(); });
 WM.setVerifier(async (app) => {
   const dir = ((await Caps.info()).paths || {}).apps;
   if (!dir) return 'failed';
-  const r = await fetch('/api/fs/read?path=' + encodeURIComponent(dir + '/' + app.id + '/.package.sig'), { cache: 'no-store' });
-  if (!r.ok) return 'failed';
+  const sigText = await fs.readText(dir + '/' + app.id + '/.package.sig').catch(() => null);
+  if (sigText == null) return 'failed';
   const { verifyServed } = await import('./store-client.js');
-  try { await verifyServed({ sigText: await r.text(), base: app.verify }); return true; }
+  try { await verifyServed({ sigText, base: app.verify }); return true; }
   catch (e) { return e && e.code === 'network' ? 'offline' : 'failed'; }
 });
 
@@ -106,7 +108,7 @@ const glyph = (a) => {
         if (appPath.endsWith('/')) appPath = appPath.slice(0, -1);
         src = appPath + '/' + src;
       }
-      if (src.startsWith('/data/') || src.startsWith('/system/')) src = '/api/fs/read?path=' + encodeURIComponent(src);
+      if (src.startsWith('/data/') || src.startsWith('/system/')) src = fs.url(src);
     }
     // A missing/404 icon file (e.g. an app whose icon.svg wasn't deployed) must NOT leave a broken
     // image — fall back to the emoji glyph in place. Resilient to any not-yet-deployed app icon.
@@ -264,7 +266,8 @@ const state = { apps: [], pins: [...UI_DEFAULTS.pins], wallpaper: UI_DEFAULTS.wa
       wav: 'media-player', mp3: 'media-player',
       mp4: 'video-player', webm: 'video-player', mov: 'video-player', mkv: 'video-player',
       m4v: 'video-player', ogv: 'video-player', avi: 'video-player', mpg: 'video-player', mpeg: 'video-player', m1v: 'video-player',
-      todo: 'tasks', info: 'help'
+      todo: 'tasks', info: 'help',
+      pdf: 'pdf-editor',     // a Store app: when it is not installed, the fallback opens the file
     },
     fallback: 'file-commander'
   } };
@@ -331,14 +334,14 @@ async function flushConfig(path) {
   if (!cfgPending.has(path)) return true;         // an earlier queued run already wrote the newest body
   const body = cfgPending.get(path);
   for (let attempt = 0; attempt < 3; attempt++) {
-    let r = null;
-    try { r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body, signal: AbortSignal.timeout(8000) }); } catch {}
-    if (r && r.ok) {
+    let err = null;
+    try { await fs.write(path, body); } catch (e) { err = e; }      // atomic: a cut write never half-replaces the state
+    if (!err) {
       if (cfgPending.get(path) === body) cfgPending.delete(path);   // a newer body queued meanwhile stays pending
       if (cfgFailNotified && !cfgPending.size) { cfgFailNotified = false; showToast(t('toast_save_recovered'), '✅', 'success'); }
       return true;
     }
-    if (r && r.status >= 400 && r.status < 500) break;             // unpaired / bad request: not transient
+    if (err.code === 'denied' || err.code === 'bad-path' || err.code === 'no-space') break;   // not transient
     await new Promise((res) => setTimeout(res, 600 * (attempt + 1)));
   }
   if (!cfgFailNotified) { cfgFailNotified = true; showToast(t('toast_save_failed'), '⚠️', 'error', 7000); }
@@ -598,21 +601,20 @@ function osKeydown(e) {
   // still fire). The priority is decided by the pure, unit-tested resolveEscape(), which can NEVER
   // return a "close window" verdict. Closing a window stays an explicit gesture: title-bar ✕ or Ctrl+W.
   if (e.key === 'Escape') {
-    const dlg = document.getElementById('os-dialog-scrim');
     const ac = document.getElementById('action-center');
     const sm = document.getElementById('start-menu');
     const ctx = document.getElementById('ctxmenu');
     const shown = (el) => !!el && !el.classList.contains('hidden');
     switch (resolveEscape({
       taskSwitcher: tsActive,
-      dialog: !!(dlg && dlg.classList.contains('visible')),
+      dialog: !!(fileSheetInst && fileSheetInst.isOpen),
       copilot: !!(Copilot && Copilot.isOpen && Copilot.isOpen()),
       actionCenter: shown(ac),
       start: shown(sm),
       contextMenu: shown(ctx),
     })) {
       case 'taskSwitcher': cancelTaskSwitcher(); break;
-      case 'dialog':       closeOsFileDialog(null); break;
+      case 'dialog':       fileSheetInst.cancel(); break;
       case 'copilot':      Copilot.close(); break;
       case 'actionCenter': ac.classList.add('hidden'); break;
       case 'start':        closeStart(); break;
@@ -758,7 +760,7 @@ function initOS() {
   import('./ambient.js').then((m) => {
     Ambient = m.initAmbient({
       emit: (n) => { if (Notify) Notify.emit(n); },
-      readJSON: (p) => fetchJSON('/api/fs/read?path=' + encodeURIComponent(p), { tries: 1, timeout: 4000 }).catch(() => null),
+      readJSON: (p) => fs.readJSON(p, null).catch(() => null),
       getStatusSnap: () => lastStatusSnap,
     });
   }).catch((e) => console.warn('[ambient] load failed', e));
@@ -843,9 +845,8 @@ function addMissingAppIcons() {
 // silently, long after the 9-second toast had gone.
 async function syncUiState() {
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(UI_STATE_PATH), { cache: 'no-store' });
-    if (!r.ok) return;
-    const body = await r.text();
+    const body = await fs.readText(UI_STATE_PATH);
+    if (body == null) return;
     if (body === lastSaved) return;
     if (uiSaveInFlight > 0 || cfgPending.has(UI_STATE_PATH)) return;   // an echo of an older write of ours
     const s = { ...UI_DEFAULTS, ...JSON.parse(body) };
@@ -1070,7 +1071,7 @@ function retryTrustNow() {
 async function loadAppPermissions() {
   let installed = null;   // the registry's app list, or null when it could not be read
   try {
-    const reg = await fetchJSON('/api/fs/read?path=' + encodeURIComponent('/system/registry/apps.json'), { tries: 2, timeout: 4000 });
+    const reg = await fs.readJSON('/system/registry/apps.json', null);   // unreadable throws: provenance stays undecided
     if (!reg || !Array.isArray(reg.installed)) throw new Error('no installed[] list');
     installed = reg.installed;
   } catch (e) {
@@ -1735,7 +1736,34 @@ function wireMessages() {
     getLang: () => I18N.lang,          // so a sandboxed app can localise itself without importing the engine
     getTheme: () => currentThemeState,  // mode/accent/font size only (themeInfo), never the shell's styles
     getCaps: () => Caps.info(),         // the device's capability list, for apps that cannot import nucleo-caps.js
-    onFsChange: () => { try { FsIndex.invalidate(); } catch {} },
+    fs,                                 // the broker's disk is the core layer too; its changes reach FsIndex below
+    // file.open / file.save: the OS sheet, shown HERE in the shell's origin. The user picks a folder of the device
+    // (/api/fs, the same on every edition) or this computer/phone (file input, download): a sandboxed frame may
+    // do none of it itself, and no app has to know which edition it runs on.
+    pickOpen: (app, o) => fileSheet().open({ appId: app.id, appName: appName(app), types: o.types, multiple: o.multiple }),
+    pickSave: (app, o) => fileSheet().save({ appId: app.id, appName: appName(app), name: o.name, bytes: o.bytes, mime: o.mime }),
+    // file.launch: the file the user opened the app WITH (desktop, File Commander, Recent) — only while the
+    // app's frame still shows that file, so an app reopened from Start does not get yesterday's document.
+    launchFile: async (app) => {
+      const path = launchGrants.get(app.id);
+      if (!path) return null;
+      const w = WM.list().find((x) => x.app.id === app.id);
+      const f = w && w.el.querySelector('iframe');
+      const src = (f && f.getAttribute('src')) || (w && w.pending) || '';
+      if (new URLSearchParams(src.split('?')[1] || '').get('path') !== path) return null;
+      const b = await fs.read(path);
+      if (b == null) throw new Error('not-found');
+      if (b.byteLength > OPEN_MAX_BYTES) throw new Error('too large');
+      return { name: path.split('/').pop(), bytes: b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength), path };
+    },
+    // file.save without the sheet (kept for callers that pass no pickSave): a plain download.
+    download: (name, mime, bytes) => {
+      const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      const a = document.createElement('a');
+      a.href = url; a.download = name; a.rel = 'noopener'; a.style.display = 'none';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    },
     // ai.complete for apps that declared ai.cloud: executed HERE, in the shell's origin, so the user's
     // key never enters the sandbox — only the completion text goes back over the broker. Lazy import:
     // apps without the permission never cost the load. The OS-wide AI decision (ai-ask.js): a model on the
@@ -1786,6 +1814,29 @@ function wireMessages() {
       return;
     }
     // OS clipboard service: apps copy/cut into it, or request the latest entry.
+    // nucleo-shell.js: a system app's toast and dialogs, drawn by the OS (keys, joypad and touch answer them the
+    // same everywhere; a native confirm() inside a frame cannot be reached from the device's buttons).
+    if (d.type === 'os-toast' && typeof d.text === 'string' && d.text) {
+      const kind = ['success', 'error', 'warn', 'info'].includes(d.kind) ? d.kind : 'info';
+      const icon = { success: '✅', error: '⚠️', warn: '⚠️', info: 'ℹ️' }[kind];
+      showToast(d.text.slice(0, 300), icon, kind === 'warn' ? 'error' : kind, Math.min(15000, Math.max(1500, Number(d.ms) || 3500)));
+      return;
+    }
+    if (d.type === 'os-ask' && typeof d.id === 'string' && ['confirm', 'prompt', 'alert'].includes(d.kind)) {
+      const src = e.source;
+      const owner = senderApp(src);                    // also a page nested inside an app window
+      const w = owner ? { app: owner } : null;
+      const title = String(d.title || (w ? appName(w.app) : '')).slice(0, 120);
+      const text = String(d.text || '').slice(0, 2000);
+      const p = d.kind === 'prompt'
+        ? osModal({ title, glyph: w ? glyph(w.app) : '', bodyHTML: text ? `<p>${escapeHtml(text)}</p>` : '', withInput: true, value: String(d.value || ''), okText: d.ok || undefined, cancelText: d.cancel || undefined })
+        : osModal({ title, glyph: d.danger ? '⚠️' : (w ? glyph(w.app) : ''), bodyHTML: text ? `<p>${escapeHtml(text)}</p>` : '', okText: d.ok || undefined, cancelText: d.cancel || undefined, danger: !!d.danger, okOnly: d.kind === 'alert' });
+      p.then((v) => {
+        const value = d.kind === 'prompt' ? (v == null ? null : String(v)) : d.kind === 'confirm' ? (v != null && v !== false) : true;
+        try { src.postMessage({ type: 'os-ask-result', id: d.id, value }, '*'); } catch {}
+      });
+      return;
+    }
     if (d.type === 'clipboard-write' && d.kind) { clipboardWrite(d.kind, d.data); return; }
     if (d.type === 'clipboard-read') {
       if (e.source) try { e.source.postMessage({ type: 'clipboard-data', item: clipboardLatest() }, '*'); } catch {}
@@ -1889,8 +1940,13 @@ function applyGlobalUI() {
     const f = w.el.querySelector('iframe');
     if (f) injectGlobalTheme(f.contentDocument);
   }
-  // A frame without an origin has no contentDocument to inject into: tell it instead.
+  // A frame without an origin has no contentDocument to inject into: tell it instead. Every frame gets the
+  // broker event (nucleo-app.js, nucleo-ui.js); curated ones also the {type:'set-theme'} message that 13 apps
+  // have always listened for and that the shell never actually sent.
   pushAppEvent(brokerEvent('theme', { theme: themeInfo(currentThemeState) }));
+  for (const f of curatedFrames()) {
+    try { f.contentWindow.postMessage({ type: 'set-theme', theme: currentThemeState.theme === 'light' ? 'light' : 'dark', accent: currentThemeState.accent, fontSize: currentThemeState.fontSize }, '*'); } catch {}
+  }
   cacheTheme();
 }
 
@@ -1935,6 +1991,11 @@ function injectGlobalTheme(doc) {
     const isLight = currentThemeState.theme === 'light';
     const acc = currentThemeState.accent;
     const fs = currentThemeState.fontSize;
+    // data-theme too: app styles keyed on [data-theme="light"] used to switch only when the app re-read
+    // settings.json itself; now the OS sets it, on load and on every change (nucleo-ui.js reads it back).
+    doc.documentElement.dataset.theme = isLight ? 'light' : 'dark';
+    doc.documentElement.style.setProperty('--os-accent', acc);
+    doc.documentElement.style.setProperty('--os-font-size', fs);
     // Force the base values so they override the apps' :root via !important
     style.textContent = `
       :root, html {
@@ -1993,9 +2054,9 @@ function postLangToDevice(lang) {
 
 async function applySettingsFromDevice() {
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent('/system/config/settings.json'), { cache: 'no-store' });
-    if (!r.ok) return;
-    const s = JSON.parse(await r.text());
+    const txt = await fs.readText('/system/config/settings.json');
+    if (txt == null) return;
+    const s = JSON.parse(txt);
     if (s.ui) {
       if (s.ui.theme) currentThemeState.theme = s.ui.theme;
       if (s.ui.accent) currentThemeState.accent = s.ui.accent;
@@ -2023,15 +2084,16 @@ async function applySettingsFromDevice() {
 async function persistTheme(newTheme) {
   try {
     const path = '/system/config/settings.json';
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+    let txt = null, unread = false;
+    try { txt = await fs.readText(path); } catch { unread = true; }     // absent → null; unreadable → throws
     // settings.json is the FOURTH state store, and it had the same destructive bug as the other three:
     // on a failed read `s` stayed {} and we wrote it anyway, wiping ui.language, ui.accent, ui.fontSize,
     // ui.regionLocale and device.name. Worse, the service worker turns a network failure into a
     // Response(504) (sw.js), so the failure arrives as `!r.ok` and not as a throw. Never merge onto a
     // read we could not trust — say so and leave the file alone.
-    if (!r.ok) { showToast(t('toast_theme_error'), '⚠️', 'error'); return; }
+    if (unread) { showToast(t('toast_theme_error'), '⚠️', 'error'); return; }
     let s = {};
-    const txt = await r.text(); if (txt) s = JSON.parse(txt);
+    if (txt) s = JSON.parse(txt);
     if (!s.ui) s.ui = {};
     s.ui.theme = newTheme;
     const ok = await saveConfig(path, JSON.stringify(s, null, 2));   // the one serialized, timed-out write path
@@ -2053,7 +2115,7 @@ const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '
 // "Gioca sulla console" / "Gioca qui" e i recenti, una riga di copertine in Start.
 // Con un gioco in corso sulla console (/api/gamemode) il pulsante dice "In gioco".
 let RECENT_GAMES = [], _gamesAt = 0, _gaming = false, _gm = {};
-const coverUrl = (g) => g && g.img ? '/api/fs/read?path=' + g.img.split('/').map(encodeURIComponent).join('/') + (g.imgv ? '&v=' + g.imgv : '') : '';
+const coverUrl = (g) => g && g.img ? fs.url(g.img) + (g.imgv ? '&v=' + g.imgv : '') : '';
 // gioco senza copertina: la sua console dall'archivio di NucleoOS (/api/sysart),
 // mostrata intera (classe "con" = contain) invece di un riquadro vuoto
 const consoleUrl = (g) => g && g.system ? '/api/sysart?id=' + encodeURIComponent(g.system) : '';
@@ -2363,20 +2425,12 @@ function wireFileDrop() {
       // toast happened to land LAST during the upload (a WS fault, another file's result) instead.
       const upToast = showToast(t('toast_uploading', { name: file.name }), '📤', 'info', 60000);
       try {
-        const resp = await fetchWithRetry('/api/fs/write?path=' + encodeURIComponent(targetPath), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: file,                          // streamed by the browser, no arrayBuffer() in RAM
-        });
+        await fs.write(targetPath, file);      // the File streams (never whole in RAM), atomic, space-checked
         if (upToast) removeToast(upToast);
-        if (resp.ok) {
-          showToast(t('toast_upload_ok', { name: file.name }), '✅', 'success');
-        } else {
-          showToast(t('toast_upload_err', { name: file.name }), '❌', 'error');
-        }
+        showToast(t('toast_upload_ok', { name: file.name }), '✅', 'success');
       } catch (err) {
         if (upToast) removeToast(upToast);
-        showToast(t('toast_net_err', { name: file.name }), '❌', 'error');
+        showToast(t(err && err.code === 'offline' ? 'toast_net_err' : 'toast_upload_err', { name: file.name }), '❌', 'error');
       }
     }
   });
@@ -2428,7 +2482,7 @@ function applyWallpaper(w) {
   }
   // image
   d.style.backgroundColor = '#0a1020';   // underlay so an uncached/offline image never flashes black
-  d.style.backgroundImage = `url("/api/fs/read?path=${encodeURIComponent(w.path)}")`;
+  d.style.backgroundImage = `url("${fs.url(w.path)}")`;
   const fit = w.fit || 'cover';
   if (fit === 'tile') { d.style.backgroundSize = 'auto'; d.style.backgroundPosition = 'top left'; d.style.backgroundRepeat = 'repeat'; }
   else { d.style.backgroundSize = fit === 'center' ? 'auto' : fit; d.style.backgroundPosition = 'center'; d.style.backgroundRepeat = 'no-repeat'; }
@@ -2567,6 +2621,19 @@ function pushRecent(path) {
   renderRecommended();
 }
 
+// The file each app was last opened with, by the shell (file.launch hands it over to sandboxed apps).
+const launchGrants = new Map();
+let fileSheetInst = null;
+fs.onChange(() => { try { FsIndex.invalidate(); } catch {} });   // every write of this page, the broker's included
+function fileSheet() {
+  if (!fileSheetInst) fileSheetInst = createFileDialog({
+    t,
+    remember: (k, v) => { try { localStorage.setItem('nucleo.files.' + k, v); } catch {} },
+    recall: (k) => { try { return localStorage.getItem('nucleo.files.' + k); } catch { return null; } },
+  });
+  return fileSheetInst;
+}
+
 // Open an SD file with its associated app (shared by File Commander and file shortcuts).
 function openFile(path) {
   if (/\.lnk$/i.test(path)) { openLnk(path); return; }   // a shortcut → resolve + open its target
@@ -2576,6 +2643,8 @@ function openFile(path) {
   if (appId) {
     const app = byId(appId);
     if (app) {
+      launchGrants.set(app.id, path);
+      try { localStorage.setItem('nucleo.files.open.' + app.id, path.replace(/\/[^/]*$/, '') || '/data'); } catch {}   // Save as starts next to it
       WM.open(app, 'path=' + encodeURIComponent(path));
       return;
     } else {
@@ -2607,9 +2676,7 @@ function defaultLnkLabel(p) {
 const serializeLnk = (p) => JSON.stringify({ schema: 1, type: p.type, target: p.target, label: p.label || undefined, createdAt: Date.now() });
 async function readLnk(path) {
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
-    if (!r.ok) return null;
-    const j = JSON.parse(await r.text());
+    const j = await fs.readJSON(path, null);
     if (j && (j.type === 'app' || j.type === 'file' || j.type === 'url') && typeof j.target === 'string') return j;
   } catch {}
   return null;
@@ -2634,10 +2701,8 @@ async function reconcileDesktopFolder() {
     // as a red console error on every fresh-SD boot. mkdir is idempotent and the firmware only emits
     // fs.changed when it actually creates the dir (so this can't loop); on an unpaired session it just
     // 401s harmlessly and we fall through. Mirrors createDesktopShortcut's mkdir-then-use.
-    await fetch('/api/fs/mkdir?path=' + encodeURIComponent(DESKTOP_DIR), { method: 'POST' }).catch(() => {});
-    const r = await fetch('/api/fs/list?path=' + encodeURIComponent(DESKTOP_DIR), { cache: 'no-store' });
-    if (!r.ok) return false;
-    entries = (await r.json()).entries || [];
+    await fs.mkdirp(DESKTOP_DIR).catch(() => {});
+    entries = await fs.list(DESKTOP_DIR);                // never lists the layer's own temporary files
   } catch { return false; }
   const want = new Set(entries.filter((e) => e.type === 'file').map((e) => DESKTOP_DIR + '/' + e.name));
   const isFolderIcon = (it) => it.type === 'file' && typeof it.target === 'string' && it.target.startsWith(DESKTOP_DIR + '/');
@@ -2658,29 +2723,20 @@ async function reconcileDesktopFolder() {
 // device's fs.changed echo also reconciles, but we add it immediately so the icon appears at once.
 async function createDesktopShortcut(payload, pos) {
   if (payload.type === 'file' && PROTECTED_TARGET.test(payload.target)) { showToast(t('lnk_protected'), '⚠️', 'error'); return null; }
-  try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent(DESKTOP_DIR), { method: 'POST' }); } catch {}
   const base = safeLnkBase(payload.label || defaultLnkLabel(payload));
-  const existing = new Set();
-  try { const r = await fetch('/api/fs/list?path=' + encodeURIComponent(DESKTOP_DIR), { cache: 'no-store' }); if (r.ok) (await r.json()).entries.forEach((e) => existing.add(e.name)); } catch {}
-  let name = base + '.lnk';
-  for (let i = 2; existing.has(name); i++) name = base + ' (' + i + ').lnk';
-  const path = DESKTOP_DIR + '/' + name;
+  let path;
   // The write must have SUCCEEDED: a 500 (oom) / 504 (device busy) used to still add the icon and say "linked".
-  try { const w = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: serializeLnk(payload) }); if (!w.ok) throw 0; }
-  catch { showToast(t('lnk_create_fail'), '⚠️', 'error'); return null; }
+  try {
+    path = await fs.uniquePath(DESKTOP_DIR, base + '.lnk');
+    await fs.write(path, serializeLnk(payload), { overwrite: false });
+  } catch { showToast(t('lnk_create_fail'), '⚠️', 'error'); return null; }
   const cell = pos ? nearestFreeCell(pos.x, pos.y, occupiedCells()) : firstFreeCell(occupiedCells());
   state.desktop.push({ uid: uniqueUid('desk-' + path), type: 'file', target: path, x: cell.x, y: cell.y });
   saveUiState(); renderDesktop();
   return path;
 }
-// A free destination path in `dir` for `name` (dedupes "file.txt" → "file (1).txt").
-async function uniqueDestPath(dir, name) {
-  const existing = new Set();
-  try { const r = await fetch('/api/fs/list?path=' + encodeURIComponent(dir), { cache: 'no-store' }); if (r.ok) (await r.json()).entries.forEach((e) => existing.add(e.name)); } catch {}
-  if (!existing.has(name)) return dir + '/' + name;
-  const dot = name.lastIndexOf('.'), bse = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
-  for (let i = 1; ; i++) { const c = `${bse} (${i})${ext}`; if (!existing.has(c)) return dir + '/' + c; }
-}
+// A free destination path in `dir` for `name` (dedupes "file.txt" → "file (2).txt").
+const uniqueDestPath = (dir, name) => fs.uniquePath(dir, name).catch(() => fs.joinPath(dir, name));
 
 // ---- cross-window drag: a drag from the File Commander iframe dropped on the desktop ----
 // The browser sandbox stops the iframe's dataTransfer from crossing the frame boundary, so the
@@ -2690,7 +2746,7 @@ async function uniqueDestPath(dir, name) {
 let fcDrag = null;        // { items:[{path,name,isDir}] } while a File Commander drag is in flight
 const dropOp = (e) => e.ctrlKey ? 'copy' : e.shiftKey ? 'move' : 'shortcut';   // Alt or none → shortcut
 async function performFcDrop(op, items, pos) {
-  await fetch('/api/fs/mkdir?path=' + encodeURIComponent(DESKTOP_DIR), { method: 'POST' }).catch(() => {});
+  await fs.mkdirp(DESKTOP_DIR).catch(() => {});
   let cellSeed = pos, ok = 0;
   for (const it of (items || [])) {
     if (!it || !it.path) continue;
@@ -2703,24 +2759,9 @@ async function performFcDrop(op, items, pos) {
     }
     const dst = await uniqueDestPath(DESKTOP_DIR, it.name);
     try {
-      if (op === 'move') {
-        const r = await fetch('/api/fs/move?from=' + encodeURIComponent(it.path) + '&to=' + encodeURIComponent(dst), { method: 'POST' });
-        if (!r.ok) throw 0;
-      } else {
-        // copy: on-device where the edition has /api/fs/copy (Handheld: no byte round-trip through the
-        // browser); elsewhere (404/405/501: no copy endpoint on the device) read + write.
-        let w = (await Caps.has('fs.copy').catch(() => false))
-          ? await fetch('/api/fs/copy?from=' + encodeURIComponent(it.path) + '&to=' + encodeURIComponent(dst), { method: 'POST' })
-          : { status: 501 };
-        if (w.status === 404 || w.status === 405 || w.status === 501) {
-          // A failed read's body is an error page, not the file: never write it as the "copy".
-          const rd = await fetch('/api/fs/read?path=' + encodeURIComponent(it.path), { cache: 'no-store' });
-          if (!rd.ok) throw 0;
-          const buf = await rd.arrayBuffer();
-          w = await fetch('/api/fs/write?path=' + encodeURIComponent(dst), { method: 'POST', body: buf });
-        }
-        if (!w.ok) throw 0;
-      }
+      // copy: on-device where the edition has /api/fs/copy, else read + write (nucleo-fs.js decides)
+      if (op === 'move') await fs.move(it.path, dst);
+      else await fs.copy(it.path, dst);
       state.desktop.push({ uid: uniqueUid('desk-' + dst), type: 'file', target: dst, x: cell.x, y: cell.y });
       ok++;
     } catch { showToast(t('drop_failed'), '⚠️', 'error'); }
@@ -2927,7 +2968,7 @@ async function removeIcons(uids) {
   const removable = new Set();
   for (const it of items) {
     if (backed(it)) {
-      try { const r = await fetch('/api/fs/delete?path=' + encodeURIComponent(it.target), { method: 'POST' }); if (!r.ok) { if (r.status === 403) showToast(t('lnk_protected'), '⚠️', 'error'); continue; } } catch { continue; }
+      try { await fs.remove(it.target); } catch (e) { if (e && e.code === 'denied') showToast(t('lnk_protected'), '⚠️', 'error'); continue; }
     }
     removable.add(it.uid);
   }
@@ -3028,10 +3069,9 @@ function beginRename(uid) {
       if (base && base + ext !== cur) {
         const dst = await uniqueDestPath(DESKTOP_DIR, base + ext);
         try {
-          const r = await fetch('/api/fs/move?from=' + encodeURIComponent(item.target) + '&to=' + encodeURIComponent(dst), { method: 'POST' });
-          if (r.ok) { item.target = dst; item.uid = uniqueUid('desk-' + dst); item.label = undefined; saveUiState(); }
-          else if (r.status === 403) showToast(t('lnk_protected'), '⚠️', 'error');
-        } catch {}
+          await fs.move(item.target, dst);
+          item.target = dst; item.uid = uniqueUid('desk-' + dst); item.label = undefined; saveUiState();
+        } catch (e) { if (e && e.code === 'denied') showToast(t('lnk_protected'), '⚠️', 'error'); }
       }
     } else if (save) {
       // Committing an app icon's own default name (F2 → Enter) is not a rename: keep it unlabelled so
@@ -3353,7 +3393,7 @@ function desktopNavKey(e) {
   if (WM.active() || isEditable(e.target) || e.ctrlKey || e.altKey || e.metaKey) return false;
   const hidden = (id) => { const el = document.getElementById(id); return !el || el.classList.contains('hidden'); };
   const modalUp = document.getElementById('os-modal-scrim').classList.contains('show');
-  const dlgUp = (document.getElementById('os-dialog-scrim') || { classList: { contains: () => false } }).classList.contains('visible');
+  const dlgUp = !!(fileSheetInst && fileSheetInst.isOpen);
   const copilotUp = Copilot && Copilot.isOpen && Copilot.isOpen();
   if (!hidden('ctxmenu') || !hidden('start-menu') || !hidden('action-center') || modalUp || dlgUp || copilotUp) return false;
   const k = e.key;
@@ -4360,182 +4400,17 @@ function warmAnimaLocal() {
 if ('requestIdleCallback' in window) requestIdleCallback(() => warmAnimaLocal(), { timeout: 8000 });
 else setTimeout(warmAnimaLocal, 4000);
 
-// --- OS File Dialog Logic ---
-let osDialogCaller = null;
-let osDialogReqId = null;
-let osDialogMode = 'open'; // 'open' or 'save'
-let osDialogFilter = null;
-let osDialogCwd = '/data';
-let osDialogFiles = [];
-
-const osDialogScrim = document.getElementById('os-dialog-scrim');
-const osDialogTitle = document.getElementById('os-dialog-title-text');
-const osDialogCloseBtn = document.getElementById('os-dialog-close');
-const osDialogSearch = document.getElementById('os-dialog-search');
-const osDialogCrumbs = document.getElementById('os-dialog-crumbs');
-const osDialogList = document.getElementById('os-dialog-list');
-const osDialogFilename = document.getElementById('os-dialog-filename');
-const osDialogBtnCancel = document.getElementById('os-dialog-btn-cancel');
-const osDialogBtnConfirm = document.getElementById('os-dialog-btn-confirm');
-
-function openOsFileDialog(sourceWindow, opts) {
-  osDialogCaller = sourceWindow;
-  osDialogReqId = opts.id || null;
-  osDialogMode = opts.mode || 'open';
-  osDialogFilter = opts.filter || null; // e.g. ['.png', '.jpg']
-  osDialogTitle.textContent = opts.title || t(osDialogMode === 'save' ? 'osdlg_save_title' : 'osdlg_open_title');
-
-  if (osDialogMode === 'save') {
-    osDialogFilename.style.display = 'block';
-    osDialogFilename.value = opts.defaultName || 'untitled.txt';
-    osDialogBtnConfirm.textContent = t('save');
-  } else {
-    osDialogFilename.style.display = 'none';
-    osDialogFilename.value = '';
-    osDialogBtnConfirm.textContent = t('open');
-  }
-  
-  osDialogCwd = opts.defaultPath || '/data';
-  osDialogScrim.classList.add('visible');
-  loadOsDialogDir(osDialogCwd);
-}
-
-function closeOsFileDialog(resultPath) {
-  osDialogScrim.classList.remove('visible');
-  if (osDialogCaller && osDialogReqId) {
-    try {
-      osDialogCaller.postMessage({
-        type: 'os-file-dialog-result',
-        id: osDialogReqId,
-        action: resultPath ? osDialogMode : 'cancel',
-        path: resultPath
-      }, '*');
-    } catch {}
-  }
-  osDialogCaller = null;
-}
-
-// Listings are sequenced: only the newest navigation may paint. A slow, older listing used to land on top of
-// a newer one (crumbs said one folder, the list showed another). Navigating also clears the search filter
-// and, when opening, the picked file name — which otherwise resolved against the NEW folder on "Open".
-let osDialogSeq = 0;
-async function loadOsDialogDir(path) {
-  const seq = ++osDialogSeq;
-  osDialogCwd = path;
-  if (osDialogSearch) osDialogSearch.value = '';
-  if (osDialogMode !== 'save') osDialogFilename.value = '';   // a typed SAVE name follows the user to the new folder
-  osDialogCrumbs.innerHTML = '';
-  const segs = path.split('/').filter(Boolean);
-  let acc = '';
-  const rootSeg = document.createElement('span');
-  rootSeg.className = 'os-crumbs-seg'; rootSeg.textContent = 'SD';
-  rootSeg.onclick = () => loadOsDialogDir('/');
-  osDialogCrumbs.appendChild(rootSeg);
-  
-  for (const s of segs) {
-    acc += '/' + s;
-    const slash = document.createTextNode(' / ');
-    const span = document.createElement('span');
-    span.className = 'os-crumbs-seg'; span.textContent = s;
-    const target = acc;
-    span.onclick = () => loadOsDialogDir(target);
-    osDialogCrumbs.appendChild(slash);
-    osDialogCrumbs.appendChild(span);
-  }
-  
-  const say = (key) => { osDialogList.innerHTML = ''; const d = document.createElement('div'); d.className = 'os-dialog-msg'; d.textContent = t(key); osDialogList.appendChild(d); };
-  say('osdlg_loading');
-  osDialogFiles = [];
-  try {
-    const r = await fetch('/api/fs/list?path=' + encodeURIComponent(path));
-    if (!r.ok) throw new Error();
-    const data = await r.json();
-    if (seq !== osDialogSeq) return;               // the user has navigated on since
-    osDialogFiles = data.entries || [];
-    renderOsDialogList();
-  } catch {
-    if (seq !== osDialogSeq) return;
-    say('osdlg_read_error');
+// --- OS file dialog for system apps (the 'os-file-dialog' message): the same sheet as file.open/file.save,
+// in its "where" mode — the app gets a path and reads or writes it itself through /nucleo-fs.js. One sheet for
+// the whole OS: it used to be a second, older dialog here with its own listing code.
+async function openOsFileDialog(sourceWindow, opts) {
+  const mode = opts.mode === 'save' ? 'save' : 'open';
+  const w = WM.list().find((x) => { const f = x.el.querySelector('iframe'); return f && f.contentWindow === sourceWindow; });
+  const types = (Array.isArray(opts.filter) ? opts.filter : []).map((x) => String(x).replace(/^\./, ''));
+  const got = await fileSheet().pickPath({ appId: w ? w.app.id : '', appName: w ? appName(w.app) : '', mode, types,
+    name: opts.defaultName || (mode === 'save' ? 'untitled.txt' : ''), dir: opts.defaultPath, title: opts.title });
+  const path = mode === 'save' ? got : (got && got[0]) || null;
+  if (opts.id) {
+    try { sourceWindow.postMessage({ type: 'os-file-dialog-result', id: opts.id, action: path ? mode : 'cancel', path }, '*'); } catch {}
   }
 }
-
-function renderOsDialogList(filterQuery = '') {
-  osDialogList.innerHTML = '';
-  let entries = osDialogFiles;
-  
-  if (osDialogCwd !== '/' && osDialogCwd !== '') {
-    entries = [{ name: '..', type: 'dir' }, ...entries];
-  }
-  
-  if (filterQuery) {
-    const q = filterQuery.toLowerCase();
-    entries = entries.filter(e => e.type === 'dir' || e.name.toLowerCase().includes(q));
-  }
-
-  if (osDialogMode === 'open' && Array.isArray(osDialogFilter) && osDialogFilter.length > 0) {
-    entries = entries.filter(e => {
-      if (e.type === 'dir') return true;
-      const lw = e.name.toLowerCase();
-      return osDialogFilter.some(ext => lw.endsWith(ext.toLowerCase()));
-    });
-  }
-
-  entries.sort((a, b) => {
-    if (a.name === '..') return -1;
-    if (b.name === '..') return 1;
-    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
-
-  if (entries.length === 0) {
-    const d = document.createElement('div'); d.className = 'os-dialog-msg'; d.textContent = t('osdlg_empty');
-    osDialogList.appendChild(d);
-    return;
-  }
-
-  entries.forEach(e => {
-    const li = document.createElement('li');
-    li.className = 'os-dialog-item';
-    const icon = e.type === 'dir' 
-      ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
-      : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg>';
-    
-    // The fs/list API reports the byte size as `size` (see nucleo_fsapi.c / serve-shell.mjs / server.py /api/fs/list).
-    const sizeStr = e.type === 'file' && e.size != null ? Math.round(e.size/1024) + ' KB' : '';
-    li.innerHTML = `<div class="os-dialog-icon ${e.type}">${icon}</div><div class="os-dialog-name">${escapeHtml(e.name)}</div><div class="os-dialog-size">${sizeStr}</div>`;
-    
-    li.onclick = () => {
-      document.querySelectorAll('.os-dialog-item').forEach(i => i.classList.remove('active'));
-      li.classList.add('active');
-      if (e.type === 'file') {
-        osDialogFilename.value = e.name;
-      }
-    };
-    
-    li.ondblclick = () => {
-      if (e.type === 'dir') {
-        const next = e.name === '..' ? osDialogCwd.substring(0, osDialogCwd.lastIndexOf('/')) || '/' : (osDialogCwd === '/' ? '/' + e.name : osDialogCwd + '/' + e.name);
-        loadOsDialogDir(next);
-      } else {
-        osDialogFilename.value = e.name;
-        const finalPath = (osDialogCwd === '/' ? '' : osDialogCwd) + '/' + e.name;
-        closeOsFileDialog(finalPath);
-      }
-    };
-    
-    osDialogList.appendChild(li);
-  });
-}
-
-if (osDialogSearch) {
-  osDialogSearch.addEventListener('input', (e) => renderOsDialogList(e.target.value));
-}
-if (osDialogCloseBtn) osDialogCloseBtn.onclick = () => closeOsFileDialog(null);
-if (osDialogBtnCancel) osDialogBtnCancel.onclick = () => closeOsFileDialog(null);
-if (osDialogBtnConfirm) osDialogBtnConfirm.onclick = () => {
-  const val = osDialogFilename.value.trim();
-  if (osDialogMode === 'save' && !val) return;
-  if (!val && osDialogMode === 'open') return;
-  const finalPath = (osDialogCwd === '/' ? '' : osDialogCwd) + '/' + val;
-  closeOsFileDialog(finalPath);
-};

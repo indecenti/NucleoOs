@@ -29,6 +29,7 @@
 #include <strings.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <math.h>
 extern "C" {
 #include "nucleo_i18n.h"
 #include "nucleo_board.h"
@@ -240,15 +241,6 @@ static const char *ago(uint32_t t)
 }
 
 static const char *row_label(int i, void *) { return M->rows[M->vis[i]].name; }
-static const char *row_right(int i, void *)
-{
-    const Row &r = M->rows[M->vis[i]];
-    if (s_view != V_CAT && s_tab == TAB_NEW && r.state == S_NEW) return ago(r.updated);
-    if (r.state == S_NEW) { static char b[16]; kb(b, sizeof b, r.size); return b; }
-    return list_word(r.state);
-}
-static unsigned short row_color(int i, void *) { return state_col(M->rows[M->vis[i]].state); }
-
 static const char *cat_label(int i, void *) { return CATS[i].n[lang_idx()]; }
 static const char *cat_right(int i, void *) { static char b[8]; snprintf(b, sizeof b, "%d", M->cat_count[i]); return b; }
 static unsigned short cat_color(int i, void *) { return M->cat_count[i] ? CATS[i].col : DIM; }
@@ -372,12 +364,56 @@ static int wrap(int x, int y, int w, const char *s, int maxl, uint16_t c, int sk
     return y + (lines - skip) * 16;
 }
 
-// The app's tile: its category colour with its initial (Font4 on the Cardputer, FreeSansBold18 on the panel).
-static void tile(int x, int y, int sz, const char *name, int cat, const lgfx::IFont *f = &fonts::Font4)
+// ── icons ─────────────────────────────────────────────────────────────────────
+// The store's colour icons (art.bin, fetched with the catalog: store_engine.h): raw RGB565 read from the SD card a
+// row at a time and box-filtered down to the size asked, corners rounded against `bg`. No image is ever held in
+// RAM: ~0.5 KB of stack per icon. The pack is open only while a frame is drawn (art_begin / art_end).
+static FILE *s_art;
+static void art_begin(int ch)
 {
+    if (s_art) return;
+    s_art = st_art_open(NUCLEO_SD_MOUNT, CH_ID[ch]);
+    if (!s_art) s_art = st_art_open(NUCLEO_SD_MOUNT, CH_ID[ch ^ 1]);   // the stores' own icons are in both packs
+}
+static void art_end(void) { if (s_art) { fclose(s_art); s_art = nullptr; } }
+
+static bool art_icon(const char *id, int x, int y, int sz, unsigned short bg)
+{
+    uint32_t off; int n;
+    if (!s_art || !st_art_find(s_art, id, &off, &n) || n > 64 || sz > n || sz < n / 3) return false;
+    uint16_t src[3][64], line[64];
+    for (int r = 0; r < sz; r++) {
+        int r0 = r * n / sz, r1 = (r + 1) * n / sz;
+        if (r1 <= r0) r1 = r0 + 1;
+        if (fseek(s_art, (long)(off + (uint32_t)r0 * n * 2), SEEK_SET)) return r > 0;
+        for (int k = 0; k < r1 - r0; k++) if (fread(src[k], 2, n, s_art) != (size_t)n) return r > 0;
+        for (int c = 0; c < sz; c++) {
+            int c0 = c * n / sz, c1 = (c + 1) * n / sz, R = 0, G = 0, B = 0, cnt = 0;
+            if (c1 <= c0) c1 = c0 + 1;
+            for (int k = 0; k < r1 - r0; k++)
+                for (int j = c0; j < c1; j++) { const uint16_t v = src[k][j]; R += v >> 11; G += v >> 5 & 63; B += v & 31; cnt++; }
+            line[c] = (uint16_t)(R / cnt << 11 | G / cnt << 5 | B / cnt);
+        }
+        d.pushImage(x, y + r, sz, 1, (const lgfx::rgb565_t *)line);
+    }
+    const int rr = sz / 5;                                   // the rounded corners, cut in the background colour
+    for (int j = 0; j < rr; j++) {
+        const int dy = rr - j, cut = rr - (int)sqrtf((float)(rr * rr - dy * dy));
+        if (cut <= 0) continue;
+        d.drawFastHLine(x, y + j, cut, bg);          d.drawFastHLine(x + sz - cut, y + j, cut, bg);
+        d.drawFastHLine(x, y + sz - 1 - j, cut, bg); d.drawFastHLine(x + sz - cut, y + sz - 1 - j, cut, bg);
+    }
+    return true;
+}
+
+// An app's icon: its colour icon from the pack, else its category colour with its initial.
+static void app_icon(const char *id, const char *name, int cat, int x, int y, int sz, unsigned short bg)
+{
+    if (art_icon(id, x, y, sz, bg)) return;
     d.fillRoundRect(x, y, sz, sz, sz / 4, CATS[cat].col);
     char l[2] = { name && name[0] ? name[0] : '?', 0 };
-    txt(f, x + sz / 2, y + sz / 2 + 1, l, INK, textdatum_t::middle_center);
+    txt(sz >= 40 ? (const lgfx::IFont *)&fonts::FreeSansBold18pt7b : sz >= 26 ? (const lgfx::IFont *)&fonts::Font4 : &fonts::Font2,
+        x + sz / 2, y + sz / 2 + 1, l, INK, textdatum_t::middle_center);
     d.setTextDatum(textdatum_t::top_left);
 }
 
@@ -421,13 +457,19 @@ static void draw_choose(int top, int h)
         int y = top + 20 + c * (ch_h + 2);
         bool on = c == s_ch_sel, off = c == CH_NATIVE && !native_ok();
         unsigned short col = off ? DIM : CH_COL[c];
-        if (on) d.fillRoundRect(4, y, 232, ch_h, 8, col); else d.drawRoundRect(4, y, 232, ch_h, 8, col);
-        char k[2] = { (char)('1' + c), 0 };
-        txt(&fonts::Font4, 20, y + ch_h / 2 + 1, k, on ? INK : col, textdatum_t::middle_center);
-        txt(&fonts::FreeSansBold9pt7b, 40, y + 4, ch_name(c), on ? INK : FG);
+        const unsigned short bg = on ? col : BG;               // (lg::card() turns olive on the 8-bit canvas)
+        d.fillRoundRect(4, y, 232, ch_h, 8, bg);
+        if (!on) d.drawRoundRect(4, y, 232, ch_h, 8, col);
+        const int isz = ch_h - 10;
+        if (!art_icon(c == CH_NATIVE ? "@native" : "@web", 9, y + 5, isz, bg)) {
+            char k[2] = { (char)('1' + c), 0 };
+            txt(&fonts::Font4, 9 + isz / 2, y + ch_h / 2 + 1, k, on ? INK : col, textdatum_t::middle_center);
+        }
+        const int tx = 15 + isz;
+        txt(&fonts::FreeSansBold9pt7b, tx, y + 6, ch_name(c), on ? INK : FG);
         const char *sub = off ? TR5("Non qui (M5Launcher)", "Not here (M5Launcher)", "Aqui no (M5Launcher)",
                                     "Pas ici (M5Launcher)", "Nicht hier (M5Launcher)") : ch_sub(c);
-        txt_fit(&fonts::Font0, 40, y + ch_h - 13, 190, sub, on ? INK : MUTED);
+        txt_fit(&fonts::Font0, tx, y + ch_h - 14, 230 - tx, sub, on ? INK : MUTED);
     }
 }
 
@@ -448,6 +490,45 @@ static void enter_channel(int c)
     load();
     go(V_LIST);
     if (nucleo_setup_ip() && nucleo_setup_ip()[0]) start(NST_OP_REFRESH, nullptr);   // the fresh catalog of THIS store
+}
+
+// Compact: an app as a two-line row — its icon, the name, size + category (+ how new) under it, its state as a chip
+// at the right; the selection on the accent. Scrolls to keep the selection in view.
+static int s_cscroll;
+static void compact_apps(int y, int h)
+{
+    const int rh = 33, rows = h / rh > 0 ? h / rh : 1, li = lang_idx();
+    const bool bar = s_nvis > rows;
+    if (s_sel < s_cscroll) s_cscroll = s_sel;
+    if (s_sel >= s_cscroll + rows) s_cscroll = s_sel - rows + 1;
+    if (s_cscroll > (bar ? s_nvis - rows : 0)) s_cscroll = bar ? s_nvis - rows : 0;
+    const int rw = bar ? 230 : 236;
+    for (int k = 0; k < rows && s_cscroll + k < s_nvis; k++) {
+        const int i = s_cscroll + k, ry = y + k * rh;
+        const Row &r = M->rows[M->vis[i]];
+        const bool f = i == s_sel;
+        const unsigned short bg = f ? ACC : BG;
+        if (f) d.fillRoundRect(2, ry + 1, rw, rh - 2, 8, ACC);
+        app_icon(r.id, r.name, r.cat, 6, ry + 4, rh - 8, bg);
+        const char *w = list_word(r.state);
+        d.setFont(&fonts::Font0);
+        const int cw = d.textWidth(w) + 10, cx = 2 + rw - cw - 4;
+        const unsigned short cc = f ? INK : state_col(r.state);
+        d.drawRoundRect(cx, ry + 10, cw, 13, 6, cc);
+        txt(&fonts::Font0, cx + cw / 2, ry + 13, w, cc, textdatum_t::top_center);
+        txt_fit(&fonts::Font2, 36, ry + 2, cx - 40, r.name, f ? INK : FG);
+        char sz[16], m[48];
+        kb(sz, sizeof sz, r.size);
+        const char *age = s_view != V_CAT && s_tab == TAB_NEW ? ago(r.updated) : "";
+        snprintf(m, sizeof m, age[0] ? "%s  %s  %s" : "%s  %s", sz, CATS[r.cat].n[li], age);
+        txt_fit(&fonts::Font0, 36, ry + 21, cx - 40, m, f ? INK : MUTED);
+    }
+    if (bar) {                                               // where the visible rows are in the whole list
+        d.fillRoundRect(235, y + 2, 3, rows * rh - 4, 1, LINE);
+        const int th = (rows * rh - 4) * rows / s_nvis, ty = y + 2 + (rows * rh - 4 - th) * s_cscroll / (s_nvis - rows);
+        d.fillRoundRect(235, ty, 3, th < 6 ? 6 : th, 1, ACC);
+    }
+    d.setTextDatum(textdatum_t::top_left);
 }
 
 static void draw_tabs_and_list(int top, int h)
@@ -474,7 +555,7 @@ static void draw_tabs_and_list(int top, int h)
         y += 19; lh -= 19;
         d.setFont(&fonts::Font0); d.setTextDatum(textdatum_t::top_left);
     }
-    if (s_nvis) { app_ui_list(y, lh, s_nvis, s_sel, row_label, row_right, row_color, nullptr); return; }
+    if (s_nvis) { compact_apps(y, lh); return; }
     if (!s_n)
         empty_state(y, nucleo_store_status() == NST_FAILED ? nucleo_store_error()
                        : TR5("Catalogo non ancora scaricato: serve il Wi-Fi (r per riprovare).",
@@ -501,7 +582,7 @@ static void draw_category(int top, int h)
     txt(&fonts::Font2, 12, top + 3, t, INK);
     int y = top + 22;
     d.setFont(&fonts::Font0); d.setTextDatum(textdatum_t::top_left);
-    if (s_nvis) app_ui_list(y, h - 22, s_nvis, s_sel, row_label, row_right, row_color, nullptr);
+    if (s_nvis) compact_apps(y, h - 22);
     else empty_state(y, TR5("Nessuna app in questa categoria.", "No apps in this category.", "Sin apps en esta categoria.", "Aucune app ici.", "Keine Apps hier."), MUTED);
 }
 
@@ -511,7 +592,7 @@ static void draw_app(int top, int h)
     int li = lang_idx(), cat = cat_index(a.category);
     uint8_t stt = state_of(a);
     // Header: tile, name, author.
-    tile(6, top + 4, 30, a.name[li], cat);
+    app_icon(a.id, a.name[li], cat, 6, top + 4, 30, BG);
     txt_fit(&fonts::Font4, 42, top + 2, 194, a.name[li], FG);
     char s[72], sz[16];
     kb(sz, sizeof sz, a.size);
@@ -573,48 +654,92 @@ static void draw_qr(int top, int h)
 }
 
 // ===== two screens ==============================================================================================
-// The panel carries the store: the sections as a tab bar, the apps as a touch list, and an app's page as a real
-// install card (big tile, name, facts, description, the Install/Update/Open + Uninstall buttons). Categories, the
-// remove confirm and the open-on-phone QR get their own panel layouts. The Cardputer becomes the companion: the
-// section / selection / app state and the key map; during a download, the progress.
+// With the panel attached the panel IS the store, the Cardputer its companion:
+//  - the choice: two big cards with the stores' icons;
+//  - a store's sections (tabs) or a category: master-detail - the apps as a touch list at the left (icon, name,
+//    state), the selected app's card at the right (icon, facts, name, description, its action as a big button), so
+//    browsing, reading and installing need no page change; tap the card (or a selected row again) for the full page;
+//  - Categories: a 2 x 4 grid of coloured tiles, one tap opens one;
+//  - an app's page, the remove confirm, the open-on-phone QR and the progress: their own layouts.
+// The Cardputer shows the selected app (name, state, facts, description) and the keys.
 static const char *const LG_TABS[5][NTABS] = {
     { "Novita'", "Giochi", "Categorie", "Mie" }, { "New", "Games", "Categories", "Mine" },
     { "Nuevas", "Juegos", "Categorias", "Mias" }, { "Neuf", "Jeux", "Categ.", "Mes apps" },
     { "Neu", "Spiele", "Kategorien", "Meine" } };
+enum { LG_ROW = 44, LG_LW = 150, ACT = 0x02 };               // ACT: the detail card's action button (never typed)
 
-static void lg_tile(int x, int y, int sz, const char *name, int cat) { tile(x, y, sz, name, cat, &fonts::FreeSansBold18pt7b); }
+static const char *act_word(uint8_t stt) { return stt == S_OK ? TR5("Apri", "Open", "Abrir", "Ouvrir", "Oeffnen") : state_word(stt); }
+static bool can_act(uint8_t stt) { return stt == S_NEW || stt == S_UPDATE || stt == S_OK; }
 
-// An app as a card in the panel lists: its tile, name and facts, and its action ON the card â€” Install / Update /
-// Open. The action is a field registered before the row's own target (the first registered wins), so tapping it
-// acts at once (on_key, via card_top) while the rest of the card selects / opens the app page.
-enum { LG_CARD = 56 };
-// The panel card list's top, for drawing and for hit-testing the action taps: under the header (a category) or
-// under the header + the tabs (+ the "update all" bar in Mine). Must match draw_large's layout.
-static int card_top(void) { return s_view == V_CAT ? lg::HEAD + 2 : lg::HEAD + 34 + (s_tab == TAB_MINE && s_updates ? 36 : 0); }
-static void card_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+// The selected row's full catalog entry, for the detail card and the companion (M->app is free in the lists).
+static const st_app_t *selected_app(void)
+{
+    if (!s_nvis) return nullptr;
+    const char *id = M->rows[M->vis[s_sel]].id;
+    if (strcmp(M->app.id, id) && !st_find(NUCLEO_SD_MOUNT, CH_ID[s_ch], id, &M->app)) { M->app.id[0] = 0; return nullptr; }
+    return &M->app;
+}
+
+static void lg_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
 {
     const Row &r = M->rows[M->vis[i]];
-    if (!focus) { bg = lg::card(); d.fillRoundRect(x, y + 2, w, h - 4, 8, bg); }
-    lg_tile(x + 7, y + 8, 40, r.name, r.cat);
-    const bool act = r.state == S_NEW || r.state == S_UPDATE || r.state == S_OK;
-    const int aw = 90, ax = x + w - aw - 7, tx = x + 56, tw = (act ? ax : x + w - 8) - tx - 6;
-    char t[48]; lg::font(1); d.setTextColor(focus ? INK : FG, bg); lg::fit(t, sizeof t, r.name, tw); d.drawString(t, tx, y + 10);
-    char sz[16]; kb(sz, sizeof sz, r.size);
-    char f[48]; snprintf(f, sizeof f, "%s  %s", sz, act ? CATS[r.cat].n[lang_idx()] : list_word(r.state));
-    lg::font(0); d.setTextColor(focus ? INK : MUTED, bg); lg::fit(t, sizeof t, f, tw); d.drawString(t, tx, y + 32);
-    if (!act) return;
-    const unsigned short pc = r.state == S_OK ? C_GREEN : state_col(r.state);
-    d.fillRoundRect(ax, y + 12, aw, h - 24, 8, pc);
-    if (focus) d.drawRoundRect(ax, y + 12, aw, h - 24, 8, INK);
-    lg::fit(t, sizeof t, r.state == S_OK ? TR5("Apri", "Open", "Abrir", "Ouvrir", "Oeffnen") : state_word(r.state), aw - 8);
-    d.setTextDatum(middle_center); d.setTextColor(INK, pc);
-    d.drawString(t, ax + aw / 2, y + h / 2); d.setTextDatum(top_left);
-    lg::field(ax - 4, y + 2, aw + 8, h - 4);
+    app_icon(r.id, r.name, r.cat, x + 6, y + 5, h - 10, bg);
+    char t[40];
+    lg::font(0); d.setTextColor(focus ? INK : FG, bg); lg::fit(t, sizeof t, r.name, w - h - 8); d.drawString(t, x + h + 2, y + 6);
+    lg::font(4); d.setTextColor(focus ? INK : state_col(r.state), bg); d.drawString(list_word(r.state), x + h + 2, y + 27);
 }
-static void card_list(void)
+
+static void lg_detail(int x, int y, int w, int h)
 {
-    const int y = card_top();
-    lg::list(0, y, d.width(), d.height() - y - 4, LG_CARD, s_nvis, s_sel, &s_lg_scroll, card_row, nullptr, ACC);
+    lg::panel(x, y, w, h);
+    const st_app_t *a = selected_app();
+    if (!a) return;
+    const int li = lang_idx(), cat = cat_index(a->category);
+    const uint8_t stt = state_of(*a);
+    const unsigned short cb = lg::card();
+    app_icon(a->id, a->name[li], cat, x + 8, y + 8, 48, cb);
+    char t[72], sz[16];
+    kb(sz, sizeof sz, a->size);
+    lg::font(4); d.setTextColor(MUTED, cb);
+    snprintf(t, sizeof t, "v%s", a->version); d.drawString(t, x + 64, y + 10);
+    d.drawString(sz, x + 64, y + 22);
+    d.setTextColor(CATS[cat].col, cb); lg::fit(t, sizeof t, CATS[cat].n[li], w - 70); d.drawString(t, x + 64, y + 34);
+    const char *age = ago(a->updated);
+    if (age[0]) { d.setTextColor(DIM, cb); d.drawString(age, x + 64, y + 46); }
+    lg::font(1); d.setTextColor(FG, cb); lg::fit(t, sizeof t, a->name[li], w - 16); d.drawString(t, x + 8, y + 62);
+    const int by = y + h - 42;                               // the action
+    lg::font(4); d.setTextColor(FG, cb);
+    lg::wrap(a->desc[li], x + 8, y + 84, w - 16, 11, (by - y - 88) / 11);
+    if (can_act(stt)) lg::button(x + 8, by, w - 16, 34, act_word(stt), stt == S_OK ? C_GREEN : state_col(stt), INK, NK_CHAR, ACT);
+    else { lg::font(0); d.setTextColor(state_col(stt), cb); d.setTextDatum(middle_center); d.drawString(state_word(stt), x + w / 2, by + 17); d.setTextDatum(top_left); }
+    nucleo_touch_add(x, y, w, by - y, NK_ENTER, 0);          // the rest of the card: the full page
+}
+
+// The apps of a section or a category: the list and the selected app's card.
+static void lg_apps(int y, int H)
+{
+    lg::list(0, y, LG_LW, H - y - 2, LG_ROW, s_nvis, s_sel, &s_lg_scroll, lg_row, nullptr, ACC);
+    lg_detail(LG_LW + 4, y + 2, 320 - LG_LW - 8, H - y - 6);
+}
+
+static void lg_cats(int y, int H)
+{
+    const int li = lang_idx(), rows = (NCATS + 1) / 2, cw = (320 - 12) / 2, ch = (H - y - 4) / rows;
+    for (int i = 0; i < NCATS; i++) {
+        const int cx = 4 + (i % 2) * (cw + 4), cy = y + 2 + (i / 2) * ch;
+        const bool f = i == s_cat_sel;
+        const unsigned short col = M->cat_count[i] ? CATS[i].col : DIM, bg = f ? col : lg::card();
+        d.fillRoundRect(cx, cy, cw, ch - 4, 10, bg);
+        if (!f) d.fillRoundRect(cx + 8, cy + (ch - 4) / 2 - 7, 14, 14, 4, col);
+        char t[32], n[8];
+        snprintf(n, sizeof n, "%d", M->cat_count[i]);
+        lg::font(1);
+        const int avail = cw - 44 - d.textWidth(n);              // the bold face when the name fits, else Font2
+        if (d.textWidth(CATS[i].n[li]) > avail) lg::font(0);
+        d.setTextColor(f ? INK : FG, bg); lg::fit(t, sizeof t, CATS[i].n[li], avail); d.drawString(t, cx + 30, cy + (ch - 4) / 2 - 7);
+        lg::font(1); d.setTextColor(f ? INK : MUTED, bg); d.setTextDatum(top_right); d.drawString(n, cx + cw - 10, cy + (ch - 4) / 2 - 7); d.setTextDatum(top_left);
+        nucleo_touch_add(cx, cy, cw, ch - 4, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
 }
 
 static void lg_progress(void)
@@ -640,13 +765,13 @@ static void lg_app(void)
     const uint8_t stt = state_of(a);
     const int y = lg::header(a.name[li], nullptr, ACC, NK_BACK);
     d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
-    lg_tile(14, y + 8, 56, a.name[li], cat);
-    lg::font(2); d.setTextColor(FG, BG); char nm[48]; lg::fit(nm, sizeof nm, a.name[li], W - 92); d.drawString(nm, 82, y + 10);
+    app_icon(a.id, a.name[li], cat, 14, y + 8, 48, BG);
+    lg::font(2); d.setTextColor(FG, BG); char nm[48]; lg::fit(nm, sizeof nm, a.name[li], W - 84); d.drawString(nm, 74, y + 10);
     char sz[16]; kb(sz, sizeof sz, a.size);
     char facts[80]; snprintf(facts, sizeof facts, "v%s  %s  %s", a.version, sz, CATS[cat].n[li]);
-    lg::font(0); d.setTextColor(MUTED, BG); char ff[80]; lg::fit(ff, sizeof ff, facts, W - 92); d.drawString(ff, 82, y + 42);
-    if (a.author[0]) { char au[48]; snprintf(au, sizeof au, "%s %s", TR5("di", "by", "de", "par", "von"), a.author); char af[48]; lg::fit(af, sizeof af, au, W - 92); d.setTextColor(DIM, BG); d.drawString(af, 82, y + 58); }
-    int dy = y + 80;
+    lg::font(0); d.setTextColor(MUTED, BG); char ff[80]; lg::fit(ff, sizeof ff, facts, W - 84); d.drawString(ff, 74, y + 36);
+    if (a.author[0]) { char au[48]; snprintf(au, sizeof au, "%s %s", TR5("di", "by", "de", "par", "von"), a.author); char af[48]; lg::fit(af, sizeof af, au, W - 84); d.setTextColor(DIM, BG); d.drawString(af, 74, y + 52); }
+    int dy = y + 66;
     d.drawFastHLine(14, dy, W - 28, LINE); dy += 8;
     const int descBot = a.perms[0] ? H - 74 : H - 62;
     const int maxl = (descBot - dy) / 16; bool more = false;
@@ -708,68 +833,80 @@ static void lg_choose(void)
     for (int c = 0; c < NCH; c++) {
         const int cy = y + 30 + c * (ch + 4);
         const bool off = c == CH_NATIVE && !native_ok(), on = c == s_ch_sel;
-        const unsigned short col = off ? DIM : CH_COL[c];
-        if (on) d.fillRoundRect(10, cy, W - 20, ch, 12, col); else { d.fillRoundRect(10, cy, W - 20, ch, 12, LINE); d.drawRoundRect(10, cy, W - 20, ch, 12, col); }
-        lg::font(2); d.setTextColor(on ? INK : FG, on ? col : LINE); d.drawString(ch_name(c), 28, cy + 12);
-        lg::font(0); d.setTextColor(on ? INK : MUTED, on ? col : LINE);
+        const unsigned short col = off ? DIM : CH_COL[c], bg = on ? col : lg::card();
+        d.fillRoundRect(10, cy, W - 20, ch, 12, bg);
+        if (!on) d.drawRoundRect(10, cy, W - 20, ch, 12, col);
+        const int isz = ch - 20 > 48 ? 48 : ch - 20;
+        if (!art_icon(c == CH_NATIVE ? "@native" : "@web", 22, cy + (ch - isz) / 2, isz, bg)) {
+            d.fillRoundRect(22, cy + (ch - isz) / 2, isz, isz, isz / 4, on ? INK : col);
+            char k[2] = { (char)('1' + c), 0 };
+            lg::font(3); d.setTextColor(on ? col : INK); d.setTextDatum(middle_center); d.drawString(k, 22 + isz / 2, cy + ch / 2); d.setTextDatum(top_left);
+        }
+        const int tx = 34 + isz;
+        lg::font(2); d.setTextColor(on ? INK : FG, bg); d.drawString(ch_name(c), tx, cy + ch / 2 - 22);
+        lg::font(0); d.setTextColor(on ? INK : MUTED, bg);
         char sub[64]; lg::fit(sub, sizeof sub, off ? TR5("Non disponibile in questa installazione", "Not available on this setup", "No disponible aqui",
-                                                         "Indisponible ici", "Hier nicht verfuegbar") : ch_sub(c), W - 56);
-        d.drawString(sub, 28, cy + ch - 24);
+                                                         "Indisponible ici", "Hier nicht verfuegbar") : ch_sub(c), W - tx - 20);
+        d.drawString(sub, tx, cy + ch / 2 + 4);
         nucleo_touch_add(10, cy, W - 20, ch, NK_CHAR, (char)('1' + c));   // tap the card = open that store
     }
     if (s_note) { lg::font(0); d.setTextColor(C_RED, BG); char n[96]; lg::fit(n, sizeof n, s_note, W - 20); d.drawString(n, 10, H - 14); }
 }
 
-static void draw_large(void)
+static const char *empty_msg(void)
+{
+    return nucleo_store_status() == NST_FAILED ? nucleo_store_error()
+         : !s_n ? TR5("Catalogo non ancora scaricato: serve il Wi-Fi (r per riprovare).",
+                      "Catalog not downloaded yet: it needs Wi-Fi (r to retry).",
+                      "Catalogo aun no descargado: necesita Wi-Fi (r para reintentar).",
+                      "Catalogue pas encore telecharge : il faut le Wi-Fi (r pour reessayer).",
+                      "Katalog noch nicht geladen: WLAN noetig (r fuer neu).")
+         : s_view == V_CAT ? TR5("Nessuna app in questa categoria.", "No apps in this category.", "Sin apps en esta categoria.", "Aucune app ici.", "Keine Apps hier.")
+         : s_tab == TAB_MINE ? TR5("Nessuna app installata dallo store. Le trovi in Novita' e Categorie.",
+                                   "No apps installed from the store yet. Find them in New and Categories.",
+                                   "Aun no hay apps de la tienda. Buscalas en Nuevas y Categorias.",
+                                   "Aucune app de la boutique. Voyez Nouveau et Categories.",
+                                   "Noch keine Store-Apps. Siehe Neu und Kategorien.")
+         : TR5("Niente qui, per ora.", "Nothing here yet.", "Nada aqui por ahora.", "Rien ici pour l'instant.", "Noch nichts hier.");
+}
+
+static void draw_large_view(void)
 {
     const int W = d.width(), H = d.height();
-    nucleo_touch_clear();
-    if (nucleo_store_status() == NST_BUSY) { lg_progress(); nucleo_touch_commit(); return; }
-    if (s_view == V_CHOOSE) { lg_choose(); nucleo_touch_commit(); return; }
-    if (s_view == V_APP || s_view == V_CONFIRM_REMOVE) { lg_app(); nucleo_touch_commit(); return; }
-    if (s_view == V_QR) { lg_qr(); nucleo_touch_commit(); return; }
+    if (nucleo_store_status() == NST_BUSY) { lg_progress(); return; }
+    if (s_view == V_CHOOSE) { lg_choose(); return; }
+    if (s_view == V_APP || s_view == V_CONFIRM_REMOVE) { lg_app(); return; }
+    if (s_view == V_QR) { lg_qr(); return; }
+    int y;
     if (s_view == V_CAT) {
         char cnt[12]; snprintf(cnt, sizeof cnt, "%d", s_nvis);
-        const int y = lg::header(CATS[s_cat].n[lang_idx()], cnt, CATS[s_cat].col, NK_BACK);
-        if (s_nvis) card_list();
-        else lg::message(0, y, W, H - y, TR5("Nessuna app in questa categoria.", "No apps in this category.", "Sin apps en esta categoria.", "Aucune app ici.", "Keine Apps hier."), nullptr, MUTED);
-        nucleo_touch_commit();
-        return;
+        y = lg::header(CATS[s_cat].n[lang_idx()], cnt, CATS[s_cat].col, NK_BACK);
+    } else {
+        const int y0 = lg::header(ch_name(s_ch), nullptr, CH_COL[s_ch], NK_BACK);
+        const int li = lang_idx();
+        const char *names[NTABS]; static char mine[20];
+        for (int i = 0; i < NTABS; i++) names[i] = LG_TABS[li][i];
+        if (s_updates) { snprintf(mine, sizeof mine, "%s %d", LG_TABS[li][TAB_MINE], s_updates); names[TAB_MINE] = mine; }
+        y = lg::tabs(y0, names, NTABS, s_tab, CH_COL[s_ch], nullptr);
     }
-    // V_LIST: section tabs + list
-    const int y0 = lg::header(ch_name(s_ch), nullptr, CH_COL[s_ch], NK_BACK);
-    const int li = lang_idx();
-    const char *names[NTABS]; static char mine[20];
-    for (int i = 0; i < NTABS; i++) names[i] = LG_TABS[li][i];
-    if (s_updates) { snprintf(mine, sizeof mine, "%s %d", LG_TABS[li][TAB_MINE], s_updates); names[TAB_MINE] = mine; }
-    int y = lg::tabs(y0, names, NTABS, s_tab, CH_COL[s_ch], nullptr);
-    if (s_tab == TAB_CATS) {
-        lg::text_list(0, y + 2, W, H - y - 4, NCATS, s_cat_sel, &s_lg_scroll, cat_label, cat_right, cat_color, nullptr, ACC);
-        nucleo_touch_commit();
-        return;
-    }
-    int listy = y + 2, listh = H - listy - 4;
-    if (s_tab == TAB_MINE && s_updates) {
+    d.fillRect(0, y, W, H - y, BG);
+    if (s_view == V_LIST && s_tab == TAB_CATS) { lg_cats(y, H); return; }
+    if (s_view == V_LIST && s_tab == TAB_MINE && s_updates) {
         char b[40]; snprintf(b, sizeof b, TR5("Aggiorna tutte (%d)", "Update all (%d)", "Actualizar todas (%d)", "Tout mettre a jour (%d)", "Alle aktualisieren (%d)"), s_updates);
-        lg::button(8, y + 2, W - 16, 32, b, C_YELLOW, INK, NK_CHAR, 'u');
-        listy = y + 38; listh = H - listy - 4;
+        lg::button(6, y + 3, W - 12, 30, b, C_YELLOW, INK, NK_CHAR, 'u');
+        y += 36;
     }
-    if (s_nvis) card_list();
-    else {
-        const char *msg = nucleo_store_status() == NST_FAILED ? nucleo_store_error()
-                        : !s_n ? TR5("Catalogo non ancora scaricato: serve il Wi-Fi (r per riprovare).",
-                             "Catalog not downloaded yet: it needs Wi-Fi (r to retry).",
-                             "Catalogo aun no descargado: necesita Wi-Fi (r para reintentar).",
-                             "Catalogue pas encore telecharge : il faut le Wi-Fi (r pour reessayer).",
-                             "Katalog noch nicht geladen: WLAN noetig (r fuer neu).")
-                        : s_tab == TAB_MINE ? TR5("Nessuna app installata dallo store. Le trovi in Novita' e Categorie.",
-                           "No apps installed from the store yet. Find them in New and Categories.",
-                           "Aun no hay apps de la tienda. Buscalas en Nuevas y Categorias.",
-                           "Aucune app de la boutique. Voyez Nouveau et Categories.",
-                           "Noch keine Store-Apps. Siehe Neu und Kategorien.")
-                        : TR5("Niente qui, per ora.", "Nothing here yet.", "Nada aqui por ahora.", "Rien ici pour l'instant.", "Noch nichts hier.");
-        lg::message(0, listy, W, listh, msg, nullptr, nucleo_store_status() == NST_FAILED ? C_RED : MUTED);
-    }
+    if (s_nvis) lg_apps(y, H);
+    else lg::message(0, y, W, H - y, empty_msg(), nullptr, nucleo_store_status() == NST_FAILED ? C_RED : MUTED);
+}
+
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    art_begin(s_view == V_CHOOSE ? s_ch_sel : s_ch);
+    draw_large_view();
+    art_end();
+    d.setTextDatum(top_left);
     nucleo_touch_commit();
 }
 
@@ -825,28 +962,42 @@ static void draw_companion(void)
         lg::comp_keys(TR5("un tasto: indietro", "any key: back", "una tecla: atras", "une touche : retour", "Taste: zurueck"));
         return;
     }
-    if (s_view == V_CAT) {
-        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(CATS[s_cat].col, BG); d.drawString(CATS[s_cat].n[li], 8, y + 4);
-        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); char c[32]; snprintf(c, sizeof c, TR5("%d app", "%d apps", "%d apps", "%d apps", "%d Apps"), s_nvis); d.drawString(c, 8, y + 26);
-        if (s_nvis) { d.setTextColor(FG, BG); char b[40]; snprintf(b, sizeof b, "-> %.22s", row_label(s_sel, nullptr)); d.drawString(b, 8, y + 40); }
-        lg::comp_keys(TR5("INVIO apri  ESC categorie", "ENTER open  ESC categories", "INTRO abrir  ESC categ.", "ENTREE ouvrir  ESC categ.", "ENTER oeffnen  ESC Kateg."));
+    if (s_view == V_LIST && s_tab == TAB_CATS) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(CATS[s_cat_sel].col, BG); d.drawString(CATS[s_cat_sel].n[li], 8, y + 4);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+        char c[32]; snprintf(c, sizeof c, TR5("%d app", "%d apps", "%d apps", "%d apps", "%d Apps"), M->cat_count[s_cat_sel]); d.drawString(c, 8, y + 26);
+        lg::comp_keys(TR5("TAB sezione  INVIO apri", "TAB section  ENTER open", "TAB seccion  INTRO abrir", "TAB section  ENTREE", "TAB Bereich  ENTER"));
         return;
     }
-    // V_LIST
-    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(CH_COL[s_ch], BG);
-    char tb[40]; snprintf(tb, sizeof tb, "%s - %s", ch_name(s_ch), LG_TABS[li][s_tab]); d.drawString(tb, 8, y + 4);
-    d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
-    if (s_tab == TAB_CATS) { char c[24]; snprintf(c, sizeof c, TR5("%d categorie", "%d categories", "%d categorias", "%d categories", "%d Kategorien"), NCATS); d.drawString(c, 8, y + 26); d.setTextColor(FG, BG); char b[40]; snprintf(b, sizeof b, "-> %.22s", cat_label(s_cat_sel, nullptr)); d.drawString(b, 8, y + 40); }
-    else {
-        char c[32]; snprintf(c, sizeof c, TR5("%d app  -  %d da aggiornare", "%d apps  -  %d to update", "%d apps  -  %d por actualizar", "%d apps  -  %d a jour", "%d Apps  -  %d Updates"), s_nvis, s_updates); d.drawString(c, 8, y + 26);
-        if (s_nvis) { d.setTextColor(FG, BG); char b[40]; snprintf(b, sizeof b, "-> %.22s", row_label(s_sel, nullptr)); d.drawString(b, 8, y + 40); }
+    // A list (a section or a category): the app selected on the panel, in full.
+    const st_app_t *a = selected_app();
+    if (!a) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(CH_COL[s_ch], BG); d.drawString(ch_name(s_ch), 8, y + 4);
+        lg::comp_keys(TR5("TAB sezione  r ricarica", "TAB section  r reload", "TAB seccion  r recargar", "TAB section  r", "TAB Bereich  r"));
+        return;
     }
-    lg::comp_keys(TR5("TAB sezione  INVIO apri  r ricarica", "TAB section  ENTER open  r reload", "TAB seccion  INTRO abrir  r", "TAB section  ENTREE ouvrir  r", "TAB Bereich  ENTER oeffnen  r"));
+    const int cat = cat_index(a->category);
+    const uint8_t stt = state_of(*a);
+    app_icon(a->id, a->name[li], cat, 6, y + 2, 28, BG);
+    txt_fit(&fonts::FreeSansBold9pt7b, 40, y + 1, 196, a->name[li], FG);
+    char f[48], sz[16]; kb(sz, sizeof sz, a->size);
+    snprintf(f, sizeof f, "%s  -  v%s  %s", state_word(stt), a->version, sz);
+    txt_fit(&fonts::Font0, 40, y + 20, 196, f, state_col(stt));
+    d.setFont(&fonts::Font0); d.setTextColor(FG, BG);
+    lg::wrap(a->desc[li], 6, y + 36, 228, 10, (nucleo_app_content_top() + nucleo_app_content_height() - 14 - (y + 36)) / 10);
+    lg::comp_keys(TR5("INVIO pagina  TAB sezione", "ENTER page  TAB section", "INTRO pagina  TAB seccion", "ENTREE page  TAB section", "ENTER Seite  TAB Bereich"));
 }
 
+static void draw_compact(void);
 static void on_draw(void)
 {
-    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    art_begin(s_view == V_CHOOSE ? s_ch_sel : s_ch);
+    if (nucleo_app_two_screens()) draw_companion(); else draw_compact();
+    art_end();
+}
+
+static void draw_compact(void)
+{
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     if (s_canvas_lent && !s_direct_full && nucleo_store_status() == NST_BUSY) {   // direct: only the card changes
         draw_progress(top, h);
@@ -964,21 +1115,19 @@ static void on_key(int key, char ch)
         nucleo_app_request_draw();
         return;
     }
-    int tx, ty;
-    if (lg::tap(key, ch, &tx, &ty)) {                     // a card's own action on the panel: open the app and act
-        const int i = s_lg_scroll + (ty - card_top()) / LG_CARD;
-        if (i < 0 || i >= s_nvis) return;
-        s_sel = i; open_app();
+    if (key == NK_CHAR && ch == ACT) {                    // the detail card's button on the panel: act on the selection
+        if (!s_nvis) return;
+        open_app();
         if (s_view != V_APP) return;
         const uint8_t stt = state_of(M->app);
         if (stt == S_NEW || stt == S_UPDATE) start(NST_OP_INSTALL, M->app.id);
         else if (stt == S_OK) open_installed();
         return;
     }
-    if (nucleo_touch_is_row(key, ch)) {                   // a tapped list / category row on the panel
-        if (s_view == V_LIST && s_tab == TAB_CATS) {
-            if (lg::row_tap(key, ch, s_lg_scroll, NCATS, &s_cat_sel) == 2) { s_cat = s_cat_sel; s_sel = 0; go(V_CAT); }
-            else nucleo_app_request_draw();
+    if (nucleo_touch_is_row(key, ch)) {                   // a tapped list row / category tile on the panel
+        if (s_view == V_LIST && s_tab == TAB_CATS) {      // a tile opens at once
+            const int c = ch - NUCLEO_TOUCH_ROW;
+            if (c < NCATS) { s_cat = s_cat_sel = c; s_sel = 0; go(V_CAT); }
             return;
         }
         if (lg::row_tap(key, ch, s_lg_scroll, s_nvis, &s_sel) == 2) open_app();

@@ -103,18 +103,9 @@
   <script type="module">
     import I18N from '/nucleo-i18n.js';
     import Caps from '/nucleo-caps.js';   // what this device can do (wifi.manage)
+    import os from '/nucleo-shell.js';   // theme (set by the shell) and the shell's status snapshot
     const t = await I18N.init('wifi-scanner');
     const $ = (id) => document.getElementById(id);
-    const SETTINGS = '/system/config/settings.json';
-
-    async function readJSON(path) {
-      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
-        return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; }
-    }
-    async function loadTheme() {
-      const s = await readJSON(SETTINGS);
-      if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
-    }
 
     // ---- signal model ----------------------------------------------------------
     // RSSI dBm → 0..100% and a 1..4 quality bucket, with a colour ramp.
@@ -266,9 +257,9 @@
     }
 
     async function fetchStatus() {
-      try { const r = await fetch('/api/status', { cache: 'no-store' });
-        if (r.ok) { const s = await r.json(); connectedSSID = s?.network?.ssid || null; return s; } } catch {}
-      return null;
+      const s = await os.status();
+      if (s) connectedSSID = s?.network?.ssid || null;
+      return s;
     }
 
     // Try the device scan endpoint; normalise a few likely field names.
@@ -290,7 +281,7 @@
       } catch { return { err: 0 }; }
     }
 
-    // Driven from the shell when embedded: status.snapshot keeps connectedSSID fresh (no own
+    // Driven from the shell when embedded: its status snapshot (os.onStatus) keeps connectedSSID fresh (no own
     // /api/status), and os-visibility pauses the auto-scan while the window is hidden — each scan
     // BLOCKS the single httpd task ~1.5-2 s, so scanning an invisible window starved the whole UI.
     const EMBEDDED = window.top !== window.self;
@@ -331,12 +322,10 @@
       if (e.key === 'r' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scan(); }
     });
 
-    // ---- live: theme + pushed scan events --------------------------------------
+    // ---- live: pushed scan events and the shell's status (the shell themes the page itself) ----
+    os.onStatus((s) => { connectedSSID = s?.network?.ssid || null; });   // fresh highlight, no fetch
     window.addEventListener('message', (e) => {
-      if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
-      if (e.data?.t === 'fs.changed' && e.data.d?.path?.endsWith('settings.json')) loadTheme();
       if (e.data?.t === 'wifi.scan' && Array.isArray(e.data.d?.networks)) { setSrc('src_live', true); render(e.data.d.networks); }
-      if (e.data?.t === 'status.snapshot') connectedSSID = e.data.d?.network?.ssid || null;   // fresh highlight, no fetch
       if (e.data?.t === 'os-visibility') {                                                     // pause scanning while hidden
         osVisible = !!(e.data.d && e.data.d.visible);
         if (osVisible && autoOn) scan();
@@ -352,7 +341,6 @@
 
     // ---- boot ------------------------------------------------------------------
     async function init() {
-      await loadTheme();
       // Scanning and joining are the device's (capability wifi.manage): elsewhere say so, and never scan.
       // Unknown caps (the device did not answer at all) are not "no Wi-Fi": scan anyway, so the user is told
       // the real reason (unreachable, not paired) by the scan's own failure path.

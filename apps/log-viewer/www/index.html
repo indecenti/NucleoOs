@@ -109,6 +109,13 @@
   // visibility-gated health probe that SYNTHESIZES rows entirely client-side (one tiny read-only GET per
   // tick, never during a heavy job). The device pays nothing at rest; the intelligence lives here.
   const JOURNAL = '/journal/events.ndjson';
+  // The core file layer (/nucleo-fs.js), imported once by this classic script.
+  let _fs = null;
+  const coreFs = () => _fs || (_fs = import('/nucleo-fs.js').then((m) => m.default, (e) => { _fs = null; throw e; }));
+  // The OS around this window (/nucleo-shell.js), imported right away so it hears the shell's first status
+  // snapshot: the probe's /api/status fallback reads the snapshot the shell already polls, never its own.
+  const osReady = import('/nucleo-shell.js').then((m) => m.default, () => null);
+  const shellStatus = () => osReady.then((os) => (os ? os.status() : null)).catch(() => null);
   const CAP = 600;                      // bounded view — never grows without limit
   const events = [];                    // newest at the end (device events carry ts in EPOCH SECONDS)
   let paused = false, follow = true, filterStr = '';
@@ -196,9 +203,8 @@
     btn.disabled = true; btn.textContent = '…';
     const restoreBtn = () => { btn.disabled = false; btn.innerHTML = '↧ <span>' + t('btn_history') + '</span>'; };
     try {
-      const r = await fetch('/api/fs/read?path=' + encodeURIComponent(JOURNAL), { cache: 'no-store' });
-      if (r.ok) {
-        const text = await r.text();
+      const text = await (await coreFs()).readText(JOURNAL);
+      if (text != null) {
         const lines = text.split('\n').filter((l) => l.trim());
         // Newest CAP *events*, walking back from the end: a torn or garbled line (power loss mid-append,
         // a truncated payload, a bare `null`) is skipped on its own — it used to throw and lose them all.
@@ -213,7 +219,7 @@
         events.length = 0; events.push(...hist, ...live);
         if (events.length > CAP) events.splice(0, events.length - CAP);
         srcEl.textContent = t('src_journal', { lines: lines.length });
-      } else { srcEl.textContent = t(r.status === 404 ? 'src_none' : 'src_error'); }   // 503/401 = unreadable, not absent
+      } else { srcEl.textContent = t('src_none'); }   // absent; unreadable (busy, not paired) throws: src_error below
     } catch { srcEl.textContent = t('src_error'); }
     restoreBtn();
     render();
@@ -285,8 +291,8 @@
         else if (r.status === 404) probe.mode = 'status';       // older firmware → fall back permanently
       }
       if (!raw) {
-        const r = await fetch('/api/status', { cache: 'no-store' });
-        if (r.ok) { raw = { status: await r.json() }; partial = true; }
+        const st = await shellStatus();
+        if (st) { raw = { status: st }; partial = true; }
       }
     } catch { /* offline → just back off */ }
 
@@ -321,7 +327,7 @@
     if (!out.diag) {     // legacy device → assemble from the three classic read-only endpoints
       // One at a time: three parallel reads would flood the single-task PSRAM-less httpd.
       const grab = (p) => fetch(p, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-      out.status = await grab('/api/status');
+      out.status = await shellStatus();
       if (hasDiag) { out.heap = await grab('/api/heap'); out.cpu = await grab('/api/cpu'); }
     }
     if (hasDiag) try { const r = await fetch('/api/logs', { cache: 'no-store' }); if (r.ok) out.logsText = await r.text(); } catch {}
@@ -344,8 +350,10 @@
   function closeDiagnose() { modal.classList.remove('show'); }
   async function copyDigest() {
     const text = digestEl.value;
-    try { await navigator.clipboard.writeText(text); }
-    catch { digestEl.focus(); digestEl.select(); try { document.execCommand('copy'); } catch {} }
+    const os = await osReady;
+    if (os) os.copy(text);
+    // Plain http has no system clipboard API: the old selection copy still reaches the PC's clipboard.
+    if (!os || !window.isSecureContext) { digestEl.focus(); digestEl.select(); try { document.execCommand('copy'); } catch {} }
     toast(t('copied'));
   }
 

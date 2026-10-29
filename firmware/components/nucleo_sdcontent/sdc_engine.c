@@ -263,6 +263,29 @@ bool sdc_engine_run(const sdc_cfg_t *cfg, const sdc_io_t *io, sdc_state_t *st)
         else if (!cmt) { line[strcspn(line, "\r\n")] = 0; fclose(mf); fail(e, SDC_E_MANIFEST_BAD, "invalid manifest", line); goto out; }
     }
     if (!have_hdr) { fclose(mf); fail(e, SDC_E_MANIFEST_BAD, "invalid manifest", "no header"); goto out; }
+
+    // 3b) Authenticity, before a single payload byte: the manifest pins every file's SHA-256, so its release
+    //     signature covers the whole web OS. HTTPS + per-file hashes only proved the files match the site.
+    {
+        char surl[400], spart[300], ssha[65];
+        url_join(surl, sizeof surl, cfg->base_url, "sd-manifest.sig");
+        join(spart, sizeof spart, cfg->root, "system/content/manifest.sig");
+        uint32_t sbytes = 0;
+        uint8_t block[128];
+        bool got = cfg->verify_manifest && fetch_to_file(e, surl, spart, false, 0, ssha, &sbytes) == SDC_OK &&
+                   sbytes == sizeof block;
+        if (got) {
+            FILE *sf = fopen(spart, "rb");
+            got = sf && fread(block, 1, sizeof block, sf) == sizeof block;
+            if (sf) fclose(sf);
+        }
+        unlink(spart);
+        if (!got || !cfg->verify_manifest(hdr.tag, msha, mbytes, block)) {
+            fclose(mf);
+            fail(e, SDC_E_SIGNATURE, got ? "bad release signature" : "release not signed", "sd-manifest.sig");
+            goto out;
+        }
+    }
     sdc_content_write(cfg->root, cfg->ver3, false, false);   // "started": an interrupted run reads as PARTIAL
     st->files_total = total; st->kb_total = (uint32_t)(e->total / 1024);
     st->phase = SDC_DOWNLOADING; st->pct = 0; prog_at(e, 0);

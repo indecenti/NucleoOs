@@ -88,6 +88,7 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import fs from '/nucleo-fs.js';
     const t = await I18N.init('calendar');
     const $ = (id) => document.getElementById(id);
     const CAL = '/system/config/calendar.json';
@@ -102,20 +103,16 @@
 
     // Typed read. A FAILED read (offline, 401, 503) is NOT an empty calendar: treating it as one showed
     // "no events" and the next add wrote that empty calendar over the real file on the SD.
-    // The firmware answers a missing /system/config/*.json with 200 "{}", so 404 is also "nothing yet".
+    // The firmware answers a missing /system/config/*.json with 200 "{}", so an absent file is also "nothing yet".
+    const statusOf = (e) => (e && e.code === 'denied' ? 403 : 0);
     async function readJSON(path) {
       try {
-        const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
-        if (r.status === 404) return { ok: true, data: null };
-        if (!r.ok) return { ok: false, status: r.status };
-        const txt = await r.text();
+        const txt = await fs.readText(path);
         return { ok: true, data: txt ? JSON.parse(txt) : null };
-      } catch { return { ok: false, status: 0 }; }
+      } catch (e) { return { ok: false, status: statusOf(e) }; }
     }
-    async function writeJSON(path, obj) {
-      try { const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path),
-        { method: 'POST', body: JSON.stringify(obj) }); return r.ok ? true : r.status; } catch { return 0; }
-    }
+    // → true, or the failing status (403 = not paired). Atomic: a failed save keeps the previous calendar.
+    const writeJSON = (path, obj) => fs.writeJSON(path, obj).then(() => true, statusOf);
     // Reminders ANIMA adds on the device carry no id (nucleo_httpd.c writes {time,text}), so they could
     // never be deleted here (the delete filter compared against "undefined"). Give every event a STABLE
     // id derived from its content, so the same event gets the same id on every load without rewriting.
@@ -135,8 +132,7 @@
 
     async function loadSettings() {
       const r = await readJSON(SETTINGS);
-      const s = r.ok ? r.data : null;
-      if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
+      const s = r.ok ? r.data : null;   // the theme is set on this page by the shell (nucleo-shell.js)
       // Dates follow the OS regional format (Settings ▸ Language & Region), like every other surface.
       locale = I18N.locale ? I18N.locale() : (s?.device?.locale || navigator.language);
       // Infer week start from locale: most of the world starts Monday; US/CA/JP start Sunday.
@@ -233,7 +229,7 @@
     $('today-btn').onclick = () => { view = new Date(); view.setDate(1); select(todayKey()); };
     $('ev-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') addEvent(); });
 
-    // Live cross-client: another window edited the calendar or theme → reflect it.
+    // Live cross-client: another window edited the calendar or the regional settings → reflect it.
     window.addEventListener('message', (e) => {
       // ANIMA adding a reminder on the device publishes calendar.changed (nucleo_httpd.c), not fs.changed.
       if (e.data?.t === 'calendar.changed') loadEvents().then(() => { renderGrid(); renderDay(); });
@@ -241,7 +237,6 @@
         if (e.data.d.path.endsWith('calendar.json')) loadEvents().then(() => { renderGrid(); renderDay(); });
         if (e.data.d.path.endsWith('settings.json')) loadSettings().then(() => { renderDow(); renderGrid(); renderDay(); });
       }
-      if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
     });
 
     async function init() {

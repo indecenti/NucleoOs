@@ -99,10 +99,11 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';
     const T = await I18N.init('tasks');   // 't' is already used for task objects; alias the translator as 'T'
     const $ = (id) => document.getElementById(id);
     const FILE = '/data/tasks.todo';          // shared storage so other apps can read it
-    const SETTINGS = '/system/config/settings.json';
 
     let tasks = [];          // { id, text, done, pri (0|1|2), ts }
     let filter = 'all';
@@ -111,38 +112,25 @@
     let readOk = false;       // editing is allowed only once the REAL file was read (or is known not to exist)
 
     // ---- device storage (graceful fallback to memory in preview) --------------
-    async function readText(path) {
-      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
-        return r.ok ? await r.text() : null; } catch { return null; }
-    }
     // Typed read of the task list. A FAILED read (offline, 401, 503) is NOT an empty list: treating it as one
-    // showed "no tasks" and the next add wrote that one task over the whole list on the SD. 404 = none yet.
+    // showed "no tasks" and the next add wrote that one task over the whole list on the SD. Absent = none yet.
+    const statusOf = (e) => (e && e.code === 'denied' ? 403 : 0);
     async function readTasks() {
       try {
-        const r = await fetch('/api/fs/read?path=' + encodeURIComponent(FILE), { cache: 'no-store' });
-        if (r.status === 404) return { ok: true, list: [] };
-        if (!r.ok) return { ok: false, status: r.status };
-        const txt = (await r.text()).trim();
+        const txt = ((await fs.readText(FILE)) || '').trim();
         if (!txt) return { ok: true, list: [] };
         const j = JSON.parse(txt);
         return Array.isArray(j) ? { ok: true, list: j } : { ok: false, status: 'corrupt' };
-      } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : 0 }; }
+      } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : statusOf(e) }; }
     }
-    // → true, or the failing HTTP status (0 = unreachable)
-    async function writeText(path, body) {
-      try { const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body });
-        return r.ok ? true : r.status; } catch { return 0; }
-    }
+    // → true, or the failing status (403 = not paired, 0 = anything else). Atomic: a failed save keeps the old list.
+    const writeText = (path, body) => fs.writeText(path, body).then(() => true, statusOf);
     const failText = (st) => st === 401 || st === 403 ? T('not_paired') : st === 'corrupt' ? T('read_corrupt') : T('read_failed');
     // Every edit goes through here: while the real list is unknown, nothing may change (and we try again).
     function canEdit() {
       if (readOk) return true;
       load();
       return false;
-    }
-    async function loadTheme() {
-      const t = await readText(SETTINGS);
-      try { const s = JSON.parse(t); if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme; } catch {}
     }
 
     function scheduleSave() {
@@ -254,12 +242,10 @@
           !(document.activeElement?.isContentEditable)) { e.preventDefault(); $('text').focus(); }
     });
 
-    // ---- live: theme + external edits -----------------------------------------
+    // ---- live: external edits (the shell sets the theme on this page itself) -------
     window.addEventListener('message', (e) => {
-      if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
       if (e.data?.t === 'fs.changed' && typeof e.data.d?.path === 'string') {
-        if (e.data.d.path.endsWith('settings.json')) loadTheme();
-        else if (e.data.d.path === FILE && !dirty) load();   // another client changed the list
+        if (e.data.d.path === FILE && !dirty) load();   // another client changed the list
       }
       // OS keyboard bridge: behave like a native list app — new task, save now, copy the list, reload.
       if (e.data?.type === 'os-shortcut') {
@@ -273,8 +259,7 @@
     // Copy the whole list to the OS clipboard as a Markdown checklist (Ctrl+C off the input).
     function copyList() {
       const txt = tasks.map((t) => `- [${t.done ? 'x' : ' '}] ${t.text}`).join('\n');
-      try { navigator.clipboard && navigator.clipboard.writeText(txt); } catch {}
-      try { if (window.parent !== window) window.parent.postMessage({ type: 'clipboard-write', kind: 'text', data: txt }, '*'); } catch {}
+      os.copy(txt);
       $('save').textContent = T('copied'); setTimeout(() => { if (!dirty) $('save').textContent = ''; }, 1200);
     }
     // Flush the debounced autosave immediately (Ctrl+S).
@@ -300,7 +285,6 @@
       return loading;
     }
     async function init() {
-      await loadTheme();
       await load();
       $('text').focus();
     }

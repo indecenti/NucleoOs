@@ -1167,6 +1167,15 @@ static void handle_launcher(int k, char ch)
         if (launcher_render_grid_view(ch == NUCLEO_TOUCH_VIEW_FWD ? 1 : -1)) s_dirty = true;
         return;
     }
+    if (cols > 1) {                              // the panel's quick menu: it takes every key while it is open
+        const int q = launcher_qm_key(k, ch);
+        if (q) { if (q == 2) launcher_open_focused(); s_dirty = true; return; }
+        int px, py, i = -1;
+        if (nucleo_touch_is_hold(k, ch) && nucleo_touch_last(&px, &py)) i = launcher_render_grid_item_at(px, py);   // a long press
+        else if (k == NK_CHAR && ch == '*') i = s;                                                                  // or '*'
+        if (i >= 0 && i < launcher_visible_count()) { launcher_set_sel(i); launcher_qm_open(i); s_dirty = true; return; }
+        if (nucleo_touch_is_hold(k, ch)) return;
+    }
     if (nucleo_touch_is_row(k, ch)) {            // the panel: a tapped tile opens straight away
         int i = launcher_render_grid_first() + (ch - NUCLEO_TOUCH_ROW);
         if (i >= 0 && i < launcher_visible_count()) { launcher_set_sel(i); launcher_open_focused(); }
@@ -1177,7 +1186,11 @@ static void handle_launcher(int k, char ch)
         if      (k == NK_LEFT)  launcher_set_sel(s - 1);
         else if (k == NK_RIGHT) launcher_set_sel(s + 1);
         else if (k == NK_UP)    { if (s - cols >= 0) launcher_set_sel(s - cols); }
-        else if (k == NK_DOWN)  { if (s + cols < n) launcher_set_sel(s + cols); }
+        else if (k == NK_DOWN) {                 // a shorter last row: from a column with nothing below, its last tile
+            const int lead = launcher_depth() > 0 ? 1 : 0;   // inside a category cell 0 is the Back tile
+            if (s + cols < n) launcher_set_sel(s + cols);
+            else if ((s + lead) / cols < (n - 1 + lead) / cols) launcher_set_sel(n - 1);
+        }
         else if (k == NK_ENTER) { launcher_open_focused(); s_dirty = true; return; }   // a category: repaint its tiles now
         else if (k == NK_BACK)  launcher_back();
         else if (k == NK_DEL)   launcher_filter_backspace();

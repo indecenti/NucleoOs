@@ -47,6 +47,6 @@ of silently making every answer worse.
 
 ## Tests
 
-`tools/ai-models.test.mjs` (in `npm run test:all` / the gate's unit tests): ranking on Groq's real
+`nucleo-webos tests/suite/ai-models.test.mjs` (in `npm run test:all` / the gate's unit tests): ranking on Groq's real
 list, preference kept while served, a retired model replaced (404 and 400 "decommissioned"), a bad
 key not retried and explained, error classification, the tier carried by `routeFor`.

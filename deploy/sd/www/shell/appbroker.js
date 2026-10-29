@@ -25,6 +25,8 @@
 // because the broker is the only door and the door admits one at a time. This makes the device work
 // LESS than the status quo, where each app fetched on its own schedule.
 
+import { createFs } from './nucleo-fs.js';
+
 // ── app record policy (pure) ──────────────────────────────────────────────────────────────────
 // /api/apps streams id/name/route/icon straight from each manifest — and the agent can publish a
 // manifest with any strings it likes. Those fields end up in innerHTML (taskbar, Start, window bar),
@@ -103,7 +105,48 @@ export function resolveAppPath(appId, permissions, path) {
 
 // The whole vocabulary. Anything not listed is refused — a deny-list would be a promise we cannot keep.
 export const METHODS = ['fs.read', 'fs.write', 'fs.list', 'notify', 'sys.info', 'sys.status', 'ai.ask', 'ai.complete',
-  'app.i18n', 'kv.get', 'kv.set', 'kv.remove', 'kv.all', 'sys.caps'];
+  'app.i18n', 'kv.get', 'kv.set', 'kv.remove', 'kv.all', 'sys.caps', 'file.save', 'file.open', 'file.launch', 'file.write',
+  'appfs.read', 'appfs.write', 'appfs.list', 'appfs.remove'];
+// file.save bounds: a document the user made in the app, handed to the browser as a download. The
+// type comes from the extension, from a short list of inert formats (nothing a browser would run).
+export const SAVE_MAX_BYTES = 64 * 1024 * 1024;
+export const SAVE_TYPES = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+  webp: 'image/webp', txt: 'text/plain', csv: 'text/csv', json: 'application/json', md: 'text/markdown' };
+const SAVE_GAP_MS = 1500;           // one download at a time, never a burst
+export const OPEN_MAX_FILES = 32;
+// appfs.*: an app's own FILES (binary), next to its kv: /data/apps/<id>/files/<name>. What kv is for settings,
+// this is for content an app keeps for itself — signature images, a cache of covers, exported drafts.
+export const APPFS_MAX_FILE = 16 * 1024 * 1024;
+export const APPFS_MAX_TOTAL = 64 * 1024 * 1024;
+export const APPFS_MAX_FILES = 512;
+const APPFS_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;       // one level, no hidden names, no paths
+export const appfsDir = (appId) => '/data/apps/' + appId + '/files';
+export function appfsName(name) {
+  const n = String(name == null ? '' : name);
+  return APPFS_NAME.test(n) && !n.includes('..') ? n : null;
+}
+// file.write handles: what the user picked in an Open/Save sheet (or opened the app with), for "Save" without
+// a sheet. Random, per app, kept by the shell for its session only: a handle is the user's choice, never a path.
+const HANDLE_RE = /^h[0-9a-f]{32}$/;
+function newHandle() {
+  const b = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(b);
+  return 'h' + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+}
+// The extensions an app may ask the Open sheet to show: plain short words, at most 16 of them.
+export function openTypes(types) {
+  if (!Array.isArray(types)) return [];
+  return [...new Set(types.map((x) => String(x == null ? '' : x).replace(/^\./, '').toLowerCase()).filter((x) => /^[a-z0-9]{1,8}$/.test(x)))].slice(0, 16);
+}
+// The name a saved file gets: no path, no control or reserved characters, an allowed extension.
+// null when nothing usable is left.
+export function saveName(name) {
+  const base = String(name == null ? '' : name).split(/[\\/]/).pop()
+    .replace(/[\u0000-\u001f\u007f<>:"|?*]/g, '').replace(/^[.\s]+|[.\s]+$/g, '').slice(0, 120);
+  const m = base.match(/\.([A-Za-z0-9]{1,5})$/);
+  if (!m || !Object.prototype.hasOwnProperty.call(SAVE_TYPES, m[1].toLowerCase()) || base.length <= m[0].length) return null;
+  return base;
+}
 // kv.* bounds: an app's own small state (settings, a score sheet), the size of what a page keeps in
 // localStorage — not a database. One JSON file per app, rewritten whole, so it stays small on purpose.
 export const KV_MAX_BYTES = 64 * 1024;
@@ -132,6 +175,16 @@ export function methodAllowed(method, permissions) {
   // sys.caps says which device features exist (nucleo-caps.js), so an app can hide what is missing instead of
   // failing on it. It is the same list the device's own /api/system/caps publishes without pairing.
   if (method === 'sys.caps') return true;
+  // file.save hands the user a file the app made (a signed PDF, an exported image) as a browser download:
+  // what any web page may do, and the one thing a frame without allow-downloads cannot. It reaches
+  // nothing on the device and reads nothing back, so it needs no declaration.
+  if (method === 'file.save') return true;
+  // file.open and file.launch hand over ONLY what the user picked in the shell's own Open sheet, or the file
+  // the user opened the app with (desktop, File Commander): the user's gesture is the grant, as with a
+  // browser's file input. file.write rewrites only such a file, by its handle. The app never names a path.
+  if (method === 'file.open' || method === 'file.launch' || method === 'file.write') return true;
+  // appfs.* is kv's binary sibling: the calling app's own folder, nothing else, so no declaration either.
+  if (method.startsWith('appfs.')) return true;
   // sys.status is the device telemetry every curated app reads from /api/status — time, uptime, SD
   // space, Wi-Fi name. Read-only and cheap, but it does describe the household's network, so it is
   // DECLARED (system.events), not free like sys.info.
@@ -160,8 +213,14 @@ export function brokerEvent(event, payload) {
   return { type: 'nucleo.broker.event', event, ...payload };
 }
 
-export function createBroker({ fetchFn, findApp, notify, onFsChange, getLang, getTheme, getCaps, aiComplete, aiCooldownMs = 2000 } = {}) {
+export function createBroker({ fetchFn, fs: fsIn, findApp, notify, onFsChange, getLang, getTheme, getCaps, aiComplete, download,
+  pickOpen, pickSave, launchFile, aiCooldownMs = 2000 } = {}) {
   const doFetch = fetchFn || ((...a) => fetch(...a));
+  // Every disk access of the broker goes through the core file layer (nucleo-fs.js): atomic replace, space
+  // check, one error vocabulary — the same code the shell and the system apps use.
+  const fs = fsIn || createFs({ fetchFn: doFetch, caps: getCaps || (async () => ({ caps: [], limits: {} })), onChange: onFsChange || null });
+  const handles = new Map();          // handle -> { appId, path, name }
+  const grant = (appId, path) => { const h = newHandle(); handles.set(h, { appId, path, name: path.split('/').pop() }); return h; };
   // ONE call in flight, ever. See the device-discipline note at the top.
   let chain = Promise.resolve();
   const serial = (fn) => {
@@ -173,6 +232,8 @@ export function createBroker({ fetchFn, findApp, notify, onFsChange, getLang, ge
   // but it spends the user's key, so it is single-flight AND cooled down. Both refusals are immediate:
   // a queue here would just let an app buy delayed spending.
   let aiBusy = false, aiLastAt = 0;
+  let saveLastAt = -Infinity;
+  let sheetBusy = false;              // one Open/Save sheet at a time, whichever app asks
   const lang = () => (getLang ? getLang() : 'en') || 'en';
   const timeoutOpts = (extra) => {
     const o = { cache: 'no-store', ...extra };
@@ -225,32 +286,16 @@ export function createBroker({ fetchFn, findApp, notify, onFsChange, getLang, ge
     if (e.data) return e.data;
     if (!e.loading) {
       e.loading = serial(async () => {
-        try {
-          const r = await doFetch('/api/fs/read?path=' + encodeURIComponent(kvPath(id)), timeoutOpts());
-          if (r.status === 404) return {};
-          if (!r.ok) throw new Error('http-' + r.status);
-          const j = JSON.parse(await r.text());
-          return j && typeof j === 'object' && !Array.isArray(j) ? j : {};
-        } catch (err) {
-          if (err instanceof SyntaxError) return {};      // a damaged file starts over, it does not wedge the app
-          throw err;
-        }
+        // a damaged file starts over (readJSON's fallback), it does not wedge the app
+        const j = await fs.readJSON(kvPath(id), {});
+        return j && typeof j === 'object' && !Array.isArray(j) ? j : {};
       }).then((d) => { e.data = d; return d; }).finally(() => { e.loading = null; });
     }
     return e.loading;
   }
+  // Atomic: a cut connection never leaves the app's settings half written (nucleo-fs.js).
   async function kvWrite(id, body) {
-    const e = kvEntry(id);
-    if (!e.dirReady) {
-      // mkdir is not "-p" on every backend: make both levels, ignore "exists".
-      for (const d of ['/data/apps', '/data/apps/' + id]) {
-        try { await doFetch('/api/fs/mkdir?path=' + encodeURIComponent(d), timeoutOpts({ method: 'POST' })); } catch {}
-      }
-      e.dirReady = true;
-    }
-    const r = await doFetch('/api/fs/write?path=' + encodeURIComponent(kvPath(id)), timeoutOpts({ method: 'POST', body }));
-    if (!r.ok) throw new Error('http-' + r.status);
-    if (onFsChange) onFsChange(kvPath(id));
+    await fs.write(kvPath(id), body);
   }
   // A burst of kv.set (a score tapped five times) becomes at most one write in flight plus one after it,
   // always of the latest state: the device sees a handful of writes, not one per tap.
@@ -312,6 +357,36 @@ export function createBroker({ fetchFn, findApp, notify, onFsChange, getLang, ge
     return 'written';
   }
 
+  function dataBytes(d) {
+    if (d instanceof ArrayBuffer) return new Uint8Array(d);
+    if (ArrayBuffer.isView(d)) return new Uint8Array(d.buffer, d.byteOffset, d.byteLength);
+    if (typeof d === 'string') return new TextEncoder().encode(d);
+    throw new Error('bad data');
+  }
+  // appfs.*: one flat folder per app, bounded per file, in number and in total. Errors are nucleo-fs codes.
+  async function appfsExec(app, method, a) {
+    const dir = appfsDir(app.id);
+    try {
+      if (method === 'appfs.list') return { ok: true, entries: (await fs.list(dir)).filter((e) => e.type === 'file').map((e) => ({ name: e.name, size: e.size })) };
+      const name = appfsName(a.name);
+      if (!name) return { ok: false, error: 'bad name' };
+      const path = dir + '/' + name;
+      if (method === 'appfs.read') {
+        const b = await fs.read(path);
+        return { ok: true, data: b == null ? null : b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) };
+      }
+      if (method === 'appfs.remove') return { ok: true, removed: await fs.remove(path) };
+      let bytes;
+      try { bytes = dataBytes(a.data); } catch { return { ok: false, error: 'bad data' }; }
+      if (bytes.byteLength > APPFS_MAX_FILE) return { ok: false, error: 'too-large' };
+      const others = (await fs.list(dir)).filter((e) => e.type === 'file' && e.name !== name);
+      if (others.length >= APPFS_MAX_FILES) return { ok: false, error: 'too-many' };
+      if (others.reduce((t, e) => t + e.size, 0) + bytes.byteLength > APPFS_MAX_TOTAL) return { ok: false, error: 'no-space' };
+      await serial(() => fs.write(path, bytes));
+      return { ok: true, bytes: bytes.byteLength };
+    } catch (e) { return { ok: false, error: (e && e.code) || String((e && e.message) || e) }; }
+  }
+
   async function exec(app, method, args) {
     const perms = (app && app.permissions) || [];
     if (!methodAllowed(method, perms)) return { ok: false, error: 'denied: ' + method };
@@ -330,6 +405,75 @@ export function createBroker({ fetchFn, findApp, notify, onFsChange, getLang, ge
       const c = getCaps ? await getCaps().catch(() => null) : null;
       return { ok: true, caps: c && Array.isArray(c.caps) ? c.caps.slice() : [] };
     }
+
+    if (method === 'file.save') {
+      if (!download && !pickSave) return { ok: false, error: 'unsupported' };
+      const name = saveName(args && args.name);
+      if (!name) return { ok: false, error: 'bad name' };
+      const d = args && args.data;
+      let bytes = null;
+      if (d instanceof ArrayBuffer) bytes = new Uint8Array(d);
+      else if (ArrayBuffer.isView(d)) bytes = new Uint8Array(d.buffer, d.byteOffset, d.byteLength);
+      else if (typeof d === 'string') bytes = new TextEncoder().encode(d);
+      if (!bytes) return { ok: false, error: 'bad data' };
+      if (bytes.byteLength > SAVE_MAX_BYTES) return { ok: false, error: 'too large (max 64 MB)' };
+      const mime = SAVE_TYPES[name.split('.').pop().toLowerCase()];
+      // The Save sheet: the user picks a folder on the device, or the download. Nothing is written until they do.
+      if (pickSave) {
+        if (sheetBusy) return { ok: false, error: 'busy' };
+        sheetBusy = true;
+        try {
+          const r = await pickSave(app, { name, mime, bytes });
+          if (!r) return { ok: false, error: 'cancelled' };
+          if (r.where === 'device') return { ok: true, name: r.name || name, where: 'device', handle: grant(app.id, r.path), bytes: bytes.byteLength };
+          return { ok: true, name: r.name || name, where: 'download', bytes: bytes.byteLength };
+        } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+        finally { sheetBusy = false; }
+      }
+      const now = Date.now();
+      if (now - saveLastAt < SAVE_GAP_MS) return { ok: false, error: 'busy' };
+      saveLastAt = now;
+      try { await download(name, mime, bytes); }
+      catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+      return { ok: true, name, where: 'download', bytes: bytes.byteLength };
+    }
+
+    if (method === 'file.open') {
+      if (!pickOpen) return { ok: false, error: 'unsupported' };
+      if (sheetBusy) return { ok: false, error: 'busy' };
+      sheetBusy = true;
+      try {
+        const files = await pickOpen(app, { types: openTypes(args && args.types), multiple: !!(args && args.multiple) });
+        if (!files || !files.length) return { ok: false, error: 'cancelled' };
+        return { ok: true, files: files.slice(0, OPEN_MAX_FILES).map((f) => ({ name: String(f.name || '').split(/[\\/]/).pop().slice(0, 200), data: f.bytes,
+          where: f.path ? 'device' : 'local', ...(f.path ? { handle: grant(app.id, f.path) } : {}) })) };
+      } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+      finally { sheetBusy = false; }
+    }
+
+    if (method === 'file.launch') {
+      if (!launchFile) return { ok: true, file: null };
+      try {
+        const f = await launchFile(app);
+        return { ok: true, file: f ? { name: String(f.name || '').split(/[\\/]/).pop().slice(0, 200), data: f.bytes, where: 'device',
+          ...(f.path ? { handle: grant(app.id, f.path) } : {}) } : null };
+      } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+    }
+
+    // file.write {handle, data}: "Save" onto a file the USER chose for this app (Open/Save sheet, or the file the
+    // app was opened with). Atomic like every write; a handle of another app, or none, is refused.
+    if (method === 'file.write') {
+      const h = String((args && args.handle) || '');
+      const g = HANDLE_RE.test(h) ? handles.get(h) : null;
+      if (!g || g.appId !== app.id) return { ok: false, error: 'bad handle' };
+      let bytes;
+      try { bytes = dataBytes(args && args.data); } catch { return { ok: false, error: 'bad data' }; }
+      if (bytes.byteLength > SAVE_MAX_BYTES) return { ok: false, error: 'too large (max 64 MB)' };
+      try { await fs.write(g.path, bytes); return { ok: true, name: g.name, where: 'device', bytes: bytes.byteLength }; }
+      catch (e) { return { ok: false, error: (e && e.code) || 'failed' }; }
+    }
+
+    if (method.startsWith('appfs.')) return appfsExec(app, method, args || {});
 
     if (method === 'notify') {
       if (notify) notify(String((args && args.text) || '').slice(0, 200), app.name || app.id);
@@ -408,31 +552,22 @@ export function createBroker({ fetchFn, findApp, notify, onFsChange, getLang, ge
     const abs = resolveAppPath(app.id, perms, args && args.path);
     if (!abs) return { ok: false, error: 'denied: path outside this app\'s reach' };
 
+    // Through the core file layer like everything else; the answers keep the shape apps already rely on.
     return serial(async () => {
-      const opts = { cache: 'no-store' };
-      if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) opts.signal = AbortSignal.timeout(8000);
       try {
         if (method === 'fs.read') {
-          const r = await doFetch('/api/fs/read?path=' + encodeURIComponent(abs), opts);
-          if (!r.ok) return { ok: false, error: 'http-' + r.status };
-          return { ok: true, content: await r.text() };
+          const t = await fs.readText(abs);
+          return t == null ? { ok: false, error: 'http-404' } : { ok: true, content: t };
         }
-        if (method === 'fs.list') {
-          const r = await doFetch('/api/fs/list?path=' + encodeURIComponent(abs), opts);
-          if (!r.ok) return { ok: false, error: 'http-' + r.status };
-          const j = await r.json().catch(() => null);
-          return { ok: true, entries: (j && j.entries) || [] };
-        }
+        if (method === 'fs.list') return { ok: true, entries: await fs.list(abs) };
         // fs.write — bounded on purpose: an app that needs megabytes is not a small app, it is a bug,
-        // and the device pays for the mistake.
+        // and the device pays for the mistake. Atomic, like every write of the core layer.
         const body = String((args && args.content) != null ? args.content : '');
         if (body.length > 256 * 1024) return { ok: false, error: 'too large (max 256 KB)' };
-        const r = await doFetch('/api/fs/write?path=' + encodeURIComponent(abs), { method: 'POST', body, ...opts });
-        if (!r.ok) return { ok: false, error: 'http-' + r.status };
-        if (onFsChange) onFsChange(abs);
+        await fs.write(abs, body);
         return { ok: true, bytes: body.length };
       } catch (e) {
-        return { ok: false, error: String((e && e.message) || e) };
+        return { ok: false, error: (e && e.code) || String((e && e.message) || e) };
       }
     });
   }

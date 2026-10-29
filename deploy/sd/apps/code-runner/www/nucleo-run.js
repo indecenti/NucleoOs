@@ -271,7 +271,10 @@ export function createRunner(opts) {
     if (!p) return normPath(caps.cwd);
     return normPath(p[0] === '/' ? p : (caps.cwd + '/' + p));
   };
-  const fsApi = (op, path, init) => fetch('/api/fs/' + op + '?path=' + encodeURIComponent(path), init);
+  // The device's disk through the core file layer, loaded only when a script first asks for it (hosts that
+  // import this module just to check syntax never fetch it).
+  let fsMod = null;
+  const devFs = () => fsMod || (fsMod = import('/nucleo-fs.js').then((m) => m.default));
 
   // `http` means the WEB, never the device. A relative or same-origin URL would reach /api/* with the
   // page's pairing cookie — so a script verified with {fs:false, http:true} (Forge's verify loop)
@@ -302,31 +305,24 @@ export function createRunner(opts) {
     if (method.indexOf('fs.') === 0 && !can('fs')) throw new Error('fs capability denied');
     switch (method) {
       case 'fs.read': {
-        const r = await fsApi('read', resolve(args[0]));
-        if (!r.ok) throw new Error('read failed (' + r.status + ') ' + resolve(args[0]));
-        return await r.text();
+        const text = await (await devFs()).readText(resolve(args[0])).catch((e) => { throw new Error('read failed (' + e.code + ') ' + resolve(args[0])); });
+        if (text == null) throw new Error('read failed (not-found) ' + resolve(args[0]));
+        return text;
       }
       case 'fs.write': {
-        const r = await fsApi('write', resolve(args[0]), { method: 'POST', body: String(args[1] == null ? '' : args[1]) });
-        if (!r.ok) throw new Error('write failed (' + r.status + ')');
+        await (await devFs()).write(resolve(args[0]), String(args[1] == null ? '' : args[1])).catch((e) => { throw new Error('write failed (' + e.code + ')'); });
         return true;
       }
       case 'fs.append': {
-        const rr = await fsApi('read', resolve(args[0]));
-        const cur = rr.ok ? await rr.text() : '';
-        const r = await fsApi('write', resolve(args[0]), { method: 'POST', body: cur + String(args[1] == null ? '' : args[1]) });
-        if (!r.ok) throw new Error('append failed (' + r.status + ')');
+        const f = await devFs();
+        const cur = (await f.readText(resolve(args[0])).catch(() => null)) || '';
+        await f.write(resolve(args[0]), cur + String(args[1] == null ? '' : args[1])).catch((e) => { throw new Error('append failed (' + e.code + ')'); });
         return true;
       }
-      case 'fs.list': {
-        const r = await fsApi('list', resolve(args[0] || '.'));
-        if (!r.ok) throw new Error('list failed (' + r.status + ')');
-        const j = await r.json();
-        return j.entries || [];
-      }
-      case 'fs.exists': { const r = await fsApi('read', resolve(args[0])); return r.ok; }
-      case 'fs.mkdir':  { const r = await fsApi('mkdir', resolve(args[0]), { method: 'POST' }); return r.ok; }
-      case 'fs.remove': { const r = await fsApi('delete', resolve(args[0]), { method: 'POST' }); return r.ok; }
+      case 'fs.list': return await (await devFs()).list(resolve(args[0] || '.')).catch((e) => { throw new Error('list failed (' + e.code + ')'); });
+      case 'fs.exists': return await (await devFs()).exists(resolve(args[0])).catch(() => false);
+      case 'fs.mkdir':  return await (await devFs()).mkdirp(resolve(args[0])).then(() => true, () => false);
+      case 'fs.remove': return await (await devFs()).remove(resolve(args[0])).catch(() => false);
       case 'http.get': {
         if (!can('http')) throw new Error('http capability denied');
         const r = await fetch(httpUrl(args[0]), args[1] || {});

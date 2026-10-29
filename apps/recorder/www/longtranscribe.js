@@ -20,6 +20,7 @@
 // A transcript is the textbook untrusted input: whatever a microphone happened to pick up, handed
 // verbatim to a model. See docs/anima-code.md §12.1.
 import { fenceUntrusted } from '/apps/agent/agent-tools.js';   // device webfs: /apps/<id>/<file>, never /www/
+import fs from '/nucleo-fs.js';
 
 const WHISPER_MODEL = 'whisper-large-v3';
 // The OS ships five languages; `lang` alone ("es") is not a language NAME a model reliably honours.
@@ -36,7 +37,6 @@ const RELAY_BODY_MAX = 2 * 1024 * 1024 - 64 * 1024;
 const MP3_CHUNK_BYTES = 4 * 1024 * 1024;
 const SUMMARY_PIECE_CHARS = 6000;      // map step: transcript window per partial summary (well within context)
 
-const readUrl = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
 
 // ── WAV header --------------------------------------------------------------------------------------
 // Parse just the fmt + data-chunk location from the file's first bytes (standard 44-byte device header,
@@ -75,15 +75,16 @@ function wavHeader(dataLen, fmt) {
 // for. A hop that ignores Range and answers 200 with the whole file would otherwise turn every
 // "chunk" into the entire recording (duplicated transcript, or Whisper's 25 MB rejection); a short
 // 206 under device heap pressure would silently drop audio. Slice a 200 locally and length-check.
+// fs.readRange carves the window itself when a hop answers 200; a lost connection is reported as
+// "network" so withRetry backs off on it.
 async function fetchRange(path, start, endInclusive, signal, exact) {
-  const r = await fetch(readUrl(path), { headers: { Range: `bytes=${start}-${endInclusive}` }, signal });
-  if (!(r.status === 206 || r.status === 200)) throw new Error('range read ' + r.status);
-  let bytes = new Uint8Array(await r.arrayBuffer());
+  if (signal?.aborted) throw new Error('aborted');
+  let bytes;
+  try { bytes = await fs.readRange(path, start, endInclusive); }
+  catch (e) { throw new Error((e && e.code === 'offline' ? 'network ' : 'range read ') + String(e && e.message || e)); }
+  if (!bytes) throw new Error('range read 404');
   const want = endInclusive - start + 1;
-  if (r.status === 200) {                       // Range ignored: carve the requested window ourselves
-    if (bytes.byteLength < start + (exact ? want : 1)) throw new Error('range 200 body too short');
-    bytes = bytes.subarray(start, start + want);
-  }
+  if (!bytes.byteLength) throw new Error('range body too short');
   if (exact && bytes.byteLength !== want) throw new Error(`short read ${bytes.byteLength}/${want}`);
   return bytes;
 }
@@ -208,15 +209,14 @@ export async function transcribeLong({ path, lang = 'auto', onProgress, signal }
   return out;
 }
 
-// Total file size via a 1-byte ranged GET (the 206 reply carries Content-Range: bytes 0-0/<total>);
-// a server that ignores Range answers 200 with the whole body, whose length IS the total.
+// Total file size, from the folder's listing (every edition gives it; no byte of the file is read).
 async function totalSize(path, signal) {
-  const r = await fetch(readUrl(path), { headers: { Range: 'bytes=0-0' }, signal });
-  if (!r.ok) throw new Error('size read ' + r.status);
-  const cr = r.headers.get('Content-Range');
-  const m = cr && cr.match(/\/(\d+)$/);
-  if (m) return +m[1];
-  return (await r.arrayBuffer()).byteLength;
+  if (signal?.aborted) throw new Error('aborted');
+  let s;
+  try { s = await fs.stat(path); }
+  catch (e) { throw new Error((e && e.code === 'offline' ? 'network ' : 'size read ') + String(e && e.message || e)); }
+  if (!s) throw new Error('size read 404');
+  return s.size;
 }
 
 // MP3: fixed byte windows. No frame table needed — the decoder resyncs after a mid-frame cut.

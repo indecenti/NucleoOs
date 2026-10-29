@@ -85,6 +85,7 @@
 // covers the dynamic strings below.
 import I18N from '/nucleo-i18n.js';
 import Caps from '/nucleo-caps.js';   // what this device can do (device.fido)
+import os from '/nucleo-shell.js';    // the OS dialogs (keys, joypad, touch)
 const t = await I18N.init('passkeys');
 
 const $ = id => document.getElementById(id);
@@ -111,7 +112,7 @@ async function refresh(){
       const b = document.createElement('button'); b.className='del danger'; b.textContent=t('del');
       b.onclick = async () => {
         // A resident passkey may be the only way into that account and cannot be restored: always ask.
-        if (!confirm(t('askdel', { rp: c.rp || '?', user: c.user || '' }))) return;
+        if (!(await os.confirm(t('askdel', { rp: c.rp || '?', user: c.user || '' }), { danger: true }))) return;
         try {
           // The device deletes by list INDEX. If the list changed since this render (native UI, another
           // tab), that index now names a DIFFERENT passkey: re-read and refuse unless it is still this one.
@@ -153,7 +154,7 @@ $('pinform').addEventListener('keydown', e => {
   else if (e.key === 'Escape') { e.preventDefault(); pinShow(false); }
 });
 $('b-reset').onclick = async () => {
-  if (!confirm(t('askreset'))) return;
+  if (!(await os.confirm(t('askreset'), { danger: true }))) return;
   try {
     const r = await api('/api/fido/reset',{method:'POST'});
     msg(r.ok?t('resetok'):t('err'), r.ok?'good':'bad');

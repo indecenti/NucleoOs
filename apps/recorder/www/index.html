@@ -215,7 +215,7 @@
   //   • Cardputer mic  -> firmware /api/rec writes WAV; on stop we fetch it,
   //     transcode to MP3 in the browser (lamejs), save the MP3 to SD, delete WAV.
   //   • Browser mic    -> getUserMedia -> 16 kHz mono PCM -> streamed lamejs MP3
-  //     -> POST /api/fs/write. The device never runs a codec ("device serves
+  //     -> fs.write. The device never runs a codec ("device serves
   //     bytes, client does the heavy lifting").
   // ANIMA is wired in (right dock) over the same /api/anima the OS copilot uses,
   // given the recordings + selected transcript as context — summaries, action
@@ -224,7 +224,6 @@
   const DIR = '/data/Recordings';
   const RATE = 16000, KBPS = 64;            // voice: 64 kbps mono -> tiny files
   const $ = (id) => document.getElementById(id);
-  const readUrl = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
   const enc = encodeURIComponent;
   // System language (OS Settings → localStorage 'anima.lang'); English is the floor. Feeds the LOGIC
   // paths only: ANIMA / transcription / summary language and the browser SpeechRecognition locale.
@@ -246,6 +245,8 @@
   };
   import { recordToSd, onMicStatus } from '/micgate.js';  // OS-wide single-owner gate for the Cardputer mic
   import Caps from '/nucleo-caps.js';                       // what this device can do (device.mic, anima.device)
+  import fs from '/nucleo-fs.js';                           // the device's disk
+  import os from '/nucleo-shell.js';                        // the OS dialogs (keys, joypad, touch)
   import { transcribeLong, summarizeLong, isLongWav, hasWhisperKey, isPrivate } from './longtranscribe.js';  // browser-side chunked path for long takes
   let src = 'device';                        // 'device' | 'browser'
   let devMic = null;                         // the firmware's mic + transcriber (/api/rec*, /api/transcribe): null = not probed yet
@@ -277,15 +278,10 @@
   }
 
   // ---- fs helpers ------------------------------------------------------------
-  const fs = {
-    // null = the listing FAILED (offline/503): never shown as an empty library. A 404 is a folder not made yet.
-    list:  async(p)=>{try{const r=await fetch('/api/fs/list?path='+enc(p)); if(r.status===404) return []; if(!r.ok) return null; return (await r.json()).entries||[];}catch{return null;}},
-    write: async(p,blob)=>fetch('/api/fs/write?path='+enc(p),{method:'POST',body:blob}),
-    del:   async(p)=>fetch('/api/fs/delete?path='+enc(p),{method:'POST'}),
-    move:  async(a,b)=>fetch('/api/fs/move?from='+enc(a)+'&to='+enc(b),{method:'POST'}),
-    mkdir: async(p)=>fetch('/api/fs/mkdir?path='+enc(p),{method:'POST'}),
-    readText: async(p)=>{try{const r=await fetch(readUrl(p));return r.ok?await r.text():'';}catch{return '';}},
-  };
+  // A sidecar's text, '' when it is absent or unreadable.
+  const readSidecar = (p)=> fs.readText(p).then(v=>v||'', ()=>'');
+  // An audio file's bytes for parseWav; a missing file is an error, never an empty WAV.
+  const readAudio = async(p)=>{ const b=await fs.read(p); if(!b) throw new Error('not-found'); return b.buffer; };
   // Strip EITHER container (.mp3 or .wav) before appending .txt — a WAV take that carries a
   // transcript would otherwise have the WAV binary itself fetched as its "transcript".
   const txtPath = (p)=> p.replace(/\.(mp3|wav)$/i,'') + '.txt';
@@ -297,11 +293,11 @@
   // baseOf strips either container, unlike txtPath.
   const SIDECARS = ['.ndjson','.tx.ndjson','.txt','.sum.txt','.act.txt','.ask.txt'];
   const baseOf = (p)=> p.replace(/\.(mp3|wav)$/i,'');
-  const delSidecars  = async(p)=>{ const b=baseOf(p); for(const x of SIDECARS) await fs.del(b+x).catch(()=>{}); };
+  const delSidecars  = async(p)=>{ const b=baseOf(p); for(const x of SIDECARS) await fs.remove(b+x).catch(()=>{}); };
   const moveSidecars = async(from,toBase)=>{ const b=baseOf(from); for(const x of SIDECARS) await fs.move(b+x,toBase+x).catch(()=>{}); };
   // The journals' offsets describe the WAV's PCM. Once the take is transcoded to MP3 they point at
   // nothing, and a stale index is worse than no index — drop both. Phase 2 records MP3 directly.
-  const dropJournal = async(wavPath)=>{ const b=baseOf(wavPath); await fs.del(b+'.ndjson').catch(()=>{}); await fs.del(b+'.tx.ndjson').catch(()=>{}); };
+  const dropJournal = async(wavPath)=>{ const b=baseOf(wavPath); await fs.remove(b+'.ndjson').catch(()=>{}); await fs.remove(b+'.tx.ndjson').catch(()=>{}); };
 
   // ============================ MP3 ENCODING ==================================
   function newEncoder(){ return new lamejs.Mp3Encoder(1, RATE, KBPS); }
@@ -329,10 +325,9 @@
     return new Blob(out,{type:'audio/mpeg'});
   }
   async function saveMp3(blob, base){
-    await fs.mkdir(DIR);
-    const name = base + '.mp3';
-    const r = await fs.write(DIR+'/'+name, blob);
-    if(!r.ok) throw new Error('write failed ('+r.status+')');
+    const name = base + '.mp3';                       // the folder is made as needed
+    try{ await fs.write(DIR+'/'+name, blob); }
+    catch(e){ throw new Error('write failed ('+((e&&(e.status||e.code))||e)+')'); }
     return name;
   }
 
@@ -370,7 +365,7 @@
     const base = stamp();
     lastFailedTake = {blob, base};                     // stash BEFORE the save can throw (503/full/drop): a failed write must not vaporize the recording
     const name = await saveMp3(blob, base);
-    if(el.liveOn.checked && liveText.trim()){ await fs.write(DIR+'/'+base+'.txt', new Blob([liveText.trim()],{type:'text/plain'})); }
+    if(el.liveOn.checked && liveText.trim()){ await fs.writeText(DIR+'/'+base+'.txt', liveText.trim()); }
     lastFailedTake = null;                             // saved OK -> nothing to recover
     return name;
   }
@@ -417,12 +412,12 @@
     stopTimer(); setRecUI(false);
     try{
       setStatus(t('transcoding'));
-      const buf = await (await fetch(readUrl(wavPath))).arrayBuffer();
+      const buf = await readAudio(wavPath);
       const {samples,rate} = parseWav(buf);            // Int16 @ device rate (16k)
       const blob = pcmToMp3Blob(samples, rate);
       const base = (wavPath.split('/').pop()||stamp()).replace(/\.wav$/i,'');
       await saveMp3(blob, base);
-      await fs.del(wavPath);                            // never keep the WAV
+      await fs.remove(wavPath).catch(()=>{});           // never keep the WAV
       await dropJournal(wavPath);                       // ...and its index describes bytes that are gone
       setStatus(t('savedAsMp3'),'ok'); toast(t('recordingSaved'));
     }catch(e){
@@ -550,7 +545,8 @@
   let listFailed = false;  // the last listing failed: say so instead of "no recordings"
   let listLoaded = false;  // no listing answered yet: say "loading", never "no recordings" before we know
   async function loadList(){
-    const entries = await fs.list(DIR);
+    // null = the listing FAILED (offline/503): never shown as an empty library. No folder yet lists as [].
+    let entries = null; try{ entries = await fs.list(DIR); }catch{}
     listLoaded = true;
     listFailed = entries === null;
     if(listFailed){ files = []; renderList(); return; }
@@ -587,7 +583,7 @@
       const kind=document.createElement('span'); kind.className='badge '+(isWav?'wav':'mp3'); kind.textContent=isWav?'WAV':'MP3';
       const size=document.createElement('span'); size.className='badge'; size.textContent=fmtSize(f.size||0);
       top.append(nm,kind,size);
-      const audio=document.createElement('audio'); audio.controls=true; audio.preload='none'; audio.src=readUrl(path);
+      const audio=document.createElement('audio'); audio.controls=true; audio.preload='none'; audio.src=fs.url(path);
       if(f._sum){ const ai=document.createElement('span'); ai.className='badge ai'; ai.title=t('summaryAvailable'); ai.textContent='✨'; top.appendChild(ai); }
       const acts=document.createElement('div'); acts.className='acts';
       [
@@ -607,11 +603,9 @@
 
   // Run the device pipeline: Whisper transcription (auto language, fallback to system language) +
   // cloud-teacher summary, saved as sidecars on the device. Then open the panel.
-  // Probe the file's total size cheaply (a 1-byte Range reply carries Content-Range: bytes 0-0/<total>).
+  // The file's total size, cheaply (from the folder's listing).
   async function fileSize(path){
-    try{ const r=await fetch(readUrl(path),{headers:{Range:'bytes=0-0'}});
-      const cr=r.headers.get('Content-Range'); const m=cr&&cr.match(/\/(\d+)$/); return m?+m[1]:0;
-    }catch{ return 0; }
+    try{ const s=await fs.stat(path); return s?s.size:0; }catch{ return 0; }
   }
 
   async function runPipeline(f, btn){
@@ -632,9 +626,9 @@
           btn.textContent=`✨ ${lbl} ${p.done}/${p.total}`; setStatus(`${lbl}… ${pct}%`); };
         const text=await transcribeLong({ path, lang:'auto', onProgress:prog });
         if(!text || !text.trim()) throw new Error(t('emptyTranscript'));
-        await fs.write(DIR+'/'+f._base+'.txt', new Blob([text],{type:'text/plain'}));
+        await fs.writeText(DIR+'/'+f._base+'.txt', text);
         let sum=''; try{ sum=await summarizeLong({ text, lang:sysLang(), onProgress:prog }); }catch(e){ /* keep transcript even if summary fails */ }
-        if(sum) await fs.write(DIR+'/'+f._base+'.sum.txt', new Blob([sum],{type:'text/plain'}));
+        if(sum) await fs.writeText(DIR+'/'+f._base+'.sum.txt', sum);
         setStatus(t('transcriptReadyCheck'),'ok');
         toast(t('transcriptReady')); openPanel=f._base; await loadList();
         return;
@@ -674,14 +668,14 @@
       else if(b.dataset.a==='redo'){ runPipeline(f, {textContent:'',disabled:false}); }
       else if(b.dataset.a==='anima'){ continueWithAnima(f); }
     });
-    fs.readText(DIR+'/'+f._base+'.sum.txt').then(v=>{ wrap.querySelector('[data-b="sum"]').textContent=v||t('noSummary'); });
-    fs.readText(DIR+'/'+f._base+'.txt').then(v=>{ wrap.querySelector('[data-b="tx"]').textContent=v||t('noTranscript'); });
+    readSidecar(DIR+'/'+f._base+'.sum.txt').then(v=>{ wrap.querySelector('[data-b="sum"]').textContent=v||t('noSummary'); });
+    readSidecar(DIR+'/'+f._base+'.txt').then(v=>{ wrap.querySelector('[data-b="tx"]').textContent=v||t('noTranscript'); });
     return wrap;
   }
   async function continueWithAnima(f){
     selected={ name:f.name, path:DIR+'/'+f.name, base:f._base };
     el.ctxName.textContent=prettyName(f.name);
-    const sum=await fs.readText(DIR+'/'+f._base+'.sum.txt');
+    const sum=await readSidecar(DIR+'/'+f._base+'.sum.txt');
     showDock();
     addMsg('a',t('contextLoaded')+esc(prettyName(f.name))+'</b>.'+(sum?t('summaryHeading')+fmtReply(sum):''));
     addMsg('sys',t('goAheadAsk'));
@@ -696,8 +690,8 @@
     const commit=async()=>{
       const v=inp.value.trim().replace(/[\/\\:*?"<>|]/g,'_');
       if(v && v!==cur){ const ext=f.name.match(/\.(mp3|wav)$/i)[0];
-        const r=await fs.move(DIR+'/'+f.name, DIR+'/'+v+ext);
-        if(r.ok){ await moveSidecars(DIR+'/'+f.name, DIR+'/'+v);   // carry transcript/summary/journals, or the renamed take loses them and orphans strand for a future same-named take
+        let moved=false; try{ await fs.move(DIR+'/'+f.name, DIR+'/'+v+ext); moved=true; }catch{}
+        if(moved){ await moveSidecars(DIR+'/'+f.name, DIR+'/'+v);   // carry transcript/summary/journals, or the renamed take loses them and orphans strand for a future same-named take
           toast(t('renamed')); if(selected&&selected.name===f.name) selected={name:v+ext,path:DIR+'/'+v+ext,base:v}; }
       }
       loadList();
@@ -705,20 +699,20 @@
     inp.onkeydown=(e)=>{ if(e.key==='Enter')commit(); if(e.key==='Escape')loadList(); };
     inp.onblur=commit;
   }
-  async function download(path,name){ const blob=await (await fetch(readUrl(path))).blob();
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
-  async function delRec(path){ if(!confirm(t('confirmDelete')))return;
+  async function download(path,name){
+    const a=document.createElement('a'); a.href=fs.url(path); a.download=name;   // streamed by the device
+    document.body.appendChild(a); a.click(); a.remove(); }
+  async function delRec(path){ if(!(await os.confirm(t('confirmDelete'),{danger:true})))return;
     // The sidecars (transcript, summary, journals) go only once the audio is really gone: a refused delete
     // used to keep the take but wipe its transcript, and still say "Deleted".
-    let ok=false; try{ ok=(await fs.del(path)).ok; }catch{}
+    let ok=false; try{ ok=await fs.remove(path); }catch{}
     if(!ok){ toast(t('deleteFailed')); loadList(); return; }
     await delSidecars(path);
     if(selected&&selected.path===path) selectNone(); toast(t('deleted')); loadList(); }
   async function convertWav(path,name,btn){ const o=btn.textContent; btn.disabled=true; btn.textContent='…';
-    try{ const buf=await (await fetch(readUrl(path))).arrayBuffer(); const {samples,rate}=parseWav(buf);
+    try{ const buf=await readAudio(path); const {samples,rate}=parseWav(buf);
       const blob=pcmToMp3Blob(samples, rate); const base=name.replace(/\.wav$/i,'');
-      await saveMp3(blob,base); await fs.del(path); await dropJournal(path);
+      await saveMp3(blob,base); await fs.remove(path).catch(()=>{}); await dropJournal(path);
       toast(t('convertedMp3')); loadList();
     }catch(e){ btn.textContent='✗'; toast(t('conversionFailed')); setTimeout(()=>{btn.textContent=o;btn.disabled=false;},1500); } }
 
@@ -738,7 +732,7 @@
     renderList();
     if(openDock) showDock();
   }
-  async function transcriptFor(sel){ return sel? (await fs.readText(txtPath(sel.path))).trim() : ''; }
+  async function transcriptFor(sel){ return sel? (await readSidecar(txtPath(sel.path))).trim() : ''; }
 
   function addMsg(cls,html){ const d=document.createElement('div'); d.className='msg '+cls; d.innerHTML=html;
     el.chat.appendChild(d); el.chat.scrollTop=el.chat.scrollHeight; return d; }
@@ -781,7 +775,7 @@
       if(isOnlineTier(r)&&(r.reply||r.answer)){ const title=(r.reply||r.answer).split('\n')[0].replace(/^["“]|["”]$/g,'').trim();
         const b=document.createElement('button'); b.className='applyname'; b.textContent=t('renameTo')+title;
         b.onclick=async()=>{ const v=title.replace(/[\/\\:*?"<>|]/g,'_').slice(0,48); const ext=selected.name.match(/\.(mp3|wav)$/i)[0];
-          const mv=await fs.move(selected.path, DIR+'/'+v+ext); if(mv.ok){ await moveSidecars(selected.path, DIR+'/'+v);
+          let moved=false; try{ await fs.move(selected.path, DIR+'/'+v+ext); moved=true; }catch{} if(moved){ await moveSidecars(selected.path, DIR+'/'+v);
             toast(t('renamed')); selected={name:v+ext,path:DIR+'/'+v+ext,base:v}; el.ctxName.textContent=prettyName(v+ext); loadList(); b.disabled=true; } };
         el.chat.lastChild.appendChild(document.createElement('br')); el.chat.lastChild.appendChild(b);
       }

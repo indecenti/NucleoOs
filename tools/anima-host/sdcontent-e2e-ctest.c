@@ -127,6 +127,21 @@ static size_t fx_bytes(const fx_t *f, uint8_t *out)
     return f->size;
 }
 
+// The release signature, modelled: the engine only has to fetch sd-manifest.sig and hand it, with the manifest's
+// tag + SHA-256 + size, to the hook; the real ECDSA check (nucleo_fwsig) has its own gate (npm run fwsig:test).
+static void test_sig(uint8_t out[128], const char *tag, const char *sha_hex, uint32_t size)
+{
+    memset(out, 0, 128);
+    snprintf((char *)out, 128, "TESTSIG\n%s\n%s\n%u\n", tag, sha_hex, (unsigned)size);
+}
+static int sig_checks;
+static bool test_verify(const char *tag, const char sha_hex[65], uint32_t size, const uint8_t block[128])
+{
+    uint8_t want[128]; test_sig(want, tag, sha_hex, size);
+    sig_checks++;
+    return memcmp(want, block, 128) == 0;
+}
+
 static void write_release(const char *srv, const char *tag, const char *extra_line)
 {
     rm_rf(srv); mkdir_p(srv);
@@ -145,6 +160,9 @@ static void write_release(const char *srv, const char *tag, const char *extra_li
                           tag, NFX, (unsigned long long)total, NFX - 1, (unsigned long long)(total - 9000));
     m += (size_t)snprintf(man + m, sizeof man - m, "%s", lines);
     put(srv, "sd-manifest.txt", man, m);
+    char mhex[65]; sha_hex_of(man, m, mhex);
+    uint8_t sig[128]; test_sig(sig, tag, mhex, (uint32_t)m);
+    put(srv, "sd-manifest.sig", sig, sizeof sig);
 }
 
 // ---- the fake server ---------------------------------------------------------------------------------
@@ -156,6 +174,8 @@ typedef struct {
     const char *cut_path;          // the link dies for this path from cut_off on (every retry)
     uint32_t cut_off;
     bool manifest_404;
+    bool sig_404;                  // the release is not signed (yet)
+    bool no_verifier;              // a caller that forgot the signature hook
 } fake_t;
 
 static void url_decode(const char *in, char *out, size_t cap)
@@ -179,6 +199,7 @@ static int fake_get(void *ctx, const char *url, uint32_t off, uint32_t len, uint
     if (strncmp(url, PREFIX, pl) != 0) { *status = 404; return -1; }
     char rel[400]; url_decode(url + pl, rel, sizeof rel);
     if (f->manifest_404 && !strcmp(rel, "sd-manifest.txt")) { *status = 404; return -1; }
+    if (f->sig_404 && !strcmp(rel, "sd-manifest.sig")) { *status = 404; return -1; }
     if (f->notfound_path && !strcmp(rel, f->notfound_path)) { *status = 404; return -1; }
     if (f->cut_path && !strcmp(rel, f->cut_path) && off >= f->cut_off) { *status = 0; return -1; }
     char full[512]; snprintf(full, sizeof full, "%s/%s", f->srv, rel);
@@ -211,7 +232,8 @@ static void prog_rec(void *ctx, const sdc_state_t *st)
 }
 static bool run(fake_t *f, const char *root, uint32_t window, const char *packs, sdc_state_t *st)
 {
-    sdc_cfg_t cfg = { .root = root, .base_url = PREFIX, .ver3 = "0.5.0", .packs = packs, .window = window, .retries = 3 };
+    sdc_cfg_t cfg = { .root = root, .base_url = PREFIX, .ver3 = "0.5.0", .packs = packs, .window = window, .retries = 3,
+                      .verify_manifest = f->no_verifier ? NULL : test_verify };
     memset(&PR, 0, sizeof PR); PR.monotonic = PR.bounded = true;
     sdc_io_t io = { .ctx = f, .get = fake_get, .progress = prog_rec, .tick = NULL };
     return sdc_engine_run(&cfg, &io, st);
@@ -300,10 +322,32 @@ int main(void)
       write_release(SRV_BAD, "v0.5.0", hostile); }
     sdc_state_t st; bool ok;
 
+    // S0 release signature: no payload byte is written unless the manifest's signature checks out
+    {
+        #define SRV_TAMP W "/srv-tamp"
+        char hx[65]; sha_hex_of("x", 1, hx);
+        char extra[200]; snprintf(extra, sizeof extra, "%s 1 core w www/shell/extra.js", hx);
+        write_release(SRV_TAMP, "v0.5.0", extra);
+        uint8_t *g; long gn = slurp(SRV "/sd-manifest.sig", &g);    // the genuine signature, on another manifest
+        put(SRV_TAMP, "sd-manifest.sig", g, (size_t)gn); free(g);
+        fresh_sd(); fake_t fs1 = { .srv = SRV, .sig_404 = true };
+        ok = run(&fs1, SD, WINDOW, "core", &st);
+        OK(!ok && st.code == SDC_E_SIGNATURE && st.files_written == 0, "S0 an unsigned release installs nothing");
+        fresh_sd(); fake_t fs2 = { .srv = SRV_TAMP };
+        ok = run(&fs2, SD, WINDOW, "core", &st);
+        OK(!ok && st.code == SDC_E_SIGNATURE && st.files_written == 0, "S0 a manifest changed after signing installs nothing");
+        { FILE *x = fopen(SD "/www/shell/extra.js", "rb"); OK(!x, "S0 ... not even the injected file"); if (x) fclose(x); }
+        fresh_sd(); fake_t fs3 = { .srv = SRV, .no_verifier = true };
+        ok = run(&fs3, SD, WINDOW, "core", &st);
+        OK(!ok && st.code == SDC_E_SIGNATURE, "S0 no signature hook = fail closed");
+        sig_checks = 0;
+    }
+
     // S1 fresh install
     fresh_sd(); fake_t f1 = { .srv = SRV, .corrupt_left = 0 };
     ok = run(&f1, SD, WINDOW, "core", &st);
     OK(ok && st.code == SDC_OK && st.phase == SDC_DONE, "S1 fresh install succeeds");
+    OK(sig_checks == 1, "S1 the signature was checked once");
     OK(st.files_total == NFX - 1, "S1 counts only the core pack");
     OK(st.files_written == NFX - 2, "S1 writes everything except the existing create-only seed");
     OK(f1.max_len <= (int)WINDOW, "S1 never asks for more than one window");
@@ -322,7 +366,7 @@ int main(void)
     fake_t f2 = { .srv = SRV };
     ok = run(&f2, SD, WINDOW, "core", &st);
     OK(ok && st.files_written == 0, "S2 rerun downloads no file");
-    OK(f2.requests <= 2, "S2 rerun only fetches the manifest");
+    OK(f2.requests <= 3, "S2 rerun only fetches the manifest and its signature");
     check_user_state("S2");
 
     // S3 flaky network: every 4th request dropped
@@ -489,8 +533,8 @@ int main(void)
     ok = run(&f16, SD, WINDOW, "core", &st);
     OK(!ok && st.code == SDC_E_FETCH && st.http == 0 && !strcmp(st.detail, "data/anima/anima-it-akb5.bin"), "S16 mid-file link loss -> FETCH with the path");
     OK(count_parts(SD) == 0 && !exists(SD "/data/anima/anima-it-akb5.bin"), "S16 no .part and no half file left");
-    // 1 manifest + index.html 1 + app.js 4 + calc 2 + 4 good brain windows + 4 attempts (1 + 3 retries) on the cut one
-    OK(f16.requests == 1 + 1 + 4 + 2 + 4 + 4, "S16 exactly the windows up to the cut, the cut one tried 1+3 times");
+    // 1 manifest + 1 signature + index.html 1 + app.js 4 + calc 2 + 4 good brain windows + 4 attempts (1 + 3 retries) on the cut one
+    OK(f16.requests == 1 + 1 + 1 + 4 + 2 + 4 + 4, "S16 exactly the windows up to the cut, the cut one tried 1+3 times");
     check_user_state("S16");
 
     // S15 "Skip" is remembered for this firmware only

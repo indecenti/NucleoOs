@@ -358,6 +358,7 @@ import { Brain, preflightBrain, brainMode, llmSelected } from '/apps/games/llm-b
 import { GamepadManager } from '/apps/games/gamepad.js';
 import I18N from '/nucleo-i18n.js';   // OS-wide language signal: lets the app repaint live on a language change
 import Caps from '/nucleo-caps.js';   // what this device can do (device.pad, anima.device)
+import os from '/nucleo-shell.js';   // the OS around this window: clipboard, launch args
 
 const $ = s => document.querySelector(s);
 const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
@@ -847,7 +848,7 @@ function failGrok(reason) {
 }
 $('#toRoomBtn').onclick = () => { stopCoach(); play.setPhase('waiting'); gotoPhase('waiting'); };
 $('#hintBtn').onclick = () => doHint();
-$('#inviteBtn').onclick = async () => { const link = location.origin + '/apps/games/?join=' + play.roomId; try { await navigator.clipboard.writeText(link); sys(t('invite_copied', { code: play.roomId.replace(/^r_/, '') })); } catch { sys(t('room_code_label') + play.roomId); } };
+$('#inviteBtn').onclick = async () => { const link = location.origin + '/apps/games/?join=' + play.roomId; os.copy(link); if (os.inShell || window.isSecureContext) sys(t('invite_copied', { code: play.roomId.replace(/^r_/, '') })); else sys(t('room_code_label') + play.roomId); };
 $('#leaveBtn').onclick = leaveRoom;
 
 // immersive game bar — delegates to the same handlers as the top bar so the Grok gating still applies
@@ -1335,10 +1336,10 @@ function relabel() {
   $('#codeJoin').onclick = () => { const c = $('#codeIn').value.trim(); if (c) joinGame(c.startsWith('r_') ? c : 'r_' + c, false); };
   $('#refresh').onclick = loadRooms;
   setInterval(() => { if (phase === 'lobby') loadRooms(); }, 4000);
-  const q = new URLSearchParams(location.search);
-  if (q.get('join')) joinGame(q.get('join'), false);
-  else if (q.get('spectate')) joinGame(q.get('spectate'), true);
-  else if (q.get('host')) { const g = CATALOG.find(x => x.id === q.get('host')); if (g) hostGame(g, false); }
+  const q = os.args();
+  if (q.join) joinGame(q.join, false);
+  else if (q.spectate) joinGame(q.spectate, true);
+  else if (q.host) { const g = CATALOG.find(x => x.id === q.host); if (g) hostGame(g, false); }
   // Live OS-wide language sync: when the language changes elsewhere (Settings, another open window),
   // the engine repaints every [data-i18n] first, then relabel() re-runs the JS-built renders — no reload.
   I18N.onChange(() => relabel());

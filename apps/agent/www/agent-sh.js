@@ -339,7 +339,7 @@ export function createAgentShell({ fs, device = {}, confirm = async () => true, 
     }
     const writes = plannedWrites(p);
     if (writes.length) {
-      const ok = await confirm({ cmd: String(line), writes, destructive: writes.some((w) => w.op === 'rm') });
+      const ok = await confirm({ cmd: String(line), writes, destructive: writes.some((w) => w.op === 'rm') });   // nucleo-shell: allow (the caller-supplied confirm callback, not the native dialog)
       if (!ok) return { out: 'not run: the user declined', code: 1, writes };
     }
     const outs = []; let code = 0;

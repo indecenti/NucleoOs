@@ -107,8 +107,19 @@ money/heap, or reveals more than "a NucleoOS device exists here", it is paired-o
 - **Brute-force guard**: **per source-IP**, not global (a global counter let one hostile client
   lock out pairing for everyone — a trivial remote DoS). After 5 wrong PINs from an IP the device
   refuses that IP with an **exponential backoff** (30 s, 60 s, 120 s … capped ~16 min;
-  `429 Too Many Requests`). A 6-digit space + escalating per-IP lockout makes guessing impractical
-  on a LAN.
+  `429 Too Many Requests`). The table holds 8 addresses, and a bucket with any miss or backoff is
+  **never evicted** until it has been idle for an hour: evicting it used to hand a fresh budget to
+  anyone who rotated through 9 source addresses, which removed the limit entirely. When all 8 buckets
+  hold a guesser's history, new pairings get 429 until one ages out (already paired browsers are
+  unaffected — they never call `/api/pair`). `/api/pair` sends **no CORS header**, so a web page the
+  operator happens to visit cannot run the guessing from their browser and read the answers.
+
+## Firmware and content: release signatures
+
+A paired session is not enough to replace the OS: `/api/ota` installs only images signed with a release key,
+and the native updater and the SD-content installer check the same signatures on what they download (a stolen
+cookie, a hostile web app in a shell iframe or a compromised release site can no longer push code). Details:
+[release-signing.md](release-signing.md).
 
 ## Secrets at rest: Wi-Fi and hotspot passwords
 

@@ -224,6 +224,8 @@
 <script type="module">
 import I18N from '/nucleo-i18n.js';
 import Caps from '/nucleo-caps.js';   // what this device can do (time.set)
+import fs from '/nucleo-fs.js';
+import os from '/nucleo-shell.js';     // the shell's status snapshot (no own /api/status poll)
 const t = await I18N.init('clock');
 
 const $ = id => document.getElementById(id);
@@ -235,29 +237,19 @@ const SETTINGS_PATH = '/system/config/settings.json';
 const prefs = { format24: true, showSeconds: true, analog: true };
 let locale;
 
-async function readJSON(path) {
-  try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
-    return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; }
-}
-async function writeJSON(path, obj) {
-  try { return (await fetch('/api/fs/write?path=' + encodeURIComponent(path),
-    { method: 'POST', body: JSON.stringify(obj, null, 2) })).ok; } catch { return false; }
-}
+const readJSON = (path) => fs.readJSON(path, null).catch(() => null);
+const writeJSON = (path, obj) => fs.writeJSON(path, obj, { pretty: true }).then(() => true, () => false);
 async function loadSettings() {
-  const s = await readJSON(SETTINGS_PATH);
-  if (s?.ui?.theme)     document.documentElement.dataset.theme = s.ui.theme;
+  const s = await readJSON(SETTINGS_PATH);   // the theme is set on this page by the shell (nucleo-shell.js)
   if (s?.device?.locale) locale = s.device.locale;
 }
-// clock.json read with its outcome: a 404 (never saved) or an unparsable file is "nothing to keep", but a
+// clock.json read with its outcome: an absent file (never saved) or an unparsable file is "nothing to keep", but a
 // failed read (offline, 401, 503) leaves the saved prefs unknown -> prefsKnown stays false and no toggle may
 // write defaults over them until a later read succeeds.
 let prefsKnown = false;
 async function readPrefsFile() {
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(CFG_PATH), { cache: 'no-store' });
-    if (r.status === 404) return { ok: true, data: null };
-    if (!r.ok) return { ok: false };
-    let data = null; try { data = JSON.parse(await r.text()); } catch {}
+    const data = await fs.readJSON(CFG_PATH, null);     // null when absent or unparsable; throws when the read fails
     return { ok: true, data: data && typeof data === 'object' && !Array.isArray(data) ? data : null };
   } catch { return { ok: false }; }
 }
@@ -337,14 +329,12 @@ function fmtDate(d) {
 }
 
 // ── Device badge + silent browser-time push ───────────────────────────────────
-// In the shell the desktop already polls /api/status every 15 s and rebroadcasts it as a
-// status.snapshot message — we consume that instead of fetching our own copy. Only standalone
-// (opened directly, not embedded) do we poll the device ourselves.
-const EMBEDDED = window.top !== window.self;
+// The shell already polls /api/status and hands every snapshot to its apps: os.status() for the
+// first one, os.onStatus() for the rest (opened on its own, os.status() reads it once).
 let timePushed = false;
 async function pollDevice(snap) {
   try {
-    const st = snap || await (await fetch('/api/status', { cache: 'no-store' })).json();
+    const st = snap;
     const net = st?.network;
     const dot = $('dev-dot'), txt = $('dev-txt');
     if (!net) { dot.className = 'dot err'; txt.textContent = t('dev_unreachable'); return; }
@@ -541,8 +531,6 @@ window.addEventListener('message', e => {
     if (e.data.d.path.endsWith('settings.json')) loadSettings().then(tick);
     if (e.data.d.path.endsWith('clock.json'))    loadPrefs().then(tick);
   }
-  if (e.data?.type === 'set-theme' && e.data.theme)
-    document.documentElement.dataset.theme = e.data.theme;
 });
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 window.addEventListener('keydown', e => {
@@ -574,12 +562,8 @@ async function init() {
   await loadSettings();
   await loadPrefs();
   tick(); setInterval(tick, 250);
-  if (EMBEDDED) {
-    // Driven by the shell's status.snapshot broadcast — no own /api/status poll.
-    window.addEventListener('message', (e) => { if (e.data && e.data.t === 'status.snapshot') pollDevice(e.data.d); });
-  } else {
-    pollDevice(); setInterval(pollDevice, 15000);
-  }
+  os.status().then(pollDevice);
+  os.onStatus(pollDevice);
 }
 init();
 </script>

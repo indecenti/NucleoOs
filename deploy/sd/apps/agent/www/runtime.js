@@ -25,6 +25,7 @@
 // import must NOT include /www/ (it would become a 404'ing double www/www). Same under serve-shell.
 import { makeFS } from '/apps/anima/fsclient.js';
 import Caps from '/nucleo-caps.js';   // what this device can do (one list for every app, cached per session)
+import os from '/nucleo-shell.js';    // open_in_os: the shell's open-file / open-app (transport only)
 import { compact } from '/apps/anima/context.js';
 // Provider-agnostic contract layer (node+browser safe, host-testable): tool surface + the Groq/OpenAI
 // tool-use machinery so the multi-agent works on Grok too, not just Claude.
@@ -495,8 +496,8 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
           return done(t('rt_run_ok') + (out.hasValue ? ' → ' + out.value : '') + (out.ms != null ? ' (' + out.ms + 'ms)' : '')
             + (shown ? '\nstdout:\n' + shown : '') + saved); }
         case 'open_in_os': { try {
-            if (input.path) { const abs = fs.resolve(input.path); window.parent && window.parent.postMessage({ type: 'open-file', path: abs }, '*'); return done(t('rt_open_file_ok', { path: input.path })); }
-            if (input.app) { window.parent && window.parent.postMessage({ type: 'open-app', id: String(input.app), reload: true /* it may be open with an older build */ }, '*'); return done(t('rt_open_app_ok', { app: input.app })); }
+            if (input.path) { const abs = fs.resolve(input.path); os.openFile(abs); return done(t('rt_open_file_ok', { path: input.path })); }
+            if (input.app) { if (os.inShell) os.openApp(String(input.app), undefined, { reload: true /* it may be open with an older build */ }); return done(t('rt_open_app_ok', { app: input.app })); }
             return done(t('rt_open_specify'), true);
           } catch (e) { return done(t('rt_open_err', { error: String(e.message || e) }), true); } }
         case 'get_os_api': {
@@ -687,9 +688,9 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
             const b64 = d.b64_json || d.b64;
             if (!b64) return done(t('rt_img_no_image'), true);
             const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-            const dir = String(input.path).split('/').slice(0, -1).join('/');   // /api/fs/write doesn't mkdir parents → create them first (like fs.write)
+            const dir = String(input.path).split('/').slice(0, -1).join('/');   // /api/fs/write doesn't mkdir parents → create them first (like fs.write)   // nucleo-fs: allow (the agent's sandbox I/O)
             if (dir) await withRetry(() => dq.write(() => fs.mkdir(dir)));
-            const w = await withRetry(() => dq.write(async () => { const wr = await fetch('/api/fs/write?path=' + encodeURIComponent(abs), { method: 'POST', body: bytes, signal: aborter && aborter.signal }); return wr.ok ? { ok: true } : { ok: false, error: 'http-' + wr.status }; }));
+            const w = await withRetry(() => dq.write(async () => { const wr = await fetch('/api/fs/write?path=' + encodeURIComponent(abs), { method: 'POST', body: bytes, signal: aborter && aborter.signal }); return wr.ok ? { ok: true } : { ok: false, error: 'http-' + wr.status }; }));   // nucleo-fs: allow (the agent's sandbox I/O: abortable, through its device queue)
             if (!w.ok) return done(t('rt_img_write_fail', { error: w.error }), true);
             return done(t('rt_img_saved', { path: input.path, kb: Math.round(bytes.length / 1024), provider: (providerOf(icfg.provider).label || icfg.provider) }) + (d.revised_prompt ? t('rt_img_revised', { revised: d.revised_prompt }) : ''));
           } catch (e) { return done(t('rt_img_err', { error: String(e && e.message || e) }), true); }
@@ -700,7 +701,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
           if (!wcfg) return done(t('rt_tr_no_provider'), true);
           let abs; try { abs = fs.resolve(input.path); } catch { return done(t('rt_path_outside'), true); }
           try {
-            const got = await withRetry(() => dq.read(async () => { const rr = await fetch('/api/fs/read?path=' + encodeURIComponent(abs), { cache: 'no-store', signal: aborter && aborter.signal }); if (!rr.ok) return { ok: false, error: 'http-' + rr.status }; return { ok: true, buf: await rr.arrayBuffer() }; }));
+            const got = await withRetry(() => dq.read(async () => { const rr = await fetch('/api/fs/read?path=' + encodeURIComponent(abs), { cache: 'no-store', signal: aborter && aborter.signal }); if (!rr.ok) return { ok: false, error: 'http-' + rr.status }; return { ok: true, buf: await rr.arrayBuffer() }; }));   // nucleo-fs: allow (the agent's sandbox I/O: abortable, through its device queue)
             if (!got.ok) return done(t('rt_audio_read_fail', { error: got.error }), true);
             const nm = String(input.path).split('/').pop() || 'audio';
             const ext = (nm.split('.').pop() || '').toLowerCase();

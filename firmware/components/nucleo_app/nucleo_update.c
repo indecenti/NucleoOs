@@ -30,6 +30,7 @@
 #include "esp_timer.h"
 #include "nvs.h"
 #include "mbedtls/sha256.h"
+#include "fwsig.h"           // the image must carry a release signature (docs/release-signing.md)
 
 static const char *TAG = "nucupd";
 
@@ -476,6 +477,10 @@ static void install_task(void *arg)
     mbedtls_sha256_context sha;
     mbedtls_sha256_init(&sha);
     mbedtls_sha256_starts(&sha, 0);
+    // SHA256SUMS comes from the same site as the image, so it only proves the transfer; the release signature
+    // proves who built it. Hashed as it streams (the trailing block held back), checked after esp_ota_end.
+    static fwsig_stream_t fsig;          // static: off the 12 KB task stack
+    fwsig_stream_init(&fsig);
 
     char buf[2048];
     int total = 0, r;
@@ -489,6 +494,7 @@ static void install_task(void *arg)
         }
         if (esp_ota_write(h, buf, r) != ESP_OK) { ok = false; why = "ota_write"; break; }
         mbedtls_sha256_update(&sha, (const unsigned char *)buf, r);
+        fwsig_stream_update(&fsig, (const uint8_t *)buf, (size_t)r);
         total += r;
         st_progress(total, (int)clen);
         // Aggregate hard ceiling: per-op timeout_ms doesn't bound a connection that trickles a few
@@ -510,9 +516,24 @@ static void install_task(void *arg)
         if (strcmp(hex, want) != 0) { ok = false; why = UT("Verifica SHA-256 fallita", "SHA-256 check failed", "Verificacion SHA-256 fallida", "Echec verification SHA-256", "SHA-256-Pruefung fehlgeschlagen"); }
     }
     mbedtls_sha256_free(&sha);
+    char sig_sha[65]; uint32_t sig_size = 0;
+    bool sig_whole = fwsig_stream_final(&fsig, sig_sha, &sig_size);
+    fwsig_stream_free(&fsig);
 
     if (!ok) { esp_ota_abort(h); fail_install(why ? why : "error", tk); }
     if (esp_ota_end(h) != ESP_OK) fail_install(UT("Immagine incompleta", "Incomplete image", "Imagen incompleta", "Image incomplete", "Unvollstaendiges Image"), tk);
+    {   // Never boot an image this firmware cannot prove came from a NucleoOS release key.
+        esp_app_desc_t d;
+        fwsig_rc_t sr = FWSIG_E_MISSING;
+        if (esp_ota_get_partition_description(part, &d) == ESP_OK && !strcmp(d.project_name, "nucleoos") && sig_whole)
+            sr = fwsig_verify(fsig.tail, FWSIG_DOMAIN_OTA, d.version, sig_sha, sig_size);
+        if (sr != FWSIG_OK) {
+            ESP_LOGE(TAG, "native OTA rejected: %s", fwsig_rc_name(sr));
+            fail_install(sr == FWSIG_E_MISSING
+                ? UT("Release non ancora firmata: riprova piu' tardi", "Release not signed yet: retry later", "Release aun no firmada: reintenta mas tarde", "Release pas encore signee : reessayez plus tard", "Release noch nicht signiert: spaeter erneut")
+                : UT("Firma del firmware non valida", "Invalid firmware signature", "Firma del firmware no valida", "Signature du firmware invalide", "Ungueltige Firmware-Signatur"), tk);
+        }
+    }
     if (esp_ota_set_boot_partition(part) != ESP_OK) fail_install("set_boot", tk);
 
     nucleo_arb_release(tk);

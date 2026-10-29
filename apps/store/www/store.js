@@ -3,6 +3,8 @@
 // in /store-client.js; this file shows them and asks before anything touches the device.
 import I18N from '/nucleo-i18n.js';
 import Caps from '/nucleo-caps.js';
+import fs from '/nucleo-fs.js';
+import os from '/nucleo-shell.js';   // open-app and the OS dialogs
 import { makeStore, StoreError } from '/store-client.js';
 
 const t = await I18N.init('store');
@@ -10,19 +12,17 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const size = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
 
-// The device, through the file API of the contract (contract/api.yaml).
-const q = encodeURIComponent;
-async function call(url, opts) {
-  const r = await fetch(url, Object.assign({ cache: 'no-store' }, opts || {}));
-  if (!r.ok) throw new StoreError('device', r.status + ' ' + url.split('?')[0]);
-  return r;
-}
+// The device, through the core file layer (/nucleo-fs.js). Any failure is a 'device' error for the store.
+const device = (e) => { throw e instanceof StoreError ? e : new StoreError('device', (e && e.message) || String(e)); };
 const dev = {
-  readText: async (p) => { const r = await fetch('/api/fs/read?path=' + q(p), { cache: 'no-store' }); return r.ok ? r.text() : null; },
-  writeBytes: (p, b) => call('/api/fs/write?path=' + q(p), { method: 'POST', body: b }),
-  mkdir: (p) => call('/api/fs/mkdir?path=' + q(p), { method: 'POST' }),
-  move: (from, to) => call('/api/fs/move?from=' + q(from) + '&to=' + q(to), { method: 'POST' }),
-  remove: (p) => call('/api/fs/delete?path=' + q(p), { method: 'POST' }),
+  readText: (p) => fs.readText(p).catch(device),
+  // The package lands in its own .tmp folder and takes its place in one move: those files need no atomic
+  // replace of their own. The store creates every folder itself (mkdir), in order.
+  writeBytes: (p, b) => fs.write(p, b, { mkdir: false, atomic: !p.includes('/.tmp/') }).catch(device),
+  // fs.mkdirp forgets a folder once it is removed, so .tmp/<id>, re-made on every install, is really made again.
+  mkdir: (p) => fs.mkdirp(p).catch(device),
+  move: (from, to) => fs.move(from, to).catch(device),
+  remove: (p) => fs.remove(p).then((had) => { if (!had) throw new StoreError('device', '404 ' + p); }, device),
 };
 
 const info = await Caps.info();
@@ -150,7 +150,7 @@ function card(src, a) {
     }
     if (a.installed > 0) {
       const o = el('button', '', t('open'));
-      o.addEventListener('click', () => parent.postMessage({ type: 'open-app', id: a.id }, location.origin));
+      o.addEventListener('click', () => os.openApp(a.id));
       const r = el('button', 'danger', t('remove'));
       r.addEventListener('click', () => doRemove(a));
       act.append(o, r);
@@ -181,7 +181,7 @@ async function doInstall(src, a) {
 async function doRemove(a) {
   if (busy) return;
   const name = a.names[lang()] || a.id;
-  if (!confirm(t('confirm_remove', { n: name }))) return;
+  if (!(await os.confirm(t('confirm_remove', { n: name }), { danger: true }))) return;
   lockUI(true);
   try {
     await store.uninstall(a.id);

@@ -1,8 +1,8 @@
 {
   "id": "contacts",
   "name": "Contatti",
-  "version": "1.0.1",
-  "version_code": 1,
+  "version": "1.0.2",
+  "version_code": 2,
   "description": "The OS address book: people with email/phone/org/notes, favorites, search, vCard export to the SD. Integrates with Mail (one click opens Compose with the recipient prefilled) and the OS clipboard.",
   "category": "productivity",
   "runtime": "web",

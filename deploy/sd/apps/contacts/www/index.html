@@ -122,6 +122,8 @@
 
 <script type="module">
 import I18N from '/nucleo-i18n.js';
+import fs from '/nucleo-fs.js';
+import os from '/nucleo-shell.js';
 const t = await I18N.init('contacts');
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -132,19 +134,17 @@ let contacts = [];          // [{ id, name, email, phone, org, note, fav }]
 let selId = null, query = '';
 
 // Typed read. A FAILED read (offline, 401, 503) is NOT "no contacts": the old code then showed this browser's
-// cache (or nothing) and the next edit wrote that over the real file on the SD. 404 = none yet.
+// cache (or nothing) and the next edit wrote that over the real file on the SD. Absent = none yet.
+const statusOf = (e) => (e && e.code === 'denied' ? 403 : 0);
 async function readDevice() {
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store' });
-    if (r.status === 404) return { ok: true, list: [] };
-    if (!r.ok) return { ok: false, status: r.status };
-    const s = (await r.text()).trim();
+    const s = ((await fs.readText(PATH)) || '').trim();
     if (!s) return { ok: true, list: [] };
     const j = JSON.parse(s);
     if (j && Array.isArray(j.contacts)) return { ok: true, list: j.contacts };
     if (j && typeof j === 'object' && !Object.keys(j).length) return { ok: true, list: [] };   // the firmware's "{}"
     return { ok: false, status: 'corrupt' };
-  } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : 0 }; }
+  } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : statusOf(e) }; }
 }
 const readCache = () => { try { const l = JSON.parse(localStorage.getItem('contacts.cache') || '{}'); return Array.isArray(l.contacts) ? l.contacts : []; } catch { return []; } };
 const writeCache = () => { try { localStorage.setItem('contacts.cache', JSON.stringify({ contacts })); } catch {} };
@@ -177,10 +177,8 @@ function mutate(fn) {
     const list = r.list;
     if (fn(list) === false) return false;
     try {
-      const w = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH),
-        { method: 'POST', body: JSON.stringify({ schema: 1, contacts: list }, null, 2), signal: (() => { try { return AbortSignal.timeout(9000); } catch { return undefined; } })() });
-      if (!w.ok) { toast(w.status === 401 || w.status === 403 ? t('not_paired') : t('save_failed'), true); return false; }
-    } catch { toast(t('save_failed'), true); return false; }
+      await fs.writeJSON(PATH, { schema: 1, contacts: list }, { pretty: true });   // atomic: a failed save keeps the old file
+    } catch (e) { toast(statusOf(e) === 403 ? t('not_paired') : t('save_failed'), true); return false; }
     contacts = list; readOk = true; writeCache(); showNote(null);
     return true;
   });
@@ -227,12 +225,11 @@ function render() {
 
 // ── detail ───────────────────────────────────────────────────────────────────
 function copy(text) {
-  try { navigator.clipboard && navigator.clipboard.writeText(text); } catch {}
-  try { window.parent.postMessage({ type: 'clipboard-write', kind: 'text', data: text }, '*'); } catch {}
+  os.copy(text);
   const h = $('hint'); h.textContent = t('copied'); h.classList.add('show'); setTimeout(() => h.classList.remove('show'), 1200);
 }
 // Ask the shell to open Mail with this recipient prefilled (Mail reads ?to=). Real OS integration.
-function mailTo(email) { try { window.parent.postMessage({ type: 'open-app', id: 'mail', query: 'to=' + encodeURIComponent(email) }, '*'); } catch {} }
+function mailTo(email) { os.openApp('mail', { to: email }); }
 
 function showDetail(c) {
   const d = $('detail');
@@ -273,10 +270,9 @@ function vcard(c) {
 async function exportVcard(c) {
   const safe = (c.name || c.email || 'contact').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'contact';
   const path = '/data/Contacts/' + safe + '.vcf';
-  try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent('/data/Contacts'), { method: 'POST' }); } catch {}
   try {
-    const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: vcard(c) });
-    const h = $('hint'); h.textContent = r.ok ? t('vcard_saved', { path }) : t('vcard_fail'); h.classList.add('show');
+    const ok = await fs.writeText(path, vcard(c)).then(() => true, () => false);   // makes /data/Contacts as needed
+    const h = $('hint'); h.textContent = ok ? t('vcard_saved', { path }) : t('vcard_fail'); h.classList.add('show');
     setTimeout(() => h.classList.remove('show'), 1800);
   } catch { const h = $('hint'); h.textContent = t('vcard_fail'); h.classList.add('show'); setTimeout(() => h.classList.remove('show'), 1800); }
 }
@@ -311,8 +307,9 @@ async function saveSheet() {
 async function delContact() {
   if (!editId) return;
   const c = contacts.find((x) => x.id === editId);
-  if (!confirm(t('confirm_del', { name: (c && (c.name || c.email)) || '' }))) return;
   const id = editId;
+  if (!(await os.confirm(t('confirm_del', { name: (c && (c.name || c.email)) || '' }), { danger: true }))) return;
+  if (editId !== id) return;   // the sheet was closed or switched while the dialog was open
   if (!(await mutate((l) => { const i = l.findIndex((x) => x.id === id); if (i >= 0) l.splice(i, 1); }))) { $('msg').textContent = readOk ? t('save_failed') : failText(0); return; }
   if (selId === id) selId = null;
   render(); showDetail(null); closeSheet();

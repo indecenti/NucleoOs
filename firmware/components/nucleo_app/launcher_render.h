@@ -23,6 +23,11 @@ int launcher_render_grid_first(void);
 // A drag on the large grid (NUCLEO_TOUCH_VIEW_*): the content moves one step (dir +1 = toward the end), the
 // focus stays. True when it moved (repaint).
 bool launcher_render_grid_view(int dir);
+// The panel's quick menu for one tile (a long press, or '*'): Open, Pin to Home / Unpin, Info, Uninstall (store apps).
+int  launcher_render_grid_item_at(int px, int py);   // the item under a panel point, -1 = none
+void launcher_qm_open(int item);                     // open it for that visible-list item
+bool launcher_qm_active(void);
+int  launcher_qm_key(int key, char ch);              // 0 = not open, 1 = handled (repaint), 2 = open the focused app
 
 // Bottom hint-bar text (also the public nucleo_app_set_hint).
 void        launcher_render_set_hint(const char *h);

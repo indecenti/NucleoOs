@@ -1,8 +1,8 @@
 {
   "id": "miei-fatti",
   "name": "I Miei Fatti",
-  "version": "0.1.1",
-  "version_code": 2,
+  "version": "0.1.2",
+  "version_code": 3,
   "min_os": "0.1.0",
   "platforms": ["esp32s3"],
   "description": "Capture personal and world facts and teach them to ANIMA on the device — recallable later in natural language, fully offline.",

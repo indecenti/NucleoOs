@@ -1,8 +1,8 @@
 {
   "id": "dictation",
   "name": "Trascrizione",
-  "version": "0.1.1",
-  "version_code": 1,
+  "version": "0.1.2",
+  "version_code": 2,
   "description": "Trascrizione vocale dal vivo dal microfono del dispositivo: il device manda solo l'audio (~32 KB/s), il riconoscimento gira nel browser (Vosk, offline) e il testo si salva quasi in tempo reale su SD. All'avvio spegne il display del dispositivo e lo riaccende all'uscita.",
   "category": "media",
   "runtime": "web",

@@ -1,14 +1,15 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
 // In-browser video → .nfv v4 converter. The heavy lifting (ffmpeg) runs as WebAssembly right here
 // in the browser — NO PC companion, NO install. The finished .nfv (picture AND sound in one file) is written
-// to the device in resumable parts (/api/fs/write?append=1&at=N), so a Wi-Fi drop costs one part, not the film.
+// to the device in resumable parts (fs.write, where the device appends by offset), so a Wi-Fi drop costs one
+// part, not the film.
 //
 // Single-thread @ffmpeg/core (vendored under vendor/ffmpeg/) → no SharedArrayBuffer, so it runs
 // without cross-origin-isolation headers. For a whole film the PC encoder is faster: tools/nfv/nfv4.py
 // (same format, byte-identical container — tools/nfv/nfv.test.mjs checks it).
 import { buildNfv4, splitMjpeg, wavAdpcmBlocks, stripMask, REFRESH_S } from './nfv.js';
 import I18N from '/nucleo-i18n.js';
-import Caps from '/nucleo-caps.js';
+import fs from '/nucleo-fs.js';
 const t = await I18N.init('video-studio');
 
 // q = ffmpeg's MJPEG quantiser (2 = best). The device shows ~15 fps at most (SD + SPI bus), so more fps only
@@ -163,39 +164,17 @@ export async function convertFile(file, opts = {}, onStage = () => {}) {
   }
 }
 
-// Write the result onto the device SD (same-origin — no CORS) in resumable 512 KB parts: the device appends a
-// part only when its copy is exactly `at` bytes long and answers its real size otherwise (409), so a dropped
-// request is simply sent again. The file lands as <name>.part and is renamed into place once complete.
+// Write the result onto the device SD (same-origin — no CORS). fs.write sends it in resumable parts where the
+// device appends by offset (a dropped request costs one part, not the film), in one write elsewhere, and
+// lets the finished file take its name only once it is complete: a half film never replaces a whole one.
 export async function deliverToDevice(result, onStage = () => {}) {
-  const PART = 512 * 1024, dst = `/data/Videos/${result.base}.nfv`, part = dst + '.part';
-  const q = (p) => encodeURIComponent(p);
-  const blob = result.nfv, size = blob.size;
-  await fetch('/api/fs/delete?path=' + q(part), { method: 'POST' }).catch(() => {});
-  // Resumable parts need ?append=1&at=N (fs.append). A backend without it ignores the parameters and every part
-  // would REPLACE the file: there the film goes in one write, which those backends (Linux, the browser) take.
-  if (!(await Caps.has('fs.append').catch(() => false))) {
-    onStage(t('stage_writing'), 0);
-    const w = await fetch('/api/fs/write?path=' + q(part), { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob });
-    if (!w.ok) throw new Error(t('err_write_failed', { status: w.status, path: dst }));
+  const dst = `/data/Videos/${result.base}.nfv`;
+  onStage(t('stage_writing'), 0);
+  try {
+    await fs.write(dst, result.nfv, { onProgress: (done, total) => onStage(t('stage_writing'), total ? Math.floor(done / total * 100) : 0) });
+  } catch (e) {
+    if (e && e.status) throw new Error(t('err_write_failed', { status: e.status, path: dst }));
+    throw e;                            // no HTTP answer (connection lost, no space...): its own message, as before
   }
-  let at = (await Caps.has('fs.append').catch(() => false)) ? 0 : size, fails = 0;
-  while (at < size) {
-    onStage(t('stage_writing'), Math.floor(at / size * 100));
-    try {
-      const r = await fetch(`/api/fs/write?path=${q(part)}&append=1&at=${at}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob.slice(at, Math.min(size, at + PART)),
-      });
-      if (!r.ok && r.status !== 409) throw new Error(t('err_write_failed', { status: r.status, path: dst }));
-      const j = await r.json().catch(() => ({}));
-      at = Number.isFinite(j.size) ? j.size : Math.min(size, at + PART);
-      fails = 0;
-    } catch (e) {
-      if (++fails > 8) throw e;
-      await new Promise((r) => setTimeout(r, 1500 * fails));
-    }
-  }
-  await fetch('/api/fs/delete?path=' + q(dst), { method: 'POST' }).catch(() => {});
-  const mv = await fetch(`/api/fs/move?from=${q(part)}&to=${q(dst)}`, { method: 'POST' });
-  if (!mv.ok) throw new Error(t('err_write_failed', { status: mv.status, path: dst }));
   return dst;
 }

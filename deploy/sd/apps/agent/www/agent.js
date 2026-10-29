@@ -5,6 +5,8 @@
 // back to the offline brain — it cleanly hands off to the separate offline ANIMA app.
 
 import { createRuntime } from './runtime.js';
+import fs from '/nucleo-fs.js';
+import os from '/nucleo-shell.js';   // open-app through the shell
 // The F4 engine picker (lazy): the header 🧠 button and the no-key gate both open it. It owns model
 // install and the honest per-rung capability verdicts; we only read its rows to build local.engines.
 let pickerMod = null, picker = null;
@@ -16,7 +18,7 @@ async function loadHwPerms() {
   if (hwPerms) return hwPerms;
   // Through the file API: the device's webfs serves only www/ under /apps/agent/, so the manifest (one level up)
   // answered 404 on every Cardputer and the app ran with no declared permissions (found by device-smoke, 2026-10-10).
-  try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent('/apps/agent/manifest.json'), { cache: 'no-store' }); const m = r.ok ? await r.json() : null; hwPerms = (m && Array.isArray(m.permissions)) ? m.permissions : []; }
+  try { const m = await fs.readJSON('/apps/agent/manifest.json', null); hwPerms = (m && Array.isArray(m.permissions)) ? m.permissions : []; }
   catch { hwPerms = []; }
   return hwPerms;
 }
@@ -192,7 +194,7 @@ function pickCfg(j) {
 
 function showGate(kind) {
   const c = $('gate-card');
-  const openApp = (id) => window.parent && window.parent.postMessage({ type: 'open-app', id }, '*');
+  const openApp = (id) => { if (os.inShell) os.openApp(id); };
   if (kind === 'offline') {
     c.innerHTML = '<div class="gi">📡</div><h2>' + esc(t('gate_offline_title')) + '</h2><p>' + esc(t('gate_offline_body')) + '</p><div><button id="g-retry">' + esc(t('retry')) + '</button><button class="ghost" id="g-anima">' + esc(t('gate_anima')) + '</button></div>';
   } else {

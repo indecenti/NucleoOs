@@ -75,6 +75,7 @@
 import I18N from '/nucleo-i18n.js';
 import { pairDialog } from '/nucleo-pair.js';
 import Caps from '/nucleo-caps.js';   // what this device can do (store.native)
+import os from '/nucleo-shell.js';    // the OS dialogs
 
 const t = await I18N.init('store');
 const $ = (id) => document.getElementById(id);
@@ -158,8 +159,8 @@ function render(listErr) {
 }
 
 async function run(action, ids, a) {
-  if (action === 'remove' && !confirm(t('confirm_remove', { n: (a && a.name) || ids.join(', ') }))) return;
-  if (action === 'install' && a && a.size > 200 * 1048576 && !confirm(t('confirm_big', { n: a.name, s: size(a.size) }))) return;
+  if (action === 'remove' && !(await os.confirm(t('confirm_remove', { n: (a && a.name) || ids.join(', ') }), { danger: true }))) return;
+  if (action === 'install' && a && a.size > 200 * 1048576 && !(await os.confirm(t('confirm_big', { n: a.name, s: size(a.size) })))) return;
   const r = await api('/api/store', { method: 'POST', body: JSON.stringify({ action, ids }) });
   if (!r) return;
   if (!r.ok) { info(r.error || t('failed'), 'err'); return; }

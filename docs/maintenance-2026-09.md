@@ -179,7 +179,7 @@ A pass over everything *around* the code — what a first-time reader or a licen
   once only while a search is open). Cold boot on the simulator's small SD: 10 folder listings → 1 (the Desktop); on
   a real SD the crawl was up to 600. The shell's own cold boot is now 38–42 device requests in all five languages
   (`shell-smoke` measures it with no saved windows — with restored apps the count depended on timing); pinned by
-  the `requests: 60` / `fsLists: 2` budgets and `tools/shell-fsindex.test.mjs`.
+  the `requests: 60` / `fsLists: 2` budgets and `nucleo-webos tests/suite/shell-fsindex.test.mjs`.
 - [x] Catalogs fetched once per session: app windows read core/shell i18n from the shell's in-memory Map (same
   origin), and concurrent `I18N.init()` calls share one request (Settings fetched core.en/core.<lang> twice, and a
   boot with four restored windows six times). Settings reads `teacher.json` once (shared `readTeacher()`, in-flight

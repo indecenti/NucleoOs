@@ -11,6 +11,14 @@ function t(key, args, fallback) {
 
 const MAX_TPLS = 20;
 
+// The device's disk, through the core file layer (loaded once; this is a classic script).
+let fsMod = null;
+const getFs = async () => fsMod || (fsMod = (await import('/nucleo-fs.js')).default);
+// The OS around this window: its dialogs are drawn by the shell (keys, joypad, touch). Loaded once too.
+let osMod = null;
+const getOs = async () => osMod || (osMod = (await import('/nucleo-shell.js')).default);
+const osAlert = async (text) => (await getOs()).alert(text);
+
 // Curriculum — every phrase maps to a REAL intent ANIMA resolves (app aliases in
 // registry/app-aliases.json, or a built-in system/skill query). Training a phrase
 // stores one template; saying it (one breath) launches the action.
@@ -52,13 +60,10 @@ function showTab(tab) {
 // ───────────────────────── Triggers state ─────────────────────────
 async function loadTriggers() {
   try {
-    const res = await fetch('/api/fs/list?path=/system/voice');
-    const data = await res.json();
+    const entries = await (await getFs()).list('/system/voice');
     savedTriggers = [];
-    if (data.entries) {
-      for (const f of data.entries) {
-        if (f.name.endsWith('.tpl')) savedTriggers.push(f.name.slice(0, -4));
-      }
+    for (const f of entries) {
+      if (f.name.endsWith('.tpl')) savedTriggers.push(f.name.slice(0, -4));
     }
   } catch (e) {
     savedTriggers = [];
@@ -135,13 +140,12 @@ function esc(s) { return escH(String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\
 function escH(s) { return String(s).replace(/[&<>"\']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }  // HTML-escape for text rendered into innerHTML (esc() only handles JS-string quotes)
 
 async function deleteTrigger(word) {
-  if (!confirm(t('confirm_delete', { word }, `Eliminare il comando “${word}”?`))) return;
-  try {
-    const res = await fetch(`/api/fs/delete?path=/system/voice/${encodeURIComponent(word)}.tpl`, { method: 'POST' });
-    const data = await res.json();
-    if (data.ok) loadTriggers();
-    else alert(t('err_delete', null, "Errore durante l'eliminazione"));
-  } catch (e) { alert(t('err_network', null, 'Errore di rete')); }
+  if (!(await (await getOs()).confirm(t('confirm_delete', { word }, `Eliminare il comando “${word}”?`), { danger: true }))) return;
+  let gone = false;
+  try { gone = await (await getFs()).remove(`/system/voice/${word}.tpl`); }
+  catch (e) { if (!e || e.code === 'offline') { await osAlert(t('err_network', null, 'Errore di rete')); return; } }
+  if (gone) loadTriggers();
+  else await osAlert(t('err_delete', null, "Errore durante l'eliminazione"));
 }
 
 // ───────────────────────── Recording wizard ─────────────────────────
@@ -152,7 +156,7 @@ function clearRecTimer() { if (recTimer) { clearTimeout(recTimer); recTimer = nu
 function recOpen() { return $('panel-record').classList.contains('active') && $('rec-step').style.display !== 'none'; }
 
 function startRecord(word, doneCb) {
-  if (atCap(word)) { alert(t('alert_cap', { max: MAX_TPLS }, `Hai raggiunto il limite di ${MAX_TPLS} comandi. Rimuovine uno prima.`)); return; }
+  if (atCap(word)) { osAlert(t('alert_cap', { max: MAX_TPLS }, `Hai raggiunto il limite di ${MAX_TPLS} comandi. Rimuovine uno prima.`)); return; }
   recordingWord = word;
   onRecordDone = doneCb || null;
   $('rec-step').style.display = 'block';
@@ -187,8 +191,8 @@ async function armEngine(word) {
       body: JSON.stringify({ word })
     });
     const data = await res.json();
-    if (!data.ok) { alert(t('err_arm', null, "Impossibile armare il motore (dispositivo occupato?)")); cancelRecord(); }
-  } catch (e) { alert(t('err_connect', null, 'Errore di connessione al dispositivo')); cancelRecord(); }
+    if (!data.ok) { await osAlert(t('err_arm', null, "Impossibile armare il motore (dispositivo occupato?)")); cancelRecord(); }
+  } catch (e) { await osAlert(t('err_connect', null, 'Errore di connessione al dispositivo')); cancelRecord(); }
 }
 
 function cancelRecord() {

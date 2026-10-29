@@ -177,6 +177,8 @@ import { createASR } from './asr.js';
 import { onMicStatus } from '/micgate.js';   // riflette CHI tiene il mic Cardputer (cross-app)
 import I18N from '/nucleo-i18n.js';
 import Caps from '/nucleo-caps.js';   // what this device can do (device.mic, device.display)
+import fs from '/nucleo-fs.js';       // the device's disk
+import os from '/nucleo-shell.js';    // the OS dialogs and clipboard history
 import * as AI from '/ai.js';   // automatic model choice + fallback + plain-words errors; on a sealed vault the keys stay on the device
 
 // Centralized OS i18n: paints [data-i18n] now, auto-translates DOM added later, and live-switches
@@ -261,13 +263,12 @@ ${t('hdr_engine')}: ${asr.source === 'sd' ? 'Vosk (Offline)' : 'Groq (Online)'}
 
 `;
   try{
-    const r = await fetch('/api/fs/write?path='+enc(path()), { method:'POST', body: header + snapshot });
-    if(r.ok){ savedText = snapshot; }
-    else if(r.status===401||r.status===403){ showAuth(); }
-  }catch{ /* keep localStorage copy; retry on next change/exit */ }
+    await fs.writeText(path(), header + snapshot);
+    savedText = snapshot;
+  }catch(e){ if(e && e.code==='denied') showAuth(); /* else keep localStorage copy; retry on next change/exit */ }
   saving = false; markSaved();
 }
-async function ensureDir(){ try{ await fetch('/api/fs/mkdir?path='+enc(TDIR), { method:'POST' }); }catch{} }
+async function ensureDir(){ try{ await fs.mkdirp(TDIR); }catch{} }
 
 // ---- Cardputer display control --------------------------------------------
 async function setScreen(off, silent){
@@ -334,7 +335,7 @@ onMicStatus((holder)=>{ const otherHolds = !!(holder && holder!=='Dettatura' && 
 $('btnScreen').addEventListener('click', ()=> setScreen(!screenOff));
 $('btnSave').addEventListener('click', ()=> saveNow());
 $('btnNew').addEventListener('click', async ()=>{
-  if(finalText.trim() && !confirm(t('new_confirm'))) return;
+  if(finalText.trim() && !(await os.confirm(t('new_confirm')))) return;
   // Save the current transcript BEFORE clearing it, and only move on once the device has it: a
   // fire-and-forget save that failed (offline, 503, full card) used to wipe the only copy.
   if(finalText.trim()){
@@ -394,7 +395,7 @@ $('saveSettingsBtn').addEventListener('click', async () => {
   localStorage.setItem('dictation.engine', selectedEngine);
   if (sealed) {
     // A typed key goes to the device vault and leaves the page at once.
-    if (typed) { const r = await AI.saveAppKey(groqBase, typed); if (r !== true) alert(t(r === 'unpaired' ? 'set_unpaired' : 'set_save_failed')); }
+    if (typed) { const r = await AI.saveAppKey(groqBase, typed); if (r !== true) await os.alert(t(r === 'unpaired' ? 'set_unpaired' : 'set_save_failed')); }
     await loadSystemTeacherKey();
   } else {
     groqKey = typed; keyInput.value = groqKey;   // shared with AI Chat in this browser
@@ -426,7 +427,7 @@ $('forgetBtn').addEventListener('click', () => {
   if (!sealed) { groqKey = ''; asr.setGroq('', groqBase); }   // a sealed vault's placeholder stays: the device key is Settings' to remove
   settingsPanel.classList.remove('open');
   gearBtn.classList.remove('open');
-  alert(t('set_forgotten'));
+  os.alert(t('set_forgotten'));
 });
 
 // ---- Summary Modal & LLM logic ---------------------------------------------
@@ -438,19 +439,19 @@ $('closeSummary').addEventListener('click', () => { summaryModal.style.display =
 $('closeSummaryBtn').addEventListener('click', () => { summaryModal.style.display = 'none'; });
 $('copySummary').addEventListener('click', async () => {
   try {
-    await navigator.clipboard.writeText(summaryContent.textContent);
+    os.copy(summaryContent.textContent);   // the OS clipboard history (works on plain-http devices too)
     const copyBtn = $('copySummary');
     const oldText = copyBtn.innerHTML;
     copyBtn.innerHTML = '<span class="ic">✓</span> '+t('sum_copied');
     setTimeout(() => { copyBtn.innerHTML = oldText; }, 2000);
   } catch (err) {
-    alert(t('copy_failed'));
+    await os.alert(t('copy_failed'));
   }
 });
 
 async function generateSummary() {
   if (!finalText.trim()) {
-    alert(t('sum_empty'));
+    await os.alert(t('sum_empty'));
     return;
   }
   const btn = $('btnSummary');
@@ -479,11 +480,11 @@ File sorgente: ${file}
 ---
 
 `;
-    await fetch('/api/fs/write?path=' + enc(sumPath), { method: 'POST', body: header + summary });
+    await fs.writeText(sumPath, header + summary);
     
   } catch (err) {
     console.error(err);
-    alert(t('sum_error', {msg: AI.explainAiError(err) || err.message}));   // what went wrong + how to fix it
+    await os.alert(t('sum_error', {msg: AI.explainAiError(err) || err.message}));   // what went wrong + how to fix it
   } finally {
     btn.disabled = false;
     btn.innerHTML = oldText;
@@ -528,7 +529,8 @@ let cleaned = false;
 function cleanup(){
   if(cleaned) return; cleaned = true;
   try{ asr.stop(); }catch{}
-  // sendBeacon survives tab close / iframe teardown where fetch would be cancelled.
+  // sendBeacon survives tab close / iframe teardown where fetch would be cancelled (and fs.write, which takes
+  // several requests, could not finish): the last words go in the core's keepalive write, one plain request.
   try{ if(finalText && finalText!==savedText) {
     const header = `---
 ${t('hdr_date')}: ${sessionDate}
@@ -538,7 +540,7 @@ ${t('hdr_engine')}: ${asr.source === 'sd' ? 'Vosk (Offline)' : 'Groq (Online)'}
 ---
 
 `;
-    navigator.sendBeacon('/api/fs/write?path='+enc(path()), new Blob([header + finalText],{type:'text/plain'}));
+    fs.write(path(), header + finalText, { keepalive: true });
   }}catch{}
   try{ if(!noDisplay) navigator.sendBeacon('/api/display?on=1'); }catch{}
   screenOff = false;
