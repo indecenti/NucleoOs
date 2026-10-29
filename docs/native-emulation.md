@@ -534,8 +534,9 @@ unseen and the console sat at 56-58 fps.
 
 `nucleo_pce.c` is our machine around MAME's HuC6280 (BSD-3, made plain C by `tools/emu-host/gen_h6280.py` into
 `vendor/h6280/h6280_core.h`, regenerated, never edited); the VDC, VCE, PSG, pad and HuCard mapping are ours, written
-against MAME's huc6270 / huc6260 / c6280 at scanline resolution (263 lines of 455 CPU cycles). 64 KB of VRAM as two
-32 KB blocks, 8 KB work RAM, HuCards from the SD page cache (384 / 512 / 768 KB mirroring, Street Fighter II's bank
+against MAME's huc6270 / huc6260 / c6280 at scanline resolution (263 lines of 455 CPU cycles). 64 KB of VRAM in
+eight 8 KB blocks (two 32 KB blocks once refused Street Fighter II on a heap with 148 KB free but no second 32 KB
+block), 8 KB work RAM, HuCards from the SD page cache (384 / 512 / 768 KB mirroring, Street Fighter II's bank
 register). The region comes from the file name ("(USA" = TurboGrafx-16). The store package brings its console to
 the Games gallery: `console.txt` + `console-pcengine.gfa` (`tools/gen-console-art.py`), no PC Engine in the firmware.
 
@@ -598,3 +599,34 @@ bits at a time (DIO, the bootloader's mode, not OTA-changeable), so every instru
 - Tried and measured without gain (reverted): VDC-status and joypad reads as idle-safe, re-arming the idle detector
   at the loop's head after an interrupt. Street Fighter II's waits are already skipped; the rest is real work (the
   game and its sample interrupt every ~1,000 cycles).
+
+**Measured on the device, not guessed (1.3).** Every step above was a theory about the cache. 1.3 measures it:
+- **A bench nobody sits through.** `<card>/emu_bench.txt` (front-end, every console) makes the next game play for N
+  seconds with scripted buttons, take a screenshot, set levers in the core (`emu_bench_knob`), then quit. Started
+  with `/api/play`, the Solo boot reboots into the network afterwards and the trace is read: one run every ~3
+  minutes, with no one at the device.
+- **The LX7's own counters.** The S3 has two performance counters per core (ERI registers, `rer`/`wer`). Lever 2
+  counts, inside the CPU loop only, S3 cycles + instruction-fetch stalls, or instructions retired + data stalls.
+  Street Fighter II, CPU alone (nothing drawn): 3.94 M cycles a frame, **1.47 M stalled on instruction fetch (37%)**,
+  62 K on data (1.6%: the cartridge from flash costs nothing), 1.89 M instructions for ~17,600 HuC6280
+  instructions (~107 each).
+- **Where the misses came from.** Street Fighter II runs 16.8% of its instructions outside the 64 inlined opcodes
+  (PHY, LDY #, RTI, LDX #, SAY, CLI...), ~3,000 a frame, each a call to its own MAME handler somewhere in ~40 KB of
+  cold code: one miss each, ~2 us. The game's mix is not the 40 cartridges' average.
+- **The factored interpreter** (`gen_h6280.py`). MAME's bodies are an operation on an addressing mode with fixed
+  cycles; the generator parses all 256 and gives each opcode a 4-byte entry {cycles, read mode, operation, write
+  mode | bit | TST}. Ten read modes, nine write modes and 75 operations are each written once in one loop (one
+  read-modify-write write-back, block transfers / BRK / speed switches out of line, MAME's handler table gone). Same
+  calls in the same order as each body: the 40 cartridges give the same frames, bit for bit. The module is 40 KB
+  smaller (173 -> 129 KB). On the ADV, Street Fighter II with the picture: 64 opcodes inlined ahead of it 19.4 ms
+  of CPU a frame, 16 inlined 18.8, **none 17.3** (fetch stalls 1.53 M -> 0.60 M cycles); fights 20-28 -> 38-42
+  frames emulated a second.
+- **Locking the cache** (ROM preload + lock of `.text.nap_hot`, see native-apps.md): slower every time (10.7 KB of
+  the old loop: 25.0 against 21.9 ms; the factored loop: fetch stalls 0.80 M against 0.60 M). A bench lever only.
+- **Frames shown.** The CPU alone is still above a frame's 16.7 ms in a fight, so the game cannot reach full speed and
+  skipping frames only trades smoothness: three unseen in a row (as the NES) showed 30% of the frames, ~13 a second.
+  One at most: 53%, ~21 a second, for the same speed. VRAM in 8 KB blocks, the session first.
+
+Next, the instruction count (~107 S3 instructions an emulated one): MAME's lazy N/Z flags (H6280_LAZY_FLAGS, its
+P composed on reads), the cycle counter and the timer kept in one register-friendly countdown, the zero page as a
+direct pointer while MPR1 is work RAM.

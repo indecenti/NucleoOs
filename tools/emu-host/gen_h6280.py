@@ -44,13 +44,15 @@ s = flags + '\n' + helpers + '\n' + run
 s = s.replace('debugger_instruction_hook(PCW);', '')
 s = re.sub(r'standard_irq_callback\([^;]*\);', '', s)
 s = s.replace('logerror("BRK %04x\\n",PCW);', '')
-# The dispatch: a switch over the hot opcodes (h6280_hot.txt, measured) with their handlers inlined into it, and the
-# table of cold handlers for the rest. All 256 inlined made a 24.8 KB loop that never fitted the S3's 16 KB
-# instruction cache (the module runs from flash): the hot loop now does, and a cold opcode costs one call.
+# The dispatch: every opcode through the factored interpreter below. `--hot N` puts the first N of h6280_hot.txt
+# (most executed first) in a switch ahead of it, their handlers inlined. Measured on the ADV (Street Fighter II,
+# the LX7's counters): 64 inlined 19.4 ms a frame (1.53 M fetch-stall cycles), 16 inlined 18.8 ms, none 17.3 ms
+# (0.60 M): every opcode in one small loop beats a fast path for some of them. So none by default.
 HOT = [int(x, 16) for x in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'h6280_hot.txt'))
        .read().split('\n')[-2].split()]
+HOT = HOT[:int(sys.argv[sys.argv.index('--hot') + 1])] if '--hot' in sys.argv else []
 DISPATCH = ('switch (in) {\n' + ''.join(f'\t\tcase 0x{i:02x}: op_{i:02x}(); break;\n' for i in HOT)
-            + '\t\tdefault: s_opcodetable[in](); break;\n\t\t}\n\t\t')
+            + '\t\tdefault: /*FACTORED*/ break;\n\t\t}\n\t\t')
 s = s.replace('(this->*m_opcode[in])();', DISPATCH + 'PCE_AFTER_OP();')
 # ST0/ST1/ST2: the VDC through the io space -> the host
 s = s.replace('m_io.write_byte(0x0000,tmp);', 'pce_vdc_st(0, tmp);')
@@ -69,10 +71,84 @@ s = s.replace('#define OP(prefix,opcode)  void h6280_device::prefix##_##opcode()
               '#define OPH(prefix,opcode) static inline __attribute__((always_inline)) void prefix##_##opcode(void)')
 for i in HOT:                                      # the hot handlers: inlined into the switch
     s = s.replace(f'OP(op,{i:02x}) {{', f'OPH(op,{i:02x}) {{')
+
+# ── every other opcode: one factored interpreter, built from the same bodies ─────────────────────────────────────
+# A cold opcode used to be a function of its own: ~190 of them, ~40 KB of flash, and each call an instruction-cache
+# miss (~2 us from DIO flash). Street Fighter II runs 17% of its instructions there: ~3,000 misses a frame, 37% of the
+# CPU loop's cycles stalled on fetch (the LX7's counters, on the ADV). MAME's bodies are regular: the op's cycles,
+# then an operation on an addressing mode (`h6280_cycles(4); adc(rd_zpg());`, `wr_abs(sta())`, `wb_eaz(asl(...))`).
+# So each of the 10 read modes, 9 write modes and ~110 operations is written ONCE: the opcode indexes a 4-byte entry
+# {cycles, read mode, operation, write mode | bit}, one switch reads the operand, one does the operation, one writes.
+# The same calls in the same order as each body, so the same machine; all 256 opcodes in a few KB that stay cached.
+OPS = {int(m.group(1), 16): m.group(2).strip()
+       for m in re.finditer(r'^OPH?\(op,([0-9a-f]{2})\) \{(.*?)\}\s*//', s, re.M)}
+assert len(OPS) == 256, len(OPS)
+RMODES = ['imm', 'zpg', 'zpx', 'zpy', 'abs', 'abx', 'aby', 'zpi', 'idx', 'idy']
+F_TST = 0x80                                       # the entry's last byte: TST (its immediate before the operand)
+cases, dec = {}, {}                                # case body -> case number; opcode -> (cycles, rmode, case, last)
+
+
+def case_of(body):
+    return cases.setdefault(body, len(cases))
+
+
+for o in range(256):
+    if o in HOT:
+        continue
+    b = OPS[o]
+    if m := re.match(r'^h6280_cycles\((\d+)\); (\w+)\(rd_(\w+)\(\)\);$', b):           # R: op(rd_mode())
+        dec[o] = (int(m[1]), RMODES.index(m[3]) + 1, case_of(f'{m[2]}(t);'), 0)
+    elif m := re.match(r'^h6280_cycles\((\d+)\); wr_(\w+)\((\w+)\(\)\);$', b):         # W: wr_mode(op())
+        dec[o] = (int(m[1]), 0, case_of(f'v = {m[3]}(); goto wr;'), RMODES.index(m[2]) + 1)
+    elif m := re.match(r'^h6280_cycles\((\d+)\); wb_(eaz?)\((\w+)\(rd_(\w+)\(\)\)\);$', b):   # RMW
+        dec[o] = (int(m[1]), RMODES.index(m[4]) + 1, case_of(f'v = {m[3]}(t); goto wb_{m[2]};'), 0)
+    elif m := re.match(r'^h6280_cycles\((\d+)\); wb_(eaz?)\((\w+)\((\d), rd_(\w+)\(\)\)\);$', b):   # RMB / SMB n
+        dec[o] = (int(m[1]), RMODES.index(m[5]) + 1, case_of(f'v = {m[3]}(n, t); goto wb_{m[2]};'), int(m[4]))
+    elif m := re.match(r'^h6280_cycles\((\d+)\); (bb[rs])\((\d), rd_(\w+)\(\)\);$', b):   # BBR / BBS n
+        dec[o] = (int(m[1]), RMODES.index(m[4]) + 1, case_of(f'{m[2]}(n, t);'), int(m[3]))
+    elif m := re.match(r'^h6280_cycles\((\d+)\); int imm = rd_imm\(\); tst\(imm, rd_(\w+)\(\)\);$', b):   # TST
+        dec[o] = (int(m[1]), RMODES.index(m[2]) + 1, case_of('tst(imm, t);'), F_TST)
+    elif m := re.match(r'^h6280_cycles\((\d+)\); (\w+)\(\);$', b):                     # implied
+        dec[o] = (int(m[1]), 0, case_of(f'{m[2]}();'), 0)
+    elif m := re.match(r'^h6280_cycles\((\d+)\); A = (\w+)\(A\);$', b):                # accumulator
+        dec[o] = (int(m[1]), 0, case_of(f'A = {m[2]}(A);'), 0)
+    else:                                                                              # the rest, verbatim
+        dec[o] = (0, 0, case_of(b), 0)
+assert len(cases) < 256
+WMODE = ''.join(f'\t\t\tcase {i + 1}: wr_{w}(v); break;\n' for i, w in enumerate(RMODES) if w != 'imm')
+RMODE = ''.join(f'\t\t\tcase {i + 1}: t = rd_{r}(); break;\n' for i, r in enumerate(RMODES))
+CASES = ''.join(f'\t\t\tcase {n}: {{ {body} }} break;\n' for body, n in cases.items())
+FACTORED = ('{\n'
+            '\t\t\tconst uint8_t *f = s_fdec[in];   /* {cycles, read mode, operation, write mode | bit | TST} */\n'
+            '\t\t\tuint8_t t = 0, v = 0, imm = 0; const int n = f[3] & 7; (void)n; (void)imm;\n'
+            '\t\t\tif (f[0]) h6280_cycles(f[0]);\n'
+            '\t\t\tif (f[3] & 0x80) imm = rd_imm();\n'
+            '\t\t\tswitch (f[1]) {\n' + RMODE + '\t\t\tdefault: break;\n\t\t\t}\n'
+            '\t\t\tswitch (f[2]) {\n' + CASES + '\t\t\tdefault: break;\n\t\t\t}\n'
+            '\t\t\tbreak;\n'
+            '\t\twr:\n'
+            '\t\t\tswitch (f[3]) {\n' + WMODE + '\t\t\tdefault: break;\n\t\t\t}\n'
+            '\t\t\tbreak;\n'
+            '\t\twb_eaz:                         /* read-modify-write: the result back where it was read */\n'
+            '\t\t\twb_eaz(v);\n'
+            '\t\t\tbreak;\n'
+            '\t\twb_ea:\n'
+            '\t\t\twb_ea(v);\n'
+            '\t\t\t}')
+s = s.replace('/*FACTORED*/', FACTORED)
+FDEC = ('/* the factored interpreter\'s entries (see the generator): {cycles, read mode, operation, write mode | bit | TST} */\n'
+        'static const uint8_t s_fdec[256][4] = {\n' +
+        ''.join(f'\t/* {o:02x} */ {{ {d[0]}, {d[1]}, {d[2]}, 0x{d[3]:02x} }},\n' if (d := dec.get(o)) else f'\t/* {o:02x} */ {{ 0 }},\n'
+                for o in range(256)) + '};\n')
 # The T flag (the ALU working on zero page (X) instead of A) and decimal mode are rare: out of line and cold, so the
 # common ADC / SBC / AND / EOR / ORA stay a few instructions the hot handlers inline (adc was 718 bytes, called).
 for f in ('tadc', 'tand', 'teor', 'tora', 'tsbc'):
     s = s.replace(f'static inline void {f}(uint8_t tmp)', f'static __attribute__((noinline, cold)) void {f}(uint8_t tmp)')
+# The block transfers (their byte loop is the cost, not the call), BRK and the speed switches: out of line too.
+for f in ('tai', 'tdd', 'tia', 'tii', 'tin', 'brk', 'csh', 'csl'):
+    f0 = f'static inline void {f}()'
+    assert s.count(f0) == 1, f0
+    s = s.replace(f0, f'static __attribute__((noinline)) void {f}()')
 for f in ('adc', 'sbc'):
     i = s.index(f'static inline void {f}(uint8_t tmp)\n{{')
     j = s.index('\n}\n', i) + 3
@@ -202,6 +278,6 @@ for m in re.finditer(r'^static (inline )?([\w ]+?)\s+(\w+)\(([^)]*)\)\s*\n\{', s
     protos.append(f'static {m.group(1) or ""}{m.group(2)} {m.group(3)}({m.group(4)});')
 fwd = '\n'.join(protos) + '\n' + fwd
 
-out = head + '\n' + fwd + '\n' + tab + '\n' + s
+out = head + '\n' + fwd + '\n' + FDEC + '\n' + s   # (MAME's table of handlers is no longer needed)
 open(out_path, 'w', encoding='utf-8', newline='\n').write(out)
 print('wrote', out_path, len(out.splitlines()), 'lines,', len(ops), 'opcodes')

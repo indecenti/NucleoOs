@@ -256,3 +256,10 @@ M5Launcher, whose slots are other apps) and only once the running firmware is co
 is the way back). The slot's first 64 KB block holds a header (magic, path, size, date, FNV of the first 4 KB),
 erased first and written last; the cartridge starts at the second block. The next OTA overwrites the copy; the next
 game copies again. Modules built for level 7 need firmware 7.
+
+**A module's hot code (`sdk/native/nap.ld`, no ABI change).** `__attribute__((section(".text.nap_hot")))` puts a
+function first in the module's text, its literal pool right before it, between `_nap_hot_start` and `_nap_hot_end`
+(hidden symbols the module can read). The code a module runs every microsecond then sits in contiguous cache
+lines instead of being scattered between cold functions. The PC Engine core puts its interpreter there; it can also
+lock the range in the S3's instruction cache (ROM preload + lock, a bench lever: locking 10.7 KB of 16 KB measured
+slower, the rest of the code thrashed in what was left).

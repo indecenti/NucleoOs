@@ -1,5 +1,5 @@
 # The HuC6280's hot opcodes, most executed first: the 64 that make 91% of the instructions the 40 HuCards of the
 # test set execute (1,800 frames each, idle loops skipped; tools/emu-host: an opcode count in the dispatch).
-# gen_h6280.py inlines these into the dispatch switch and makes every other handler a cold function, so the hot
-# loop fits the S3's 16 KB instruction cache (all 256 inlined it was 24.8 KB, and missed in the cache constantly).
+# gen_h6280.py --hot N inlines the first N into a switch ahead of the factored interpreter. Not by default: measured
+# on the ADV, every opcode through the one small factored loop is faster (see gen_h6280.py).
 80 4c f0 a5 d0 c5 8d 85 bd ee ff c8 7f c6 6f b1 60 b9 53 20 48 68 0f 29 ad 90 e8 18 e6 a9 0a c9 ca 9c 9d 26 cd 4a 10 69 99 65 b0 43 c0 e0 1a 2a 38 88 a8 06 da aa 62 fa e5 b5 64 a4 30 7a 89 a6

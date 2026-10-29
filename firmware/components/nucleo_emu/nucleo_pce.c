@@ -348,7 +348,7 @@ static PCE_HOT_FN const uint8_t *window(int slot)
     return r;
 }
 
-static void pce_mpr_changed(int page)
+static __attribute__((noinline)) void pce_mpr_changed(int page)   // (TAM calls it for each of 8 pages)
 {
     g_writes++;
     for (int k = 0; k < WPB; k++) { MEM.rd[page * WPB + k] = NULL; MEM.wr[page * WPB + k] = NULL; PCE->win_pg[page * WPB + k] = -1; }
@@ -977,13 +977,12 @@ static PCE_HOT_FN void idle_after(void)
     }
 }
 
-// ── the run loop locked in the instruction cache ─────────────────────────────────────────────────────────
+// ── the hot section locked in the instruction cache (a bench lever) ──────────────────────────────────────
 // A store module runs from flash through the S3's 16 KB instruction cache, shared by both cores, and a line missed
-// costs ~2 us (DIO flash at 80 MHz): the CPU loop (~7.4 KB), the line drawer on the other core and the firmware's
-// panel and audio code evict each other all frame long. The ESP32-S3's cache can LOCK lines: once loaded, a locked
-// line is never replaced. The loop is preloaded and locked for as long as a game runs, so it executes as if it were
-// in IRAM, and costs no RAM (IRAM would take it from the heap; MEMPROT forbids code in RAM anyway). The rest of the
-// code shares what is left of the cache. ROM functions (esp32s3.rom.ld), the same on every S3.
+// costs ~2 us (DIO flash at 80 MHz). The ESP32-S3's cache can LOCK lines: once loaded, a locked line is never
+// replaced, as if it were IRAM, at no RAM cost. Measured on the ADV it does not pay: with the 10.7 KB interpreter
+// locked, Street Fighter II stalled more on fetch (0.80 M cycles a frame against 0.60 M), the rest of the code
+// thrashing in what was left. Kept as a lever (emu_bench_knob[0]). ROM functions (esp32s3.rom.ld), the same on every S3.
 #ifdef NAP_MODULE
 #define ROM_ICACHE_PRELOAD      ((uint32_t (*)(uint32_t, uint32_t, uint32_t))0x4000174c)
 #define ROM_ICACHE_PRELOAD_DONE ((uint32_t (*)(void))0x40001758)
@@ -1088,7 +1087,9 @@ void nucleo_pce_run_frame(void)
     if (s->debt > 100000) s->debt = 0;                 // a pause (menu, card): start over
     s->skip = emu_bench_knob[1] == 1;                  // a bench: every frame unseen (the CPU's cost alone)
     if (s->frameskip && !s->skip) {
-        s->skip = s->debt > 0 && s->skipped < 3;       // behind: catch up unseen, three at most in a row
+        // Behind: one frame unseen at most, then one shown. Three in a row (as the NES) kept Street Fighter II at ~13
+        // frames shown a second for ~10% more speed; one shows twice as many.
+        s->skip = s->debt > 0 && s->skipped < 1;
         s->skipped = s->skip ? (uint8_t)(s->skipped + 1) : 0;
     }
     int n = APU_SPF;                                   // a frame that overran by real work: its samples too, so the
