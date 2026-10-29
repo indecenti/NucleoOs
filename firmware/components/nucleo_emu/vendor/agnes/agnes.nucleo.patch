@@ -1,0 +1,173 @@
+--- upstream/agnes.c
++++ agnes.c
+@@ -106,7 +106,7 @@
+     uint8_t nametables[4 * 1024];
+     uint8_t palette[32];
+ 
+-    uint8_t screen_buffer[AGNES_SCREEN_HEIGHT * AGNES_SCREEN_WIDTH];
++    uint8_t line[AGNES_SCREEN_WIDTH];   /* NUCLEO PATCH (A2): one scanline, handed to agnes->on_line when full */
+ 
+     int scanline;
+     int dot;
+@@ -223,7 +223,7 @@
+ /********************************* GAMEPACK **********************************/
+ 
+ typedef struct {
+-    const uint8_t *data;
++    const uint8_t *data;    /* NUCLEO PATCH (A1): only the header while agnes_load_ines_data runs */
+     unsigned prg_rom_offset;
+     unsigned chr_rom_offset;
+     int prg_rom_banks_count;
+@@ -256,8 +256,20 @@
+     } mapper;
+ 
+     mirroring_mode_t mirroring_mode;
++
++    /* NUCLEO PATCH (A1, A2, A3): the host's hooks. The cartridge is read through rom_read (a byte at a file
++     * offset: the host pages it from the SD card, the whole file never sits in RAM); each finished scanline goes
++     * to on_line (256 palette indices) instead of a 61 KB frame buffer; the APU registers ($4000-$4013, $4015,
++     * $4017) go to apu_write / apu_read — agnes has no sound of its own. Kept across agnes_restore_state. */
++    uint8_t (*rom_read)(void *user, uint32_t offset);
++    void (*on_line)(void *user, const uint8_t *line, int y);
++    void (*apu_write)(void *user, uint16_t addr, uint8_t val);
++    uint8_t (*apu_read)(void *user);
++    void *host;
+ } agnes_t;
+ 
++#define AGNES_ROM(agn, off) ((agn)->rom_read((agn)->host, (uint32_t)(off)))
++
+ #endif /* agnes_types_h */
+ //FILE_END
+ //FILE_START:cpu.h
+@@ -588,8 +600,14 @@
+ 
+ bool agnes_restore_state(agnes_t *agnes, const agnes_state_t *state) {
+     const uint8_t *gamepack_data = agnes->gamepack.data;
++    uint8_t (*rr)(void *, uint32_t) = agnes->rom_read;                     /* NUCLEO PATCH (A1-A3) */
++    void (*ol)(void *, const uint8_t *, int) = agnes->on_line;
++    void (*aw)(void *, uint16_t, uint8_t) = agnes->apu_write;
++    uint8_t (*ar)(void *) = agnes->apu_read;
++    void *host = agnes->host;
+     memmove(agnes, state, sizeof(agnes_t));
+     agnes->gamepack.data = gamepack_data;
++    agnes->rom_read = rr; agnes->on_line = ol; agnes->apu_write = aw; agnes->apu_read = ar; agnes->host = host;
+     agnes->cpu.agnes = agnes;
+     agnes->ppu.agnes = agnes;
+     switch (agnes->gamepack.mapper) {
+@@ -629,11 +647,8 @@
+     return true;
+ }
+ 
+-agnes_color_t agnes_get_screen_pixel(const agnes_t *agnes, int x, int y) {
+-    int ix = (y * AGNES_SCREEN_WIDTH) + x;
+-    uint8_t color_ix = agnes->ppu.screen_buffer[ix];
+-    return g_colors[color_ix & 0x3f];
+-}
++/* NUCLEO PATCH (A2): no frame buffer to read back; the host colours each line itself (agnes_palette). */
++const agnes_color_t *agnes_palette(void) { return g_colors; }
+ 
+ void agnes_destroy(agnes_t *agnes) {
+     free(agnes);
+@@ -794,7 +809,7 @@
+             agnes->controllers[1].shift = agnes->controllers[1].state;
+         }
+     } else if (addr < 0x4018) { // apu and io
+-
++        if (agnes->apu_write) agnes->apu_write(agnes->host, addr, val);   /* NUCLEO PATCH (A3) */
+     } else if (addr < 0x4020) { // disabled
+ 
+     } else {
+@@ -813,7 +828,7 @@
+     } else if (addr < 0x4000) {
+         res = ppu_read_register(&agnes->ppu, 0x2000 | (addr & 0x7));
+     } else if (addr < 0x4016) {
+-        // apu
++        if (addr == 0x4015 && agnes->apu_read) res = agnes->apu_read(agnes->host);   /* NUCLEO PATCH (A3) */
+     } else if (addr < 0x4018) {
+         int controller = addr & 0x1; // 0: 0x4016, 1: 0x4017
+         if (agnes->controllers_latch) {
+@@ -1393,8 +1408,8 @@
+ }
+ 
+ static void set_pixel_color_ix(ppu_t *ppu, int x, int y, uint8_t color_ix) {
+-    int ix = (y * AGNES_SCREEN_WIDTH) + x;
+-    ppu->screen_buffer[ix] = color_ix;
++    ppu->line[x] = color_ix;
++    if (x == AGNES_SCREEN_WIDTH - 1 && ppu->agnes->on_line) ppu->agnes->on_line(ppu->agnes->host, ppu->line, y);
+ }
+ 
+ static uint8_t ppu_read8(ppu_t *ppu, uint16_t addr) {
+@@ -2238,14 +2253,14 @@
+         if (mapper->use_chr_ram) {
+             res = mapper->chr_ram[addr];
+         } else {
+-            res = mapper->agnes->gamepack.data[mapper->agnes->gamepack.chr_rom_offset + addr];
++            res = AGNES_ROM(mapper->agnes, mapper->agnes->gamepack.chr_rom_offset + addr);
+         }
+     } else if (addr >= 0x8000) {
+         int bank = addr >> 14 & 0x1;
+         unsigned bank_offset = mapper->prg_bank_offsets[bank];
+         unsigned addr_offset = addr & 0x3fff;
+         unsigned offset = mapper->agnes->gamepack.prg_rom_offset + bank_offset + addr_offset;
+-        res = mapper->agnes->gamepack.data[offset];
++        res = AGNES_ROM(mapper->agnes, offset);
+     }
+     return res;
+ }
+@@ -2293,7 +2308,7 @@
+             unsigned bank_offset = mapper->chr_bank_offsets[bank];
+             unsigned addr_offset = addr & 0xfff;
+             unsigned offset = mapper->agnes->gamepack.chr_rom_offset + bank_offset + addr_offset;
+-            res = mapper->agnes->gamepack.data[offset];
++            res = AGNES_ROM(mapper->agnes, offset);
+         }
+     } else if (addr >= 0x6000 && addr < 0x8000) {
+         res = mapper->prg_ram[addr - 0x6000];
+@@ -2302,7 +2317,7 @@
+         unsigned bank_offset = mapper->prg_bank_offsets[bank];
+         unsigned addr_offset = addr & 0x3fff;
+         unsigned offset = mapper->agnes->gamepack.prg_rom_offset + bank_offset + addr_offset;
+-        res = mapper->agnes->gamepack.data[offset];
++        res = AGNES_ROM(mapper->agnes, offset);
+     }
+     return res;
+ }
+@@ -2408,7 +2423,7 @@
+         unsigned bank_offset = mapper->prg_bank_offsets[bank];
+         unsigned addr_offset = addr & 0x3fff;
+         unsigned offset = mapper->agnes->gamepack.prg_rom_offset + bank_offset + addr_offset;
+-        res = mapper->agnes->gamepack.data[offset];
++        res = AGNES_ROM(mapper->agnes, offset);
+     }
+     return res;
+ }
+@@ -2481,7 +2496,7 @@
+         } else {
+             unsigned chr_rom_size = (mapper->agnes->gamepack.chr_rom_banks_count * 8 * 1024);
+             offset = offset % chr_rom_size;
+-            res = mapper->agnes->gamepack.data[mapper->agnes->gamepack.chr_rom_offset + offset];
++            res = AGNES_ROM(mapper->agnes, mapper->agnes->gamepack.chr_rom_offset + offset);
+         }
+     } else if (addr >= 0x6000 && addr < 0x8000) {
+         return mapper->prg_ram[addr - 0x6000];
+@@ -2490,7 +2505,7 @@
+         unsigned bank_offset = mapper->prg_bank_offsets[bank];
+         unsigned addr_offset = addr & 0x1fff;
+         unsigned offset = mapper->agnes->gamepack.prg_rom_offset + bank_offset + addr_offset;
+-        res = mapper->agnes->gamepack.data[offset];
++        res = AGNES_ROM(mapper->agnes, offset);
+     }
+     return res;
+ }
+--- upstream/agnes.h
++++ agnes.h
+@@ -77,7 +77,8 @@
+ bool agnes_tick(agnes_t *agnes, bool *out_new_frame);
+ bool agnes_next_frame(agnes_t *agnes);
+ 
+-agnes_color_t agnes_get_screen_pixel(const agnes_t *agnes, int x, int y);
++/* NUCLEO PATCH (A2): no frame buffer; the 64-entry palette the line indices refer to. */
++const agnes_color_t *agnes_palette(void);
+ 
+ #ifdef __cplusplus
+ }
