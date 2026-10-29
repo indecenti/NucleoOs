@@ -236,8 +236,8 @@ static void apu_render(nes_session_t *s)
 static void mixer_init(nes_session_t *s)
 {
     // nesdev "APU Mixer": pulse = 95.88 / (8128 / n + 100), tnd ~= 163.67 / (24329 / n + 100); full scale ~1.0.
-    for (int n = 0; n < 31; n++) s->mix_pulse[n] = n ? (uint16_t)(95.88 / (8128.0 / n + 100) * 26000) : 0;
-    for (int n = 0; n < 203; n++) s->mix_tnd[n] = n ? (uint16_t)(163.67 / (24329.0 / n + 100) * 26000) : 0;
+    for (int n = 0; n < 31; n++) s->mix_pulse[n] = n ? (uint16_t)(95.88f / (8128.0f / n + 100) * 26000) : 0;
+    for (int n = 0; n < 203; n++) s->mix_tnd[n] = n ? (uint16_t)(163.67f / (24329.0f / n + 100) * 26000) : 0;
 }
 
 // ── the cartridge, paged ─────────────────────────────────────────────────────────────────────────────
