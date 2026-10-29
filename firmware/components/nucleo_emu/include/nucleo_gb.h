@@ -122,6 +122,7 @@ typedef struct {
     bool     save_dirty;     // battery RAM changed and not yet on the card
     bool     ram_banked;     // battery RAM larger than the resident banks: the rest is swapped to the card
     uint32_t ram_swaps;      // SRAM banks brought in from the card since open (a box change in Pokémon)
+    uint32_t us_miss;        // time spent reading those page-cache misses from the card, us
 } nucleo_gb_stats_t;
 void nucleo_gb_get_stats(nucleo_gb_stats_t *out);
 

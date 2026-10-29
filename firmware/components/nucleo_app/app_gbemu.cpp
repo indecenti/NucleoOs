@@ -384,7 +384,7 @@ struct EState {
     // The on-card trace, aggregated: one line per TRACE_WIN seconds instead of an fopen/append/fclose
     // every second — each of those is a FAT update on the SD bus in the middle of a frame (a visible
     // hitch) and a wake of the card on a 120 mAh battery. Averages keep the picture; min keeps the dips.
-    int      tw_n, tw_fps_sum, tw_fps_min, tw_cpu_sum, tw_blit_sum, tw_aud_sum;
+    int      tw_n, tw_fps_sum, tw_fps_min, tw_cpu_sum, tw_blit_sum, tw_aud_sum, tw_sd_sum;
     uint32_t tw_miss;
     uint8_t  stash[SRC_W];   // the line being blended into the next one (see on_line)
     uint16_t stash16[256];   // ...the same for a colour line (on_line16), up to a Master System line
@@ -983,9 +983,9 @@ static void marquee(int x, int y, int w, int h, const char *t,
 // so with half the lines arriving the picture only reaches y~67 and the bottom half of the screen
 // simply stops updating — the "split down the middle" the player saw. Frame-skip has no such problem:
 // a skipped frame calls the scanline callback zero times, so nothing half-draws. It is the only lever.
-// The NES's frame-skip draws whenever the console is on time and skips only to catch up (nucleo_nes.c); the
-// other cores skip every other frame.
-static bool skip_adaptive(void) { return SYS && !strcmp(SYS->id, "nesemu"); }
+// The NES's and the Game Boy's frame-skip draw whenever the console keeps up and skip only to catch up
+// (nucleo_nes.c, nucleo_gb.c); the Game Gear skips every other frame.
+static bool skip_adaptive(void) { return SYS && (!strcmp(SYS->id, "nesemu") || !strcmp(SYS->id, "gbemu")); }
 static void set_relief(int level)
 {
     if (level < 0) level = 0;
@@ -1674,7 +1674,7 @@ static void play_session(const char *name)
     st->toast[0] = '\0'; st->toast_until = 0;
     st->us_blit = 0; st->ms_cpu = st->ms_blit = st->ms_aud = 0;
     st->slow_secs = 0;
-    st->tw_n = 0; st->tw_fps_sum = st->tw_cpu_sum = st->tw_blit_sum = st->tw_aud_sum = 0; st->tw_miss = 0;
+    st->tw_n = 0; st->tw_fps_sum = st->tw_cpu_sum = st->tw_blit_sum = st->tw_aud_sum = st->tw_sd_sum = 0; st->tw_miss = 0;
     // Every cartridge starts at the full picture and earns relief — except where relief is adaptive (the NES): it
     // skips a frame only when the console is late, so it costs nothing when the game keeps up and it is what keeps
     // the sound from running dry when it does not. On from the start there.
@@ -1800,17 +1800,18 @@ static void play_session(const char *name)
             st->tw_fps_sum += st->fps;
             if (st->tw_n == 1 || st->fps < st->tw_fps_min) st->tw_fps_min = st->fps;
             st->tw_cpu_sum += st->ms_cpu; st->tw_blit_sum += st->ms_blit; st->tw_aud_sum += st->ms_aud;
+            st->tw_sd_sum += (int)(w.us_miss / nf / 100);   // the card's page reads, in tenths of a ms per frame
             st->tw_miss += w.bank_misses;
             if (st->tw_n >= TRACE_WIN || w.core_errors) {
                 int n = st->tw_n;
-                trace("  %ds fps avg=%d min=%d cpu=%d.%dms blit=%d.%dms audio=%d.%dms misses=%u relief=%d err=%u@%04X",
+                trace("  %ds fps avg=%d min=%d cpu=%d.%dms blit=%d.%dms audio=%d.%dms misses=%u sd=%d.%dms relief=%d err=%u@%04X",
                       n, st->tw_fps_sum / n, st->tw_fps_min,
                       st->tw_cpu_sum / n / 10, st->tw_cpu_sum / n % 10,
                       st->tw_blit_sum / n / 10, st->tw_blit_sum / n % 10,
                       st->tw_aud_sum / n / 10, st->tw_aud_sum / n % 10,
-                      (unsigned)st->tw_miss, st->relief,
+                      (unsigned)st->tw_miss, st->tw_sd_sum / n / 10, st->tw_sd_sum / n % 10, st->relief,
                       (unsigned)w.core_errors, (unsigned)w.core_err_addr);
-                st->tw_n = 0; st->tw_fps_sum = st->tw_cpu_sum = st->tw_blit_sum = st->tw_aud_sum = 0;
+                st->tw_n = 0; st->tw_fps_sum = st->tw_cpu_sum = st->tw_blit_sum = st->tw_aud_sum = st->tw_sd_sum = 0;
                 st->tw_miss = 0;
             }
             // A core error is an invalid opcode: the game has run off into data and will not come

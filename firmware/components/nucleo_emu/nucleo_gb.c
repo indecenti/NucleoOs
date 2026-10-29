@@ -159,6 +159,13 @@ typedef struct {
     uint32_t      cur_tag;              // fast path: the page the last read hit...
     uint8_t      *cur_buf;              // ...and its buffer
     uint32_t      bank_misses;          // SD refills since open
+    uint32_t      us_miss;              // ...and the time they took, us (since the last reset)
+    // Adaptive frame-skip (as nucleo_nes.c): a frame goes unseen only while the work of the last frames exceeds
+    // the frame's budget; the time a frame spent waiting on the speaker is the pace, not work.
+    bool          frameskip;
+    uint8_t       skipped;
+    int32_t       debt;
+    int64_t       last_t0, last_block;
     uint32_t      us_cpu, us_audio;     // where a frame's time goes
 
     // Battery RAM — see RAM_RESIDENT. Slots are the banks held in RAM; bank_slot maps a cartridge bank
@@ -246,6 +253,7 @@ static IRAM_ATTR uint8_t rom_read(struct gb_s *gb, const uint_fast32_t addr)
     int v = 0;
     for (int i = 1; i < s->pg_n; i++) if (s->pg_age[i] < s->pg_age[v]) v = i;
     uint32_t off = tag << PG_BITS;
+    const int64_t m0 = esp_timer_get_time();
     if (fseek(s->fp, (long)off, SEEK_SET) != 0) return 0xFF;
     size_t want = PG_SIZE;
     if (off + want > s->rom_bytes) want = s->rom_bytes - off;
@@ -261,6 +269,7 @@ static IRAM_ATTR uint8_t rom_read(struct gb_s *gb, const uint_fast32_t addr)
     s->pg_age[v] = ++s->pg_clock;
     s->hint[h] = (int8_t)v;
     s->bank_misses++;
+    s->us_miss += (uint32_t)(esp_timer_get_time() - m0);
     s->cur_tag = tag; s->cur_buf = s->pg[v];
     return s->pg[v][addr & (PG_SIZE - 1)];
 }
@@ -918,6 +927,21 @@ void nucleo_gb_run_frame(void)
 {
     if (!S) return;
     int64_t t0 = esp_timer_get_time();
+    int over = 0;                                       // this cycle's work past one frame, us
+    if (S->last_t0) {
+        const int64_t cycle = t0 - S->last_t0 - S->last_block;
+        if (cycle > 0 && cycle < 250000) over = (int)cycle - 16742;
+    }
+    S->last_t0 = t0;
+    S->debt += over;
+    if (S->debt < -4000) S->debt = -4000;
+    if (S->debt > 100000) S->debt = 0;
+    if (S->frameskip) {                                 // Walnut draws a frame when its skip count is 1
+        const bool skip = S->debt > 0 && S->skipped < 3;
+        S->skipped = skip ? (uint8_t)(S->skipped + 1) : 0;
+        S->gb.direct.frame_skip = 1;
+        S->gb.display.frame_skip_count = skip ? 0 : 1;
+    }
 #if NUCLEO_GB_CGB
     // Walnut's own recommended loop: opcodes fetched two at a time through the 16-bit reader and chained,
     // instead of one dispatch per byte (vendor/README.md). It is what made the Color affordable at all.
@@ -935,7 +959,9 @@ void nucleo_gb_run_frame(void)
     if (S->sound) {
         minigb_apu_audio_callback(&S->apu, S->audio);
         emu_afilt_run(S->afilt, S->audio, AUDIO_SAMPLES_TOTAL, AUDIO_CHANNELS, 1);   // the APU's DAC has a DC offset
+        const int64_t w0 = esp_timer_get_time();
         nucleo_audio_pcm_write(S->audio, sizeof(S->audio));
+        S->last_block = esp_timer_get_time() - w0;
         S->us_audio += (uint32_t)(esp_timer_get_time() - t1);
     }
 }
@@ -958,7 +984,13 @@ void nucleo_gb_reset(void)
     rtc_seed(S);
 }
 
-void nucleo_gb_set_frameskip(bool on) { if (S) S->gb.direct.frame_skip = on; }
+// The front-end's relief lever: adaptive (see run_frame), not every other frame.
+void nucleo_gb_set_frameskip(bool on)
+{
+    if (!S) return;
+    S->frameskip = on; S->debt = 0; S->skipped = 0;
+    if (!on) S->gb.direct.frame_skip = 0;
+}
 void nucleo_gb_set_interlace(bool on) { if (S) S->gb.direct.interlace  = on; }
 
 void nucleo_gb_reset_counters(void)
@@ -966,6 +998,7 @@ void nucleo_gb_reset_counters(void)
     if (!S) return;
     S->us_cpu = S->us_audio = 0;
     S->bank_misses = 0;
+    S->us_miss = 0;
     S->frames = 0;
 }
 
@@ -1150,6 +1183,7 @@ void nucleo_gb_get_stats(nucleo_gb_stats_t *out)
     out->rom_paged    = (S->rom_all == NULL);
     out->rom_pages    = S->pg_n;
     out->bank_misses  = S->bank_misses;
+    out->us_miss      = S->us_miss;
     out->frames       = S->frames;
     out->core_errors  = S->core_errors;
     out->core_err_addr = S->core_err_addr;
