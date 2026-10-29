@@ -48,6 +48,9 @@ int tabs(int y, const char *const *names, int n, int active, unsigned short acc,
 // fn draws one row's content over the already-painted pill/background; `bg` is the colour under it.
 typedef void (*row_fn)(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *ud);
 int  list(int x, int y, int w, int h, int rowh, int n, int sel, int *scroll, row_fn fn, void *ud, unsigned short acc);
+// The next list() repaints only rows a and b (the selection moved from one to the other) when its scroll stays where
+// it was; every row still registers its touch target. A panel row is ~150x44 px of SPI: a key costs two, not all.
+void list_only(int a, int b);
 // The common row: label left (Font2), `right` muted at the right edge, label in `col` when not focused.
 void row_text(int x, int y, int w, int h, bool focus, unsigned short bg, const char *label, const char *right, unsigned short col);
 // list() with app_ui-style providers (label required; right / color may be null).

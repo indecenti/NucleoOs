@@ -165,27 +165,37 @@ int tabs(int y, const char *const *names, int n, int active, unsigned short acc,
     return y + h + 4;
 }
 
+static int s_only_a = -1, s_only_b = -1;
+void list_only(int a, int b) { s_only_a = a; s_only_b = b; }
+
 int list(int x, int y, int w, int h, int rowh, int n, int sel, int *scroll, row_fn fn, void *ud, unsigned short acc)
 {
     const int rows = h / rowh > 0 ? h / rowh : 1;
     int sc = scroll ? *scroll : 0;
+    const int sc_was = sc, oa = s_only_a, ob = s_only_b;
+    s_only_a = s_only_b = -1;
     if (sel < sc) sc = sel;
     if (sel >= sc + rows) sc = sel - rows + 1;
     if (sc > n - rows) sc = n - rows;
     if (sc < 0) sc = 0;
     if (scroll) *scroll = sc;
+    const bool part = oa >= 0 && sc == sc_was;
     const bool knob = n > rows;
     const int rw = knob ? w - 6 : w;
     int yy = y;
     for (int i = sc; i < n && i < sc + rows; i++, yy += rowh) {
         const bool focus = i == sel;
+        if (part && i != oa && i != ob) {
+            if (i - sc < 16) nucleo_touch_add(x, yy, rw, rowh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + (i - sc)));
+            continue;
+        }
         d.fillRect(x, yy, rw, rowh, BG);
         if (focus) d.fillRoundRect(x + 4, yy + 1, rw - 8, rowh - 2, 7, acc);
         fn(i, x + 4, yy, rw - 8, rowh, focus, focus ? acc : BG, ud);
         if (i - sc < 16) nucleo_touch_add(x, yy, rw, rowh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + (i - sc)));
     }
-    if (yy < y + h) d.fillRect(x, yy, rw, y + h - yy, BG);
-    if (knob) {
+    if (yy < y + h && !part) d.fillRect(x, yy, rw, y + h - yy, BG);
+    if (knob && !part) {
         const int track = h - 8, kh = track * rows / n < 14 ? 14 : track * rows / n;
         const int ky = y + 4 + (track - kh) * sc / (n - rows);
         d.fillRect(x + w - 6, y, 6, h, BG);

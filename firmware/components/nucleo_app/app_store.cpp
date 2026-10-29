@@ -67,6 +67,7 @@ struct Row {
     char id[ST_ID_MAX + 1];
     char name[ST_NAME_MAX + 1];
     uint32_t size, updated;
+    uint32_t off, art;          // where its catalog line starts; its icon in the open art pack (0 = none)
     uint8_t state, cat;
 };
 struct Ram {
@@ -82,6 +83,8 @@ static const nucleo_app_ram_t APP_RAM[] = { { (void **)&M, sizeof(Ram) }, { null
 static int s_n, s_nvis, s_sel, s_tab, s_view, s_cat, s_cat_sel, s_updates, s_app_from, s_qn, s_qi, s_desc_off;
 static int s_btn;         // app page: the focused button (0 = Install / Update / Open, 1 = Uninstall); LEFT/RIGHT move it
 static int s_lg_scroll;   // first visible row on the panel list
+static unsigned s_lg_key, s_lg_gen;   // the panel's last list layout (0 = something else) and repaint generation
+static int s_lg_sel = -1;             // ...and the row selected in it
 static int s_ch, s_ch_sel; // the store being browsed (CH_*), and the highlighted card on the choice screen
 static bool s_yes, s_busy_seen, s_refresh_pending, s_canvas_lent, s_direct_full;
 static nst_status_t s_last_status;
@@ -105,12 +108,24 @@ static const char *ch_sub(int ch)
 }
 static bool native_ok(void) { return nucleo_store_native_abi() != 0; }
 
+// st_installed opens a file on the card (two when the app is not there): once per app and frame it was most of a
+// frame's time. One entry is enough: the app the page / the detail card shows. load() forgets it (after any op).
+static char s_inst_id[ST_ID_MAX + 1];
+static uint32_t s_inst_code;
+static bool s_inst_sys;
+static uint32_t installed(const char *id, bool *system)
+{
+    if (strcmp(s_inst_id, id)) { snprintf(s_inst_id, sizeof s_inst_id, "%s", id); s_inst_code = st_installed(NUCLEO_SD_MOUNT, id, &s_inst_sys); }
+    if (system) *system = s_inst_sys;
+    return s_inst_code;
+}
+
 static uint8_t state_of(const st_app_t &a)
 {
     const char *ch = st_kind_channel(a.kind);
     if (!ch || strcmp(ch, CH_ID[s_ch])) return S_UNSUPPORTED;
     bool system = false;
-    uint32_t have = st_installed(NUCLEO_SD_MOUNT, a.id, &system);
+    uint32_t have = installed(a.id, &system);
     if (system) return S_SYSTEM;
     if (have && have >= a.code) return S_OK;
     if (st_ver_cmp(nucleo_store_os_version(), a.min_os) < 0) return S_NEWER_OS;
@@ -166,15 +181,21 @@ static void cpy(char *dst, size_t cap, const char *src)   // both live in M: no 
 }
 
 // The catalog lives on the SD card; only the rows the lists need are kept in RAM.
+static void art_close(void);
 static void load(void)
 {
     s_n = 0; s_updates = 0;
+    s_inst_id[0] = 0;
+    s_lg_key = 0;                                    // the rows may have changed: the panel repaints them all
+    art_close();                                     // re-indexed on the next frame: the rows may have changed
     memset(M->cat_count, 0, sizeof M->cat_count);
     FILE *f = st_catalog_open(NUCLEO_SD_MOUNT, CH_ID[s_ch]);
     if (f) {
         int li = lang_idx();
-        while (s_n < MAX_ROWS && st_catalog_next(f, &M->app)) {
+        for (long pos = ftell(f); s_n < MAX_ROWS && st_catalog_next(f, &M->app); pos = ftell(f)) {
             Row &r = M->rows[s_n];
+            r.off = (uint32_t)pos;                   // a line skipped before it is skipped again when read from here
+            r.art = 0;
             r.state = state_of(M->app);
             if (r.state == S_UNSUPPORTED) continue;          // a kind this firmware cannot install: not shown
             cpy(r.id, sizeof r.id, M->app.id);
@@ -255,7 +276,7 @@ static void set_hint(void)
     else if (s_view == V_APP) {
         // Only the keys that do something for THIS app.
         uint8_t stt = state_of(M->app);
-        bool mine = st_installed(NUCLEO_SD_MOUNT, M->app.id, nullptr) != 0;
+        bool mine = installed(M->app.id, nullptr) != 0;
         if (stt == S_NEW)
             nucleo_app_set_hint(TR5("ok installa   esc indietro", "ok install   esc back", "ok instalar   esc atras", "ok installer   esc retour", "ok install.   esc zurueck"));
         else if (stt == S_UPDATE)
@@ -284,13 +305,27 @@ static void go(int view)
     nucleo_app_request_draw();
 }
 
+// An app's full catalog entry: straight at its line (load() noted where), else a scan of the whole catalog.
+static bool find_app(const char *id, st_app_t *out)
+{
+    for (int i = 0; i < s_n; i++) {
+        if (strcmp(M->rows[i].id, id)) continue;
+        FILE *f = st_catalog_open(NUCLEO_SD_MOUNT, CH_ID[s_ch]);
+        const bool ok = f && fseek(f, (long)M->rows[i].off, SEEK_SET) == 0 && st_catalog_next(f, out) && !strcmp(out->id, M->rows[i].id);
+        if (f) fclose(f);
+        if (ok) return true;
+        break;
+    }
+    return st_find(NUCLEO_SD_MOUNT, CH_ID[s_ch], id, out);
+}
+
 static void open_app(void)
 {
     if (!s_nvis) return;
     s_app_from = s_view;                         // ESC returns there (a list or a category)
     s_desc_off = 0;
     s_btn = 0;
-    if (st_find(NUCLEO_SD_MOUNT, CH_ID[s_ch], M->rows[M->vis[s_sel]].id, &M->app)) go(V_APP);
+    if (find_app(M->rows[M->vis[s_sel]].id, &M->app)) go(V_APP);
 }
 
 // ── network operations ────────────────────────────────────────────────────────
@@ -365,43 +400,75 @@ static int wrap(int x, int y, int w, const char *s, int maxl, uint16_t c, int sk
 }
 
 // ── icons ─────────────────────────────────────────────────────────────────────
-// The store's colour icons (art.bin, fetched with the catalog: store_engine.h): raw RGB565 read from the SD card a
-// row at a time and box-filtered down to the size asked, corners rounded against `bg`. No image is ever held in
-// RAM: ~0.5 KB of stack per icon. The pack is open only while a frame is drawn (art_begin / art_end).
+// The store's colour icons (art.bin, fetched with the catalog: store_engine.h): raw RGB565 read from the SD card and
+// box-filtered down to the size asked, corners rounded against `bg`. No image is held in RAM (~1.4 KB of stack per
+// icon). The pack stays open while the store is (closed after every operation and by load(): a refresh may replace
+// it), and its directory is read once into the rows (Row.art), so an icon is one seek and one sequential read, sent
+// to the screen in bands of 8 rows: on the panel every pushImage is an SPI transaction of its own.
 static FILE *s_art;
+static int s_art_for = -1, s_art_px;   // the channel the open pack is for (-1 = none tried), its icons' size
+static uint32_t s_art_ch[NCH];         // the stores' own icons ("@native", "@web") in that pack
+static void art_close(void) { if (s_art) fclose(s_art); s_art = nullptr; s_art_for = -1; }
 static void art_begin(int ch)
 {
-    if (s_art) return;
+    if (s_art_for == ch) return;
+    art_close();
+    s_art_for = ch;
     s_art = st_art_open(NUCLEO_SD_MOUNT, CH_ID[ch]);
     if (!s_art) s_art = st_art_open(NUCLEO_SD_MOUNT, CH_ID[ch ^ 1]);   // the stores' own icons are in both packs
+    s_art_ch[0] = s_art_ch[1] = 0;
+    for (int i = 0; i < s_n; i++) M->rows[i].art = 0;
+    uint8_t h[16], e[ST_ART_ENTRY];
+    if (!s_art || fseek(s_art, 0, SEEK_SET) || fread(h, 1, sizeof h, s_art) != sizeof h) return;
+    const int n = h[6] | h[7] << 8;
+    s_art_px = h[5];
+    for (int k = 0; k < n && fread(e, 1, sizeof e, s_art) == sizeof e; k++) {
+        e[ST_ART_ENTRY - 5] = 0;                             // the id field, NUL-padded: always terminated
+        const uint32_t o = (uint32_t)e[ST_ART_ENTRY - 4] | (uint32_t)e[ST_ART_ENTRY - 3] << 8 |
+                           (uint32_t)e[ST_ART_ENTRY - 2] << 16 | (uint32_t)e[ST_ART_ENTRY - 1] << 24;
+        if (o < 16u + (uint32_t)n * ST_ART_ENTRY) continue;
+        const char *id = (const char *)e;
+        if (!strcmp(id, "@native")) s_art_ch[CH_NATIVE] = o;
+        else if (!strcmp(id, "@web")) s_art_ch[CH_WEB] = o;
+        else for (int i = 0; i < s_n; i++) if (!strcmp(M->rows[i].id, id)) { M->rows[i].art = o; break; }
+    }
 }
-static void art_end(void) { if (s_art) { fclose(s_art); s_art = nullptr; } }
+static uint32_t art_off(const char *id)
+{
+    if (!strcmp(id, "@native")) return s_art_ch[CH_NATIVE];
+    if (!strcmp(id, "@web")) return s_art_ch[CH_WEB];
+    for (int i = 0; i < s_n; i++) if (!strcmp(M->rows[i].id, id)) return M->rows[i].art;
+    return 0;
+}
 
 static bool art_icon(const char *id, int x, int y, int sz, unsigned short bg)
 {
-    uint32_t off; int n;
-    if (!s_art || !st_art_find(s_art, id, &off, &n) || n > 64 || sz > n || sz < n / 3) return false;
-    uint16_t src[3][64], line[64];
-    for (int r = 0; r < sz; r++) {
-        int r0 = r * n / sz, r1 = (r + 1) * n / sz;
-        if (r1 <= r0) r1 = r0 + 1;
-        if (fseek(s_art, (long)(off + (uint32_t)r0 * n * 2), SEEK_SET)) return r > 0;
-        for (int k = 0; k < r1 - r0; k++) if (fread(src[k], 2, n, s_art) != (size_t)n) return r > 0;
-        for (int c = 0; c < sz; c++) {
-            int c0 = c * n / sz, c1 = (c + 1) * n / sz, R = 0, G = 0, B = 0, cnt = 0;
-            if (c1 <= c0) c1 = c0 + 1;
-            for (int k = 0; k < r1 - r0; k++)
-                for (int j = c0; j < c1; j++) { const uint16_t v = src[k][j]; R += v >> 11; G += v >> 5 & 63; B += v & 31; cnt++; }
-            line[c] = (uint16_t)(R / cnt << 11 | G / cnt << 5 | B / cnt);
-        }
-        d.pushImage(x, y + r, sz, 1, (const lgfx::rgb565_t *)line);
-    }
+    const uint32_t off = s_art ? art_off(id) : 0;
+    const int n = s_art_px;
+    if (!off || n > 64 || sz > n || sz < n / 3 || sz > 64 || fseek(s_art, (long)off, SEEK_SET)) return false;
+    enum { BAND = 8 };
+    uint16_t src[4][64], out[BAND * 64];          // sz >= n / 3: up to 4 source rows per row
     const int rr = sz / 5;                                   // the rounded corners, cut in the background colour
-    for (int j = 0; j < rr; j++) {
-        const int dy = rr - j, cut = rr - (int)sqrtf((float)(rr * rr - dy * dy));
-        if (cut <= 0) continue;
-        d.drawFastHLine(x, y + j, cut, bg);          d.drawFastHLine(x + sz - cut, y + j, cut, bg);
-        d.drawFastHLine(x, y + sz - 1 - j, cut, bg); d.drawFastHLine(x + sz - cut, y + sz - 1 - j, cut, bg);
+    for (int b0 = 0; b0 < sz; b0 += BAND) {
+        const int rows = sz - b0 < BAND ? sz - b0 : BAND;
+        for (int k = 0; k < rows; k++) {
+            const int r = b0 + k, r0 = r * n / sz, r1 = (r + 1) * n / sz;   // sz <= n: the source rows follow on
+            for (int j = 0; j < r1 - r0; j++) if (fread(src[j], 2, n, s_art) != (size_t)n) return r > 0;
+            uint16_t *line = out + k * sz;
+            for (int c = 0; c < sz; c++) {
+                int c0 = c * n / sz, c1 = (c + 1) * n / sz, R = 0, G = 0, B = 0, cnt = 0;
+                if (c1 <= c0) c1 = c0 + 1;
+                for (int j = 0; j < r1 - r0; j++)
+                    for (int q = c0; q < c1; q++) { const uint16_t v = src[j][q]; R += v >> 11; G += v >> 5 & 63; B += v & 31; cnt++; }
+                line[c] = (uint16_t)(R / cnt << 11 | G / cnt << 5 | B / cnt);
+            }
+            const int j = r < rr ? r : r >= sz - rr ? sz - 1 - r : -1;
+            if (j >= 0) {
+                const int dy = rr - j, cut = rr - (int)sqrtf((float)(rr * rr - dy * dy));
+                for (int q = 0; q < cut; q++) line[q] = line[sz - 1 - q] = bg;
+            }
+        }
+        d.pushImage(x, y + b0, sz, rows, (const lgfx::rgb565_t *)out);
     }
     return true;
 }
@@ -473,6 +540,20 @@ static void draw_choose(int top, int h)
     }
 }
 
+// Entering a store fetched its catalog every time: seconds of TLS with the keys locked, for a catalog that changes a
+// few times a month. Now only when it is not fresh: fetched in the last hour of this boot, or (clock set) written in
+// the last 6 hours, which the daily background check keeps true for the native one. r still fetches it at once.
+static int64_t s_fetched_us[NCH] = { -1, -1 };
+static bool catalog_fresh(int c)
+{
+    if (s_fetched_us[c] >= 0 && esp_timer_get_time() - s_fetched_us[c] < 3600LL * 1000000) return true;
+    char p[64];
+    snprintf(p, sizeof p, NUCLEO_SD_MOUNT "/apps/.store/%s/index.txt", CH_ID[c]);
+    struct stat sb;
+    const time_t now = time(NULL);
+    return now > 1700000000 && stat(p, &sb) == 0 && sb.st_mtime <= now && now - sb.st_mtime < 6 * 3600;
+}
+
 static void enter_channel(int c)
 {
     if (c == CH_NATIVE && !native_ok()) {
@@ -489,7 +570,7 @@ static void enter_channel(int c)
     s_tab = TAB_NEW; s_sel = 0; s_cat = 0; s_cat_sel = 0;
     load();
     go(V_LIST);
-    if (nucleo_setup_ip() && nucleo_setup_ip()[0]) start(NST_OP_REFRESH, nullptr);   // the fresh catalog of THIS store
+    if (nucleo_setup_ip() && nucleo_setup_ip()[0] && !catalog_fresh(c)) start(NST_OP_REFRESH, nullptr);   // THIS store's
 }
 
 // Compact: an app as a two-line row — its icon, the name, size + category (+ how new) under it, its state as a chip
@@ -614,7 +695,7 @@ static void draw_app(int top, int h)
     // The action, and what else can be done.
     int by = top + h - 22;
     bool system = false;
-    bool mine = st_installed(NUCLEO_SD_MOUNT, a.id, &system) != 0;
+    bool mine = installed(a.id, &system) != 0;
     // Main action on OK: Install / Update, or Open once it is installed (a web app opens on a phone or PC).
     const char *act = stt == S_OK ? TR5("Apri", "Open", "Abrir", "Ouvrir", "Oeffnen") : state_word(stt);
     unsigned short col = stt == S_OK ? C_GREEN : state_col(stt);
@@ -676,7 +757,7 @@ static const st_app_t *selected_app(void)
 {
     if (!s_nvis) return nullptr;
     const char *id = M->rows[M->vis[s_sel]].id;
-    if (strcmp(M->app.id, id) && !st_find(NUCLEO_SD_MOUNT, CH_ID[s_ch], id, &M->app)) { M->app.id[0] = 0; return nullptr; }
+    if (strcmp(M->app.id, id) && !find_app(id, &M->app)) { M->app.id[0] = 0; return nullptr; }
     return &M->app;
 }
 
@@ -781,7 +862,7 @@ static void lg_app(void)
     nucleo_touch_add_scroll(14, dy, W - 28, descBot - dy, 16, NK_UP, 0, NK_DOWN, 0);
     if (a.perms[0]) { char p[72]; snprintf(p, sizeof p, "%s %s", TR5("Usa:", "Uses:", "Usa:", "Utilise :", "Nutzt:"), a.perms); lg::font(0); d.setTextColor(C_YELLOW, BG); char pf[72]; lg::fit(pf, sizeof pf, p, W - 28); d.drawString(pf, 16, H - 70); }
     bool system = false;
-    const bool mine = st_installed(NUCLEO_SD_MOUNT, a.id, &system) != 0;
+    const bool mine = installed(a.id, &system) != 0;
     const char *act = stt == S_OK ? TR5("Apri", "Open", "Abrir", "Ouvrir", "Oeffnen") : state_word(stt);
     const unsigned short col = stt == S_OK ? C_GREEN : state_col(stt);
     if (mine) {
@@ -870,42 +951,66 @@ static const char *empty_msg(void)
          : TR5("Niente qui, per ora.", "Nothing here yet.", "Nada aqui por ahora.", "Rien ici pour l'instant.", "Noch nichts hier.");
 }
 
+// The list views' layout on the panel, in one number (0 is never one).
+static unsigned lg_list_key(void)
+{
+    const bool refreshing = nucleo_store_status() == NST_BUSY && nucleo_store_op() == NST_OP_REFRESH;
+    return 1u | (unsigned)s_view << 1 | (unsigned)s_tab << 4 | (unsigned)s_cat << 7 | (unsigned)s_ch << 11 |
+           (unsigned)(s_updates > 0) << 12 | (unsigned)refreshing << 13 | (unsigned)lang_idx() << 14 |
+           (unsigned)(nucleo_store_status() == NST_FAILED) << 17 | (unsigned)s_nvis << 18;
+}
+
 static void draw_large_view(void)
 {
     const int W = d.width(), H = d.height();
-    if (nucleo_store_status() == NST_BUSY) { lg_progress(); return; }
-    if (s_view == V_CHOOSE) { lg_choose(); return; }
-    if (s_view == V_APP || s_view == V_CONFIRM_REMOVE) { lg_app(); return; }
-    if (s_view == V_QR) { lg_qr(); return; }
+    const bool refreshing = nucleo_store_status() == NST_BUSY && nucleo_store_op() == NST_OP_REFRESH;
+    if (nucleo_store_status() == NST_BUSY && !(refreshing && (s_view == V_LIST || s_view == V_CAT))) { s_lg_key = 0; lg_progress(); return; }
+    if (s_view == V_CHOOSE) { s_lg_key = 0; lg_choose(); return; }
+    if (s_view == V_APP || s_view == V_CONFIRM_REMOVE) { s_lg_key = 0; lg_app(); return; }
+    if (s_view == V_QR) { s_lg_key = 0; lg_qr(); return; }
+    // The panel is written over SPI with no buffer: clearing it (~150 ms) and repainting every row on each key was
+    // most of the wait. While the layout is the same, the clear is skipped (every part paints its own box) and the
+    // list repaints only the rows the selection left and reached; a changed layout or overlay paints it all.
+    const unsigned key = lg_list_key();
+    const bool same = key == s_lg_key && nucleo_app_repaint_gen() == s_lg_gen;
+    s_lg_key = key; s_lg_gen = nucleo_app_repaint_gen();
+    const char *busy_txt = refreshing ? TR5("aggiorno...", "updating...", "actualizando...", "mise a jour...", "lade...") : nullptr;
     int y;
     if (s_view == V_CAT) {
         char cnt[12]; snprintf(cnt, sizeof cnt, "%d", s_nvis);
-        y = lg::header(CATS[s_cat].n[lang_idx()], cnt, CATS[s_cat].col, NK_BACK);
+        y = lg::header(CATS[s_cat].n[lang_idx()], busy_txt ? busy_txt : cnt, CATS[s_cat].col, NK_BACK);
     } else {
-        const int y0 = lg::header(ch_name(s_ch), nullptr, CH_COL[s_ch], NK_BACK);
+        const int y0 = lg::header(ch_name(s_ch), busy_txt, CH_COL[s_ch], NK_BACK);
         const int li = lang_idx();
         const char *names[NTABS]; static char mine[20];
         for (int i = 0; i < NTABS; i++) names[i] = LG_TABS[li][i];
         if (s_updates) { snprintf(mine, sizeof mine, "%s %d", LG_TABS[li][TAB_MINE], s_updates); names[TAB_MINE] = mine; }
         y = lg::tabs(y0, names, NTABS, s_tab, CH_COL[s_ch], nullptr);
     }
-    d.fillRect(0, y, W, H - y, BG);
+    if (!same) d.fillRect(0, y, W, H - y, BG);
     if (s_view == V_LIST && s_tab == TAB_CATS) { lg_cats(y, H); return; }
     if (s_view == V_LIST && s_tab == TAB_MINE && s_updates) {
         char b[40]; snprintf(b, sizeof b, TR5("Aggiorna tutte (%d)", "Update all (%d)", "Actualizar todas (%d)", "Tout mettre a jour (%d)", "Alle aktualisieren (%d)"), s_updates);
         lg::button(6, y + 3, W - 12, 30, b, C_YELLOW, INK, NK_CHAR, 'u');
         y += 36;
     }
-    if (s_nvis) lg_apps(y, H);
+    if (s_nvis) {
+        lg::list_only(same ? s_lg_sel : -1, s_sel);
+        s_lg_sel = s_sel;
+        lg_apps(y, H);
+    }
     else lg::message(0, y, W, H - y, empty_msg(), nullptr, nucleo_store_status() == NST_FAILED ? C_RED : MUTED);
 }
 
 static void draw_large(void)
 {
+    // A list with nothing new (the progress polls during a catalog refresh ask for a frame every 150 ms): the panel
+    // already shows it, and its touch targets stand.
+    if ((s_view == V_CAT || (s_view == V_LIST && s_tab != TAB_CATS)) && s_lg_key && lg_list_key() == s_lg_key && s_lg_sel == s_sel &&
+        nucleo_app_repaint_gen() == s_lg_gen && (nucleo_store_status() != NST_BUSY || nucleo_store_op() == NST_OP_REFRESH)) return;
     nucleo_touch_clear();
     art_begin(s_view == V_CHOOSE ? s_ch_sel : s_ch);
     draw_large_view();
-    art_end();
     d.setTextDatum(top_left);
     nucleo_touch_commit();
 }
@@ -947,7 +1052,7 @@ static void draw_companion(void)
         char sz[16]; kb(sz, sizeof sz, a.size);
         d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); char f[40]; snprintf(f, sizeof f, "v%s  %s  %s", a.version, sz, CATS[cat_index(a.category)].n[li]); d.drawString(f, 8, y + 26);
         d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(state_col(stt), BG); d.drawString(state_word(stt), 8, y + 42);
-        bool system = false; const bool mine = st_installed(NUCLEO_SD_MOUNT, a.id, &system) != 0;
+        bool system = false; const bool mine = installed(a.id, &system) != 0;
         lg::comp_keys(s_view == V_CONFIRM_REMOVE ? TR5("Y/N conferma", "Y/N confirm", "Y/N confirma", "Y/N confirme", "Y/N bestaet.")
                     : stt == S_OK ? TR5("INVIO apri  DEL disinstalla", "ENTER open  DEL uninstall", "INTRO abrir  DEL desinst.", "ENTREE ouvrir  DEL desinst.", "ENTER oeffnen  DEL entfernen")
                     : mine ? TR5("INVIO aggiorna  DEL disinstalla", "ENTER update  DEL uninstall", "INTRO actualiz  DEL desinst.", "ENTREE maj  DEL desinst.", "ENTER update  DEL entfernen")
@@ -993,7 +1098,6 @@ static void on_draw(void)
 {
     art_begin(s_view == V_CHOOSE ? s_ch_sel : s_ch);
     if (nucleo_app_two_screens()) draw_companion(); else draw_compact();
-    art_end();
 }
 
 static void draw_compact(void)
@@ -1055,6 +1159,7 @@ static bool poll(void)
             s_busy_seen = false;
             canvas_return();
             if (st == NST_DONE && nucleo_store_op() != NST_OP_REFRESH) nucleo_store_apps_sync();   // the launcher follows
+            if (st == NST_DONE && nucleo_store_op() == NST_OP_REFRESH) s_fetched_us[s_ch] = esp_timer_get_time();
             if (s_qn && st == NST_DONE && s_qi < s_qn) {   // "update all": the next one
                 start(NST_OP_INSTALL, M->queue[s_qi++]);
                 return true;
@@ -1063,7 +1168,7 @@ static bool poll(void)
             char keep[ST_ID_MAX + 1];
             snprintf(keep, sizeof keep, "%s", M->app.id);
             load();
-            if (s_view == V_APP && keep[0] && !st_find(NUCLEO_SD_MOUNT, CH_ID[s_ch], keep, &M->app)) s_view = V_LIST;
+            if (s_view == V_APP && keep[0] && !find_app(keep, &M->app)) s_view = V_LIST;
             set_hint();
         }
         return true;
@@ -1083,7 +1188,16 @@ static void open_installed(void)
 
 static void on_key(int key, char ch)
 {
-    if (nucleo_store_status() == NST_BUSY) return;
+    if (nucleo_store_status() == NST_BUSY) {
+        // A catalog refresh on the panel does not stop browsing: the lists stay live (selection, taps), actions wait.
+        if (nucleo_store_op() != NST_OP_REFRESH || !nucleo_app_two_screens() || (s_view != V_LIST && s_view != V_CAT) ||
+            (s_view == V_LIST && s_tab == TAB_CATS)) return;
+        if (nucleo_touch_is_row(key, ch)) lg::row_tap(key, ch, s_lg_scroll, s_nvis, &s_sel);
+        else if (key == NK_UP || key == NK_DOWN) app_ui_list_key(key, ch, &s_sel, s_nvis, row_label, nullptr);
+        else return;
+        nucleo_app_request_draw();
+        return;
+    }
     if (s_view == V_CHOOSE) {
         if (key == NK_CHAR && ch >= '1' && ch < '1' + NCH) { enter_channel(ch - '1'); return; }
         if (key == NK_UP || key == NK_DOWN) { s_ch_sel = (s_ch_sel + 1) % NCH; s_note = nullptr; }
@@ -1106,7 +1220,7 @@ static void on_key(int key, char ch)
         if (key == NK_DOWN && s_desc_off < 6) { s_desc_off++; nucleo_app_request_draw(); return; }
         if (key == NK_CHAR && (ch == 'q' || ch == 'Q') && stt == S_OK && !strcmp(M->app.kind, "web")
             && nucleo_setup_ip() && nucleo_setup_ip()[0]) { go(V_QR); return; }
-        bool mine = st_installed(NUCLEO_SD_MOUNT, M->app.id, nullptr) != 0;
+        bool mine = installed(M->app.id, nullptr) != 0;
         if ((key == NK_LEFT || key == NK_RIGHT) && mine) { s_btn ^= 1; set_hint(); nucleo_app_request_draw(); return; }
         if (!mine) s_btn = 0;
         if ((key == NK_ENTER && s_btn == 1) || (key == NK_DEL && mine)) { s_yes = false; s_view = V_CONFIRM_REMOVE; }
@@ -1182,7 +1296,7 @@ static void on_enter(void)
     nucleo_app_request_draw();
 }
 
-static void on_exit(void) { canvas_return(); }
+static void on_exit(void) { canvas_return(); art_close(); }
 
 extern "C" void nucleo_register_store(void)
 {

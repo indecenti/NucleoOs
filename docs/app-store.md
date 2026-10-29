@@ -52,9 +52,18 @@ JSON tree.
 **Store art.** Each channel also publishes `art.bin` + `art.sig` (format in the store's `docs/format.md`): the
 apps' colour icons, painted for the store, 48 x 48 RGB565. After a good catalog the engine fetches them only when
 `art.sig` changed and keeps them only when the signature verifies; a missing pack, a failed download or a bad
-signature leave the previous art (or none) and never fail the refresh. The UI draws an icon a row at a time
-straight from the SD card, box-filtered to the size it needs (no decoder, no image in RAM: ~0.5 KB of stack), and
-falls back to the category tile with the app's initial. Older firmware and the web shells never ask for the pack.
+signature leave the previous art (or none) and never fail the refresh. The UI keeps the pack open while the Store
+is (closed after every operation), reads its directory once into the rows, and draws an icon with one seek and one
+sequential read from the SD card, box-filtered to the size it needs (no decoder, no image in RAM: ~1.4 KB of stack),
+sent in bands of 8 rows; it falls back to the category tile with the app's initial. Older firmware and the web
+shells never ask for the pack.
+
+**Speed.** Entering a store fetches its catalog only when it is not fresh (fetched in the last hour of this boot, or
+written in the last 6 hours with the clock set; the daily background check keeps the native one fresh); `r` fetches
+it at once. On the panel a refresh does not lock the lists. Each row remembers where its catalog line starts (an
+app's page is one seek, not a scan of the catalog), and the installed version of the app on screen is cached. The
+panel is written over SPI without a buffer: while a list's layout stays the same, a key repaints only the two rows
+the selection left and reached and the detail card (`lg::list_only`), never a cleared screen.
 
 **The Store's two looks.** On the Cardputer alone: two-line rows (icon, name, size and category, a state chip) under
 the section tabs, the app page with its icon. With the external panel the panel is the store: the apps as a touch
