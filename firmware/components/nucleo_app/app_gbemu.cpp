@@ -688,11 +688,12 @@ static inline uint16_t hscale_px(const uint16_t *px, int o)
 // The Game Gear's line: already colour, already in the panel's byte order (nucleo_gg.h), so 1:1 is a
 // copy. Same line-merge and 2:3 stretch as the Game Boy path above. A 256x192 Master System picture
 // merges 57 of its 192 lines (45/64) and resamples its columns through hscale_build's table.
+extern "C" int emu_bench_knob[4];               // a bench's levers (see bench_take)
 __attribute__((optimize("-O2")))
 static void on_line16(const uint16_t *px, int line, void *user)
 {
     (void)user;
-    if (!st || !st->band[0]) return;
+    if (!st || !st->band[0] || emu_bench_knob[3] == 1) return;   // (a bench: lines drawn, never sent to a panel)
     if (st->shot) shot_line(px, nullptr, line);
     if (s_big) {                                 // Game Gear 160x144: the same exact 3/2; Master System 256x192: 5/4
         if (st->out_y >= s_out_h) return;

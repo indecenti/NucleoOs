@@ -17,7 +17,8 @@ void nucleo_rom_unmap(void);
 extern void (*emu_rom_progress)(uint32_t done, uint32_t total, void *user);
 // A bench run's levers (the front-end's /emu_bench.txt, "knob <i> <v>"); all 0 when playing. The PC Engine's:
 // [0] the hot section's lock in the instruction cache (0 = off, 1 = all of it, n = its first n bytes), [1] 1 = draw nothing,
-// [2] the LX7's performance counters in the CPU loop: 1 = cycles + fetch stalls, 2 = instructions + data stalls.
+// [2] the LX7's performance counters in the CPU loop: 1 = cycles + fetch stalls, 2 = instructions + data stalls;
+// [3] 1 = lines drawn but never sent to a panel (the front-end's on_line16 returns at once).
 extern int emu_bench_knob[4];
 
 #ifdef __cplusplus
