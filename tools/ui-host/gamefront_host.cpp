@@ -17,6 +17,7 @@ static const nucleo_app_def_t REG[] = {
     { "tanks",   "Tanks",          "Games", "", 'T', 0xF96B, nop, nokey, nullptr, nop, nullptr },
     { "poker",   "Poker",          "Games", "", 'K', 0xC5F5, nop, nokey, nullptr, nop, nullptr },
     { "ggemu",   "Game Gear/Master System", "Games", "", 'G', 0x5D7F, nop, nokey, nullptr, nop, nullptr },
+    { "nesemu",  "NES",            "Games", "", 'N', 0xAD55, nop, nokey, nullptr, nop, nullptr },
     { "brawler", "Brawler",        "Games", "", 'B', 0xFBB6, nop, nokey, nullptr, nop, nullptr },
     { "reactor", "Reactor",        "Games", "", 'R', 0xFE8C, nop, nokey, nullptr, nop, nullptr },
 };

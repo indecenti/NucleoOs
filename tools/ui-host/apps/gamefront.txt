@@ -25,18 +25,21 @@
 @sdfile Download/racer.zip apps/fixtures/racer.zip
 @sd Download/notes.zip x
 @sd system/firmware-test.gb x
+@sd data/ROMs/nes/Super%20Tilt%20Bro.nes x
+@sd Giochi/Nova%20the%20Squirrel%20(World).nes x
 @sdfile data/GameShots/stelle.png apps/fixtures/cover.png
 systems
-systems_gg D D D
+systems_gg D D D D D
 native ENTER
 native_cover ENTER D
 native_pick ENTER row:5
-gb D ENTER
-gb_snap D ENTER c:d c:e c:a
-gb_search D ENTER c:l c:o
-gb_nomatch D ENTER c:z c:q
+gb D D ENTER
+gb_snap D D ENTER c:d c:e c:a
+gb_search D D ENTER c:l c:o
+gb_nomatch D D ENTER c:z c:q
 sms D D D D ENTER
-gg_anywhere D D D ENTER
+gg_anywhere D D D D D ENTER
 back D ENTER BACK
 search c:g c:a
-last D ENTER D D ENTER
+last D D ENTER D D ENTER
+nes D ENTER

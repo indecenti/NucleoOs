@@ -42,7 +42,8 @@
 #include "app_gfx.h"
 #include "nucleo_gb.h"
 #include "nucleo_gg.h"
-#include "nucleo_gbc.h"       // the Game Boy Color: the Game Boy's host around a CGB core
+#include "nucleo_gbc.h"
+#include "nucleo_nes.h"       // the NES: agnes (patched) and our APU, the same front-end       // the Game Boy Color: the Game Boy's host around a CGB core
 #include "nucleo_kbd.h"
 #include "nucleo_board.h"
 #include "nucleo_exclusive.h"
@@ -178,6 +179,7 @@ static void trace_heap(const char *label)
 #define DIR_GBC  NUCLEO_SD_MOUNT "/data/ROMs/gbc"
 #define DIR_GG   NUCLEO_SD_MOUNT "/data/ROMs/gg"
 #define DIR_SMS  NUCLEO_SD_MOUNT "/data/ROMs/sms"
+#define DIR_NES  NUCLEO_SD_MOUNT "/data/ROMs/nes"
 
 // ── screen mapping ──────────────────────────────────────────────────────────────────────────────
 // NO SCALING HORIZONTALLY. The panel is 240 px wide and the Game Boy is 160, so every column goes to
@@ -309,7 +311,7 @@ static void geom_apply(void)
         return;
     }
     s_out_y0 = 0; s_out_h = OUT_H;
-    int w1 = s_src_w == SRC_W ? SRC_W : 180;
+    int w1 = s_src_w == SRC_W ? SRC_W : s_src_w * OUT_H / s_src_h;   // 256x192 -> 180, 256x240 -> 144: its aspect
     if (s_stretch) { s_out_w = 240; s_out_x = 0;              s_band_h = SYS ? SYS->band_wide : BAND_WIDE; }
     else           { s_out_w = w1;  s_out_x = (240 - w1) / 2;
                      s_band_h = !SYS ? BAND_1TO1 : w1 == SRC_W ? SYS->band_1to1 : SYS->band_wide; }
@@ -679,7 +681,10 @@ static void on_line16(const uint16_t *px, int line, void *user)
             }
             return;
         }
-        if (line_same(px, s_src_w * 2, line)) { rows_skip(s_src_w == SRC_W ? ((line & 1) ? 2 : 1) : ((line & 3) == 1 ? 2 : 1)); return; }
+        // Rows per source line on the panel: 3/2 (160x144: every odd line twice), 5/4 down (256x192: every fourth
+        // line twice), 1 (256x240: the NES is already the panel's height).
+        const int twice_here = s_src_w == SRC_W ? (line & 1) : s_src_h == 192 ? (line & 3) == 1 : 0;
+        if (line_same(px, s_src_w * 2, line)) { rows_skip(1 + twice_here); return; }
         uint16_t *row = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
         bool twice;
         if (s_src_w == SRC_W) {
@@ -693,7 +698,7 @@ static void on_line16(const uint16_t *px, int line, void *user)
                 uint16_t a = px[x], b = px[x + 1], c = px[x + 2], e = px[x + 3];
                 row[o] = a; row[o + 1] = b; row[o + 2] = b; row[o + 3] = c; row[o + 4] = e;
             }
-            twice = (line & 3) == 1;
+            twice = twice_here;
         }
         row_done();
         if (twice && st->out_y < s_out_h) {
@@ -703,7 +708,9 @@ static void on_line16(const uint16_t *px, int line, void *user)
         }
         return;
     }
-    bool merge = s_src_h == 144 ? (line & 15) == 7 : (line * 45 >> 6) == ((line + 1) * 45 >> 6);
+    // The Cardputer's 135 rows: a source line that maps onto the same output row as the next one is merged into it
+    // (one in sixteen at 144; 57 of 192; 105 of 240).
+    bool merge = s_src_h == 144 ? (line & 15) == 7 : (line * OUT_H / s_src_h) == ((line + 1) * OUT_H / s_src_h);
     if (merge) {
         if (!s_sharp) { memcpy(st->stash16, px, (size_t)s_src_w * sizeof *px); st->have_stash = true; }
         return;
@@ -1031,7 +1038,7 @@ static void card_draw(bool full)
         // The controls, as the keys they are on this keyboard.
         // Three rows of caps, 14 px apart: the last one ends on row 132 of 135.
         int x = keycap(g, 4, 91, "E S A D", TR5("muovi", "move", "mover", "bouger", "bewegen"));
-        if (!strcmp(SYS->id, "gbemu")) {
+        if (strcmp(SYS->id, "ggemu")) {             // A / B / START / SELECT: Game Boy, Color, NES
             x = keycap(g, x, 91, "K", "A");
             keycap(g, x, 91, "J", "B");
             x = keycap(g, 4, 105, TR5("Invio", "Enter", "Intro", "Entree", "Enter"), "START");
@@ -1563,7 +1570,7 @@ static void play_session(const char *name)
     // System game (its CRC says so), known only now. The bands were sized for the widest case.
     SYS->geometry(&s_src_w, &s_src_h);
     // Two screens: the picture goes to the external panel (160x144 at 3/2, 256x192 at 5/4: full screen).
-    s_big = ((s_src_w == SRC_W && s_src_h == 144) || (s_src_w == 256 && s_src_h == 192)) && nucleo_surface_large_ok();
+    s_big = ((s_src_w == SRC_W && s_src_h == 144) || (s_src_w == 256 && (s_src_h == 192 || s_src_h == 240))) && nucleo_surface_large_ok();
     st->diff_ok = false;
     if (s_big && !nucleo_surface_large() && !nucleo_surface_set_large(true)) s_big = false;
     ESP_LOGW("gbemu", "two screens: src %dx%d ok=%d large=%d big=%d", s_src_w, s_src_h, (int)nucleo_surface_large_ok(), (int)nucleo_surface_large(), (int)s_big);
@@ -2281,10 +2288,11 @@ static void draw_companion(void)
     }
     // The console's buttons on this keyboard, for the game about to start: the same key caps as in the game.
     d.fillRect(0, top + ch - 30, 240, 16, BG);
-    int kx = keycap(&d, 4, top + ch - 29, "K", !strcmp(SYS->id, "gbemu") ? "A" : "2");
-    kx = keycap(&d, kx, top + ch - 29, "J", !strcmp(SYS->id, "gbemu") ? "B" : "1");
+    const bool ab = strcmp(SYS->id, "ggemu") != 0;
+    int kx = keycap(&d, 4, top + ch - 29, "K", ab ? "A" : "2");
+    kx = keycap(&d, kx, top + ch - 29, "J", ab ? "B" : "1");
     kx = keycap(&d, kx, top + ch - 29, TR5("Invio", "Enter", "Intro", "Entree", "Enter"), "START");
-    if (!strcmp(SYS->id, "gbemu")) keycap(&d, kx, top + ch - 29, TR5("Spazio", "Space", "Esp.", "Esp.", "Leer"), "SEL");
+    if (ab) keycap(&d, kx, top + ch - 29, TR5("Spazio", "Space", "Esp.", "Esp.", "Leer"), "SEL");
     lg::comp_keys(st->flen ? TR5("INVIO gioca  CANC modif.  ESC pulisce", "ENTER play  DEL edit  ESC clear", "INTRO juega  ESC limpia", "ENTREE joue  ESC efface", "ENTER spielt  ESC leert")
                            : TR5("su/giu  INVIO gioca  scrivi = cerca", "up/dn  ENTER play  type = search", "arr/ab  INTRO juega", "haut/bas  ENTREE joue", "auf/ab  ENTER spielt"));
 }
@@ -2451,6 +2459,35 @@ static const EmuSys SYS_GG = {
     { ART_GG_S_Z, sizeof ART_GG_S_Z, ART_GG_S_W, ART_GG_S_H }, { ART_SMS_S_Z, sizeof ART_SMS_S_Z, ART_SMS_S_W, ART_SMS_S_H },
 };
 
+// The NES: one folder, .nes files (iNES), the cartridge's own palette, the panel filled at 5/4 across.
+static esp_err_t nes_open(const char *p)  { return nucleo_nes_open(p, on_line16, nullptr); }
+static esp_err_t nes_probe(const char *p) { return nucleo_nes_probe(p, nullptr); }
+static void nes_explain(esp_err_t e, const char *path, char *buf, size_t n)
+{
+    int mapper = 0;
+    nucleo_nes_probe(path, &mapper);
+    if (e == ESP_ERR_NOT_SUPPORTED) {
+        snprintf(buf, n, "%s %d", TR5("Mapper non supportato:", "Unsupported mapper:", "Mapper no soportado:", "Mapper non supporte:", "Mapper fehlt:"), mapper);
+        return;
+    }
+    start_error(e, nullptr, buf, n);
+}
+static const EmuSys SYS_NES = {
+    "nesemu", "NES", "NES", DIR_NES, nullptr, ".nes", nullptr, nullptr,
+    "Nessuna ROM in /data/ROMs/nes", "No ROMs in /data/ROMs/nes", "Ninguna ROM en /data/ROMs/nes", "Aucune ROM dans /data/ROMs/nes", "Keine ROMs in /data/ROMs/nes",
+    NUCLEO_SD_MOUNT "/system/config/nesemu.json", NUCLEO_SD_MOUNT "/system/config/nesemu.shelf",
+    NUCLEO_SD_MOUNT "/nesemu_trace.txt", "/nesemu_trace.txt",
+    16639,                                   // 60.0988 Hz, NTSC
+    false, 5, 3,
+    nes_open, nes_probe, nes_explain, nucleo_nes_close, nucleo_nes_reset, nucleo_nes_run_frame,
+    nucleo_nes_set_buttons, nucleo_nes_title, nucleo_nes_set_frameskip, nucleo_nes_state_save,
+    nucleo_nes_state_load, nucleo_nes_state_exists, nucleo_nes_save, nucleo_nes_autosave,
+    nucleo_nes_get_stats, nucleo_nes_reset_counters, nucleo_nes_geometry, false,
+    { ART_NES_Z, sizeof ART_NES_Z, ART_NES_W, ART_NES_H }, { ART_NES_Z, sizeof ART_NES_Z, ART_NES_W, ART_NES_H },
+    "NES", "NES", nullptr,
+    { ART_NES_S_Z, sizeof ART_NES_S_Z, ART_NES_S_W, ART_NES_S_H }, { ART_NES_S_Z, sizeof ART_NES_S_Z, ART_NES_S_W, ART_NES_S_H },
+};
+
 static void enter(void)
 {
     // The RAM window is declarative (see the app_def): by the time this runs we are already on a
@@ -2489,6 +2526,7 @@ static void enter(void)
 
 static void enter_gb(void) { SYS = &SYS_GB; enter(); }
 static void enter_gg(void) { SYS = &SYS_GG; enter(); }
+static void enter_nes(void) { SYS = &SYS_NES; enter(); }
 
 static void leave(void)
 {
@@ -2532,6 +2570,19 @@ extern "C" void nucleo_register_ggemu(void)
         NX_NET_APP | NX_SOLO | NX_WIFI, nullptr, draw_large
     };
     nucleo_app_register(&gg);
+}
+#endif
+#ifdef NAP_MODULE
+// The NES ships only from the store (it was never built into the firmware).
+extern "C" void nucleo_register_nesemu(void)
+{
+    static const nucleo_app_def_t nes = {
+        "nesemu", "NES", "Games",
+        "Play NES cartridges natively — the emulator runs on the Cardputer itself.",
+        'N', 0xE8E4, enter_nes, on_key, nullptr, draw, leave,
+        NX_NET_APP | NX_SOLO | NX_WIFI, nullptr, draw_large
+    };
+    nucleo_app_register(&nes);
 }
 #endif
 #endif  // !(CONFIG_NUCLEO_STORE_GBEMU && CONFIG_NUCLEO_STORE_GGEMU) || NAP_MODULE

@@ -1,7 +1,7 @@
 // GameFront — see gamefront.h. The Games gallery: systems, then titles, on a HyperSpin-style wheel.
 //
 // PLUG AND PLAY. Nothing is configured: the native games are the registry's (built in, or installed from the
-// Store), and the cartridges are FOUND — the whole card is walked for .gb / .gbc / .gg / .sms files (and zips that
+// Store), and the cartridges are FOUND — the whole card is walked for .gb / .gbc / .gg / .sms / .nes files (and zips that
 // hold a Game Gear / Master System cartridge), wherever they are, and the result kept in an index on the card. The
 // walk runs a few milliseconds at a time while the gallery is open (gamefront_step), so the gallery is usable at
 // once with the last index and updates itself when the walk finds something new: once per boot, and again when
@@ -117,7 +117,8 @@ static const Meta META[] = {
                                   "Mini-RPG: erkunden, mit NPCs reden, Gold sammeln." } },
 };
 
-// The consoles, in the order the gallery lists them. Two share an emulator each, but every console is its own system.
+// The consoles. Their index here is the system digit in the cartridge index (new ones go at the end); the gallery lists
+// them in SHOW_ORDER instead: by maker, then by year. Two share an emulator each, but every console is its own system.
 struct Art { const uint8_t *z; uint16_t n; uint8_t w, h; };
 // A console's NAME is never written in the gallery (it is searched by, not shown): its mark is drawn instead.
 struct System {
@@ -134,8 +135,12 @@ static const System SYS[] = {
                                                                   { ART_GG_S_Z,  sizeof ART_GG_S_Z,  ART_GG_S_W,  ART_GG_S_H } },
     { "sms", "ggemu", "Master System",  "Sega, 1986",     0xF96B, { ART_SMS_Z, sizeof ART_SMS_Z, ART_SMS_W, ART_SMS_H },
                                                                   { ART_SMS_S_Z, sizeof ART_SMS_S_Z, ART_SMS_S_W, ART_SMS_S_H } },
+    { "nes", "nesemu", "NES",           "Nintendo, 1985", 0xAD55, { ART_NES_Z, sizeof ART_NES_Z, ART_NES_W, ART_NES_H },
+                                                                  { ART_NES_S_Z, sizeof ART_NES_S_Z, ART_NES_S_W, ART_NES_S_H } },
 };
 #define NSYS ((int)(sizeof SYS / sizeof SYS[0]))
+static const uint8_t SHOW_ORDER[] = { 4, 0, 1, 3, 2 };   // NES, Game Boy, Game Boy Color, Master System, Game Gear
+static_assert(sizeof SHOW_ORDER == NSYS, "every console has its place in SHOW_ORDER");
 #define NATIVE (-1)            // the group of the native games
 #define ACC_NATIVE 0xFB4D      // the Games category's colour
 #define C_LAST 0x8FF3          // "last played"
@@ -278,6 +283,7 @@ static int sys_of(const char *name)            // by extension; -2 = a zip, look
     if (!strcasecmp(dot, ".gbc")) return 1;
     if (!strcasecmp(dot, ".gg"))  return 2;
     if (!strcasecmp(dot, ".sms")) return 3;
+    if (!strcasecmp(dot, ".nes")) return 4;
     if (!strcasecmp(dot, ".zip")) return -2;
     return -1;
 }
@@ -599,7 +605,8 @@ static void systems_build(void)
         while (idx_next(f, line, sizeof line, dir, sizeof dir, &sys, &name)) roms[sys]++;
         fclose(f);
     }
-    for (int g = 0; g < NSYS; g++) {
+    for (int o = 0; o < NSYS; o++) {
+        const int g = SHOW_ORDER[o];
         if (find_app(SYS[g].app) < 0) continue;
         bool any = false;                          // any cartridge for this emulator at all?
         for (int h = 0; h < NSYS; h++) if (!strcmp(SYS[h].app, SYS[g].app) && roms[h] > 0) any = true;
@@ -1145,9 +1152,9 @@ static const char *empty_sub(void)
     if (s_flen) return TR5("Canc per correggere", "Backspace to edit", "Retroceso para editar", "Retour pour modifier", "Ruecktaste zum Bearbeiten");
     if (s_scan.on) return "";
     if (s_level == 1 && s_group != NATIVE)
-        return TR5("Copia i file .gb .gbc .gg .sms dove vuoi sulla SD: li trovo da solo", "Copy .gb .gbc .gg .sms files anywhere on the card: they are found on their own",
-                   "Copia archivos .gb .gbc .gg .sms en cualquier lugar de la SD", "Copiez des fichiers .gb .gbc .gg .sms n'importe ou sur la carte",
-                   "Kopiere .gb .gbc .gg .sms irgendwohin auf die Karte");
+        return TR5("Copia le ROM dove vuoi sulla SD: le trovo da sola", "Copy the ROMs anywhere on the card: they are found on their own",
+                   "Copia las ROM donde quieras en la SD: se encuentran solas", "Copiez les ROM n'importe ou sur la carte : elles sont trouvees",
+                   "ROMs irgendwohin auf die Karte kopieren: sie werden gefunden");
     return TR5("Si installano dallo Store", "Install them from the Store", "Se instalan desde la Store", "A installer depuis le Store", "Aus dem Store installieren");
 }
 static const char *level_title(void)

@@ -1,7 +1,7 @@
 // GameFront — the Games gallery, HyperSpin style. The launcher's Games tile opens it instead of a plain category.
 //
 // Two levels: the SYSTEMS (native games — built in or from the Store — then one entry per console whose emulator is
-// installed and whose cartridges are on the card: Game Boy, Game Boy Color, Game Gear, Master System), then the
+// installed and whose cartridges are on the card: NES, Game Boy, Game Boy Color, Master System, Game Gear), then the
 // TITLES of the chosen one. A title wheel on the right (the selection in the middle, its neighbours fading), the
 // picture and the whole title on the left, the live search on top; the same look as the emulators' own shelf.
 // A cartridge opens straight in its emulator ("open with", carried across the game's Solo reboot), and quitting the

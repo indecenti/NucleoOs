@@ -187,6 +187,7 @@ so the firmware image gets an empty file and the host gallery (`tools/ui-host/ap
 | App (id) | Module | Notes |
 |---|---|---|
 | Converter (`units`) | 23 KB (17 KB code + constants, 2.3 KB RAM, ABI 3) | 9 quantities; 5 languages in the source (the language comes from `settings.json`: `nucleo_tr5` is not in the ABI); numbers formatted with integers (no double helpers in the ABI) |
+| NES (`nesemu`, the emulators' front-end + agnes + our APU) | 111 KB (69 KB code, 11 KB constants, 5.3 KB RAM, ABI 4) | `nucleo_register_nesemu`; ROMs in `/data/ROMs/nes`; see `native-emulation.md` §8 |
 
 With all three from the store (the default) the image is **3,461,120 B instead of 3,603,792 B: 142,672 B (139 KB)
 recovered**

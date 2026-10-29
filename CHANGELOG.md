@@ -8,14 +8,14 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ### Changed
 - **Games gallery, HyperSpin style.** The Games tile opens a two-level gallery: first the systems (native games,
-  then Game Boy, Game Boy Color, Game Gear and Master System, each shown when its emulator is installed and its
+  then NES, Game Boy, Game Boy Color, Master System and Game Gear, each shown when its emulator is installed and its
   folder in `/data/ROMs` has cartridges), then their titles, sorted, on a title wheel with live search, the game's
   picture (cover, cartridge screenshot or console photo) and its whole title. With the second screen the gallery
   is on the panel (tap a title to bring it to the middle, tap the middle one or the picture to play, drag to turn
   the wheel) and the Cardputer shows the selection's details (system, maker, region, cartridge; players, source and
   blurb). Keyboard: up/down, left/right by 5, 1-7 (1-5) the wheel's slots, Enter, type to search, Esc = search,
   then back a level, then out.
-- **Plug and play.** The gallery finds the cartridges on its own, anywhere on the card (`.gb`, `.gbc`, `.gg`, `.sms`,
+- **Plug and play.** The gallery finds the cartridges on its own, anywhere on the card (`.gb`, `.gbc`, `.gg`, `.sms`, `.nes`,
   and zips holding a Game Gear / Master System cartridge), skipping the system's folders. The card is walked a few
   milliseconds at a time while the gallery is open (once per boot, and again after ten minutes), so it is usable at
   once and updates itself when the walk finds something new; the result is an index on the card.

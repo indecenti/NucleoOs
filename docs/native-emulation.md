@@ -446,7 +446,7 @@ number that decides what to optimise next; the QIO flash question in §6 applies
 `esp_partition_mmap`-ing it would remove every SD miss and hand the page cache's ~55 KB back — at the
 price of overwriting the rollback image in that partition (§2 rules out a dedicated one).
 
-## 8. Next: PC Engine, NES, Commodore 64 (prepared, not built yet)
+## 8. NES (built), Commodore 64 and PC Engine (prepared)
 
 Prepared so far: their console pictures and marks (`gbemu_art.h`, public-domain photos), and the ROM folders on the
 card (`/data/ROMs/pcengine`, `nes`, `c64`). What each needs, against the two rules every core here follows — a
@@ -459,3 +459,14 @@ licence compatible with the firmware's (no GPL code), and no single block larger
 | PC Engine | none found under a compatible licence (HuExpress, Mednafen, Geargrafx, PCE-Go are GPL) | — | 8 KB work RAM + **64 KB** VRAM + 512-colour VCE | our own machine around a permissive 65C02 core (chips `m6502` is zlib; HuC6280 adds a bank MMU, block transfers, timer, PSG), as nucleo_gg.c is around z80emu; VRAM in banks; HuCards up to 2.5 MB (Street Fighter II) from the SD page cache |
 
 Order of work, cheapest first: NES, then C64 (with the ROM question settled), then the PC Engine machine.
+
+**NES, done (`nesemu`, store only).** `nucleo_nes.c` around agnes with three marked patches (`vendor/agnes/agnes.nucleo.patch`):
+A1 the cartridge is read through a callback (the same SD page cache as the other consoles; the whole file is
+loaded only when it fits with 24 KB to spare), A2 each finished scanline goes to the host (256 palette indices)
+instead of a 61 KB frame buffer, A3 the APU registers reach the host. agnes has no sound: the APU is ours (two
+pulses, triangle, noise, DMC level; nesdev's non-linear mixer as tables in single precision, 32 kHz, through
+`emu_audio.h`). Battery PRG RAM (MMC1, MMC3) goes to `Saves/nes/<rom>.sav`, autosaved when it changes; states are
+`NNS1` (the live agnes struct, its host pointers restored on load). Mappers 0, 1, 2, 4; any other is refused with
+its number. Host test: `tools/emu-host/nes_test.c` (SMB, Zelda, Mega Man 2, SMB3, Tetris, Contra, state
+round-trip). agnes's PPU works per dot (~2-3 ms a frame on the PC against Walnut's 0.4 ms): the next step is a
+scanline renderer, measured on the device first.

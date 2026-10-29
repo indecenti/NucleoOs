@@ -37,8 +37,9 @@ from PIL import Image
 UA = {"User-Agent": "NucleoOS-rom-snaps/1.0 (+https://github.com/indecenti/NucleoOs)"}
 BOX = (112, 101)
 FOLDERS = {"gb": ("Nintendo_-_Game_Boy", (160, 144)), "gbc": ("Nintendo_-_Game_Boy_Color", (160, 144)),
-           "gg": ("Sega_-_Game_Gear", (160, 144)), "sms": ("Sega_-_Master_System_-_Mark_III", (256, 192))}
-ROM_EXT = (".gb", ".gbc", ".gg", ".sms", ".zip")
+           "gg": ("Sega_-_Game_Gear", (160, 144)), "sms": ("Sega_-_Master_System_-_Mark_III", (256, 192)),
+           "nes": ("Nintendo_-_Nintendo_Entertainment_System", (256, 240))}
+ROM_EXT = (".gb", ".gbc", ".gg", ".sms", ".zip", ".nes")
 GOOD = ("screenshot", "screen", "shot", "gameplay", "title")
 BAD = ("logo", "icon", "font", "tile", "sprite", "palette", "map", "button", "banner", "cover", "box", "label")
 
