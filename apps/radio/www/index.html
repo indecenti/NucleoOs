@@ -221,6 +221,8 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';   // the OS dialogs
     const t = await I18N.init('radio');
 
     const CONFIG = '/system/config/radio.json';
@@ -274,10 +276,10 @@
     async function load() {
       let status = 0, j = null;
       try {
-        const r = await fetch('/api/fs/read?path=' + encodeURIComponent(CONFIG) + '&t=' + Date.now(), { cache: 'no-store' });
-        status = r.status;
-        if (r.ok) { const txt = (await r.text()).trim(); j = txt ? JSON.parse(txt) : {}; if (!j || typeof j !== 'object' || Array.isArray(j)) status = 'corrupt'; }
-      } catch (e) { status = e instanceof SyntaxError ? 'corrupt' : 0; }   // corrupt file / network error / unreachable
+        const raw = await fs.readText(CONFIG);
+        status = raw == null ? 404 : 200;
+        if (raw != null) { const txt = raw.trim(); j = txt ? JSON.parse(txt) : {}; if (!j || typeof j !== 'object' || Array.isArray(j)) status = 'corrupt'; }
+      } catch (e) { status = e instanceof SyntaxError ? 'corrupt' : e && e.code === 'denied' ? 401 : 0; }   // corrupt file / not paired / network error
       readOk = status === 404 || (typeof status === 'number' && status >= 200 && status < 300);
       readStatus = readOk ? 0 : status;
 
@@ -327,8 +329,7 @@
       setSave('busy', t('saving'));
       try {
         const body = JSON.stringify(model, null, 2) + '\n';
-        const r = await fetch('/api/fs/write?path=' + encodeURIComponent(CONFIG), { method:'POST', body });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
+        await fs.write(CONFIG, body);
         setSave('ok', t('saved_ok'));
         if (msg) toast(msg);
       } catch (e) { setSave('err', t('save_failed')); }
@@ -491,7 +492,7 @@
     async function removeStation(i) {
       if (!(await canEdit())) return;
       const s = model.stations[i];
-      if (!confirm(t('confirm_remove', { name: s.name }))) return;
+      if (!(await os.confirm(t('confirm_remove', { name: s.name }), { danger: true }))) return;
       if (s.id === curId) { audio.pause(); audio.removeAttribute('src'); curId = null; stopNowPlaying(); $('npStation').textContent = t('np_idle'); $('npTrack').textContent = ''; }
       model.stations.splice(i, 1);
       if (model.default === s.id) model.default = model.stations[0]?.id || '';

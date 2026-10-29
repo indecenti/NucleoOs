@@ -11,7 +11,9 @@
 //   · relights         — how many beacons you lit (the Echo weighs it);
 //   · found["sec:sys:w"] / looted[...] — sites discovered on world w of a system, relics recovered there (bit per site).
 // Keyed by the run's seed: a new run (new seed) starts a fresh web save. Writes are debounced and best-effort.
-const PATH = '/data/costellazioni/web.json', DIR = '/data/costellazioni';
+import fs from '/nucleo-fs.js';
+
+const PATH = '/data/costellazioni/web.json';
 const LS = 'cz.web';
 export const WEB_VER = 1;
 
@@ -32,8 +34,8 @@ const lsSet = (w) => { try { localStorage.setItem(LS, JSON.stringify(w)); } catc
 export async function loadWeb(seed) {
   let card = null;
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { credentials: 'same-origin', cache: 'no-store' });
-    if (r.ok) card = sane(JSON.parse((await r.text()) || 'null'), seed);
+    const t = await fs.readText(PATH);                    // null when the card has none
+    if (t != null) card = sane(JSON.parse(t || 'null'), seed);
   } catch {}
   const local = sane(lsGet(), seed);
   // two copies of the same run: the one that has seen more wins
@@ -42,19 +44,11 @@ export async function loadWeb(seed) {
   return w;
 }
 
-let timer = null, writing = false, again = null, dirMade = false;
+let timer = null, writing = false, again = null;
+// Atomic (the core's default): a cut connection never leaves half a save; the folder is made as needed.
 async function write(w) {
-  const body = JSON.stringify(w);
   lsSet(w);
-  try {
-    if (!dirMade) {   // the device mkdir is not recursive: parents first
-      for (const d of ['/data', DIR]) await fetch('/api/fs/mkdir?path=' + encodeURIComponent(d), { method: 'POST', credentials: 'same-origin' }).catch(() => {});
-      dirMade = true;
-    }
-    const r = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream' }, body });
-    if (!r.ok) dirMade = false;
-    return r.ok;
-  } catch { dirMade = false; return false; }
+  try { await fs.writeJSON(PATH, w); return true; } catch { return false; }
 }
 // Debounced save (one write per burst of changes; a write never overlaps another).
 export function saveWeb(w, now = false) {

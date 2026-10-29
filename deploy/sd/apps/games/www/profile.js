@@ -4,7 +4,7 @@
 // (/data/play/*.json) so every surface (Cardputer, web, another browser) shares one identity.
 //
 // The stat mutation is a PURE function (applyResult) so it can be unit-tested off-device.
-import { _fs as FS } from '/apps/games/nucleo-play.js';
+import fs from '/nucleo-fs.js';
 
 const PROFILE_KEY = 'play.profile';
 const PROFILE_PATH = '/data/play/profile.json';
@@ -26,7 +26,7 @@ export function getProfile() {
 export async function setProfile(p) {
   const clean = { name: (p.name || 'Player').slice(0, 16).trim() || 'Player', avatar: p.avatar || AVATARS[0], color: p.color || COLORS[0], created: p.created || Date.now() };
   localStorage.setItem(PROFILE_KEY, JSON.stringify(clean));
-  FS.mkdir('/data/play').then(() => FS.writeJSON(PROFILE_PATH, clean)).catch(() => {});   // best-effort SD mirror
+  fs.writeJSON(PROFILE_PATH, clean).catch(() => {});   // best-effort SD mirror (atomic, folder made as needed)
   return clean;
 }
 
@@ -49,7 +49,7 @@ export function applyResult(stats, gameId, outcome) {
 }
 
 export async function loadStats() {
-  const s = await FS.readJSON(STATS_PATH);
+  const s = await fs.readJSON(STATS_PATH).catch(() => null);
   return s || {};
 }
 
@@ -58,12 +58,9 @@ export async function loadStats() {
 // as {} — fine for painting the card, fatal here, where it rewrote stats.json with this one match and wiped
 // the player's whole record.
 async function readStatsForUpdate() {
-  const r = await fetch('/api/fs/read?path=' + encodeURIComponent(STATS_PATH), { credentials: 'same-origin', cache: 'no-store' });
-  if (r.status === 404) return {};
-  if (!r.ok) throw new Error('stats read failed: HTTP ' + r.status);
-  const txt = (await r.text()).trim();
-  if (!txt) return {};
-  const s = JSON.parse(txt);                          // a garbled body throws: never rebuild over it
+  const txt = await fs.readText(STATS_PATH);         // null = absent; any other failure throws (FsError)
+  if (txt == null || !txt.trim()) return {};
+  const s = JSON.parse(txt);                                 // a garbled body throws: never rebuild over it
   if (!s || typeof s !== 'object' || Array.isArray(s)) throw new Error('stats file is not an object');
   return s;
 }
@@ -72,8 +69,7 @@ async function readStatsForUpdate() {
 export async function recordResult(gameId, outcome) {
   const cur = await readStatsForUpdate();
   const next = applyResult(cur, gameId, outcome);
-  await FS.mkdir('/data/play');
-  if (!(await FS.writeJSON(STATS_PATH, next))) throw new Error('stats write failed');
+  await fs.writeJSON(STATS_PATH, next);               // atomic: a failure throws and keeps the old record
   return next;
 }
 

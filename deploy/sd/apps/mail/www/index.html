@@ -82,29 +82,22 @@
   <script type="module">
     import I18N from '/nucleo-i18n.js';
     import Caps from '/nucleo-caps.js';   // what this device can do (mail.smtp)
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';
     const t = await I18N.init('mail');
     const $ = (id) => document.getElementById(id);
-    const SETTINGS = '/system/config/settings.json';
     const SENT_LOG = '/system/mail/sent.log';
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     let accounts = [], presets = [], def = -1, tab = 'compose', loaded = false, needPair = false;
     // A recipient can be handed in via ?to= (e.g. Contacts → "Write email"): open straight into Compose.
-    const _q = new URLSearchParams(location.search);
-    let draft = { to: (_q.get('to') || '').trim(), subject: (_q.get('subject') || '').trim(), body: (_q.get('body') || '').trim(), account: -1 };
+    const _q = os.args();
+    let draft = { to: (_q.to || '').trim(), subject: (_q.subject || '').trim(), body: (_q.body || '').trim(), account: -1 };
     let editing = null;
 
     const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-    async function readText(path) {
-      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
-        return r.ok ? await r.text() : null; } catch { return null; }
-    }
-    async function readJSON(path) { const s = await readText(path); try { return s ? JSON.parse(s) : null; } catch { return null; } }
-    async function loadTheme() {
-      const s = await readJSON(SETTINGS);
-      if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
-    }
+    const readText = (path) => fs.readText(path).catch(() => null);
 
     async function loadData() {
       // Sequential, never parallel: the device is a single-task PSRAM-less httpd — two concurrent
@@ -328,7 +321,7 @@
     async function delAccount(idx) {
       const a = accounts.find((x) => x.idx === idx); if (!a) return;
       // The stored SMTP password goes with it and cannot be read back: always ask first.
-      if (!confirm(t('confirm_delete_account', { name: a.name || a.user || a.host }))) return;
+      if (!(await os.confirm(t('confirm_delete_account', { name: a.name || a.user || a.host }), { danger: true }))) return;
       const r = await fetch('/api/mail/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idx, delete: true }) }).catch(() => null);
       if (r && r.status === 401) { setStatus('err', t('need_pair')); return; }
@@ -367,15 +360,10 @@
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && tab === 'compose' && accounts.length) { e.preventDefault(); send(); }
     });
 
-    window.addEventListener('message', (e) => {
-      if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
-      if (e.data?.t === 'fs.changed' && e.data.d?.path?.endsWith('settings.json')) loadTheme();
-    });
     let smtpOk = null;                      // capability mail.smtp, set by init()
     I18N.onChange(() => { if (smtpOk !== false) render(); });
 
     async function init() {
-      await loadTheme();
       // Sending mail is the device's (capability mail.smtp): elsewhere say so, and ask nothing of /api/mail.
       smtpOk = await Caps.has('mail.smtp');
       if (!smtpOk) {

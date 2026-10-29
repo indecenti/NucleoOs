@@ -9,6 +9,10 @@
 //               legge il corpo in sequenza, i blocchi arrivano in ordine; tornare su un blocco già
 //               scartato = ripartire da capo scartando i byte. Con file piccoli si tiene tutto.
 // La modalità si scopre alla prima richiesta (Range 0..BLOCK-1 → 206 oppure 200).
+// The streaming itself fetches the URL directly (abortable, read as it arrives); only the size lookup
+// goes through the core file layer.
+
+import fs from '/nucleo-fs.js';
 
 // 256 KB: la prima immagine arriva prima (la board serve ~0,1-2 MB/s) e le richieste restano medie.
 export const BLOCK = 256 * 1024;
@@ -228,12 +232,8 @@ export class HttpSource extends BaseSource {
     try {
       const u = new URL(this.url, location.href);
       const path = u.searchParams.get('path');
-      if (!path || !u.pathname.endsWith('/api/fs/read')) return null;
-      const dir = path.substring(0, path.lastIndexOf('/')) || '/';
-      const name = path.substring(path.lastIndexOf('/') + 1);
-      const r = await fetch('/api/fs/list?path=' + encodeURIComponent(dir), { cache: 'no-store' });
-      if (!r.ok) return null;
-      const e = ((await r.json()).entries || []).find((x) => x.name === name);
+      if (!path || new URL(fs.url(path), location.href).href !== u.href) return null;   // only a device file
+      const e = await fs.stat(path);   // read from the folder's listing
       return e && e.size > 0 ? e.size : null;
     } catch { return null; }
   }

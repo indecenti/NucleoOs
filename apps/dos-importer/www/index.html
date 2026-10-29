@@ -122,6 +122,8 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';
     const t = await I18N.init('dos-importer');
 
     const DEST_DIR = '/data/DOS';
@@ -313,7 +315,6 @@
     function setStatus(cls, msg) { const s = $('status'); s.className = 'status ' + cls; s.textContent = msg; }
 
     // ---- install: build bundle (or passthrough) and write to the SD ----
-    async function ensureDir() { for (const p of ['/data', DEST_DIR]) { try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent(p), { method: 'POST' }); } catch {} } }
     async function install() {
       const name = sanitize($('name').value);
       let bytes;
@@ -328,18 +329,15 @@
 
       $('install').disabled = true; setStatus('busy', t('st_installing', { size: fmt(bytes.length) }));
       try {
-        await ensureDir();
         const path = DEST_DIR + '/' + name + '.jsdos';
-        const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: bytes });
-        if (!r.ok) {
-          const body = await r.text().catch(() => '');
-          // With pairing ON the write route answers 401 with {"error":"pairing_required"} —
-          // show a translated message, not the raw JSON body.
-          if (r.status === 401 || /pairing_required/.test(body)) { setStatus('err', t('pairing_required')); return; }
-          throw new Error(body || ('HTTP ' + r.status));
+        try { await fs.write(path, bytes); }                  // atomic, folders made as needed
+        catch (e) {
+          // With pairing ON the write route answers 401 ('denied') — show a translated message.
+          if (e && e.code === 'denied') { setStatus('err', t('pairing_required')); return; }
+          throw e;
         }
         setStatus('ok', t('st_installed', { path, size: fmt(bytes.length) }));
-        window.parent.postMessage({ type: 'open-app', id: 'dosbox', reload: true }, '*');   // best-effort; reload: an open DOS Box must list the new game
+        if (os.inShell) os.openApp('dosbox', null, { reload: true });   // best-effort; reload: an open DOS Box must list the new game
       } catch (e) { setStatus('err', t('err_install_failed', { msg: e.message })); }
       finally { $('install').disabled = false; }
     }
@@ -353,10 +351,10 @@
     // ingest() always leaves the final status (ok, or WHY not: not a ZIP, nothing runnable…) — don't clear it here.
     drop.addEventListener('drop', async (e) => { setStatus('busy', t('st_reading')); try { await ingest(await entriesFromDataTransfer(e.dataTransfer)); } catch (err) { setStatus('err', err.message); } });
     $('picker').addEventListener('change', async (e) => {
-      const fs = [...e.target.files]; if (!fs.length) return;
+      const picked = [...e.target.files]; if (!picked.length) return;
       setStatus('busy', t('st_reading'));
       const files = []; let topName = null;
-      for (const f of fs) { const rel = f.webkitRelativePath || f.name; files.push({ name: rel, data: new Uint8Array(await f.arrayBuffer()) }); if (!topName) topName = (f.webkitRelativePath ? f.webkitRelativePath.split('/')[0] : f.name); }
+      for (const f of picked) { const rel = f.webkitRelativePath || f.name; files.push({ name: rel, data: new Uint8Array(await f.arrayBuffer()) }); if (!topName) topName = (f.webkitRelativePath ? f.webkitRelativePath.split('/')[0] : f.name); }
       await ingest({ files, topName });
     });
     $('install').addEventListener('click', install);

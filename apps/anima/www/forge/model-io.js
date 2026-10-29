@@ -44,7 +44,7 @@ export function makeCdnRangeFetcher(baseUrl, { fetchImpl = globalThis.fetch } = 
 export function makeSdPartReader({ fetchImpl = globalThis.fetch } = {}) {
   return async function readPart(path) {
     try {
-      const r = await fetchImpl('/api/fs/read?path=' + encodeURIComponent(path) + '&t=' + Date.now(), { cache: 'no-store' });
+      const r = await fetchImpl('/api/fs/read?path=' + encodeURIComponent(path) + '&t=' + Date.now(), { cache: 'no-store' });   // nucleo-fs: allow (injected fetchImpl, model shards with their own resume)
       if (!r.ok) return { ok: false, status: r.status };
       const buf = await r.arrayBuffer();
       return { ok: true, status: r.status, bytes: new Uint8Array(buf) };
@@ -60,7 +60,7 @@ export function makeSdSink(destDir, { fetchImpl = globalThis.fetch } = {}) {
   return async function writeShard(name, bytes) {
     try {
       const body = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-      const r = await fetchImpl('/api/fs/write?path=' + encodeURIComponent(`${dir}/${name}`), { method: 'POST', body });
+      const r = await fetchImpl('/api/fs/write?path=' + encodeURIComponent(`${dir}/${name}`), { method: 'POST', body });   // nucleo-fs: allow (injected fetchImpl, model shards with their own resume)
       return r.ok ? { ok: true } : { ok: false, error: 'http-' + r.status };
     } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
   };
@@ -106,11 +106,11 @@ export function makeDeviceIndexStore(key, { fetchImpl = globalThis.fetch, dir = 
   return {
     path,
     async load() {
-      try { const r = await fetchImpl('/api/fs/read?path=' + encodeURIComponent(path) + '&t=' + Date.now(), { cache: 'no-store' });
+      try { const r = await fetchImpl('/api/fs/read?path=' + encodeURIComponent(path) + '&t=' + Date.now(), { cache: 'no-store' });   // nucleo-fs: allow (injected fetchImpl, model shards with their own resume)
         if (!r.ok) return {}; const j = await r.json(); return (j && j.shards) || {}; } catch { return {}; }
     },
     async save(cache) {
-      try { await fetchImpl('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: JSON.stringify({ key, ts: Date.now(), shards: cache }) }); } catch {}
+      try { await fetchImpl('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: JSON.stringify({ key, ts: Date.now(), shards: cache }) }); } catch {}   // nucleo-fs: allow (injected fetchImpl, model shards with their own resume)
     },
   };
 }

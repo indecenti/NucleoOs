@@ -67,14 +67,15 @@
   <script src="/apps/qr/qrcode.js"></script>
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import os from '/nucleo-shell.js';   // the OS clipboard (works on plain http too)
     const t = await I18N.init('community');
     const INVITE = 'https://discord.gg/84tyTPtWus';
     document.getElementById('url').textContent = INVITE;
 
     document.getElementById('open').onclick = () => window.open(INVITE, '_blank', 'noopener,noreferrer');
     const copyBtn = document.getElementById('copy');
-    copyBtn.onclick = async () => {
-      try { await navigator.clipboard.writeText(INVITE); } catch { /* clipboard may be gated on plain http */ }
+    copyBtn.onclick = () => {
+      os.copy(INVITE);
       copyBtn.textContent = t('copied');
       setTimeout(() => { copyBtn.textContent = t('copy'); }, 1600);
     };

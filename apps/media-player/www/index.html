@@ -27,11 +27,13 @@
   <ul id="list"></ul>
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';   // launch arguments ({ path } when opened on a file)
     const t = await I18N.init('media-player');
     const DIR = '/data/Music';
     const player = document.getElementById('player');
     const list = document.getElementById('list');
-    const src = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
+    const src = (p) => fs.url(p);
     let tracks = [], idx = -1, current = '';
     function play(path, li, i) {
       current = path;
@@ -49,12 +51,10 @@
     async function load() {
       const note = (key) => { list.innerHTML = ''; const li = document.createElement('li'); li.className = 'muted'; li.textContent = t(key); list.appendChild(li); };
       let data;
-      try {
-        const r = await fetch('/api/fs/list?path=' + encodeURIComponent(DIR));
-        // A card without /data/Music answers 404: that is an EMPTY library, not an unreachable device
-        // (it said "is the device online?" while the device was answering).
-        data = r.status === 404 ? { entries: [] } : (r.ok ? await r.json() : null);
-      } catch { data = null; }
+      // A card without /data/Music lists as []: that is an EMPTY library, not an unreachable device
+      // (it said "is the device online?" while the device was answering).
+      try { data = { entries: await fs.list(DIR) }; }
+      catch { data = null; }
       if (!data) { note('load_failed'); return; }
       tracks = (data.entries || []).filter(e => e.type === 'file' && /\.(mp3|wav)$/i.test(e.name));
       if (!tracks.length) { note('empty_list'); return; }   // t(): inserted after the page was translated
@@ -77,7 +77,7 @@
       else if (e.key === 'ArrowDown' || e.key === 'n') playIdx(idx + 1);
       else if (e.key === 'ArrowUp' || e.key === 'p') playIdx(idx - 1);
     });
-    const q = new URLSearchParams(location.search).get('path');
+    const q = os.args().path;
     if (q) play(q);
     load();
   </script>

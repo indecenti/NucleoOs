@@ -225,8 +225,10 @@
   <script type="module">
     import I18N from '/nucleo-i18n.js';
     import Caps from '/nucleo-caps.js';   // what this device can do (fs.stat)
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';   // the OS around this window: open-app/open-file, clipboard
     const t = await I18N.init('file-commander');   // loads core + this app's catalog, paints [data-i18n], live-switches
-    let cwd = new URLSearchParams(location.search).get('path') || '/data';
+    let cwd = os.args().path || '/data';
     let entries = [];
     let filterText = '';
     const selected = new Set();          // selected entry names in cwd
@@ -277,8 +279,7 @@
     const fmt = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? (b / 1024).toFixed(0) + ' KB' : b + ' B';
     // Every destructive call (delete/move) funnels through here; the firmware answers 403 for
     // protected system files, so surface that once, centrally, as a friendly toast.
-    const api = (op, path, opts) => fetch(`/api/fs/${op}?path=` + encodeURIComponent(path), opts)
-      .then((res) => { if (res.status === 403) toast(t('lock_kept_safe')); return res; });
+    const guard = (p) => p.catch((err) => { if (err && err.code === 'denied') toast(t('lock_kept_safe')); throw err; });
     let _toastT = null;
     function toast(msg) {
       let el = document.getElementById('fc-toast');
@@ -311,7 +312,7 @@
     const SD_LOC = { id: 'sd', kind: 'sd', label: 'NucleoOS SD', glyph: '💾', removable: false };
     const locals = [];                 // [{ id, kind:'local', src:'bridge'|'fsa', label, glyph, path, stack? }]
     let ACTIVE = SD_LOC;               // currently-browsed location
-    let sdPath = (new URLSearchParams(location.search).get('path') || '/data');  // last SD folder (copy-to-SD target)
+    let sdPath = (os.args().path || '/data');  // last SD folder (copy-to-SD target)
     const isSD = () => ACTIVE.kind === 'sd';
     // Windows path helpers (bridge paths use backslashes; "C:\" is a drive root).
     const winJoin = (a, b) => a.replace(/\\+$/, '') + '\\' + b;
@@ -326,7 +327,7 @@
 
     // A runnable script -> launch it in the Code Runner (sandboxed Web Worker), autorun on.
     const RUNNABLE = /\.(m?js|cjs)$/i;
-    const runFile = (p) => window.parent.postMessage({ type: 'open-app', id: 'code-runner', query: 'path=' + encodeURIComponent(p) + '&autorun=1' }, '*');
+    const runFile = (p) => os.openApp('code-runner', { path: p, autorun: 1 });
 
     function renderCrumbs() {
       if (isSD()) {
@@ -410,7 +411,7 @@
     }
     async function listSD() {
       sdPath = cwd;                                   // remember for copy-to-SD from a local view
-      const j = await (await api('list', cwd)).json();
+      const j = { entries: await guard(fs.list(cwd)) };   // with the device's own flags (protected, has_subdirs)
       // Hide ".gz" shadow files: the device transparently serves <name> from <name>.gz, so a gzip
       // sibling is an internal compression artifact, not a user file. Showing it cluttered every
       // folder with duplicates AND each one was a dead click — opening it fired a stray /api/fs/list
@@ -515,7 +516,7 @@
       if (!sel.length) { xfer = null; return; }
       const items = [];
       if (isSD()) {
-        for (const e of sel) { const p = join(cwd, e.name); items.push({ name: e.name, read: () => api('read', p).then((r) => { if (!r.ok) throw new Error(t('up_failed') + ' (' + r.status + ')'); return r.blob(); }), del: () => trashFile(p, false) }); }
+        for (const e of sel) { const p = join(cwd, e.name); items.push({ name: e.name, read: () => readBlob(p), del: () => trashFile(p, false) }); }
       } else if (ACTIVE.src === 'bridge') {
         for (const e of sel) { const p = winJoin(ACTIVE.path, e.name); items.push({ name: e.name, read: () => bridgeReadBlob(p), del: () => bridgeDelete(p) }); }
       } else {
@@ -528,18 +529,24 @@
     // Copy/Cut from any location; mirror SD copies to the OS clipboard for cross-window paste.
     async function copyCut(op) {
       await buildXfer(op);
-      if (isSD() && xfer) { const paths = xfer.items.map((it) => join(cwd, it.name)); window.parent.postMessage({ type: 'clipboard-write', kind: 'files', data: { op, paths } }, '*'); }
+      if (isSD() && xfer) { const paths = xfer.items.map((it) => join(cwd, it.name)); os.copy({ op, paths }, 'files'); }
     }
     async function pasteHere(osClip) {
       if (xfer) return pasteXfer();
-      if (isSD()) { osClip ? pasteFiles(osClip) : window.parent.postMessage({ type: 'clipboard-read' }, '*'); }
+      if (isSD()) { osClip ? pasteFiles(osClip) : pasteFiles(await os.paste()); }
+    }
+    // An SD file as a Blob for the clipboard; a failed read must not become the copy.
+    async function readBlob(p) {
+      let b; try { b = await guard(fs.read(p)); } catch (err) { throw new Error(err && err.status ? t('up_failed') + ' (' + err.status + ')' : t('up_net_error')); }
+      if (!b) throw new Error(t('up_failed') + ' (404)');
+      return new Blob([b]);
     }
     async function pasteXfer() {
       if (!xfer || !xfer.items.length || !writable()) return;
       const { op, items } = xfer;
       const copied = new Set();                          // items whose copy really landed
       if (isSD()) {
-        let taken = new Set(); try { const sd = await (await api('list', cwd)).json(); taken = new Set((sd.entries || []).map((e) => e.name)); } catch {}
+        let taken = new Set(); try { taken = new Set((await fs.list(cwd)).map((e) => e.name)); } catch {}
         const jobs = items.map((it) => ({ label: it.name, dest: join(cwd, uniqueName(it.name, taken)), read: it.read, item: it }));
         const done = await runUploadJobs(jobs);          // progress panel + 640 MB guard; resolves to the jobs that landed
         for (const j of done) copied.add(j.item);
@@ -563,11 +570,8 @@
     }
 
     // ---- SD drag-and-drop operations (Windows modifiers): Ctrl=copy · Shift/none=move · Alt=shortcut ----
-    async function fcUniqueDest(dir, name) {
-      let taken = new Set();
-      try { const r = await api('list', dir); if (r.ok) (await r.json()).entries.forEach((e) => taken.add(e.name)); } catch {}
-      return join(dir, uniqueName(name, taken));
-    }
+    // A free name in `dir` ("a (2).lnk"); a folder that cannot be listed keeps the plain name, as before.
+    const fcUniqueDest = (dir, name) => fs.uniquePath(dir, name).catch(() => join(dir, name));
     const lnkBlob = (target, label) => JSON.stringify({ schema: 1, type: 'file', target, label: label || undefined, createdAt: Date.now() });
     async function fcDropInto(destDir, items, op) {
       let ok = 0, failed = 0;
@@ -578,18 +582,14 @@
         if (op === 'shortcut') {
           const base = it.name.replace(/\.lnk$/i, '');
           const dst = await fcUniqueDest(destDir, base + '.lnk');
-          try { if ((await api('write', dst, { method: 'POST', body: lnkBlob(it.path, base) })).ok) ok++; } catch {}
+          try { await guard(fs.writeText(dst, lnkBlob(it.path, base))); ok++; } catch {}
           continue;
         }
         if (it.isDir && op === 'copy') { toast(t('copy_folder_unsupported')); continue; }   // no recursive byte-copy
         const dst = await fcUniqueDest(destDir, it.name);
         try {
-          if (op === 'move') { const r = await fetch('/api/fs/move?from=' + encodeURIComponent(it.path) + '&to=' + encodeURIComponent(dst), { method: 'POST' }); if (r.ok) ok++; else if (r.status === 403) toast(t('lock_kept_safe')); }
-          else {
-            const r = await api('read', it.path);                     // a failed read must not become the copy
-            if (!r.ok) { failed++; continue; }
-            if ((await api('write', dst, { method: 'POST', body: await r.arrayBuffer() })).ok) ok++; else failed++;
-          }
+          if (op === 'move') { await guard(fs.move(it.path, dst)); ok++; }
+          else { await guard(fs.copy(it.path, dst)); ok++; }     // a failed read never becomes the copy
         } catch { if (op === 'copy') failed++; }
       }
       if (failed) toast(t('err_copy_failed', { count: failed }));
@@ -598,12 +598,12 @@
     async function makeShortcut(e) {                              // create a .lnk in the current folder
       const target = join(cwd, e.name), base = e.name.replace(/\.lnk$/i, '');
       const dst = await fcUniqueDest(cwd, base + ' - ' + t('shortcut_word') + '.lnk');
-      try { await api('write', dst, { method: 'POST', body: lnkBlob(target, base) }); toast(t('toast_shortcut_made')); } catch {}
+      try { await guard(fs.writeText(dst, lnkBlob(target, base))); toast(t('toast_shortcut_made')); } catch {}
       load();
     }
     async function sendToDesktop(e) {                            // create a .lnk in /data/Desktop (the real Desktop folder)
       const target = join(cwd, e.name), base = e.name.replace(/\.lnk$/i, '');
-      try { await api('mkdir', '/data/Desktop', { method: 'POST' }); const dst = await fcUniqueDest('/data/Desktop', base + '.lnk'); await api('write', dst, { method: 'POST', body: lnkBlob(target, base) }); toast(t('toast_sent_desktop')); } catch {}
+      try { const dst = await fcUniqueDest('/data/Desktop', base + '.lnk'); await guard(fs.writeText(dst, lnkBlob(target, base))); toast(t('toast_sent_desktop')); } catch {}   // write makes the folder
     }
 
     // The view = entries filtered by the search box. Single click selects (Windows-style),
@@ -757,7 +757,7 @@
     async function open(e) {
       if (isSD()) {
         if (e.type === 'dir') { cwd = join(cwd, e.name); load(); }
-        else window.parent.postMessage({ type: 'open-file', path: join(cwd, e.name) }, '*');
+        else os.openFile(join(cwd, e.name));
         return;
       }
       if (e.type === 'dir') { try { await localEnter(ACTIVE, e.name); } catch {} load(); }
@@ -867,10 +867,11 @@
       load();
     }
     // Folders skip the Recycle Bin, and the firmware only removes an EMPTY folder (rmdir) - a non-empty
-    // one answers 404 "no entry". Say so instead of silently doing nothing (403 = protected, toasted by api()).
+    // one answers 404 "no entry" (fs.remove: false). Say so instead of silently doing nothing (denied =
+    // protected, toasted by guard()).
     async function deleteFolder(path) {
-      let r; try { r = await api('delete', path, { method: 'POST' }); } catch {}
-      if (r && (r.ok || r.status === 403)) return r.ok;
+      let gone = false; try { gone = await guard(fs.remove(path)); } catch (err) { if (err && err.code === 'denied') return false; }
+      if (gone) return true;
       toast(t('err_folder_not_empty', { name: path.split('/').pop() }));
       return false;
     }
@@ -878,7 +879,7 @@
       if (!writable()) return;
       const name = await inputModal(t('modal_new_folder'), t('modal_folder_name'), t('default_new_folder'));
       if (!name) return;
-      try { if (isSD()) await api('mkdir', join(cwd, name), { method: 'POST' }); else await localMkdir(ACTIVE, name); } catch (err) { console.warn('mkdir failed', err); }
+      try { if (isSD()) await guard(fs.mkdirp(join(cwd, name))); else await localMkdir(ACTIVE, name); } catch (err) { console.warn('mkdir failed', err); }
       load();
     }
     async function newFile() {
@@ -887,13 +888,10 @@
       if (!/\.[a-z0-9]+$/i.test(name)) name += '.txt';
       // Never truncate an existing file: re-list the folder and pick a free name ("untitled (1).txt").
       // If the folder can't be listed we can't know, so nothing is written.
-      const dir = cwd;
-      let taken;
-      try { const r = await api('list', dir); if (r.ok) taken = new Set(((await r.json()).entries || []).map((x) => x.name)); } catch {}
-      if (!taken) { toast(t('cannot_read')); return; }
-      name = uniqueName(name, taken);
-      let w; try { w = await api('write', join(dir, name), { method: 'POST', body: '' }); } catch {}
-      if (!w || !w.ok) toast(t('err_new_file', { name }));
+      let dest; try { dest = await fs.uniquePath(cwd, name); } catch {}
+      if (!dest) { toast(t('cannot_read')); return; }
+      name = dest.split('/').pop();
+      try { await guard(fs.write(dest, '', { overwrite: false })); } catch { toast(t('err_new_file', { name })); }
       load();
     }
     async function renameFile(e) {
@@ -908,20 +906,17 @@
           // above). Renaming by copy-then-delete pulled the ENTIRE file through the browser — renaming a
           // 300 MB video meant ~600 MB over Wi-Fi off a PSRAM-less device — it broke outright on files
           // larger than browser memory, and it was not atomic: a failure halfway left two copies or none.
-          const from = join(cwd, e.name), to = join(cwd, name);
-          const r = await fetch('/api/fs/move?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to), { method: 'POST' });
-          if (!r.ok) { if (r.status === 403) toast(t('lock_kept_safe')); throw new Error('move ' + r.status); }
+          await guard(fs.move(join(cwd, e.name), join(cwd, name)));
         } else await localRenameEntry(ACTIVE, e, name);
       } catch (err) { console.warn('rename failed', err); }
       load();
     }
-    async function copy(text) { try { await navigator.clipboard.writeText(text); } catch {} }
+    function copy(text) { os.copy(text); }   // the OS clipboard history (works on plain-http devices too)
 
     function compressSelection() {
       const paths = selectedPaths();
       if (!paths.length) return;
-      const q = encodeURIComponent(JSON.stringify(paths));
-      window.parent.postMessage({ type: 'open-app', id: 'archive-manager', query: 'compress=' + q }, '*');
+      os.openApp('archive-manager', { compress: JSON.stringify(paths) });
     }
 
     function properties(e, path) {
@@ -989,10 +984,7 @@
         let name = src.split('/').pop(), dst = join(cwd, name);
         if (dst === src) { if (op === 'cut') continue; name = name.replace(/(\.[^.]+)?$/, ' copy$&'); dst = join(cwd, name); }
         try {
-          const r = await api('read', src);                           // files only (folders skipped)
-          if (!r.ok) throw new Error('read ' + r.status);             // never write an error body as the file
-          const w = await api('write', dst, { method: 'POST', body: await r.arrayBuffer() });
-          if (!w.ok) throw new Error('write ' + w.status);
+          await guard(fs.copy(src, dst, { overwrite: true }));        // files only (folders skipped)
         } catch (err) { console.warn('paste failed', src, err); failed++; continue; }   // the source is untouched
         if (op === 'cut') {
           // The copy landed; the source goes only into the Recycle Bin. If that fails it stays put, and
@@ -1012,10 +1004,8 @@
     // that would wipe the record of every other trashed file. A 404, or the firmware's "{}" for a
     // missing /system/config/*.json, is a genuinely empty bin.
     async function loadTrashDb() {
-      let r; try { r = await api('read', TRASH_DB); } catch { return null; }
-      if (r.status === 404) return { items: [] };
-      if (!r.ok) return null;
-      let txt; try { txt = await r.text(); } catch { return null; }   // a read that broke off is not an index
+      let txt; try { txt = await guard(fs.readText(TRASH_DB)); } catch { return null; }   // a read that broke off is not an index
+      if (txt == null) return { items: [] };
       if (!txt.trim()) return { items: [] };                            // a 0-byte index = an empty bin
       try {
         const d = JSON.parse(txt);
@@ -1028,26 +1018,22 @@
       // trashed files stay in /system/.trash, and the old list stays recoverable) and start a fresh index; if
       // even that copy cannot be written, change nothing.
       try {
-        const k = await api('write', TRASH_DB.replace(/.json$/, '.corrupt.json'), { method: 'POST', body: txt });
-        if (k && k.ok) return { items: [] };
+        await guard(fs.writeText(TRASH_DB.replace(/.json$/, '.corrupt.json'), txt));
+        return { items: [] };
       } catch {}
       return null;
     }
-    const saveTrashDb = (db) => api('write', TRASH_DB, { method: 'POST', body: JSON.stringify(db) });
+    const saveTrashDb = (db) => guard(fs.writeJSON(TRASH_DB, db));
     // Does a delete of this path go to the SERVER's bin? Only the device can say, on the RESOLVED path
     // (/api/fs/stat → trash:true; on the Handheld data/ROMs, data/Music… are links to the same files as
     // roms/ and media/). A device without the fs.stat capability is not asked at all; one with it still
     // answers per file (the `trash` flag is state). Without either (Cardputer, P4, older servers) the app keeps
     // its own checked trash — never guess from the path: on a backend that hard-deletes, a wrong guess would
-    // destroy the file.
+    // destroy the file. fs.stat asks /api/fs/stat where the device has it, and only that route carries the `trash`
+    // flag (the Handheld lists no such field): anything else would say "no" and pull a multi-GB file through the tab.
     async function serverTrashes(path) {
       if (!(await Caps.has('fs.stat'))) return false;
-      try {
-        const r = await fetch('/api/fs/stat?path=' + encodeURIComponent(path), { cache: 'no-store' });
-        if (!r.ok) return false;
-        const j = await r.json().catch(() => null);
-        return !!(j && j.trash === true);
-      } catch { return false; }
+      try { const st = await fs.stat(path); return !!(st && st.trash === true); } catch { return false; }
     }
     // A failed step with a message already meant for the user (callers toast err.message).
     const userError = (msg) => Object.assign(new Error(msg), { user: true });
@@ -1064,8 +1050,8 @@
         // Copying the bytes through the tab into /system/.trash would (a) double
         // the entry and (b) try to fit a multi-GB video onto the ~800MB rootfs.
         // So just delete and read back the entry the server wrote, for undo.
-        let d; try { d = await api('delete', path, { method: 'POST' }); } catch {}
-        if (!d || !d.ok) throw notTrashed();
+        let d = false; try { d = await guard(fs.remove(path)); } catch {}
+        if (!d) throw notTrashed();
         if (record) {
           const db = await loadTrashDb();
           const it = ((db && db.items) || []).find((i) => i.orig === path);
@@ -1075,26 +1061,21 @@
       }
       const db = await loadTrashDb();
       if (!db) throw userError(t('err_trash_index'));
-      await api('mkdir', TRASH, { method: 'POST' }).catch(() => {});
       const tpath = join(TRASH, Date.now() + '_' + Math.floor(Math.random() * 9999) + '_' + name);
-      let r; try { r = await api('read', path); } catch { throw notTrashed(); }
-      if (!r.ok) throw notTrashed();
-      const buf = await r.arrayBuffer();
-      let w; try { w = await api('write', tpath, { method: 'POST', body: buf }); } catch { throw notTrashed(); }
-      if (!w.ok) { api('delete', tpath, { method: 'POST' }).catch(() => {}); throw notTrashed(); }
+      try { await guard(fs.copy(path, tpath)); } catch { fs.remove(tpath).catch(() => {}); throw notTrashed(); }   // the folder is made as needed
       const entry = { orig: path, trash: tpath, name, ts: Date.now() };
       db.items.unshift(entry);
-      let s; try { s = await saveTrashDb(db); } catch {}
-      if (!s || !s.ok) { api('delete', tpath, { method: 'POST' }).catch(() => {}); throw notTrashed(); }
-      let d; try { d = await api('delete', path, { method: 'POST' }); } catch {}
-      if (!d || !d.ok) {                          // the original stays: roll the trash copy + entry back
+      let saved = false; try { await saveTrashDb(db); saved = true; } catch {}
+      if (!saved) { fs.remove(tpath).catch(() => {}); throw notTrashed(); }
+      let d = false; try { d = await guard(fs.remove(path)); } catch {}
+      if (!d) {                                   // the original stays: roll the trash copy + entry back
         db.items = db.items.filter((i) => i !== entry);
         await saveTrashDb(db).catch(() => {});
-        api('delete', tpath, { method: 'POST' }).catch(() => {});
+        fs.remove(tpath).catch(() => {});
         throw notTrashed();
       }
       if (db.items.length > TRASH_CAP) {          // evict the oldest only once this one is safely in
-        while (db.items.length > TRASH_CAP) { const old = db.items.pop(); try { await api('delete', old.trash, { method: 'POST' }); } catch {} }
+        while (db.items.length > TRASH_CAP) { const old = db.items.pop(); try { await guard(fs.remove(old.trash)); } catch {} }
         await saveTrashDb(db).catch(() => {});
       }
       if (record) pushUndo({ type: 'delete', orig: path, trash: tpath });
@@ -1109,14 +1090,10 @@
         // move = rename first: works on files AND folders, on either trash location (the Handheld's server
         // bins into <mount>/.nucleos-trash), and never pulls bytes through the tab. A backend whose move
         // cannot do it (e.g. across filesystems) falls back to the checked copy below.
-        let mv = null;
-        try { mv = await fetch('/api/fs/move?from=' + encodeURIComponent(trash) + '&to=' + encodeURIComponent(orig) + '&overwrite=1', { method: 'POST' }); } catch {}
-        if (!mv || !mv.ok) {
-          const r = await api('read', trash);
-          if (!r.ok) throw new Error('read ' + r.status);
-          const w = await api('write', orig, { method: 'POST', body: await r.arrayBuffer() });
-          if (!w.ok) throw new Error('write ' + w.status);
-          await api('delete', trash, { method: 'POST' }).catch(() => {});
+        try { await fs.move(trash, orig, { overwrite: true }); }
+        catch {
+          await guard(fs.copy(trash, orig, { overwrite: true }));
+          await guard(fs.remove(trash)).catch(() => {});
         }
         db.items = db.items.filter((i) => i.trash !== trash); await saveTrashDb(db).catch(() => {});
         return true;
@@ -1145,9 +1122,9 @@
     async function undo() {
       const rec = undoStack.pop(); if (!rec) return;
       if (rec.type === 'delete') { if (!await restoreFromTrash(rec.trash, rec.orig)) pushUndo(rec); }   // failed: keep it undoable
-      else if (rec.type === 'paste') { for (const p of rec.created) try { await api('delete', p, { method: 'POST' }); } catch {} }
+      else if (rec.type === 'paste') { for (const p of rec.created) try { await guard(fs.remove(p)); } catch {} }
       // undo a move with the firmware's atomic move — never read+rewrite the file through the browser
-      else if (rec.type === 'move') { for (const m of rec.moved) try { await fetch('/api/fs/move?from=' + encodeURIComponent(m.dst) + '&to=' + encodeURIComponent(m.src), { method: 'POST' }); } catch {} }
+      else if (rec.type === 'move') { for (const m of rec.moved) try { await fs.move(m.dst, m.src); } catch {} }
       load();
     }
 
@@ -1173,7 +1150,6 @@
         }, 400);
         return;
       }
-      if (d.type === 'clipboard-data') { pasteFiles(d.item); return; }   // reply to a paste request
       if (d.type !== 'os-shortcut') return;
       // On a local location, write actions apply only when it's writable.
       if (!isSD()) {
@@ -1207,22 +1183,11 @@
     const upBody = document.getElementById('up-body');
     let dragDepth = 0;                                    // enter/leave counter → no flicker over children
 
-    // POST one file's bytes to /api/fs/write with live upload progress. XHR (not fetch) so
-    // we get upload.onprogress; timeout=0 means the browser never gives up on a huge transfer.
-    function putFile(file, destPath, onProgress) {
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', `/api/fs/write?path=` + encodeURIComponent(destPath));
-        xhr.timeout = 0;
-        xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded, e.total); };
-        xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
-          ? resolve()
-          : reject(new Error((xhr.responseText || '').trim() || ('HTTP ' + xhr.status)));
-        xhr.onerror = () => reject(new Error(t('up_net_error')));
-        xhr.onabort = () => reject(new Error(t('up_aborted')));
-        xhr.send(file);
-      });
-    }
+    // One file onto the device with live upload progress: fs.write streams the Blob (never whole in memory)
+    // and reports it byte by byte; the folder is made as needed.
+    const putFile = (file, destPath, onProgress) => fs.write(destPath, file, { onProgress }).catch((err) => {
+      throw new Error(err && err.status ? 'HTTP ' + err.status : err && err.code === 'no-space' ? t('up_failed') + ' (no-space)' : t('up_net_error'));
+    });
 
     // Avoid clobbering an existing entry: "report.txt" → "report (1).txt". `taken` also holds
     // names claimed earlier in this same drop so a multi-file batch can't collide with itself.
@@ -1277,9 +1242,8 @@
     async function handleDrop(dt) {
       const dropped = await collect(dt);
       if (!dropped.length) return;
-      // Resolve destination paths up front: unique top-level names, mkdir for any folder depth.
+      // Resolve destination paths up front: unique top-level names; fs.write makes any folder depth.
       const taken = new Set(entries.map((e) => e.name));
-      const madeDirs = new Set();
       const jobs = [];
       for (const { file, rel } of dropped) {
         const segs = rel.split('/').filter(Boolean);
@@ -1287,10 +1251,7 @@
         const finalTop = uniqueName(top, taken);            // dedupe only the top segment
         segs[0] = finalTop;
         let dir = cwd;
-        for (let i = 0; i < segs.length - 1; i++) {
-          dir = join(dir, segs[i]);
-          if (!madeDirs.has(dir)) { madeDirs.add(dir); await api('mkdir', dir, { method: 'POST' }).catch(() => {}); }
-        }
+        for (let i = 0; i < segs.length - 1; i++) dir = join(dir, segs[i]);
         jobs.push({ file, dest: join(dir, segs[segs.length - 1]), label: segs.join('/') });
       }
 
@@ -1329,7 +1290,7 @@
       const names = [...selected].filter((n) => { const e = entries.find((x) => x.name === n); return e && e.type === 'file'; });
       if (!names.length) return;
       let taken = new Set();
-      try { const sd = await (await api('list', sdPath)).json(); taken = new Set((sd.entries || []).map((e) => e.name)); } catch {}
+      try { taken = new Set((await fs.list(sdPath)).map((e) => e.name)); } catch {}
       const jobs = names.map((name) => ({
         label: t('to_sd_label', { name, path: sdPath }),
         dest: join(sdPath, uniqueName(name, taken)),
@@ -1342,7 +1303,7 @@
     async function downloadToPC(e) {
       const src = join(cwd, e.name);
       const a = document.createElement('a');
-      a.href = '/api/fs/read?path=' + encodeURIComponent(src);
+      a.href = fs.url(src);
       a.download = e.name;
       document.body.appendChild(a); a.click(); a.remove();
     }
@@ -1393,8 +1354,7 @@
       const loc = node.loc;
       try {
         if (loc.kind === 'sd') {
-          const j = await (await api('list', node.path)).json();
-          return (j.entries || []).filter((e) => e.type === 'dir').sort(byName).map((e) => childNode(node, e.name, { path: join(node.path, e.name), leaf: e.has_subdirs !== undefined ? !e.has_subdirs : false }));
+          return (await guard(fs.list(node.path))).filter((e) => e.type === 'dir').sort(byName).map((e) => childNode(node, e.name, { path: join(node.path, e.name), leaf: e.has_subdirs !== undefined ? !e.has_subdirs : false }));
         }
         if (loc.src === 'bridge') {
           const raw = await bridge.ListDir(node.path); const j = typeof raw === 'string' ? JSON.parse(raw) : raw;

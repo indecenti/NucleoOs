@@ -47,11 +47,13 @@
   <footer><span id="status" data-i18n="ready">Ready</span><span class="sp"></span><span id="stats">0 chars · 1 line</span></footer>
 
   <script type="module">
-    // Notepad — a real OS-integrated text editor. File I/O via the OS file API (/api/fs/*); New/
+    // Notepad — a real OS-integrated text editor. File I/O via the core file layer (/nucleo-fs.js); New/
     // Open/Save As go through the shell's central file dialog (postMessage 'os-file-dialog'). OS-wide
     // keyboard shortcuts arrive from the shell as {type:'os-shortcut'} (Ctrl+S/Shift+S/O/N + edit
     // verbs); a standalone keydown fallback covers running outside the shell (dev/preview).
     import I18N from '/nucleo-i18n.js';
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';
     const t = await I18N.init('notepad');   // core + notepad catalog, paints [data-i18n], live-switch
     const params = new URLSearchParams(location.search);
     const ed = document.getElementById('ed');
@@ -60,17 +62,7 @@
     const pathEl = document.getElementById('path');
     const inShell = window.parent && window.parent !== window;
 
-    // OS theme: read the persisted choice at boot so a light OS shows a light editor even when opened
-    // fresh (the shell's live CSS-var injection only fires on switch, and never when standalone).
-    async function loadTheme() {
-      try {
-        const r = await fetch('/api/fs/read?path=' + encodeURIComponent('/system/config/settings.json'), { cache: 'no-store' });
-        if (!r.ok) return;
-        const s = JSON.parse(await r.text());
-        if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
-      } catch {}
-    }
-    loadTheme();
+    // OS theme: the shell sets data-theme on this page on load and on every change (nucleo-shell.js).
 
     let path = params.get('path') || '';
     let dirty = false;
@@ -90,7 +82,7 @@
       if (dirty) { pathEl.append(' '); const dot = document.createElement('span'); dot.className = 'dot'; dot.textContent = '●'; pathEl.append(dot); }
       const title = (dirty ? '● ' : '') + name + ' — Notepad';
       document.title = title;
-      if (inShell) try { window.parent.postMessage({ type: 'set-window-title', title: (dirty ? '● ' : '') + name }, '*'); } catch {}
+      if (inShell) os.setTitle((dirty ? '● ' : '') + name);
     }
     function setDirty(d) { if (dirty === d) return; dirty = d; setTitle(); }
     ed.addEventListener('input', () => { setDirty(ed.value !== savedValue); setStats(); });
@@ -99,28 +91,30 @@
       if (!p) { path = ''; ed.value = ''; savedValue = ''; setDirty(false); setStats(); setTitle(); ed.focus(); return; }
       // A read that FAILED (503, offline, 401…) is not an empty file. When the editor is bound to that
       // very path (the ?path= open) it holds none of the file's text, so drop the binding: Save must
-      // ask where to save, never write the editor over a file it could not read. Only a definite 404
-      // (a new file at a chosen path) keeps it, so Save creates the file there.
+      // ask where to save, never write the editor over a file it could not read. Only a definite absence
+      // (null: a new file at a chosen path) keeps it, so Save creates the file there.
       const failed = () => {
         if (path !== p) { setStatus('could_not_open', { name: baseName(p) }); return; }
         path = ''; setTitle(); setStatus('open_failed_unbound', { name: baseName(p) });
       };
       try {
-        const r = await fetch('/api/fs/read?path=' + encodeURIComponent(p));
-        if (r.ok) { ed.value = await r.text(); savedValue = ed.value; path = p; setDirty(false); setStats(); setTitle(); setStatus('loaded', { name: baseName(p) }); }
-        else if (r.status === 404) setStatus('could_not_open', { name: baseName(p) });
-        else failed();
+        const text = await fs.readText(p);
+        if (text != null) { ed.value = text; savedValue = ed.value; path = p; setDirty(false); setStats(); setTitle(); setStatus('loaded', { name: baseName(p) }); }
+        else setStatus('could_not_open', { name: baseName(p) });
       } catch { failed(); }
       ed.focus();
     }
 
     async function writeTo(p) {
       try {
-        const r = await fetch('/api/fs/write?path=' + encodeURIComponent(p), { method: 'POST', body: ed.value });
-        if (r.ok) { path = p; savedValue = ed.value; setDirty(false); setTitle(); setStatus('saved_file', { name: baseName(p) }); }
-        else setStatus('save_failed', { status: r.status });
-        return r.ok;
-      } catch { setStatus('save_pending'); return false; }
+        await fs.writeText(p, ed.value);                // atomic: a failed save keeps the previous file
+        path = p; savedValue = ed.value; setDirty(false); setTitle(); setStatus('saved_file', { name: baseName(p) });
+        return true;
+      } catch (e) {
+        if (e && e.status) setStatus('save_failed', { status: e.status });   // the device answered: its HTTP status
+        else setStatus('save_pending');                                       // no answer at all
+        return false;
+      }
     }
 
     function save() { if (path) writeTo(path); else saveAs(); }
@@ -133,8 +127,8 @@
         .then((p) => { if (p) confirmDirty(() => load(p)); });
     }
     function newDoc() { confirmDirty(() => load('')); }
-    function confirmDirty(go) {
-      if (dirty && !confirm(t('confirm_dirty'))) return;
+    async function confirmDirty(go) {
+      if (dirty && !(await os.confirm(t('confirm_dirty'), { danger: true }))) return;
       go();
     }
 
@@ -142,8 +136,8 @@
     let dlgSeq = 0; const dlgPending = {};
     function askFileDialog(opts) {
       if (!inShell) {                                   // standalone fallback (dev/preview): prompt
-        const p = prompt(opts.mode === 'save' ? t('prompt_save') : t('prompt_open'), (opts.defaultPath || '/data/Documents') + '/' + (opts.defaultName || ''));
-        return Promise.resolve(p && p.trim() ? p.trim() : null);
+        return os.prompt(opts.mode === 'save' ? t('prompt_save') : t('prompt_open'), { value: (opts.defaultPath || '/data/Documents') + '/' + (opts.defaultName || '') })
+          .then((p) => (p && p.trim() ? p.trim() : null));
       }
       const id = 'np-' + (++dlgSeq);
       return new Promise((resolve) => {
@@ -155,7 +149,6 @@
     // ---- OS shortcut + dialog-result bridge ---------------------------------------------------
     window.addEventListener('message', (e) => {
       const d = e.data; if (!d) return;
-      if (d.type === 'set-theme' && d.theme) { document.documentElement.dataset.theme = d.theme; return; }
       if (d.type === 'os-file-dialog-result') {
         const res = dlgPending[d.id]; if (!res) return; delete dlgPending[d.id];
         res(d.action === 'cancel' ? null : (d.path || null));

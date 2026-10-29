@@ -1,8 +1,8 @@
 {
   "id": "log-viewer",
   "name": "Log Viewer",
-  "version": "0.1.1",
-  "version_code": 1,
+  "version": "0.1.2",
+  "version_code": 2,
   "description": "Tail live logs and replay the event journal for time-travel debugging.",
   "category": "tools",
   "entry_service": "log_viewer_main",

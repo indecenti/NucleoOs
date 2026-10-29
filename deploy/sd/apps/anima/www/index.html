@@ -1090,6 +1090,8 @@
   <script type="module">
     import I18N from '/nucleo-i18n.js';   // OS i18n engine — for live OS-wide language sync (ANIMA keeps its own STR)
     import Caps from '/nucleo-caps.js';   // what this device can do (one list for every app, cached per session)
+    import devfs from '/nucleo-fs.js';    // the device's disk outside the workspace sandbox (fsclient keeps its own rules)
+    import os from '/nucleo-shell.js';    // the OS around this window: open app/file, title, status snapshot, dialogs, clipboard
     // ===========================================================================
     // ANIMA web front-end — a Claude-Code-style agent terminal in one file.
     // Talks to the SAME engine endpoint (/api/anima) and shell protocol as before;
@@ -3134,9 +3136,11 @@
     }
     function copyText(text){
       text=String(text||'');
-      if(window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText)
-        return navigator.clipboard.writeText(text).then(()=>true, ()=>execCopy(text));
-      return Promise.resolve(execCopy(text));       // synchronous inside the click: keeps the user gesture
+      os.copy(text);                                // the OS clipboard history (+ the system one in a secure context)
+      if(window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) return Promise.resolve(true);
+      // plain HTTP: execCommand still reaches the system clipboard, synchronous inside the click (keeps the user
+      // gesture); inside the shell the OS history already holds the text even when that is refused
+      return Promise.resolve(execCopy(text) || os.inShell);
     }
     function selectNode(node){ try{ const r=document.createRange(); r.selectNodeContents(node); const s=getSelection(); s.removeAllRanges(); s.addRange(r); }catch{} }
     // Wire a copy button. getText() -> the text; selectEl -> what to select when copying is refused.
@@ -3590,7 +3594,11 @@
       const body=sdPayload();
       if(body===_sessLast) return;                     // unchanged since the last SD write (or read) → no device round-trip
       _sessLast=body;
-      fetch('/api/fs/write?path='+encodeURIComponent(SESS_PATH),{method:'POST',body,keepalive:!!keepalive && body.length<60000}).catch(()=>{ _sessLast=''; });  // let a retry through on failure
+      // Leaving the page: ONE keepalive request is all that outlives it, so the plain write route; else the core
+      // layer's atomic replace (a cut connection never leaves half a sessions file).
+      const failed=()=>{ _sessLast=''; };  // let a retry through on failure
+      if(keepalive) devfs.write(SESS_PATH, body, { keepalive: true });
+      else devfs.write(SESS_PATH, body).catch(failed);
     }catch{} }
     function sessSdSave(){ clearTimeout(sessSdTimer); sessSdTimer=setTimeout(()=>sessSdWrite(false), SESS_SD_QUIET_MS); }
     function sessSdFlush(){ if(!sessSdTimer) return; clearTimeout(sessSdTimer); sessSdTimer=0; sessSdWrite(true); }
@@ -3603,7 +3611,7 @@
       if(busy) return;
       _sessMergedAt=Date.now();
       let j=null;
-      try{ const r=await dfetch('/api/fs/read?path='+encodeURIComponent(SESS_PATH),{cache:'no-store'}); if(!r.ok) return; j=JSON.parse(await r.text()); }catch{ return; }
+      try{ const txt=await devfs.readText(SESS_PATH); if(txt==null) return; j=JSON.parse(txt); }catch{ return; }
       if(busy) return;
       const remote=Array.isArray(j)?j:(j&&Array.isArray(j.sessions)?j.sessions:[]);
       for(const t of ((j&&Array.isArray(j.tomb))?j.tomb:[])) if(Array.isArray(t)&&typeof t[0]==='string'){ const mine=tombs.find(x=>x[0]===t[0]); if(!mine) tombs.push([t[0],+t[1]||0]); else if((+t[1]||0)>mine[1]) mine[1]=+t[1]; }
@@ -3716,8 +3724,8 @@
     function closeInspector(){ if(_ctxm) _ctxm.classList.remove('open'); }
 
     // ---- engine status dot ----------------------------------------------------
-    // Embedded in the shell, the desktop already polls /api/status and rebroadcasts it — every
-    // status.snapshot we receive IS proof the device is reachable, so we light the dot from that
+    // Embedded in the shell, the desktop already polls /api/status and hands it out — every
+    // snapshot we receive (os.onStatus) IS proof the device is reachable, so we light the dot from that
     // instead of adding our own /api/status poll. Only standalone do we ping the device ourselves.
     const EMBEDDED = window.top !== window.self;
     function setDot(s){ for(const id of ['dot','dot2']){ const e=$(id); if(e) e.className='dot'+(s?(' '+s):''); } }
@@ -3729,8 +3737,9 @@
     // The launch/open-file hand-off ALSO fires automatically so the embedded shell
     // opens immediately; the card button lets the user re-trigger it.
     // ===========================================================================
-    function handoffApp(idArg, query){ try{ window.parent.postMessage({type:'open-app',id:idArg,query:query||''},'*'); }catch{} }
-    function handoffFile(path){ try{ window.parent.postMessage({type:'open-file',path},'*'); }catch{} }
+    // Only inside the shell (standalone there is no OS to hand off to, and ANIMA must not navigate away).
+    function handoffApp(idArg, query){ if(os.inShell) os.openApp(idArg, query ? Object.fromEntries(new URLSearchParams(query)) : undefined); }
+    function handoffFile(path){ os.openFile(path); }
     function cardFromDescriptor(c){
       const t=UI[lang];
       if(c.kind==='launch') return { icon:'▦', status:'ok', title:c.arg, sub:t.openApp, btn:t.reopen, onClick:()=>handoffApp(c.arg) };
@@ -4213,7 +4222,7 @@
           if(!r.ok) throw { status: r.status };
           return r.json();
         },
-        listDir: (p) => devJson('/api/fs/list?path='+encodeURIComponent(p)),
+        listDir: (p) => devJson('/api/fs/list?path='+encodeURIComponent(p)),   // nucleo-fs: allow (library-relative path, not an absolute one)
       };
     }
     // ===========================================================================
@@ -4369,8 +4378,8 @@
       return (_kit = { nucleo, catalog, asset: async (p)=>{ const r = await fetch(base+p); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } });
     }
     const forgeDev = {
-      write: async (p, bytes) => { const r = await dfetch('/api/fs/write?path='+encodeURIComponent(p), { method:'POST', body:bytes }, 1); if(!r.ok) throw Object.assign(new Error('write '+r.status), { status:r.status }); },
-      read: async (p) => { try{ const r = await dfetch('/api/fs/read?path='+encodeURIComponent(p)+'&t='+Date.now(), { cache:'no-store' }); return r.ok ? r.text() : null; }catch{ return null; } },
+      write: async (p, bytes) => { const r = await dfetch('/api/fs/write?path='+encodeURIComponent(p), { method:'POST', body:bytes }, 1); if(!r.ok) throw Object.assign(new Error('write '+r.status), { status:r.status }); },   // nucleo-fs: allow (library-relative path, not an absolute one)
+      read: async (p) => { try{ const r = await dfetch('/api/fs/read?path='+encodeURIComponent(p)+'&t='+Date.now(), { cache:'no-store' }); return r.ok ? r.text() : null; }catch{ return null; } },   // nucleo-fs: allow (library-relative path, not an absolute one)
       launch: async (sys, file) => { const r = await dfetch('/api/library/launch', { method:'POST', body:JSON.stringify({ sys, file }) }, 1); const j = await r.json().catch(()=>({})); return r.status===401 ? { ok:false, error:'pairing' } : j; },
       gaming: async () => { try{ return !!(await devJson('/api/gamemode')).gaming; }catch{ return false; } },
       sleep: (ms) => new Promise((ok)=>setTimeout(ok, ms)),
@@ -4445,7 +4454,7 @@
       const codeBlock = res.code ? '\n\n```lua\n' + res.code.replace(/\n$/,'') + '\n```' : '';
       if(res.ok){
         set('anima.forge.last', JSON.stringify({ name:res.name, title }));
-        const img = res.shot ? '/api/fs/read?path='+encodeURIComponent(res.shot)+'&v='+Date.now() : '';
+        const img = res.shot ? '/api/fs/read?path='+encodeURIComponent(res.shot)+'&v='+Date.now() : '';   // nucleo-fs: allow (library-relative path, not an absolute one)
         const head = L5({
           it:'**'+title+'** è pronto, ed è già stato provato sulla console: gira a '+res.fps+' FPS su '+res.screen+(res.attempts>1?' (al '+res.attempts+'° tentativo: gli errori li ho corretti io)':'')+'. Lo trovi anche in Giochi → Love2d.\n\nComandi: croce per muoverti, **A** azione, **START** pausa, **SELECT+START** per uscire. Vuoi cambiarlo? Dimmi per esempio «aggiungi i nemici» o «rendilo più difficile».',
           en:'**'+title+'** is ready, and it has already been tested on the console: '+res.fps+' FPS at '+res.screen+(res.attempts>1?' (attempt '+res.attempts+': I fixed the errors myself)':'')+'. It is also in Games → Love2d.\n\nControls: d-pad to move, **A** action, **START** pause, **SELECT+START** to quit. Want changes? Say for example “add enemies” or “make it harder”.',
@@ -4576,6 +4585,9 @@
     // One cached read of /api/status shared by the exact live answers and the device line every prompt carries
     // (a few seconds old at most: one request per turn burst, not one per use — the device serves it on 18 KB).
     let _devStatus=null, _devStatusAt=0;
+    // Embedded, the shell's own snapshot (it polls /api/status for the whole OS) is a fresh read too: a turn
+    // right after one needs no request of its own.
+    os.onStatus((s)=>{ if(s){ _devStatus=s; _devStatusAt=Date.now(); _devProfile=String(s.profile||'up'); } });
     async function statusNow(maxAgeMs=4000){
       if(_devStatus && Date.now()-_devStatusAt<maxAgeMs) return _devStatus;
       // bounded: a device busy serving a big asset must never hold the turn (seen: /api/status timing out while
@@ -5622,7 +5634,7 @@
           let rel=String(r.arg).replace(/^\/+/,'').replace(/^data\//,'');
           if(!rel || /(^|\/)\.\.(\/|$)/.test(rel)) rel=r.arg.split('/').pop();   // basename fallback ONLY for a real ../ traversal segment (keeps benign 'v1..2/x')
           const w=await fs.write(rel, r.content||'');
-          if(w.ok && r.path){ try{ await fetch('/api/fs/delete?path='+encodeURIComponent(r.arg),{method:'POST'}); }catch{} }   // remove the engine's out-of-workspace copy
+          if(w.ok && r.path){ try{ await devfs.remove(r.arg); }catch{} }   // remove the engine's out-of-workspace copy
           const view=buildFileView({op:'write',path:rel}, w, r.content||'');
           renderFileView(body, view); entry.fileop={view, sum:'write '+rel}; if(view.reply) entry.text=reply+'\n\n'+view.reply;
           if(w.ok) refreshTree();
@@ -5746,7 +5758,7 @@
     function syncTitle(){
       const s=activeSession(); const t=(s && s.title) ? clamp(s.title,40) : '';
       document.title = t ? (t+' — ANIMA') : 'ANIMA';
-      try{ if(window.parent!==window) window.parent.postMessage({type:'set-window-title', title: t || 'ANIMA'},'*'); }catch{}
+      if(os.inShell) os.setTitle(t || 'ANIMA');
     }
     function updateSessions(){
       const q=($('dsearch').value||'').trim().toLowerCase();
@@ -5927,7 +5939,7 @@
       if(cmd==='compact'||cmd==='compatta'){ const n=compactSession(true); toast(n?(TR('Contesto compattato in background (','Context compacted in background (')+n+TR(' turni)',' turns)')):TR('Niente da compattare','Nothing to compact'),'ok'); return true; }
       // F4 retired the detached forge-demo.html (its relative imports 404 when served by the device);
       // the ANIMA Code surface is the Agenti app: engine picker (🧠), model install, honest capability verdicts.
-      if(cmd==='forge'){ addUser(q); try{ parent.postMessage({type:'open-app', id:'agent'}, '*'); }catch{} sysLine(TR('Apro **Agenti** — ANIMA Code: scegli il motore (cloud o locale) dal pulsante 🧠.', 'Opening **Agents** — ANIMA Code: pick the engine (cloud or local) from the 🧠 button.')); return true; }
+      if(cmd==='forge'){ addUser(q); if(os.inShell) os.openApp('agent'); sysLine(TR('Apro **Agenti** — ANIMA Code: scegli il motore (cloud o locale) dal pulsante 🧠.', 'Opening **Agents** — ANIMA Code: pick the engine (cloud or local) from the 🧠 button.')); return true; }
       if(['models','modelli','modello'].includes(cmd)){ window.openModelManager&&window.openModelManager(); return true; }
       return false;
     }
@@ -6685,12 +6697,12 @@
       set('anima.ws', body);
       clearTimeout(wsSdTimer);
       wsSdTimer=setTimeout(()=>{ if(body===_wsLast) return; _wsLast=body;   // skip redundant device write when the workspace didn't change
-        fetch('/api/fs/write?path='+encodeURIComponent(WS_PATH),{method:'POST',body}).catch(()=>{ _wsLast=''; }); }, 900);
+        devfs.write(WS_PATH, body).catch(()=>{ _wsLast=''; }); }, 900);
     }
     async function wsBoot(){
       wsLoad(); wsReflect(); if(fs.hasRoot()) refreshTree();
-      if(!ws.root){ try{ const r=await fetch('/api/fs/read?path='+encodeURIComponent(WS_PATH),{cache:'no-store'});
-        if(r.ok){ const j=JSON.parse(await r.text()); if(j&&j.root){ ws.root=j.root; ws.recents=j.recents||[]; fs.setRoot(ws.root); set('anima.ws',JSON.stringify({root:ws.root,recents:ws.recents})); wsReflect(); refreshTree(); } } }catch{} }
+      if(!ws.root){ try{ const txt=await devfs.readText(WS_PATH);
+        if(txt!=null){ const j=JSON.parse(txt); if(j&&j.root){ ws.root=j.root; ws.recents=j.recents||[]; fs.setRoot(ws.root); set('anima.ws',JSON.stringify({root:ws.root,recents:ws.recents})); wsReflect(); refreshTree(); } } }catch{} }
     }
     function setWorkspace(root){
       root = root? ('/'+root.split('/').filter(Boolean).join('/')) : '';
@@ -6759,7 +6771,8 @@
 
     // ---- folder picker (browses absolute SD paths, outside the workspace sandbox) ----
     const pickScrim=$('wspick-scrim'); let pickCwd='/data';
-    async function rawList(abs){ try{ const r=await fetch('/api/fs/list?path='+encodeURIComponent(abs),{cache:'no-store'}); if(!r.ok) return null; const j=await r.json(); return (j.entries||[]).filter(e=>e.name!=='.'&&e.name!=='..').sort((a,b)=>a.type===b.type?a.name.localeCompare(b.name):a.type==='dir'?-1:1);}catch{return null;} }
+    // '/' itself is the one folder the core layer does not list (it works below the top-level folders): asked directly.
+    async function rawList(abs){ try{ return (await devfs.list(abs)).filter(e=>e.name!=='.'&&e.name!=='..').sort((a,b)=>a.type===b.type?a.name.localeCompare(b.name):a.type==='dir'?-1:1);}catch{return null;} }
     function openPicker(start){ pickCwd= start&&start.startsWith('/')? start.replace(/\/+$/,'')||'/' : '/data'; pickScrim.classList.add('open'); paintPicker(); }
     function closePicker(){ pickScrim.classList.remove('open'); }
     // Promise-based picker, so a caller (e.g. the agent's "open a workspace first" gate) can AWAIT the
@@ -6788,7 +6801,7 @@
     $('wp-cancel').addEventListener('click',()=>{ closePicker(); settlePick(null); });
     $('wp-x').addEventListener('click',()=>{ closePicker(); settlePick(null); });
     pickScrim.addEventListener('click',e=>{ if(e.target===pickScrim){ closePicker(); settlePick(null); } });
-    $('wp-newdir').addEventListener('click',async()=>{ const name=prompt(TR('Nome nuova cartella:', 'New folder name:')); if(!name) return; const abs=(pickCwd==='/'?'':pickCwd)+'/'+name.trim().replace(/[^\w.\- ]/g,''); await fetch('/api/fs/mkdir?path='+encodeURIComponent(abs),{method:'POST'}).catch(()=>{}); pickCwd=abs; paintPicker(); });
+    $('wp-newdir').addEventListener('click',async()=>{ const name=await os.prompt(TR('Nome nuova cartella:', 'New folder name:')); if(!name) return; const abs=(pickCwd==='/'?'':pickCwd)+'/'+name.trim().replace(/[^\w.\- ]/g,''); await devfs.mkdirp(abs).catch(()=>{}); pickCwd=abs; paintPicker(); });
 
     // ---- the file agent loop ----
     async function composeContent(intent){
@@ -6799,7 +6812,7 @@
     async function runFileIntent(q, intent){
       // Un delete da linguaggio naturale è hard-delete (i file in /data NON vanno nel cestino) —
       // come overwrite e chiudi-workspace, chiedi conferma prima di eseguire.
-      if(intent.op==='delete' && !confirm((TR('Eliminare definitivamente ', 'Permanently delete '))+'“'+(intent.path||'')+'”'+(TR('?\nI file nel workspace non finiscono nel cestino.', '?\nWorkspace files are not moved to a trash.')))) return;
+      if(intent.op==='delete' && !(await os.confirm((TR('Eliminare definitivamente ', 'Permanently delete '))+'“'+(intent.path||'')+'”'+(TR('?\nI file nel workspace non finiscono nel cestino.', '?\nWorkspace files are not moved to a trash.')), { danger: true }))) return;
       busy=true; interrupt=false; setStop(true); closeSlash(); stopSpeaking();   // un nuovo turno zittisce la risposta precedente
       addUser(q); history.push({role:'user',text:q}); persist();
       const think=startThinking();
@@ -6980,8 +6993,8 @@
     $('fd-refresh').addEventListener('click',refreshTree);
     $('fd-open').addEventListener('click',()=>openPicker(ws.root||'/data'));
     $('fd-leave').addEventListener('click',async()=>{ if(await askDialog({ title:L('closeWsQ'), ok:L('close') })){ closeWorkspace(); closeFsDrawer(); } });
-    $('fd-newdir').addEventListener('click',async()=>{ if(!fs.hasRoot()) return; const name=prompt(TR('Nuova cartella:', 'New folder:')); if(!name) return; const r=await fs.mkdir(name.trim()); if(r.ok){ refreshTree(); toast(TR('Cartella creata', 'Folder created'),'ok'); } else { toast((r.error==='http-401'||r.error==='http-403')?TR('Accoppia il browser per gestire i file.','Pair this browser to manage files.'):TR('Creazione non riuscita','Could not create the folder'),'warn'); } });
-    $('fd-newfile').addEventListener('click',async()=>{ if(!fs.hasRoot()) return; const name=prompt(TR('Nuovo file:', 'New file:')); if(!name) return; const r=await fs.write(name.trim(),'',{overwrite:false}); if(r.ok){ refreshTree(); handoffFile(r.abs); toast(TR('File creato', 'File created'),'ok'); } else toast(r.error==='exists'?(TR('Esiste già', 'Already exists')):(TR('Non riuscito', 'Failed')),'warn'); });
+    $('fd-newdir').addEventListener('click',async()=>{ if(!fs.hasRoot()) return; const name=await os.prompt(TR('Nuova cartella:', 'New folder:')); if(!name) return; const r=await fs.mkdir(name.trim()); if(r.ok){ refreshTree(); toast(TR('Cartella creata', 'Folder created'),'ok'); } else { toast((r.error==='http-401'||r.error==='http-403')?TR('Accoppia il browser per gestire i file.','Pair this browser to manage files.'):TR('Creazione non riuscita','Could not create the folder'),'warn'); } });
+    $('fd-newfile').addEventListener('click',async()=>{ if(!fs.hasRoot()) return; const name=await os.prompt(TR('Nuovo file:', 'New file:')); if(!name) return; const r=await fs.write(name.trim(),'',{overwrite:false}); if(r.ok){ refreshTree(); handoffFile(r.abs); toast(TR('File creato', 'File created'),'ok'); } else toast(r.error==='exists'?(TR('Esiste già', 'Already exists')):(TR('Non riuscito', 'Failed')),'warn'); });
     function closeWorkspace(){ setWorkspace(''); }
     $('drawer-scrim').addEventListener('click',()=>{ if(fsdrawer.classList.contains('open')) closeFsDrawer(); });
     window.addEventListener('message',e=>{ const d=e.data; if(d && d.t==='fs.changed' && fs.hasRoot()) scheduleTreeRefresh(); });
@@ -7036,8 +7049,8 @@
     document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ idle(edgeBackgroundSync, 2000); replayPendingSoon(); } });
     requestAnimationFrame(()=>document.documentElement.classList.add('themed'));   // enable theme transitions after first paint
     if(EMBEDDED){
-      // dot driven by the shell's status.snapshot broadcast — no own /api/status poll
-      window.addEventListener('message',e=>{ if(e.data && e.data.t==='status.snapshot') setDot('ok'); });
+      // dot driven by the shell's status snapshot (os.onStatus) — no own /api/status poll
+      os.onStatus(()=>setDot('ok'));
       setDot('ok');   // we only load embedded when the shell reached the device
     } else {
       ping(); setInterval(ping, 20000);
@@ -7056,8 +7069,8 @@
     const T=(it,en)=>TR(it,en);                   // bilingual helper (reads module-scoped `lang`)
     const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     const mb=n=>n>=1e9?(n/1e9).toFixed(1)+' GB':(n/1e6).toFixed(0)+' MB';
-    const readJson=p=>fetch('/api/fs/read?path='+encodeURIComponent(p)+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():null).catch(()=>null);
-    const listDir=p=>fetch('/api/fs/list?path='+encodeURIComponent(p),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>j&&j.entries||[]).catch(()=>[]);
+    const readJson=p=>devfs.readJSON(p, null).catch(()=>null);
+    const listDir=p=>devfs.list(p).catch(()=>[]);
 
     function injectStyle(){ if(document.getElementById('mm-style')) return; const s=document.createElement('style'); s.id='mm-style';
       s.textContent=`.mm-scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(2px)}

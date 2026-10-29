@@ -559,7 +559,7 @@
           <div class="row" style="border-bottom:none;margin-top:8px"><div class="hint" style="flex:1" data-i18n-html="aiKeysHint">🎨 <b>Generare immagini con l'IA</b> in Paint (Atelier) richiede una chiave <b>Grok (xAI)</b> — modello <code>grok-2-image</code>. Claude e Groq non disegnano, ma possono <b>migliorare il prompt</b>. 🎙️ La <b>trascrizione vocale</b> (Recorder, Dettatura) usa sempre Groq/OpenAI (Whisper), anche con Claude, Gemini o Grok come chat.</div></div></div>
 
         <div class="sect"><h2><span data-i18n="browserWasm">Browser · cervello locale (WASM)</span> <span class="badge">Offline</span></h2>
-          <div class="row"><label data-i18n="state">Stato</label><div class="ctl" style="flex-wrap:wrap"><span class="hint" id="edge-brain-stat" style="flex:1">controllo…</span></div></div>
+          <div class="row"><label data-i18n="state">Stato</label><div class="ctl" style="flex-wrap:wrap"><span class="hint" id="edge-brain-stat" style="flex:1" data-i18n="checking">controllo…</span></div></div>
           <div class="row" style="border-bottom:none"><label></label><div class="ctl" style="gap:8px;flex-wrap:wrap"><button id="edge-brain-prep">⬇ <span data-i18n="prepareUpdate">Prepara / Aggiorna</span></button><span class="hint" id="edge-brain-prog"></span></div></div>
           <div class="row"><label data-i18n="webSearchOnDemand">Ricerca web on-demand</label><div class="ctl"><span class="sw"><input type="checkbox" id="edge-web-on"><span></span></span><span class="hint" style="flex:1" data-i18n-html="edgeWebHint">In modalità <b>Browser</b>, quando i cervelli locali non sanno, recupera la risposta <b>certa</b> da Wikipedia (dal browser, mai dal dispositivo) e la <b>mette in cache</b>: da lì resta offline. Spento = solo conoscenza già in cache (nulla esce dal dispositivo).</span></div></div>
           <div class="row"><label data-i18n="cachedKnowledge">Conoscenza in cache</label><div class="ctl" style="gap:8px;flex-wrap:wrap"><span class="hint" id="edge-kb-count" style="flex:1">…</span><button id="edge-kb-clear">🗑 <span data-i18n="clear">Svuota</span></button></div></div>
@@ -712,7 +712,7 @@
   <!-- command palette -->
   <div class="cmd-scrim" id="cmd-scrim">
     <div class="cmd-box">
-      <input type="text" id="cmd-input" placeholder="Comanda il dispositivo…" autocomplete="off" spellcheck="false">
+      <input type="text" id="cmd-input" data-i18n-attr="placeholder:cmdPlaceholder" placeholder="Comanda il dispositivo…" autocomplete="off" spellcheck="false">
       <div class="cmd-results" id="cmd-results"></div>
     </div>
   </div>
@@ -763,7 +763,9 @@ import { PRESETS, applyPreset, planPreset, feasibility, buildRegistry, gaps, APP
 import { buildActionRegistry, filterActions } from './actions.js';
 import { ENDPOINTS, runSelfTest, formatReport } from './selftest.js';
 import { initUpdatesTab } from './fwupdate.js';
+import fs from '/nucleo-fs.js';
 import Caps from '/nucleo-caps.js';   // what this device has: one shared answer (/api/system/caps, or the fallback table)
+import os from '/nucleo-shell.js';    // the OS around this window: status snapshot, dialogs, open app, clipboard
 
 // ═══════════ serial device gate ═══════════
 // ONE request to the Cardputer at a time, always. The device is a single-task PSRAM-less httpd
@@ -1074,7 +1076,7 @@ const metricOf = {
   cpu: (d) => d && (typeof d.load === 'number' ? Math.round(d.load * 100) : Math.round(d.load_avg || 0)),
 };
 // Embedded in the shell, /api/status is NOT polled here at all: the shell already polls it every
-// 15 s and rebroadcasts the snapshot (status.snapshot, consumed below) — one poller for the whole
+// 15 s and hands out the snapshot (os.onStatus, consumed below) — one poller for the whole
 // OS instead of two hammering the same endpoint. Standalone keeps the full rotation.
 const EMBEDDED = window.top !== window.self;
 const POLL = EMBEDDED ? ['heap', 'cpu'] : ['status', 'heap', 'cpu'];   // heap/cpu dropped at boot without diag
@@ -1231,7 +1233,7 @@ async function runSelfTestUI(prefix) {
   const okN = results.filter((r) => r.ok && !r.warn).length;
   stat.textContent = `${okN}/${results.length} ${T('pass')}`;
   const report = formatReport(results, lang); copy.disabled = false;
-  copy.onclick = async () => { try { await navigator.clipboard.writeText(report); } catch {} try { window.parent.postMessage({ type: 'clipboard-write', kind: 'text', data: report }, '*'); } catch {} copy.textContent = T('copied'); setTimeout(() => copy.textContent = T('copyReport'), 1400); };
+  copy.onclick = () => { os.copy(report); copy.textContent = T('copied'); setTimeout(() => copy.textContent = T('copyReport'), 1400); };
 }
 $('cc-selftest').addEventListener('click', () => runSelfTestUI('cc'));
 $('dg-selftest').addEventListener('click', () => runSelfTestUI('dg'));
@@ -1309,7 +1311,7 @@ async function scanWifi() {
   }
 }
 $('wifi-scan').addEventListener('click', scanWifi);
-$('wifi-open').addEventListener('click', () => { try { window.parent.postMessage({ type: 'open-app', id: 'wifi-scanner' }, '*'); } catch {} });
+$('wifi-open').addEventListener('click', () => os.openApp('wifi-scanner'));
 
 // ═══════════ diagnostics: heap detail + logs ═══════════
 async function refreshHeapDetail() {
@@ -1544,16 +1546,14 @@ function wpRenderPresets() {
 async function wpLoadGallery() {
   const container = $('wp-container'); if (!container) return;
   try {
-    const r = await fetch('/api/fs/list?path=/data/Pictures', { cache: 'no-store' });
-    if (!r.ok && r.status !== 404) { container.innerHTML = `<div class="hint" style="padding:10px">${T('unreachable')}</div>`; return; }
-    // No /data/Pictures yet answers 404: that is no wallpapers yet, not an unreachable device.
-    const imgs = ((r.status === 404 ? {} : await r.json()).entries || []).filter((e) => e.type === 'file' && /\.(png|jpe?g|webp)$/i.test(e.name));
+    // No /data/Pictures yet lists as []: that is no wallpapers yet, not an unreachable device (that throws).
+    const imgs = (await fs.list('/data/Pictures')).filter((e) => e.type === 'file' && /\.(png|jpe?g|webp)$/i.test(e.name));
     if (!imgs.length) { container.innerHTML = `<div class="hint" style="padding:10px">${T('wpEmpty')}</div>`; return; }
     container.innerHTML = '';
     for (const img of imgs) {
       const path = '/data/Pictures/' + img.name;
       const el = document.createElement('div'); el.className = 'wp-item'; el.dataset.path = path;
-      el.style.backgroundImage = `url("/api/fs/read?path=${encodeURIComponent(path)}")`;
+      el.style.backgroundImage = `url("${fs.url(path)}")`;
       const nm = document.createElement('div'); nm.className = 'wp-name'; nm.textContent = img.name; el.appendChild(nm);   // a file name is data, never markup
       el.addEventListener('click', () => { wpModel = { type: 'image', path, fit: wpModel.fit || 'cover' }; wpApply(); wpMarkActive(); });
       container.appendChild(el);
@@ -1605,7 +1605,7 @@ function wpWire() {
 }
 async function loadWallpapers() {          // lazy: called when the Personalization tab opens
   wpWire(); wpRenderPresets();
-  try { const uiR = await fetch('/api/fs/read?path=/system/config/ui-state.json', { cache: 'no-store' }); if (uiR.ok) wpModel = wpNormalize((await uiR.json()).wallpaper); }
+  try { const ui = await fs.readJSON('/system/config/ui-state.json', null); if (ui) wpModel = wpNormalize(ui.wallpaper); }
   catch {}
   wpView = wpModel.type;
   wpShowPane(); wpMarkActive();
@@ -1725,13 +1725,12 @@ function fromForm() {
 // change over the real settings.json (Wi-Fi, language, device name…). 404/empty = none yet (firmware "{}").
 async function readSettingsFile() {
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store' });
-    if (r.status === 404) return { ok: true, data: {} };
-    if (!r.ok) return { ok: false, status: r.status };
-    const t = (await r.text()).trim();
+    const raw = await fs.readText(PATH);
+    if (raw == null) return { ok: true, data: {} };
+    const t = raw.trim();
     const j = t ? JSON.parse(t) : {};
     return j && typeof j === 'object' && !Array.isArray(j) ? { ok: true, data: j } : { ok: false, status: 'corrupt' };
-  } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : 0 }; }
+  } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : e && e.code === 'denied' ? 401 : 0 }; }
 }
 const readFailText = (st) => st === 401 || st === 403 ? T('settingsNotPaired') : st === 'corrupt' ? T('settingsReadCorrupt') : T('settingsReadFailed');
 let settingsRead = false;      // saving is allowed only once the REAL file was read
@@ -1740,7 +1739,7 @@ async function persistModel() {
   const r = await readSettingsFile();                      // re-read → merge → write: preserve keys we don't manage
   if (!r.ok) { settingsRead = false; return readFailText(r.status); }
   const out = merge(r.data, model);
-  try { const w = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH), { method: 'POST', body: JSON.stringify(out, null, 2) }); return w.ok ? true : (w.status === 401 || w.status === 403 ? T('settingsNotPaired') : T('saveFailed')); } catch { return T('saveFailed'); }
+  try { await fs.writeJSON(PATH, out, { pretty: true }); return true; } catch (e) { return e && e.code === 'denied' ? T('settingsNotPaired') : T('saveFailed'); }
 }
 async function save() {
   if (!settingsRead) { await load(); if (!settingsRead) return; }      // never save over a file we could not read
@@ -1876,7 +1875,7 @@ $('bk-file').addEventListener('change', async () => {
     const pr = await fetch('/api/backup/restore?probe=1', { cache: 'no-store' });
     if (!pr.ok && pr.status !== 404) { bkStat(bkError(pr.status, await pr.json().catch(() => null)), false); return; }
   } catch { bkStat(T('unreachable'), false); return; }
-  if (!confirm(T('backupRestoreConfirm').replace('{name}', f.name))) return;
+  if (!(await os.confirm(T('backupRestoreConfirm').replace('{name}', f.name), { danger: true }))) return;
   bkStat(T('backupRestoring'));
   $('bk-restore').disabled = true;
   try {
@@ -2041,7 +2040,7 @@ let probed = false;
 async function probeDevice() {
   if (probed) return; probed = true;
   // the /api/display dialect is known from /api/status (the poller may not have run yet: a hidden page skips its ticks)
-  if (!lastStatus) { const st = await apiJson('/api/status'); if (st && !lastStatus) renderStatus(st); }
+  if (!lastStatus) { const st = await os.status(); if (st && !lastStatus) renderStatus(st); }
   if (has('device.display') && !DEV.fw) {                 // the firmware's /api/display is POST-only: no state to read
     const d = await probe('/api/display');
     if (d && d.ok) { try { DEV.display = typeof (await d.json()).on === 'boolean'; } catch {} }
@@ -2153,7 +2152,7 @@ async function mountPcModelsUI() {
   // Accumulated certain-knowledge: the web-index cards cached in IndexedDB — the "centralizer" growing with use.
   const WS = '/apps/anima/local/webstore.js', kb = $('edge-kb-count'), kbClr = $('edge-kb-clear');
   async function kbRefresh() { if (!kb) return; try { const s = (await import(WS)).webStore; const n = await s.count(); kb.textContent = n > 0 ? (n + ' ' + T('kbEntries')) : T('kbEmpty'); } catch { kb.textContent = '—'; } }
-  if (kbClr) kbClr.addEventListener('click', async () => { if (!confirm(T('kbClearConfirm'))) return; try { const s = (await import(WS)).webStore; if (s.clear) await s.clear(); } catch {} kbRefresh(); });
+  if (kbClr) kbClr.addEventListener('click', async () => { if (!(await os.confirm(T('kbClearConfirm'), { danger: true }))) return; try { const s = (await import(WS)).webStore; if (s.clear) await s.clear(); } catch {} kbRefresh(); });
   try { I18N.onChange(() => refresh()); } catch {}
   refresh(); kbRefresh();
 })();
@@ -2421,7 +2420,7 @@ async function mountPcModelsUI() {
   async function forgetVault() { try { (await import('/ai.js')).invalidateTeacher(); } catch {} }
   async function addKeyFlow(provider) {
     const name = provider === 'xai' ? 'Grok (xAI)' : 'Groq';
-    const k = prompt(T('apPastePre') + name + T('apPastePost'));
+    const k = prompt(T('apPastePre') + name + T('apPastePost'));   // nucleo-shell: allow (an API key is typed in this window only: it never travels through the shell's dialog)
     if (!k || !k.trim()) return;
     status(T('apSaving'));
     const res = await addSecondaryKey(provider, k.trim());
@@ -2475,15 +2474,15 @@ async function mountPcModelsUI() {
 })();
 
 // ═══════════ bus events (from shell over postMessage) ═══════════
+// Embedded: the shell polls /api/status for the whole OS and hands out the snapshot — feed the
+// hero/network/about surfaces from it instead of polling the same endpoint a second time here.
+os.onStatus((s) => { if (s && EMBEDDED) { renderStatus(s); setLive('live'); } });
 window.addEventListener('message', (e) => {
   const d = e.data; if (!d) return;
   if (d.t === 'fs.changed' && typeof d.d?.path === 'string' && d.d.path.endsWith('settings.json') && !dirty) load();
   else if (d.t === 'system.busy' && d.d) { if (d.d.busy) setLive('busy'); }
   // Deep-link from the shell (an update notification click): jump to the requested tab.
   else if (d.t === 'settings.tab' && typeof d.d === 'string' && TABS.some(([id]) => id === d.d)) selectTab(d.d);
-  // Embedded: the shell polls /api/status for the whole OS and rebroadcasts the snapshot — feed the
-  // hero/network/about surfaces from it instead of polling the same endpoint a second time here.
-  else if (d.t === 'status.snapshot' && d.d && EMBEDDED) { renderStatus(d.d); setLive('live'); }
   // The shell's link monitor: the Cardputer dropped off / came back. Without it the pill kept saying
   // "Live" while the device was gone.
   else if (d.t === 'link.state' && d.d && EMBEDDED) setLive(d.d.online ? 'live' : 'offline');
@@ -2538,9 +2537,9 @@ window.addEventListener('storage', (e) => {
 (async () => {
   if (POLL.length) { await poller.prime(); poller.start(); }
   await load();
-  // Embedded, and the shell's status.snapshot hasn't arrived yet (it also pushes one on frame
-  // load) → a single one-shot read fills the hero now instead of waiting the 15 s broadcast.
-  if (EMBEDDED && !lastStatus) { const s = await apiJson('/api/status'); if (s && !lastStatus) renderStatus(s); }
+  // Embedded, and the shell's snapshot hasn't arrived yet (it also pushes one on frame load) →
+  // os.status() waits a moment for it, else reads once, instead of waiting the 15 s broadcast.
+  if (EMBEDDED && !lastStatus) { const s = await os.status(); if (s && !lastStatus) renderStatus(s); }
   await probeDevice();
 })();
 </script>

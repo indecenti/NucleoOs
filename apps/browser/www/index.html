@@ -1223,7 +1223,7 @@
       // and relaying a whole page through the Cardputer would burn its scarce heap. We're already
       // inside a real browser, so navigation hands off to a real tab. EXCEPTION: a direct file link
       // is offered for download straight onto the Cardputer SD (single fetch via the on-device proxy,
-      // streamed to /data/downloads by /api/fs/write) — a bounded transfer, not a live page.
+      // streamed to /data/downloads by the core file layer) — a bounded transfer, not a live page.
       try {
         addToSessionHistory(url, url);
         tab.title = url;
@@ -1258,7 +1258,7 @@
     }
 
     // Honest in-app card shown after a URL is handed off to a real browser tab.
-    // It also offers to save the target onto the Cardputer SD (single proxy fetch -> /api/fs/write).
+    // It also offers to save the target onto the Cardputer SD (single proxy fetch -> core file layer).
     function createHandoffHtml(url, blocked) {
       return `
         <div class="tab-overlay">
@@ -1277,7 +1277,7 @@
     }
 
     // Shown when the URL points at a downloadable file: save it straight onto the Cardputer SD
-    // (/data/downloads, via the on-device proxy + /api/fs/write) or open it in a real tab.
+    // (/data/downloads, via the on-device proxy + the core file layer) or open it in a real tab.
     function createDownloadHtml(url, filename) {
       return `
         <div class="tab-overlay">
@@ -1618,6 +1618,9 @@
 
     // ===== SD DOWNLOADER ENGINE =====
     const DOWNLOADS_DIR = '/data/downloads';
+    // The device's disk through the core file layer (this is a classic script: loaded once, on first use).
+    let devFsP = null;
+    const devFs = () => devFsP || (devFsP = import('/nucleo-fs.js').then((m) => m.default));
     const dlLog = []; // { filename, url, size, ts, ok }
 
     // File extensions a browser would download rather than render. Such URLs are offered for a
@@ -1638,7 +1641,7 @@
     }
 
     // Core engine (DOM-agnostic): fetch a remote URL through the on-device proxy (same-origin,
-    // SSRF-hardened) and stream it onto the SD at /data/downloads/<filename> via /api/fs/write.
+    // SSRF-hardened) and stream it onto the SD at /data/downloads/<filename> via the core file layer.
     // Callers pass onStep(text, pct) for progress. Resolves {ok, size, filename} or throws a
     // human message (auth failures carry .authRequired so the pairing banner can be shown).
     async function downloadUrlToSd(url, filename, onStep = () => {}) {
@@ -1661,29 +1664,29 @@
         if (!response.ok) throw new Error(t('errRemoteHttp', { status: response.status }, `Il server remoto ha risposto: HTTP ${response.status}`));
 
         onStep(t('stepTransfer', null, 'Trasferimento in corso...'), 55);
-        const buffer = await response.arrayBuffer();
+        const blob = await response.blob();
 
         onStep(t('stepSdFolder', null, 'Preparazione cartella SD...'), 68);
         await ensureDirectory(DOWNLOADS_DIR);
 
         const targetPath = `${DOWNLOADS_DIR}/${filename}`;
         onStep(t('stepWriteSd', { name: filename }, `Scrittura su SD: ${filename}...`), 80);
-        const writeResp = await fetch(`/api/fs/write?path=${encodeURIComponent(targetPath)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: buffer
-        });
-        if (writeResp.status === 401 || writeResp.status === 403) {
-          const e = new Error(t('errAccessDenied', null, 'Accesso negato — assicurati di essere associato al dispositivo'));
-          e.authRequired = true; throw e;
-        }
-        if (!writeResp.ok) {
-          const errText = await writeResp.text();
-          throw new Error(t('errSdWrite', { status: writeResp.status, detail: errText.trim() }, `Scrittura SD fallita (${writeResp.status}): ${errText.trim()}`));
+        const writeText = t('stepWriteSd', { name: filename }, `Scrittura su SD: ${filename}...`);
+        try {
+          await (await devFs()).write(targetPath, blob, {
+            onProgress: (done, total) => { if (total) onStep(writeText, 80 + Math.floor(19 * done / total)); }
+          });
+        } catch (we) {
+          if (we && we.code === 'denied') {
+            const e = new Error(t('errAccessDenied', null, 'Accesso negato — assicurati di essere associato al dispositivo'));
+            e.authRequired = true; throw e;
+          }
+          const code = (we && we.code) || 'failed', detail = (we && we.detail) || '';
+          throw new Error(t('errSdWrite', { status: code, detail }, `Scrittura SD fallita (${code}): ${detail}`));
         }
 
         onStep(t('stepSavedOk', null, '✅ Salvato con successo!'), 100);
-        return { ok: true, size: buffer.byteLength, filename };
+        return { ok: true, size: blob.size, filename };
       };
 
       if (!withDownloadLock) return run();
@@ -1711,14 +1714,11 @@
       }
     };
 
-    // Pulsante: apri /data/downloads in File Commander tramite postMessage alla shell
-    document.getElementById('btn-open-downloads-folder').onclick = () => {
+    // Pulsante: apri /data/downloads in File Commander tramite la shell (nucleo-shell.js)
+    document.getElementById('btn-open-downloads-folder').onclick = async () => {
       try {
-        window.parent.postMessage({
-          type: 'open-app',
-          id: 'file-commander',
-          query: 'path=' + encodeURIComponent(DOWNLOADS_DIR)
-        }, '*');
+        const { default: os } = await import('/nucleo-shell.js');
+        os.openApp('file-commander', { path: DOWNLOADS_DIR });
         // Chiudi il modal dopo aver aperto il file manager
         document.getElementById('modal-settings').classList.remove('active');
         showBrowserToast(t('toastOpeningDownloads', null, 'Apertura cartella download...'), '🗂️');
@@ -1784,14 +1784,12 @@
       }
     }
 
-    // Crea directory garantendone l'esistenza (mkdir è idempotente nel firmware)
+    // Crea directory garantendone l'esistenza (mkdirp: "esiste già" è un successo)
     async function ensureDirectory(path) {
-      const resp = await fetch(`/api/fs/mkdir?path=${encodeURIComponent(path)}`, { method: 'POST' });
-      // 500 con corpo 'mkdir' può significare che esiste già (comportamento FATFS) — accettabile
-      if (!resp.ok) {
-        const text = await resp.text();
-        if (resp.status === 500 && text.includes('mkdir')) return; // directory già esistente
-        throw new Error(t('errMkdir', { status: resp.status, detail: text }, `Mkdir fallita (${resp.status}): ${text}`));
+      try { await (await devFs()).mkdirp(path); }
+      catch (e) {
+        const code = (e && e.code) || 'failed', detail = (e && e.detail) || '';
+        throw new Error(t('errMkdir', { status: code, detail }, `Mkdir fallita (${code}): ${detail}`));
       }
     }
 
@@ -1822,7 +1820,7 @@
       const logEntry = { filename, url, size: 0, ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), ok: false };
 
       try {
-        const res = await downloadUrlToSd(url, filename, setStep);   // shared engine: proxy fetch -> /api/fs/write
+        const res = await downloadUrlToSd(url, filename, setStep);   // shared engine: proxy fetch -> core file layer
         logEntry.ok = true;
         logEntry.size = res.size;
         showBrowserToast(t('toastSaved', { name: res.filename }, `Salvato: ${res.filename}`), '✅');

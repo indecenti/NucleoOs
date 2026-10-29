@@ -106,6 +106,7 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import os from '/nucleo-shell.js';
     import { UNITS, unitsInCategory, categoryOf, convert, fmt, runCommand } from './convert.js';
     const t = await I18N.init('unit-converter');
     const lang = I18N.lang;   // the OS language (anima.lang); 'nucleo.lang' was never written, so this read the page default
@@ -205,28 +206,13 @@
     function showToast(msg) { toast.textContent = msg; toast.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => toast.classList.remove('show'), 1400); }
     $('copy').addEventListener('click', async () => {
       const txt = $('big').textContent + ' ' + $('unit').textContent;
-      try { await navigator.clipboard.writeText(txt); } catch { /* clipboard may be gated; ignore */ }
+      os.copy(txt);   // the OS clipboard history (and the system clipboard where the page may use it)
       showToast(t('copied'));
     });
 
-    // ── OS theme ──
-    // Apply the persisted OS theme at boot; the shell also live-injects CSS vars, but only on switch
-    // and never standalone. A missing settings.json leaves the default dark palette in place.
-    async function loadTheme() {
-      try {
-        const r = await fetch('/api/fs/read?path=' + encodeURIComponent('/system/config/settings.json'), { cache: 'no-store' });
-        if (!r.ok) return;
-        const s = JSON.parse(await r.text());
-        if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
-      } catch {}
-    }
-    window.addEventListener('message', (e) => {
-      const d = e.data; if (!d) return;
-      if (d.type === 'set-theme' && d.theme) document.documentElement.dataset.theme = d.theme;
-    });
+    // ── OS theme: the shell sets data-theme on this page on load and on every change (nucleo-shell.js) ──
 
     // ── boot ──
-    loadTheme();
     selectCat('length');
     renderHist();
     I18N.onChange(() => {

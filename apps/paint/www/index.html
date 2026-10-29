@@ -437,6 +437,12 @@
   </div>
 
 <script>
+// The core file layer (/nucleo-fs.js), imported once by this classic script: atomic saves, one error vocabulary.
+let _fs = null;
+const coreFs = () => _fs || (_fs = import('/nucleo-fs.js').then(m => m.default, e => { _fs = null; throw e; }));
+// The OS around this window (dialogs, title, close): /nucleo-shell.js, imported once. Hoisted: syncTitle may run first.
+var _os = null;
+function coreOs(){ return _os || (_os = import('/nucleo-shell.js').then(m => m.default, e => { _os = null; throw e; })); }
 let c = document.getElementById('c'), ctx = c.getContext('2d', { willReadFrequently:true });   // c/ctx = the ACTIVE layer (reassigned on layer switch); all drawing code targets them unchanged
 const ov = document.getElementById('overlay'), octx = ov.getContext('2d');
 const wrap = document.getElementById('wrap'), stage = document.getElementById('stage');
@@ -832,7 +838,8 @@ function syncTitle(){
   $('st-file').textContent = path ? path.split('/').pop() : untitled;
   $('st-dirty').textContent = dirty ? ' •' : '';
   $('st-dim').textContent = c.width+' × '+c.height;
-  try{ window.parent.postMessage({type:'set-window-title', title:'Paint — '+(path?path.split('/').pop():untitled)+(dirty?' •':'')}, '*'); }catch{}
+  const title='Paint — '+(path?path.split('/').pop():untitled)+(dirty?' •':'');
+  if(window.parent!==window) coreOs().then(os=>os.setTitle(title), ()=>{});
 }
 function markDirty(){ if(!dirty){ dirty=true; syncTitle(); } }
 
@@ -906,7 +913,7 @@ function renderLayersUI(){ const list=$('layList'); if(!list) return; list.inner
 function setLayerVisible(i,v){ layers[i].visible=v; applyLayerStyles(); markDirty(); renderLayersUI(); }
 function setLayerOpacity(o){ activeLayer().opacity=o; applyLayerStyles(); markDirty(); }
 function setLayerBlend(b){ activeLayer().blend=b; applyLayerStyles(); markDirty(); }
-function renameLayer(i){ const n=prompt(LT('Nome livello:','Layer name:'), layers[i].name); if(n!=null && n.trim()){ layers[i].name=n.trim(); renderLayersUI(); } }
+async function renameLayer(i){ const n=await (await coreOs()).prompt(LT('Nome livello:','Layer name:'), { value: layers[i].name }); if(n!=null && n.trim() && layers[i]){ layers[i].name=n.trim(); renderLayersUI(); } }
 function resetLayers(W,H,drawFn,name){ layers.forEach(L=>L.canvas.remove()); const k=mkLayerCanvas(W,H); if(drawFn) drawFn(k.ctx);
   layers=[{ id:++layerSeq, name:name||LT('Livello 1','Layer 1'), canvas:k.canvas, ctx:k.ctx, visible:true, opacity:1, blend:'normal' }]; activeIdx=0;
   setImageSize(W,H); reorderDOM(); setActive(0); renderLayersUI(); }
@@ -988,18 +995,20 @@ function floodFill(x,y,col){ const im=ctx.getImageData(0,0,c.width,c.height), d=
 // ---- load an image (from path, dropped File, or open-file) ----
 function loadImageEl(img){ pushUndo(); const W=img.naturalWidth||img.width, H=img.naturalHeight||img.height;
   resetLayers(W,H, cx=>cx.drawImage(img,0,0), LT('Immagine','Image')); syncTitle(); }   // single layer, preserves PNG alpha (no white-fill)
-function loadFromPath(p){ const img=new Image(); img.onload=()=>{ loadImageEl(img); path=p; dirty=false; syncTitle(); setMsg(LT('Aperto ','Opened ')+p); };
-  img.onerror=()=>setMsg(LT('Impossibile aprire ','Could not open ')+p); img.src='/api/fs/read?path='+encodeURIComponent(p)+'&t='+Date.now(); }
+async function loadFromPath(p){ const img=new Image(); img.onload=()=>{ loadImageEl(img); path=p; dirty=false; syncTitle(); setMsg(LT('Aperto ','Opened ')+p); };
+  img.onerror=()=>setMsg(LT('Impossibile aprire ','Could not open ')+p);
+  let u; try{ u=(await coreFs()).url(p); }catch{ img.onerror(); return; }
+  img.src=u+(u.includes('?')?'&':'?')+'t='+Date.now(); }
 function loadFromFile(file){ const r=new FileReader(); r.onload=()=>{ const img=new Image();
   img.onload=()=>{ loadImageEl(img); dirty=true; setMsg(LT('Immagine caricata: ','Image loaded: ')+file.name+LT(' (salva per memorizzarla)',' (save to keep it)')); }; img.src=r.result; }; r.readAsDataURL(file); }
 
 // ---- save (RAW bytes, not FormData — the previous bug corrupted PNGs) ----
 function mimeFor(p){ return /\.jpe?g$/i.test(p)?'image/jpeg':/\.webp$/i.test(p)?'image/webp':'image/png'; }
 function writeTo(p){ return new Promise(res=>{ compositeCanvas().toBlob(async blob=>{   // save the FLATTENED composite of all layers
-  try{ const r=await fetch('/api/fs/write?path='+encodeURIComponent(p),{method:'POST',body:blob});
-    if(r.ok){ path=p; dirty=false; syncTitle(); setMsg(LT('Salvato in ','Saved to ')+p); res(true); }
-    else { setMsg(LT('Salvataggio fallito (','Save failed (')+r.status+')'); res(false); } }
-  catch(err){ setMsg(LT('Errore di rete: ','Network error: ')+err.message); res(false); } }, mimeFor(p), 0.92); }); }
+  try{ await (await coreFs()).write(p,blob);                                          // atomic: a failed save keeps the previous file
+    path=p; dirty=false; syncTitle(); setMsg(LT('Salvato in ','Saved to ')+p); res(true); }
+  catch(err){ if(err&&err.status){ setMsg(LT('Salvataggio fallito (','Save failed (')+err.status+')'); res(false); return; }   // the device answered
+    setMsg(LT('Errore di rete: ','Network error: ')+(err&&err.message)); res(false); } }, mimeFor(p), 0.92); }); }
 function save(){ if(path) writeTo(path); else saveAs(); }
 function saveAs(){ dialog('save', path||'/data/Pictures', path? path.split('/').pop():LT('disegno.png','drawing.png')).then(p=>{ if(p) writeTo(p); }); }
 
@@ -1054,13 +1063,14 @@ stage.addEventListener('drop', e=>{ e.preventDefault(); if(window.__atelierBusy)
 
 // ---- commands ----
 function newCanvas(){ pushUndo(); const W=c.width,H=c.height; bgTransparent=false; resetLayers(W,H, cx=>{ cx.fillStyle='#fff'; cx.fillRect(0,0,W,H); }, LT('Livello 1','Layer 1')); path=''; dirty=false; syncTitle(); setMsg(LT('Nuovo','New')); }
-function resizeCanvas(){ const w=parseInt(prompt(LT('Larghezza tela:','Canvas width:'), c.width)||c.width,10), h=parseInt(prompt(LT('Altezza tela:','Canvas height:'), c.height)||c.height,10);
+async function resizeCanvas(){ const os=await coreOs();
+  const w=parseInt(await os.prompt(LT('Larghezza tela:','Canvas width:'), { value: String(c.width) })||c.width,10), h=parseInt(await os.prompt(LT('Altezza tela:','Canvas height:'), { value: String(c.height) })||c.height,10);
   if(!w||!h||w<1||h<1||w>4000||h>4000){ setMsg(LT('Dimensione non valida','Invalid size')); return; }
   pushUndo();
   layers.forEach(L=>{ const tmp=document.createElement('canvas'); tmp.width=L.canvas.width; tmp.height=L.canvas.height; tmp.getContext('2d').drawImage(L.canvas,0,0);
     L.canvas.width=w; L.canvas.height=h; L.ctx.clearRect(0,0,w,h); L.ctx.drawImage(tmp,0,0); });
   setImageSize(w,h); markDirty(); syncTitle(); applyZoom(); renderLayersUI(); }
-function exit(){ if(dirty && !confirm(LT('Uscire senza salvare? Le modifiche andranno perse.','Exit without saving? Your changes will be lost.'))) return; try{ window.parent.postMessage({type:'close-window'}, '*'); }catch{} }
+async function exit(){ const os=await coreOs(); if(dirty && !(await os.confirm(LT('Uscire senza salvare? Le modifiche andranno perse.','Exit without saving? Your changes will be lost.'), { danger: true }))) return; os.close(); }
 const CMD={ new:newCanvas, open:()=>dialog('open').then(p=>{ if(p) loadFromPath(p); }), save, saveas:saveAs,
   exit, undo, redo, clear:()=>{ pushUndo(); fill(c.width,c.height); markDirty(); }, resize:resizeCanvas };
 
@@ -1138,7 +1148,7 @@ function fillSelection(){ if(!sel) return; pushUndo(); ctx.save(); ctx.globalAlp
 window.__paintSel=()=>sel;   // the Atelier reads this to generate INTO the selection
 
 // ---- text tool ----
-function placeText(x,y){ const t=prompt(LT('Testo:','Text:')); if(t==null||t==='') return; pushUndo();
+async function placeText(x,y){ const t=await (await coreOs()).prompt(LT('Testo:','Text:')); if(t==null||t==='') return; pushUndo();
   const fs=Math.max(8,parseInt($('fontSize')&&$('fontSize').value,10)||24), bold=($('fontBold')&&$('fontBold').checked)?'bold ':'';
   ctx.save(); ctx.globalAlpha=brushOpacity; ctx.fillStyle=color; ctx.textBaseline='top';
   ctx.font=bold+fs+"px 'Segoe UI',system-ui,sans-serif"; ctx.fillText(t,x,y); ctx.restore(); markDirty(); setMsg(LT('Testo inserito','Text added')); }
@@ -1346,7 +1356,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
   let _askP=null; const askMod=()=> _askP || (_askP=import('/ai-ask.js').catch((e)=>{ _askP=null; throw e; }));
   async function loadAi(){ if(aiLoaded) return aiCfg; await ensurePipeline();
     aiCfg={ chat:null, image:null };
-    try{ const r=await fetch('/api/fs/read?path='+encodeURIComponent(TEACHER),{cache:'no-store'});
+    try{ const r=await fetch('/api/fs/read?path='+encodeURIComponent(TEACHER),{cache:'no-store'});   // nucleo-fs: allow (the key vault: shell/ai.js rules)
       if(r.ok){ aiCfg.image=PIPEMOD.P.resolveConfigs(await r.json()).image; } }catch{}
     try{ const M=await import('/anima-mode.js'); privateMode = M.readMode()==='private'; }catch{ privateMode=false; }
     try{ const A=await askMod(), AI=await aiMod(); const plan=await A.planEngines({ tier:'fast', probe:true }); const k=plan.order[0];
@@ -1968,7 +1978,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
     if(el.save.checked){ const name='atelier-'+seed+'-'+Math.random().toString(36).slice(2,6)+'.png'; const ok=await saveGenerated('/data/Pictures/'+name); msg += ok?(UL(' · salvata in /data/Pictures/',' · saved to /data/Pictures/')+name):UL(' · salvataggio fallito',' · save failed'); }
     setMsg(msg); el.status.textContent=msg;
   }
-  function saveGenerated(p){ return new Promise(res=>{ compositeCanvas().toBlob(async blob=>{ try{ const r=await fetch('/api/fs/write?path='+encodeURIComponent(p),{method:'POST',body:blob}); res(r.ok); }catch{ res(false);} }, 'image/png', 0.95); }); }
+  function saveGenerated(p){ return new Promise(res=>{ compositeCanvas().toBlob(async blob=>{ try{ await (await coreFs()).write(p,blob); res(true); }catch{ res(false);} }, 'image/png', 0.95); }); }
 
   // wire the toolbar button + expose for menus / ANIMA hand-off
   const btn=document.getElementById('atelierBtn'); if(btn) btn.addEventListener('click', ()=>open('text'));

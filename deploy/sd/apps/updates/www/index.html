@@ -271,6 +271,7 @@
 <script type="module">
   import I18N from '/nucleo-i18n.js';
   import Caps from '/nucleo-caps.js';   // what this device can do ('ota')
+  import os from '/nucleo-shell.js';    // the OS dialogs (keys, joypad, touch)
   const t = await I18N.init('updates');
   window.__nucleoT = t;                          // hand the live translator to the inline script
   // The inline script may have already painted imperative bits with the passthrough fallback; repaint now.
@@ -347,7 +348,7 @@
         const dry = document.createElement('button'); dry.textContent = t('dry_run'); dry.disabled = busy;
         const ins = document.createElement('button'); ins.className = 'primary'; ins.textContent = t('install'); ins.disabled = busy;
         dry.addEventListener('click', () => run('dry-run', { path: p.path }));
-        ins.addEventListener('click', () => { if (confirm(t('confirm_install', { v: p.version || p.name }))) run('install', { path: p.path }); });
+        ins.addEventListener('click', async () => { if (await os.confirm(t('confirm_install', { v: p.version || p.name }))) run('install', { path: p.path }); });
         d.appendChild(dry); d.appendChild(ins);
       }
       box.appendChild(d);
@@ -361,7 +362,7 @@
       d.className = 'pkg';
       d.innerHTML = '<div class="grow"><div class="nm">' + esc(b.stamp) + '</div><div class="meta">' + esc(t('backup_meta')) + '</div></div>';
       const rb = document.createElement('button'); rb.className = 'danger'; rb.textContent = t('rollback'); rb.disabled = busy;
-      rb.addEventListener('click', () => { if (confirm(t('confirm_rollback', { s: b.stamp }))) run('rollback', { stamp: b.stamp }); });
+      rb.addEventListener('click', async () => { if (await os.confirm(t('confirm_rollback', { s: b.stamp }), { danger: true })) run('rollback', { stamp: b.stamp }); });
       d.appendChild(rb);
       bb.appendChild(d);
     }
@@ -381,14 +382,14 @@
   async function run(action, extra) {
     const body = JSON.stringify({ action, ...extra });
     let r;
-    try { r = await fetch('/api/update', { method: 'POST', body }); } catch { alert(t('unreachable')); return; }
+    try { r = await fetch('/api/update', { method: 'POST', body }); } catch { await os.alert(t('unreachable')); return; }
     if (r.status === 401) {
       const { pairDialog } = await import('/nucleo-pair.js');
       if (!(await pairDialog())) return;
       try { r = await fetch('/api/update', { method: 'POST', body }); } catch { return; }
     }
     const j = await r.json().catch(() => ({}));
-    if (!j.ok) { alert(j.error || t('failed')); return; }
+    if (!j.ok) { await os.alert(j.error || t('failed')); return; }
     $('log-card').hidden = false;
     await loadUpd();
   }
