@@ -29,6 +29,7 @@
 #include "freertos/queue.h"
 #include "esp_timer.h"
 #include "app_large.h"       // lg::capture: Fn+P also saves the second screen
+#include <ctype.h>
 #include <sys/stat.h>        // ...into /data/Screenshots
 #include "nucleo_board.h"    // NUCLEO_SD_MOUNT
 #include "esp_task_wdt.h"
@@ -336,6 +337,40 @@ static esp_err_t screen_get(httpd_req_t *req)
     return ESP_OK;
 }
 
+// POST /api/play?path=<a file on the card> — play a cartridge in its emulator, as Files' "open with" does (the Solo
+// boot). Paired clients only. The answer comes first ({"ok":true,"app":"<emulator>"}); the run loop then launches it
+// (the UI task owns the apps). {"ok":false,"err":"not found"|"no emulator"} otherwise.
+static char s_play_path[256];
+static volatile bool s_play_req;
+static esp_err_t play_post(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    char q[300] = "", raw[240] = "", path[256];
+    if (httpd_req_get_url_query_str(req, q, sizeof q) == ESP_OK) httpd_query_key_value(q, "path", raw, sizeof raw);
+    int o = 0;                                                // %XX and + decoded
+    for (int i = 0; raw[i] && o < (int)sizeof path - 1; i++) {
+        if (raw[i] == '%' && isxdigit((unsigned char)raw[i + 1]) && isxdigit((unsigned char)raw[i + 2])) {
+            char h[3] = { raw[i + 1], raw[i + 2], 0 }; path[o++] = (char)strtol(h, nullptr, 16); i += 2;
+        } else path[o++] = raw[i] == '+' ? ' ' : raw[i];
+    }
+    path[o] = 0;
+    char full[256];
+    if (!strncmp(path, NUCLEO_SD_MOUNT "/", strlen(NUCLEO_SD_MOUNT) + 1)) snprintf(full, sizeof full, "%s", path);
+    else snprintf(full, sizeof full, NUCLEO_SD_MOUNT "%s%s", path[0] == '/' ? "" : "/", path);
+    httpd_resp_set_type(req, "application/json");
+    struct stat st;
+    if (!path[0] || strstr(path, "..") || stat(full, &st) != 0 || S_ISDIR(st.st_mode))
+        return httpd_resp_sendstr(req, "{\"ok\":false,\"err\":\"not found\"}");
+    char emu[32];
+    if (!gamefront_emulator_for(full, emu, sizeof emu)) return httpd_resp_sendstr(req, "{\"ok\":false,\"err\":\"no emulator\"}");
+    char out[80];
+    snprintf(out, sizeof out, "{\"ok\":true,\"app\":\"%s\"}", emu);
+    httpd_resp_sendstr(req, out);                             // before the Solo reboot the launch leads to
+    if (!s_play_req) { snprintf(s_play_path, sizeof s_play_path, "%s", full); s_play_req = true; }
+    ESP_LOGW("play", "api play %s -> %s", full, emu);
+    return ESP_OK;
+}
+
 // POST /api/input?key=enter|back|left|right|up|down|tab|del|char&ch=x — inject one key exactly as the
 // external panel's touch does (the same ring the run loop reads). Paired clients only. For remote tests
 // and automation: "does a key reach the launcher / the app" without touching the device.
@@ -372,6 +407,8 @@ extern "C" esp_err_t nucleo_app_register_display(httpd_handle_t server)
     httpd_register_uri_handler(server, &screen);
     httpd_uri_t input = { .uri = "/api/input", .method = HTTP_POST, .handler = input_post };
     httpd_register_uri_handler(server, &input);
+    httpd_uri_t play = { .uri = "/api/play", .method = HTTP_POST, .handler = play_post };
+    httpd_register_uri_handler(server, &play);
     return e;
 }
 
@@ -978,6 +1015,8 @@ bool nucleo_app_launch_file(const char *path)
         else if (!strcasecmp(ext, ".txt") || !strcasecmp(ext, ".md") || !strcasecmp(ext, ".json") ||
                  !strcasecmp(ext, ".log") || !strcasecmp(ext, ".csv") || !strcasecmp(ext, ".ini")) id = "notepad";
     }
+    char emu[32];                                             // a cartridge: its emulator (in its Solo boot)
+    if (!id && gamefront_emulator_for(path, emu, sizeof emu)) id = emu;
     if (!id) return false;                                    // no native viewer for this type
     snprintf(s_open_file, sizeof s_open_file, "%s", path);     // hand the exact file to the viewer's on_enter
     launch_by_id(id);
@@ -2115,6 +2154,14 @@ void nucleo_app_run(void)
         static int64_t s_ob_try = -10000;                           // at most one re-open every 2 s
         if (s_active == -1 && !s_gamefront && nucleo_setup_onboarding() && now - s_ob_try >= 2000) {
             s_ob_try = now; nucleo_settings_onboard(); nucleo_app_launch_id("wifi"); last_act = now;
+        }
+        // A cartridge asked for over the web (/api/play): its emulator, as Files' "open with" (the Solo boot).
+        if (s_play_req) {
+            s_play_req = false; last_act = now;
+            if (s_disp_sleep) display_wake();
+            if (s_control_center) { s_control_center = false; launcher_render_control_center_close(); }
+            if (s_gamefront) { s_gamefront = false; s_gf_return = false; }
+            if (!nucleo_app_launch_file(s_play_path)) s_dirty = true;
         }
         // The screensaver, one rule for the launcher and the Games gallery (no app open, no web client): after the
         // time set in Settings > Display > Screensaver (0 = never), its style: "off" puts the screen to sleep (backlight

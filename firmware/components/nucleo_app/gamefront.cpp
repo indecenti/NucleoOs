@@ -310,6 +310,46 @@ static int sys_of(const char *name)            // by extension; -2 = a zip, look
     return -1;
 }
 
+// The firmware's consoles by extension alone (no store consoles: no gallery state), -2 = a zip.
+static int builtin_sys_of(const char *dot)
+{
+    static const char *const EXT[] = { ".gb", ".gbc", ".gg", ".sms", ".nes" };
+    for (int i = 0; i < (int)(sizeof EXT / sizeof EXT[0]); i++) if (!strcasecmp(dot, EXT[i])) return i;
+    return !strcasecmp(dot, ".zip") ? -2 : -1;
+}
+bool gamefront_emulator_for(const char *path, char *id, int cap)
+{
+    const char *base = path ? strrchr(path, '/') : nullptr;
+    base = base ? base + 1 : path;
+    const char *dot = base ? strrchr(base, '.') : nullptr;
+    if (!dot || base[0] == '.') return false;
+    int sys = builtin_sys_of(dot);
+    if (sys == -2) sys = zip_sys(path);
+    if (sys >= 0) {
+        if (find_app(SYS[sys].app) < 0) return false;
+        snprintf(id, cap, "%s", SYS[sys].app);
+        return true;
+    }
+    for (int i = 0, n = nucleo_app_count(); i < n; i++) {   // an installed store emulator that declares it
+        const nucleo_app_def_t *a = nucleo_app_at(i);
+        if (!a->category || strcmp(a->category, "Games")) continue;
+        char cp[96];
+        snprintf(cp, sizeof cp, NUCLEO_SD_MOUNT "/apps/%s/console.txt", a->id);
+        FILE *f = fopen(cp, "r");
+        if (!f) continue;
+        char line[120];
+        bool hit = false;
+        while (!hit && fgets(line, sizeof line, f)) {
+            char key[12], exts[40];
+            if (line[0] == '#' || sscanf(line, "console %11s %39s", key, exts) != 2) continue;
+            for (char *e = strtok(exts, ","); e && !hit; e = strtok(nullptr, ",")) hit = !strcasecmp(e, dot);
+        }
+        fclose(f);
+        if (hit) { snprintf(id, cap, "%s", a->id); return true; }
+    }
+    return false;
+}
+
 // ── the store's consoles ────────────────────────────────────────────────────────────────────────────
 static void extras_free(void) { free(s_ext); s_ext = nullptr; s_nx = 0; }
 static bool gfa_part(FILE *f, Art &a, const char *file)        // one picture of a .gfa: its size and where it is

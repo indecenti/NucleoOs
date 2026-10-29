@@ -60,6 +60,21 @@
     },
     "params": []
   },
+  "POST /api/play": {
+    "it": {
+      "title": "POST /api/play - Gioca una ROM",
+      "description": "Apre una ROM della scheda SD nel suo emulatore, come 'Apri con' della app File: il dispositivo si riavvia nella sessione Solo del gioco e, all'uscita, torna al sistema. L'emulatore si sceglie dall'estensione (le console del firmware e quelle dichiarate dagli emulatori installati dallo store). Richiede l'accoppiamento.",
+      "synopsis": "POST /api/play?path=/data/ROMs/gb/Tetris.gb",
+      "details": "Parametri nella query:\n- path: il file sulla SD (percorso dalla radice della scheda, codificato URL)\nRisposta, prima del riavvio: {\"ok\":true,\"app\":\"gbemu\"}; {\"ok\":false,\"err\":\"not found\"} se il file non c'e'; {\"ok\":false,\"err\":\"no emulator\"} se nessun emulatore installato lo apre.\n"
+    },
+    "en": {
+      "title": "POST /api/play - Play a ROM",
+      "description": "Opens a ROM on the SD card in its emulator, like the Files app's 'Open with': the device reboots into the game's Solo session and comes back to the system when it quits. The emulator is chosen by extension (the firmware's consoles and those declared by emulators installed from the store). Requires pairing.",
+      "synopsis": "POST /api/play?path=/data/ROMs/gb/Tetris.gb",
+      "details": "Query parameters:\n- path: the file on the SD card (from the card's root, URL-encoded)\nResponse, before the reboot: {\"ok\":true,\"app\":\"gbemu\"}; {\"ok\":false,\"err\":\"not found\"} when the file is missing; {\"ok\":false,\"err\":\"no emulator\"} when no installed emulator opens it.\n"
+    },
+    "params": []
+  },
   "GET /api/status": {
     "it": {
       "title": "GET /api/status - Stato Dispositivo",

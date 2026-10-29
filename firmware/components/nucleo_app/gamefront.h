@@ -34,6 +34,10 @@ bool gamefront_scanning(void);                                   // the card is 
 // In the full OS boot after a game launched from the gallery ran in its Solo boot: true = reopen the gallery (on
 // that game). One-shot, and only after our own restart.
 bool gamefront_take_return(void);
+// The emulator that plays a cartridge (by extension; a zip by the file inside): a console the firmware knows, or one
+// an installed store emulator declares in its console.txt. True and its app id in `id` when that emulator is
+// installed. Reads only files and the registry (no gallery state): any task may call it (the web server's /api/play).
+bool gamefront_emulator_for(const char *path, char *id, int cap);
 // The Cardputer's screen while the gallery is on the panel (gamefront_render calls it; exposed for the PC gallery).
 void gamefront_draw_companion(void *gfx);
 

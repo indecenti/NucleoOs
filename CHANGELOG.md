@@ -120,6 +120,9 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   rendered on the PC from its source; a cover captured on the device still wins).
 - The selection's whole title has a line of its own across the panel, above the picture and the wheel; one too long
   for it scrolls (a pause, then round), redrawn alone; under the picture, its caption and what it is.
+- "Open with" knows the cartridges: a ROM opened from Files or a notification starts in its emulator (the firmware's
+  consoles, and those an installed store emulator declares), in its Solo boot. POST /api/play?path=... does the same
+  for a paired client (the answer comes before the reboot).
 - The Games gallery takes the consoles of an emulator installed from the store from the app's own files
   (`/sd/apps/<id>/console.txt` and `console-<key>.gfa`: name, extensions, colour, photo and mark): it lists them as
   systems, finds their cartridges anywhere on the card and opens them in that app; the app leaves the native games,
