@@ -756,6 +756,8 @@ static void on_line16(const uint16_t *px, int line, void *user)
 }
 
 static void toast(const char *msg);
+static void quick_save(void);
+static void quick_load(void);
 // ── Fn+P: the game's own picture, at its own size, top-down 16-bit BMP (RGB565 bit fields) ──────────────
 static void shot_start(void)
 {
@@ -1444,25 +1446,29 @@ static void menu_activate(void)
         case MI_INFO:   s_hud = !s_hud;
                         if (!s_hud) frame_clear(); else { hud_draw(); chrome_draw(); }
                         menu_draw(); return;
-        case MI_SAVE: {
-            esp_err_t e = SYS->state_save(0);
-            if (e == ESP_OK) st->state_ok = true;
-            toast(e == ESP_OK ? TR5("salvato", "saved", "guardado", "enreg.", "speich.") : TR5("errore", "failed", "error", "erreur", "fehler"));
-            menu_close(); return;
-        }
-        case MI_LOAD: {
-            esp_err_t e = SYS->state_load(0);
-            toast(e == ESP_OK ? TR5("caricato", "loaded", "cargado", "charge", "geladen")
-                              : e == ESP_ERR_NOT_FOUND ? TR5("nessuno stato", "no state", "sin estado", "sans etat", "kein zustand")
-                                                       : TR5("stato non valido", "bad state", "estado malo", "etat mauvais", "Bad Zustand"));
-            menu_close(); return;
-        }
+        case MI_SAVE: quick_save(); menu_close(); return;
+        case MI_LOAD: quick_load(); menu_close(); return;
         case MI_PAL: if (!SYS->palettes) return;
                      s_pal = (s_pal + 1) % PAL_COUNT; pal_apply(); state_save(st->resume);
                      menu_draw(); return;
         case MI_PIC: set_relief((st->relief + 1) % 2); menu_draw(); return;
         default:     st->running = false; return;
     }
+}
+
+// The save state, from the menu or in one key (Fn+S / Fn+L, as the handhelds' Fn hotkeys): the toast says how it went.
+static void quick_save(void)
+{
+    esp_err_t e = SYS->state_save(0);
+    if (e == ESP_OK) st->state_ok = true;
+    toast(e == ESP_OK ? TR5("salvato", "saved", "guardado", "enreg.", "speich.") : TR5("errore", "failed", "error", "erreur", "fehler"));
+}
+static void quick_load(void)
+{
+    esp_err_t e = SYS->state_load(0);
+    toast(e == ESP_OK ? TR5("caricato", "loaded", "cargado", "charge", "geladen")
+                      : e == ESP_ERR_NOT_FOUND ? TR5("nessuno stato", "no state", "sin estado", "sans etat", "kein zustand")
+                                               : TR5("stato non valido", "bad state", "estado malo", "etat mauvais", "Bad Zustand"));
 }
 
 static void menu_key(nucleo_key_t k)
@@ -1745,6 +1751,9 @@ static void play_session(const char *name)
                 menu_draw();
             }
             else if ((k.ch == 'p' || k.ch == 'P' || k.ch == 0x10) && (nucleo_kbd_mods() & NK_MOD_FN)) shot_start();
+            // Fn+S / Fn+L: save / load the state without the menu (the Fn hotkeys every emulation handheld has)
+            else if ((k.ch == 's' || k.ch == 'S' || k.ch == 0x13) && (nucleo_kbd_mods() & NK_MOD_FN)) quick_save();
+            else if ((k.ch == 'l' || k.ch == 'L' || k.ch == 0x0c) && (nucleo_kbd_mods() & NK_MOD_FN)) quick_load();
             else if (k.ch == 'p' || k.ch == 'P') pal_cycle();
             // Two things a player changes mid-game without wanting to pause: how loud it is, and
             // whether the pillars are there at all. Both are one key, both echo in the toast.
