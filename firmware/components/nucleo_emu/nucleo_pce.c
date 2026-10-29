@@ -61,7 +61,7 @@ static const char *TAG = "pce";
 #define APU_RATE  32000
 #define APU_SPF   535                                  // 32000 / 59.826
 #define PSG_HZ    3579545
-#define LOG_MAX   1024
+#define FRAME_CYC (LINES * LINE_CYC)
 
 // VDC status bits and registers (MAME huc6270)
 #define ST_CR 0x01
@@ -105,10 +105,6 @@ typedef struct {
     uint32_t sf2_off;
 } pce_core_t;
 
-typedef struct {
-    uint32_t cyc;                                    // cycle in the frame
-    uint8_t  reg, val;
-} psg_log_t;
 
 // A display line as described when it starts (see vdc_line), and the batches the other core draws them in.
 typedef struct pce_line_s {
@@ -116,7 +112,7 @@ typedef struct pce_line_s {
     uint16_t width;                                  // 0: a blank line (outside the display window)
     uint16_t cr, mwr, bxr, byr, raster;
 } pce_line_t;
-#define PCE_BATCH 8
+#define PCE_BATCH 4                                  // 2 x 2 KB of pixels: RAM is the cartridge cache
 typedef struct {
     int        n;
     pce_line_t line[PCE_BATCH];
@@ -141,25 +137,28 @@ typedef struct {
     int8_t     hint[PG_HINT];
     uint32_t   cur_tag;
     uint8_t   *cur_buf;
+    int16_t    cur_pg;
     uint32_t   misses;
     uint32_t   bank_off[128];                        // HuCard bank -> offset in the data (the console's mirroring)
     bool       sf2;
     bool       tg16;                                 // a TurboGrafx-16 card (its pad port reads "not Japanese")
     const uint8_t *rd[64];                           // CPU 1 KB windows (NULL: the slow path)
     uint8_t   *wr[64];
+    int16_t    win_pg[64];                           // the cache page each window shows (-1: RAM, open bus, I/O)
+    int16_t    last_pg;                              // the page rom_page returned last (-1: not a cache page)
     uint16_t   rgb[512];                             // the palette in the panel's RGB565 order
     uint16_t   out[NUCLEO_PCE_W];                    // a line drawn on this core
     pce_batch_t *batch[2];                           // lines for the other core: one filling, one being drawn
     int        bi, pending;                          // the batch being filled; the one handed over (-1: none)
     bool       busy;                                 // lines described and not yet on the screen
-    pce_scratch_t *km, *kw;                          // this core's drawer, the other core's
+    uint16_t   *spr_here;                            // this core's sprite row (the interrupts it raises)
+    pce_scratch_t *kw;                               // the other core's drawer
     // (each its own allocation, a few KB: after the VRAM the heap has no block for one big session)
     nucleo_pce_line_fn on_line;
     void      *user;
     uint8_t    buttons;
-    psg_log_t  log[LOG_MAX];
-    int        log_n;
-    uint32_t   frame_cyc, leg_base, leg_len;         // where the CPU is in the frame (for the PSG log)
+    uint32_t   leg_base, leg_len;                    // where the CPU is in the frame (the PSG's writes)
+    int        psg_n, psg_i;                         // this frame's samples, and how many are made
     int16_t    pcm[2 * APU_SPF];                     // a late frame makes up to twice a frame's samples
     uint16_t   vol[32];
     emu_afilt_t afilt;
@@ -170,12 +169,12 @@ typedef struct {
     uint8_t    skipped;
     // Where the time goes, in CPU cycles (the S3's counter), written to the trace when the game closes.
     uint64_t   prof_cpu, prof_vdc, prof_line, prof_psg, prof_idle, prof_wait;
-    uint32_t   prof_frames, prof_drawn;
+    uint32_t   prof_misses, prof_frames, prof_drawn, prof_lines_here, prof_lines_other;
     char       trace_path[160];
     char       save_base[300];
     char       title[48];
     size_t     heap_bytes;
-    uint32_t   frames, us_cpu, us_audio, clock;
+    uint32_t   frames, us_cpu, us_audio, us_miss, clock;
 } pce_t;
 
 static pce_t *PCE;
@@ -196,34 +195,51 @@ static inline uint32_t pce_ccount(void)
 
 // ── the cartridge, paged (as nucleo_nes.c) ────────────────────────────────────────────────────────────────
 static const uint8_t PG_OPEN[PG_SIZE] = { [0 ... PG_SIZE - 1] = 0xFF };
-static void windows_drop(void) { memset(PCE->rd, 0, sizeof PCE->rd); memset(PCE->wr, 0, sizeof PCE->wr); }
+static void windows_drop(void)
+{
+    memset(PCE->rd, 0, sizeof PCE->rd); memset(PCE->wr, 0, sizeof PCE->wr);
+    memset(PCE->win_pg, 0xff, sizeof PCE->win_pg);
+}
 
 static const uint8_t *rom_page(uint32_t data_off)
 {
     pce_t *s = PCE;
+    s->last_pg = -1;
     if (data_off >= s->data_bytes) return PG_OPEN;
     const uint32_t tag = data_off >> PG_BITS;
     if (s->rom_all) return s->rom_all + s->rom_base + (tag << PG_BITS);
-    if (tag == s->cur_tag) return s->cur_buf;
+    if (tag == s->cur_tag) { s->last_pg = s->cur_pg; return s->cur_buf; }
     int h = (int)(tag & (PG_HINT - 1)), g = s->hint[h];
     if (g < 0 || g >= s->pg_n || s->pg_tag[g] != tag) {
         g = -1;
         for (int i = 0; i < s->pg_n; i++) if (s->pg_tag[i] == tag) { g = i; break; }
         if (g < 0) {
-            int v = 0;
-            for (int i = 1; i < s->pg_n; i++) if (s->pg_age[i] < s->pg_age[v]) v = i;
+            // The victim: the least recently used page that no window shows. A page the CPU reads through a window
+            // is never "used" again as far as the ages know (a window is a pointer: no call, no clock), so plain LRU
+            // threw out exactly the hottest pages, then every window with them, and read them back at once.
+            uint8_t shown[PG_SLOTS];
+            memset(shown, 0, sizeof shown);
+            for (int k = 0; k < 64; k++) if (s->win_pg[k] >= 0) shown[s->win_pg[k]] = 1;
+            int v = -1;
+            for (int i = 0; i < s->pg_n; i++) if (!shown[i] && (v < 0 || s->pg_age[i] < s->pg_age[v])) v = i;
+            if (v < 0) { v = 0; for (int i = 1; i < s->pg_n; i++) if (s->pg_age[i] < s->pg_age[v]) v = i; }
             size_t got = 0;
+            const int64_t m0 = esp_timer_get_time();
             if (fseek(s->fp, (long)(s->rom_base + (tag << PG_BITS)), SEEK_SET) == 0) got = fread(s->pg[v], 1, PG_SIZE, s->fp);
+            s->us_miss += (uint32_t)(esp_timer_get_time() - m0);
             if (got < PG_SIZE) memset(s->pg[v] + got, 0xFF, PG_SIZE - got);
             s->pg_tag[v] = tag;
             s->misses++;
+            s->prof_misses++;
             g = v;
-            windows_drop();                          // a window may have pointed at the page just replaced
+            for (int k = 0; k < 64; k++)             // only the windows on the page just replaced (none, usually)
+                if (s->win_pg[k] == v) { s->rd[k] = NULL; s->wr[k] = NULL; s->win_pg[k] = -1; }
         }
         s->hint[h] = (int8_t)g;
     }
     s->pg_age[g] = ++s->pg_clock;
-    s->cur_tag = tag; s->cur_buf = s->pg[g];
+    s->cur_tag = tag; s->cur_buf = s->pg[g]; s->cur_pg = (int16_t)g;
+    s->last_pg = (int16_t)g;
     return s->cur_buf;
 }
 
@@ -254,23 +270,26 @@ static const uint8_t *window(int slot)
     const uint32_t k = (uint32_t)(slot & 7) << 10;
     const uint8_t *r = NULL;
     uint8_t *w = NULL;
+    int16_t pg = -1;
     if (bank < 0x80) {
         uint32_t off = (s->sf2 && bank >= 0x40) ? (uint32_t)bank * 0x2000 + s->m.sf2_off : s->bank_off[bank];
         r = rom_page(off + k);
+        pg = s->last_pg;
     } else if (bank >= 0xF8 && bank <= 0xFB) {
         r = w = s->m.wram + k;
     } else if (bank != 0xFF) {
         r = PG_OPEN;
     }
-    s->rd[slot] = r;                                 // after rom_page: a miss there drops every window
+    s->rd[slot] = r;                                 // after rom_page: a miss there drops the windows on its victim
     s->wr[slot] = w;
+    s->win_pg[slot] = pg;
     return r;
 }
 
 static void pce_mpr_changed(int page)
 {
     g_writes++;
-    for (int k = 0; k < 8; k++) { PCE->rd[page * 8 + k] = NULL; PCE->wr[page * 8 + k] = NULL; }
+    for (int k = 0; k < 8; k++) { PCE->rd[page * 8 + k] = NULL; PCE->wr[page * 8 + k] = NULL; PCE->win_pg[page * 8 + k] = -1; }
 }
 
 static inline uint8_t mem_read(uint16_t addr)
@@ -337,30 +356,13 @@ static void psg_reg(uint8_t reg, uint8_t data)
         case 0x09: m->lfo_ctrl = data; break;
     }
 }
-static void pce_psg_write(int reg, uint8_t v)
-{
-    pce_t *s = PCE;
-    if (s->log_n < LOG_MAX) {
-        s->log[s->log_n].cyc = s->leg_base + (uint32_t)(s->leg_len - (m_icount > 0 ? m_icount : 0));
-        s->log[s->log_n].reg = (uint8_t)reg;
-        s->log[s->log_n].val = v;
-        s->log_n++;
-    } else {
-        psg_reg((uint8_t)reg, v);                     // a full log: apply at once (tone kept, timing lost)
-    }
-}
-
-// One frame of sound: the logged writes applied at their moment, the channels stepped in PSG clocks.
-static void psg_render(pce_t *s, int n)
+// One sample, the channels stepped in PSG clocks.
+static void psg_sample(pce_t *s, int i)
 {
     pce_core_t *m = &s->m;
     static const uint8_t SCALE[16] = { 0x00, 0x03, 0x05, 0x07, 0x09, 0x0b, 0x0d, 0x0f, 0x10, 0x13, 0x15, 0x17, 0x19, 0x1b, 0x1d, 0x1f };
     const uint32_t cps = (uint32_t)(((uint64_t)PSG_HZ << 16) / APU_RATE);   // PSG clocks per sample, 16.16
-    const uint32_t frame_cyc = LINES * LINE_CYC;
-    int li = 0;
-    for (int i = 0; i < n; i++) {
-        const uint32_t at = (uint32_t)i * frame_cyc / (uint32_t)n;   // 1070 x 119,665 fits 32 bits (no 64-bit division in a module)
-        while (li < s->log_n && s->log[li].cyc <= at) { psg_reg(s->log[li].reg, s->log[li].val); li++; }
+    {
         const uint8_t lmal = SCALE[(m->psg_balance >> 4) & 15], rmal = SCALE[m->psg_balance & 15];
         int32_t out = 0;
         for (int chn = 0; chn < 6; chn++) {
@@ -399,8 +401,23 @@ static void psg_render(pce_t *s, int n)
         if (out > 32767) out = 32767; else if (out < -32768) out = -32768;
         s->pcm[i] = (int16_t)out;
     }
-    while (li < s->log_n) { psg_reg(s->log[li].reg, s->log[li].val); li++; }
-    s->log_n = 0;
+}
+// The frame's samples that come before CPU cycle `cyc` of it (sample i sits at cycle i * FRAME_CYC / n). Made as the
+// CPU gets there, so a register write lands between exactly the samples it fell between — the same sound as logging
+// every write with its cycle and replaying the log after the frame, without the 8 KB the log took (and with no
+// limit on writes a frame: sampled voices write the PSG from a timer interrupt thousands of times a second).
+static void psg_upto(pce_t *s, uint32_t cyc)
+{
+    while (s->psg_i < s->psg_n && (uint32_t)s->psg_i * FRAME_CYC / (uint32_t)s->psg_n < cyc) {   // fits 32 bits
+        psg_sample(s, s->psg_i);
+        s->psg_i++;
+    }
+}
+static void pce_psg_write(int reg, uint8_t v)
+{
+    pce_t *s = PCE;
+    psg_upto(s, s->leg_base + (uint32_t)(s->leg_len - (m_icount > 0 ? m_icount : 0)));
+    psg_reg((uint8_t)reg, v);
 }
 
 // ── the VCE ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -698,7 +715,7 @@ static int line_draw(const pce_line_t *L, uint16_t *o, pce_scratch_t *k)
 }
 
 // ── the other core ───────────────────────────────────────────────────────────────────────────────────────────
-// Eight lines a hand-over, two batches: the other core draws one while this core runs the CPU and fills the other.
+// Four lines a hand-over, two batches: the other core draws one while this core runs the CPU and fills the other.
 // The other core only computes (no bus, no driver, no file: the panel shares the SD card's bus); the lines go to the
 // screen from this core, in order.
 static void line_job(void *arg)
@@ -759,25 +776,23 @@ static void vdc_line(int y)
         // Not shown: only what the CPU can see. The background never raises anything; the sprites do (sprite 0's
         // collision, the 16-cell overflow) and only when their interrupt is on.
         if (spr_irq) {
-            const bool ov = line_sprites(&L, s->km->spr);
+            const bool ov = line_sprites(&L, s->spr_here);
             if (ov && (m->cr & 0x02)) vdc_irq(ST_OR);
-            if (m->cr & 0x01) for (int x = 0; x < width; x++) if (s->km->spr[x] & 0x8000) { vdc_irq(ST_CR); break; }
+            if (m->cr & 0x01) for (int x = 0; x < width; x++) if (s->spr_here[x] & 0x8000) { vdc_irq(ST_CR); break; }
         }
         return;
     }
     if (spr_irq) {
-        // The CPU reads this line's sprite interrupts as it starts: drawn here, now, after the queued ones.
-        lines_settle(s);
+        // The CPU reads this line's sprite interrupts as it starts: the sprites are evaluated here, now (the table
+        // and VRAM they read only change after the queued lines are drawn); the pixels still go to the other core.
+        s->prof_lines_here++;
         const uint32_t c0 = pce_ccount();
-        const int f = line_draw(&L, s->out, s->km);
+        const bool ov = line_sprites(&L, s->spr_here);
+        if (ov && (m->cr & 0x02)) vdc_irq(ST_OR);
+        if (m->cr & 0x01) for (int x = 0; x < width; x++) if (s->spr_here[x] & 0x8000) { vdc_irq(ST_CR); break; }
         s->prof_vdc += pce_ccount() - c0;
-        if ((f & 2) && (m->cr & 0x02)) vdc_irq(ST_OR);
-        if ((f & 1) && (m->cr & 0x01)) vdc_irq(ST_CR);
-        const uint32_t c1 = pce_ccount();
-        if (s->on_line) s->on_line(s->out, y, s->user);
-        s->prof_line += pce_ccount() - c1;
-        return;
     }
+    if (!spr_irq) s->prof_lines_other++;
     pce_batch_t *b = s->batch[s->bi];
     b->line[b->n++] = L;
     s->busy = true;
@@ -921,6 +936,10 @@ void nucleo_pce_run_frame(void)
         s->skip = s->debt > 0 && s->skipped < 3;       // behind: catch up unseen, three at most in a row
         s->skipped = s->skip ? (uint8_t)(s->skipped + 1) : 0;
     }
+    int n = APU_SPF;                                   // a frame that overran by real work: its samples too, so the
+    if (over > 1000) n += (int)((uint32_t)over * 4u / 125u);   // speaker never runs dry (32 kHz = 4/125 a us)
+    if (n > 2 * APU_SPF) n = 2 * APU_SPF;
+    s->psg_n = n; s->psg_i = 0;
     s->leg_base = 0;
     for (int v = 0; v < LINES; v++) {
         vdc_hsync();
@@ -938,10 +957,7 @@ void nucleo_pce_run_frame(void)
     const int64_t t1 = esp_timer_get_time();
     s->us_cpu += (uint32_t)(t1 - t0);
     const uint32_t c0 = pce_ccount();
-    int n = APU_SPF;                                   // a frame that overran by real work: its samples too, so the
-    if (over > 1000) n += (int)((uint32_t)over * 4u / 125u);   // speaker never runs dry (32 kHz = 4/125 a us)
-    if (n > 2 * APU_SPF) n = 2 * APU_SPF;
-    psg_render(s, n);
+    psg_upto(s, FRAME_CYC + 1);                        // the rest of the frame's samples
     s->last_block = 0;
     if (s->sound) {
         emu_afilt_run(&s->afilt, s->pcm, n, 1, 1);
@@ -998,7 +1014,7 @@ static void session_free(pce_t *s)
     for (int i = 0; i < s->pg_n; i++) free(s->pg[i]);
     free(s->rom_all);
     free(s->vram[0]); free(s->vram[1]);
-    free(s->batch[0]); free(s->batch[1]); free(s->km); free(s->kw);
+    free(s->batch[0]); free(s->batch[1]); free(s->spr_here); free(s->kw);
     free(s);
 }
 
@@ -1041,7 +1057,6 @@ static void machine_reset(void)
     m->ch[4].noise_seed = m->ch[5].noise_seed = 1;
     for (int i = 0; i < 512; i++) PCE->rgb[i] = rgb_of(0);
     memset(PCE->vram[0], 0, 0x8000); memset(PCE->vram[1], 0, 0x8000);
-    PCE->log_n = 0;
     cpu_reset();
 }
 
@@ -1059,13 +1074,14 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     s->heap_bytes = sizeof *s + 0x10000;
     s->batch[0] = (pce_batch_t *)calloc(1, sizeof(pce_batch_t));
     s->batch[1] = (pce_batch_t *)calloc(1, sizeof(pce_batch_t));
-    s->km = (pce_scratch_t *)malloc(sizeof(pce_scratch_t));
+    s->spr_here = (uint16_t *)malloc(512 * sizeof(uint16_t));
     s->kw = (pce_scratch_t *)malloc(sizeof(pce_scratch_t));
-    if (!s->batch[0] || !s->batch[1] || !s->km || !s->kw) { session_free(s); return ESP_ERR_NO_MEM; }
-    s->heap_bytes += 2 * sizeof(pce_batch_t) + 2 * sizeof(pce_scratch_t);
+    if (!s->batch[0] || !s->batch[1] || !s->spr_here || !s->kw) { session_free(s); return ESP_ERR_NO_MEM; }
+    s->heap_bytes += 2 * sizeof(pce_batch_t) + 512 * sizeof(uint16_t) + sizeof(pce_scratch_t);
     s->on_line = line_cb; s->user = user;
     s->pending = -1;
     s->cur_tag = PG_EMPTY;
+    memset(s->win_pg, 0xff, sizeof s->win_pg);
     for (int i = 0; i < PG_SLOTS; i++) s->pg_tag[i] = PG_EMPTY;
     memset(s->hint, -1, sizeof s->hint);
     save_base_init(s, rom_path);
@@ -1087,7 +1103,13 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     s->sound = nucleo_audio_pcm_open_ex(APU_RATE, 1, EMU_AUDIO_QUEUE_FRAMES * APU_SPF) == ESP_OK;
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
-    if ((size_t)sz + 24 * 1024 <= heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT)) {
+#ifdef NUCLEO_HOST_TEST
+    const char *tp = getenv("PCE_PAGES");               // the host harness: the device's page cache, by number
+    const int test_pages = tp ? atoi(tp) : 0;
+#else
+    const int test_pages = 0;
+#endif
+    if (!test_pages && (size_t)sz + 24 * 1024 <= heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT)) {
         s->rom_all = (uint8_t *)malloc((size_t)sz);
         if (s->rom_all && fread(s->rom_all, 1, (size_t)sz, s->fp) != (size_t)sz) { free(s->rom_all); s->rom_all = NULL; }
         if (s->rom_all) { s->heap_bytes += (size_t)sz; fclose(s->fp); s->fp = NULL; }
@@ -1097,7 +1119,7 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     nucleo_cowork_wait();
     if (!s->rom_all) {
         const uint32_t pages = (s->data_bytes + PG_SIZE - 1) / PG_SIZE;
-        for (int i = 0; i < PG_SLOTS && (uint32_t)i < pages; i++) {
+        for (int i = 0; i < PG_SLOTS && (uint32_t)i < pages && (!test_pages || i < test_pages); i++) {
             if (heap_caps_get_free_size(MALLOC_CAP_DEFAULT) < PG_SIZE + KEEP) break;
             uint8_t *b = (uint8_t *)malloc(PG_SIZE);
             if (!b) break;
@@ -1129,9 +1151,10 @@ static void profile_write(pce_t *s)
                    w = (unsigned)((uint32_t)(s->prof_wait >> 10) / n * 16 / 375);
     FILE *f = fopen(s->trace_path, "a");
     if (!f) return;
-    fprintf(f, "  pce profile: %u frames (%u drawn), ms/frame: huc6280 %u.%u  vdc %u.%u  panel lines %u.%u  wait 2nd core %u.%u  psg+speaker %u.%u, idle skipped %u%%\n",
+    fprintf(f, "  pce profile: %u frames (%u drawn), ms/frame: huc6280 %u.%u  vdc %u.%u  panel lines %u.%u  wait 2nd core %u.%u  psg+speaker %u.%u, idle skipped %u%%, lines with sprite irq evaluated here %u%%, cartridge misses %u\n",
             (unsigned)n, (unsigned)s->prof_drawn, c / 10, c % 10, v / 10, v % 10, l / 10, l % 10, w / 10, w % 10, a / 10, a % 10,
-            (unsigned)((uint32_t)(s->prof_idle >> 10) / n * 1024u / (LINES * LINE_CYC / 100)));   // no 64-bit division
+            (unsigned)((uint32_t)(s->prof_idle >> 10) / n * 1024u / (LINES * LINE_CYC / 100)),   // no 64-bit division
+            (unsigned)(s->prof_lines_here * 100u / (s->prof_lines_other + s->prof_lines_here + 1)), (unsigned)s->prof_misses);
     fclose(f);
 }
 
@@ -1224,7 +1247,6 @@ esp_err_t nucleo_pce_state_load(int slot)
     if (!ok) { machine_reset(); return ESP_ERR_INVALID_CRC; }
     cpu_set(&c);
     for (int i = 0; i < 512; i++) PCE->rgb[i] = rgb_of(PCE->m.pal[i]);
-    PCE->log_n = 0;
     windows_drop();
     return ESP_OK;
 }
@@ -1244,11 +1266,12 @@ void nucleo_pce_get_stats(nucleo_gb_stats_t *out)
     out->frames = s->frames;
     out->us_cpu = s->us_cpu;
     out->us_audio = s->us_audio;
+    out->us_miss = s->us_miss;
 }
 void nucleo_pce_reset_counters(void)
 {
     if (!PCE) return;
-    PCE->us_cpu = PCE->us_audio = 0;
+    PCE->us_cpu = PCE->us_audio = PCE->us_miss = 0;
     PCE->misses = 0;
     PCE->frames = 0;
 }
