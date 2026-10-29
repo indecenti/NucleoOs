@@ -93,7 +93,8 @@ typedef struct {
     uint16_t      pal[64];                      // the NES palette, RGB565 in the panel's byte order
 
     nes_apu_t     apu;
-    int16_t       pcm[APU_SPF];
+    int16_t       pcm[2 * APU_SPF];             // up to two frames' worth: the sound follows the clock (apu_render)
+    int64_t       audio_t;                      // when the last frame's sound was handed to the speaker
     emu_afilt_t   afilt;
     uint16_t      mix_pulse[31], mix_tnd[203];  // the NES mixer's two curves, as 16-bit levels
     bool          sound;
@@ -109,7 +110,7 @@ typedef struct {
     size_t        heap_bytes;
     uint32_t      frames, us_cpu, us_audio;
     uint64_t      prof_apu;                     // cycles in the APU and the speaker (agnes_profile has the rest)
-    uint32_t      prof_frames, prof_drawn;
+    uint32_t      prof_frames, prof_drawn, prof_idle;
     char          trace_path[96];               // "<card>/nesemu_trace.txt": the profile line on close
     uint32_t      clock;
 } nes_session_t;
@@ -200,15 +201,20 @@ static uint8_t apu_read(void *host)
     return (uint8_t)((a->p[0].len > 0) | (a->p[1].len > 0) << 1 | (a->t.len > 0) << 2 | (a->n.len > 0) << 3);
 }
 
-// One frame of sound. The registers are those the game left during the frame (most games write them once,
-// in their NMI); the frame sequencer runs its four quarter steps across the frame, as on the console.
-static void apu_render(nes_session_t *s)
+// One frame of sound, n samples. The registers are those the game left during the frame (most games write them
+// once, in their NMI); the frame sequencer runs its four quarter steps across the frame, as on the console.
+//
+// n follows the WALL CLOCK, not the emulated frame: as many samples as the speaker played since the last frame
+// (533 at full speed, more when a frame ran late). A late frame therefore stretches its sound a little instead of
+// leaving the speaker a gap - the queue never runs dry, so a dip costs a touch of tempo, never a click. Pitch is
+// unchanged: the channels' timers still count CPU cycles per sample.
+static void apu_render(nes_session_t *s, int n)
 {
     nes_apu_t *a = &s->apu;
     const uint32_t step = (uint32_t)(((uint64_t)CPU_HZ << 16) / APU_RATE);   // CPU cycles per sample, 16.16
-    for (int i = 0; i < APU_SPF; i++) {
-        const int q = i * 4 / APU_SPF;
-        if (i == q * APU_SPF / 4 && !(a->five_step && q == 3)) { apu_quarter(a); if (q & 1) apu_half(a); }
+    for (int i = 0; i < n; i++) {
+        const int q = i * 4 / n;
+        if (i == q * n / 4 && !(a->five_step && q == 3)) { apu_quarter(a); if (q & 1) apu_half(a); }
         a->acc += step;
         const int cyc = (int)(a->acc >> 16);
         a->acc &= 0xFFFF;
@@ -504,8 +510,9 @@ static void profile_write(nes_session_t *s)
                    l = (unsigned)((uint32_t)(line >> 10) / n * 16 / 375), a = (unsigned)((uint32_t)(s->prof_apu >> 10) / n * 16 / 375);
     FILE *f = fopen(s->trace_path, "a");
     if (!f) return;
-    fprintf(f, "  nes profile: %u frames (%u drawn), ms/frame: 6502 %u.%u  ppu %u.%u  panel lines %u.%u  apu %u.%u\n",
-            (unsigned)s->prof_frames, (unsigned)s->prof_drawn, c / 10, c % 10, p / 10, p % 10, l / 10, l % 10, a / 10, a % 10);
+    fprintf(f, "  nes profile: %u frames (%u drawn), ms/frame: 6502 %u.%u  ppu %u.%u  panel lines %u.%u  apu %u.%u, idle skipped %u%%\n",
+            (unsigned)s->prof_frames, (unsigned)s->prof_drawn, c / 10, c % 10, p / 10, p % 10, l / 10, l % 10, a / 10, a % 10,
+            (unsigned)(s->prof_idle / n * 100 / 29781));   // the console's CPU cycles skipped as idle loops
     fclose(f);
 }
 
@@ -548,14 +555,23 @@ void nucleo_nes_run_frame(void)
     int64_t t1 = esp_timer_get_time();
     s->us_cpu += (uint32_t)(t1 - t0);
     const uint32_t c0 = agnes_ccount();
-    apu_render(s);
+    int n = APU_SPF;
+    if (s->audio_t) {                                 // the clock's samples since the last frame: 32 per ms
+        const int64_t el = t1 - s->audio_t;
+        if (el > 0 && el < 1000000) n = (int)((uint32_t)el * 4u / 125u);
+        if (n < APU_SPF) n = APU_SPF;
+        if (n > 2 * APU_SPF) n = 2 * APU_SPF;
+    }
+    s->audio_t = t1;
+    apu_render(s, n);
     if (s->sound) {
-        emu_afilt_run(&s->afilt, s->pcm, APU_SPF, 1, 1);
-        nucleo_audio_pcm_write(s->pcm, sizeof s->pcm);
+        emu_afilt_run(&s->afilt, s->pcm, n, 1, 1);
+        nucleo_audio_pcm_write(s->pcm, (size_t)n * sizeof s->pcm[0]);
         s->us_audio += (uint32_t)(esp_timer_get_time() - t1);
     }
     s->prof_apu += (uint32_t)(agnes_ccount() - c0);
     s->prof_frames++;
+    s->prof_idle += agnes_idle_cycles();
     if (!s->a->skip_draw) s->prof_drawn++;
     s->frames++;
     s->clock++;
