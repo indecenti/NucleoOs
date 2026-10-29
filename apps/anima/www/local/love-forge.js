@@ -403,6 +403,8 @@ end
 
 // ---- the .love file is a ZIP: the OS's own writer (shell/nucleo-zip.js), stored like LÖVE's own tools ----
 const zipStore = async (files) => (await import('/nucleo-zip.js')).default.create(files, { level: 'store' });
+// the game's text goes to the console as bytes (it left with the old ZIP writer, and every forge stopped on it)
+const enc = (s) => (typeof s === 'string' ? new TextEncoder().encode(s) : s);
 
 // ---- il registro ---------------------------------------------------------------------------------------------
 // -> { run, done, ok, error, at:[righe], fps, screen, shot, loaded }

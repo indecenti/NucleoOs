@@ -52,8 +52,8 @@
   "weather": "1.0.2",
   "wifi-scanner": "0.1.3"
  },
- "build_hash": "a7efd0e5ef8fb0402a4f8c1c47b44b898bb644d3850ac2935fb9bade653c66ce",
- "commit": "73df5ccac266326ba52f77435a1f08b596b5b29a",
+ "build_hash": "78c5b3c21c9bce650ffd02ee9225549d6c4389dc722f6816d3b6bfd9952b18b0",
+ "commit": "5b62c081fffa75dca8b0f46345c0ecb25cfc2986",
  "files": {
   "apps/agent/manifest.json": "b91d94384d1f527a7b49b1c15438c8b3b38138ef0369ff68cf571d65c6eecfa6",
   "apps/agent/www/agent-sh.js": "077b9b75575cbc51a47ec6f9e1333b5c29dca01114b0d32e9632292d73433eec",
@@ -129,7 +129,7 @@
   "apps/anima/www/local/console-skills.js": "efecc1489f53081511de06633c99a70972fcb4b4e8f335e2e3970aee35232877",
   "apps/anima/www/local/engine.js": "104809d7cd78a14abf4991e6190f84e6f181d802a4bbfbdab5a122642290cfcd",
   "apps/anima/www/local/game-kb.js": "8e6029202c7aef4d0206d0eaa9d3fe93dd324deee415f8391afca8276623f1fe",
-  "apps/anima/www/local/love-forge.js": "a087002f714faa6e38256ee73d5c9119c69c891483135ed0220cc216b5520043",
+  "apps/anima/www/local/love-forge.js": "d25a04b8d89966fadca3f6d09a9adde634a94084233b7da908d011e2482028a5",
   "apps/anima/www/local/nlmath.js": "4deb97e8336e844506946f4903368c92734103067a90fbb77cabe611a1baa29e",
   "apps/anima/www/local/pc-llm.js": "6593dc0dcf9680c3bdecff99764102d28a32c96dc1ff937d4867c929995c97e7",
   "apps/anima/www/local/weather.js": "4bb1de953d6c9ba8be55402c278e5e8ec114e437d090417e0c65f5f7923a927b",
@@ -839,7 +839,7 @@
   "web/shell/boot-fetch.js": "121915625d6de641e509f4aae83261713676af517cb802fac670b74f76592dc5",
   "web/shell/boot-install.js": "8f653164dcbf7ec2a34020fccf2d913644d8f5f68c85b784c4a2995f91d7fa2d",
   "web/shell/boot-splash.js": "e9c12559caf698feab1a11a0b9013c4cbea24dbf1618e0dce2d5f9e71b49f167",
-  "web/shell/build.json": "d38426310191f305541a6ead6a2e84e44766be10314a874b9a062cbf2e2fbcd4",
+  "web/shell/build.json": "5f95ee95956c3bac7459874d90c463709806b41f685c53b8f0ec3bf24d535e96",
   "web/shell/busy.js": "9e7b476d21c4e9b148146efa2b8e117bd011c59d55db447ee629f1517b89a3dd",
   "web/shell/capabilities.js": "9d867a1d6e382752ebf25bcf4b9e6fa27a6a360ee911e4d85084638adf149cfb",
   "web/shell/caps-fallback.json": "3ce7223b49efc2f1215fe214878a5b65f56ef92fbf3ce5f225667514e0658fb8",
