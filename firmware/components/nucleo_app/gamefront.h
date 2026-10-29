@@ -1,12 +1,18 @@
-// GameFront — a HyperSpin-style front-end that REPLACES the plain "Games" category carousel.
-// Pressing the Games tile opens this full-screen launcher: a large game cover (real on-device
-// screenshots, with a procedural poster fallback), the title, a scrollable description and a
-// neighbour wheel. It is a launcher STATE (like the Control Center), not a registered app, so it
-// stays lightweight and the run loop owns it. See nucleo_app.cpp for the wiring.
+// GameFront — the Games gallery, HyperSpin style. The launcher's Games tile opens it instead of a plain category.
 //
-// Screenshots are captured on-device from the shared back-buffer (every native game draws through
-// it), so a freshly-played game self-seeds its cover. Covers live on the SD at
-// /sd/data/GameShots/<id>.{bmp,png,jpg}; a per-game blurb may be overridden at <id>.txt.
+// Two levels: the SYSTEMS (native games — built in or from the Store — then one entry per console whose emulator is
+// installed and whose cartridges are on the card: NES, Game Boy, Game Boy Color, Master System, Game Gear), then the
+// TITLES of the chosen one. A title wheel on the right (the selection in the middle, its neighbours fading), the
+// picture and the whole title on the left, the live search on top; the same look as the emulators' own shelf.
+// A cartridge opens straight in its emulator ("open with", carried across the game's Solo reboot), and quitting the
+// game comes back here on it. With the external panel the gallery lives there and the Cardputer is its companion.
+//
+// It is a launcher STATE (like the Control Center), not a registered app: the run loop owns it (nucleo_app.cpp).
+// Plug and play: the cartridges are found anywhere on the card (by extension; zips by the file inside) and kept in an
+// index, GameShots/.cache/roms.idx, walked again in the background once per boot and after a while.
+// Pictures: native games' covers /sd/data/GameShots/<id>.{png,jpg,bmp}; a cartridge's screenshot
+// <rom folder>/.snaps/<rom file>.snp (tools/fetch-rom-snaps.py); the consoles' photos (gbemu_art.h). Each is turned
+// once into a raw .pic beside it (or in GameShots/.cache) and streamed from the card while a frame is composed.
 #pragma once
 #include <stdbool.h>
 #ifdef __cplusplus
@@ -16,26 +22,20 @@ extern "C" {
 // gamefront_key return codes (mirrors the Control Center contract).
 enum { GF_NONE = 0, GF_REDRAW = 1, GF_CLOSE = 2, GF_LAUNCH = 3 };
 
-void gamefront_open(void);                                  // snapshot the Games list, keep selection
-int  gamefront_key(int key, char ch, char *launch_id, int cap);  // GF_LAUNCH fills launch_id
-void gamefront_render(void);                               // compose full screen + blit
-bool gamefront_step(void);                                 // animation tick; true while moving
-void gamefront_invalidate(void);                           // the next render repaints everything (surface switch)
-
-// Capture the freshly-composited shared canvas to the SD. cover -> downscaled /data/GameShots/<id>.bmp;
-// screenshot -> full-res /data/Screenshots/<name>.bmp. Call right after the frame is pushed.
-bool gamefront_save_cover(const char *id);        // true if the BMP was written
-// Unique name for the next /data/Screenshots capture: shot_YYYYMMDD_HHMMSS once the clock is set, else
-// shot_N one past the highest N already on the card (never overwrites an earlier session's shots).
-void gamefront_shot_name(char *out, int cap);
-bool gamefront_save_screenshot(const char *name); // true if the BMP was written (reads the canvas)
-bool gamefront_save_panel_screenshot(const char *name); // reads the PHYSICAL PANEL — works for direct-draw / Solo-mode apps
-bool gamefront_save_panel_cover(const char *id);        // full-frame panel shot AS the carousel cover (/data/GameShots/<id>.bmp, overwrites)
-bool gamefront_save_canvas_cover(const char *id);       // cheap RAM-read cover from the live canvas, scaled to fit the hero box (overwrites)
-
-// Called when a game closes: refresh its .bmp cover from the last composited frame (overwrite), so
-// exiting on the frame you like sets the cover. Skips only if a curated .png/.jpg is present.
-void gamefront_seed_cover(const char *id);
+void gamefront_open(void);                                       // list the systems and titles, keep the selection
+int  gamefront_key(int key, char ch, char *launch_id, int cap);  // GF_LAUNCH fills launch_id (the app to open)
+const char *gamefront_launch_file(void);                         // ...and the cartridge it must open, or NULL
+void gamefront_render(void);                                     // the whole screen (+ the companion on two screens)
+void gamefront_invalidate(void);                                 // the surface changed: repaint everything
+// Call every loop while the gallery is up: a slice (~15 ms) of the walk that finds the cartridges on the card. True =
+// the walk just ended (repaint: the lists may have changed).
+bool gamefront_step(void);
+bool gamefront_scanning(void);                                   // the card is being walked
+// In the full OS boot after a game launched from the gallery ran in its Solo boot: true = reopen the gallery (on
+// that game). One-shot, and only after our own restart.
+bool gamefront_take_return(void);
+// The Cardputer's screen while the gallery is on the panel (gamefront_render calls it; exposed for the PC gallery).
+void gamefront_draw_companion(void *gfx);
 
 #ifdef __cplusplus
 }

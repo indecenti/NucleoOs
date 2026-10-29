@@ -56,6 +56,39 @@ int  text_list(int x, int y, int w, int h, int n, int sel, int *scroll, app_ui_t
 // A tapped list row (from list()): 1 = it is now the selection, 2 = it already was (open it), 0 = not a row key.
 int  row_tap(int key, char ch, int scroll, int n, int *sel);
 
+// A search line in [x, x+w) x [y, y+h) (36 tall on the panel, ~22 on the Cardputer): a rounded card with a
+// magnifier, the typed text with a cursor (or `hint` when nothing is typed) and `count` at its right in ccol.
+// Returns y + h.
+int  search(int x, int y, int w, int h, const char *text, const char *hint, const char *count, unsigned short ccol, unsigned short acc);
+
+// A HyperSpin-style wheel in [x, x+w) x [y, y+h): `slots` titles (odd), the selection in the middle on an acc pill,
+// its neighbours fading and stepping in with their distance; it turns forever: past the last title the first comes
+// again (with fewer titles than slots they repeat). `offset` draws the titles that many px off their rest (a turn in
+// progress: the pill stays, the titles slide through it). Slot k registers a row target NUCLEO_TOUCH_ROW + k (tap = bring it to the middle,
+// tap the middle one = open: the app's job), and the band is a scroll area (a drag turns it: NK_UP / NK_DOWN). A
+// thin rail at the right edge says where the selection is in a long list. Fonts: Font2, the middle FreeSansBold9pt.
+struct Wheel {
+    int slots;                          // visible titles (odd)
+    const unsigned char *heights;       // each slot's height (slots entries)
+    int n, sel;                         // titles, selection
+    const char *(*label)(int i, void *ud);   // title i
+    bool (*mark)(int i, void *ud);      // a dot before title i (last played, has a save); null = none
+    void *ud;
+    unsigned short acc, mark_col;
+    // Optional: draws something before title i (a console's mark) with its left edge at x, centred on cy, and
+    // returns its width (0 = nothing); the title follows it.
+    int (*icon)(int i, int x, int cy, bool mid, void *ud);
+    int offset;
+};
+// The title in wheel slot k (-1 = none). Any k: a turning wheel shows one slot more on each side.
+inline int wheel_at(int sel, int n, int slots, int k)
+{
+    const int i = sel + k - slots / 2;
+    if (n > 1) return ((i % n) + n) % n;
+    return i == 0 && n == 1 ? 0 : -1;
+}
+void wheel(int x, int y, int w, int h, const Wheel &wl);
+
 // A rounded button with a centred label; tapping it delivers (key, ch).
 void button(int x, int y, int w, int h, const char *label, unsigned short fill, unsigned short ink, int key, char ch);
 // A rounded card fill (lg::card() colour by default).
@@ -120,6 +153,10 @@ void comp_keys(const char *keys);
 // straight to the panel — use it for tool apps with themed cards / rows (on the 8-bit canvas dark greys turn
 // olive); keep the 8-bit default for games (tile_blit / stipple need it, and it is faster).
 bool frame(void (*paint)(void *ud), void *ud, int y0 = 0, int h = 0 /* 0 = to the bottom */, bool exact = false);
+// The same for one rectangle [x0, x0+w) x [y0, y0+h) of the screen, the rest left as it is: paint() draws with x
+// relative to x0 (0 = its left edge) and y in screen rows. For a part that changes alone and often (a wheel turning):
+// the bytes on the bus are that rectangle's only. Touch targets are not touched. False = no canvas (repaint whole).
+bool frame_rect(void (*paint)(void *ud), void *ud, int x0, int y0, int w, int h, bool exact = false);
 // Screenshots of the panel. It cannot be read back (its driver has no MISO), so the next WHOLE frame that frame()
 // composes is also written to `path` as it goes, strip by strip (24-bit BMP, no extra RAM). Apps that draw the
 // panel straight (not through frame()) cannot be captured: the request then fails after a few seconds.

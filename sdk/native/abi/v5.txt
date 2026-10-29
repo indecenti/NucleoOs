@@ -1,0 +1,264 @@
+# NucleoOS native app ABI, level 5 = level 4 + what the emulators need to be opened on one cartridge from the
+# Games gallery (the "open with" handoff). Same rules as v1.txt.
+THEME_BG
+THEME_DIM
+THEME_FG
+THEME_LINE
+THEME_MUTED
+_Z14game_text_openPKc                                        # game_text_open(char const*)
+_Z14nucleo_app_gfxv                                          # nucleo_app_gfx()
+_Z15game_text_closev                                         # game_text_close()
+_Z22nucleo_app_is_bufferedv                                  # nucleo_app_is_buffered()
+_Z9game_textPKcS0_                                           # game_text(char const*, char const*)
+_ZN2lg3barEiiiiit                                            # lg::bar(int, int, int, int, int, unsigned short)
+_ZN2lg3fitEPcjPKci                                           # lg::fit(char*, unsigned int, char const*, int)
+_ZN2lg4cardEv                                                # lg::card()
+_ZN2lg4fontEi                                                # lg::font(int)
+_ZN2lg4gameEPFvvEPFviiEPKct                                  # lg::game(void (*)(), void (*)(int, int), char const*, unsigned short)
+_ZN2lg4wrapEPKciiiii                                         # lg::wrap(char const*, int, int, int, int, int)
+_ZN2lg6buttonEiiiiPKcttic                                    # lg::button(int, int, int, int, char const*, unsigned short, unsigned short, int, char)
+_ZN2lg9comp_headEPKct                                        # lg::comp_head(char const*, unsigned short)
+_ZN2lg9comp_keysEPKc                                         # lg::comp_keys(char const*)
+_ZN3gui10text_widthEPKci                                     # gui::text_width(char const*, int)
+_ZN3gui3mixEtti                                              # gui::mix(unsigned short, unsigned short, int)
+_ZN3gui3rgbEiii                                              # gui::rgb(int, int, int)
+_ZN3gui4menuERKNS_4MenuEPKPKciiit                            # gui::menu(gui::Menu const&, char const* const*, int, int, int, unsigned short)
+_ZN3gui4textEPKciiiitt                                       # gui::text(char const*, int, int, int, int, unsigned short, unsigned short)
+_ZN3gui5panelEiiiitt                                         # gui::panel(int, int, int, int, unsigned short, unsigned short)
+_ZN3gui5titleEPKcS1_t                                        # gui::title(char const*, char const*, unsigned short)
+_ZN3gui6dialogEPKcS1_S1_S1_t                                 # gui::dialog(char const*, char const*, char const*, char const*, unsigned short)
+_ZN3gui8menu_keyERNS_4MenuEii                                # gui::menu_key(gui::Menu&, int, int)
+_ZN3gui9menu_tickERNS_4MenuEi                                # gui::menu_tick(gui::Menu&, int)
+_ZN3gui9vgradientEiiiitt                                     # gui::vgradient(int, int, int, int, unsigned short, unsigned short)
+_ZN4lgfx2v111pixelcopy_tC1EPKvNS0_13color_depth_tES4_bS3_m   # lgfx::v1::pixelcopy_t::pixelcopy_t(void const*, lgfx::v1::color_depth_t, lgfx::v1::color_depth_t, bool, void const*, unsigned long)
+_ZN4lgfx2v15fonts17FreeSansBold9pt7bE                        # lgfx::v1::fonts::FreeSansBold9pt7b
+_ZN4lgfx2v15fonts18FreeSansBold12pt7bE                       # lgfx::v1::fonts::FreeSansBold12pt7b
+_ZN4lgfx2v15fonts5Font0E                                     # lgfx::v1::fonts::Font0
+_ZN4lgfx2v15fonts5Font2E                                     # lgfx::v1::fonts::Font2
+_ZN4lgfx2v18LGFXBase10drawCircleElll                         # lgfx::v1::LGFXBase::drawCircle(long, long, long)
+_ZN4lgfx2v18LGFXBase10fillCircleElll                         # lgfx::v1::LGFXBase::fillCircle(long, long, long)
+_ZN4lgfx2v18LGFXBase11drawEllipseEllll                       # lgfx::v1::LGFXBase::drawEllipse(long, long, long, long)
+_ZN4lgfx2v18LGFXBase11draw_stringEPKcllNS0_9textdatum11textdatum_tEPKNS0_5IFontE # lgfx::v1::LGFXBase::draw_string(char const*, long, long, lgfx::v1::textdatum::textdatum_t, lgfx::v1::IFont const*)
+_ZN4lgfx2v18LGFXBase11fillEllipseEllll                       # lgfx::v1::LGFXBase::fillEllipse(long, long, long, long)
+_ZN4lgfx2v18LGFXBase11getClipRectEPlS2_S2_S2_                # lgfx::v1::LGFXBase::getClipRect(long*, long*, long*, long*)
+_ZN4lgfx2v18LGFXBase11setClipRectEllll                       # lgfx::v1::LGFXBase::setClipRect(long, long, long, long)
+_ZN4lgfx2v18LGFXBase12drawTriangleEllllll                    # lgfx::v1::LGFXBase::drawTriangle(long, long, long, long, long, long)
+_ZN4lgfx2v18LGFXBase12fillTriangleEllllll                    # lgfx::v1::LGFXBase::fillTriangle(long, long, long, long, long, long)
+_ZN4lgfx2v18LGFXBase13clearClipRectEv                        # lgfx::v1::LGFXBase::clearClipRect()
+_ZN4lgfx2v18LGFXBase13drawFastHLineElll                      # lgfx::v1::LGFXBase::drawFastHLine(long, long, long)
+_ZN4lgfx2v18LGFXBase13drawFastVLineElll                      # lgfx::v1::LGFXBase::drawFastVLine(long, long, long)
+_ZN4lgfx2v18LGFXBase13drawRoundRectElllll                    # lgfx::v1::LGFXBase::drawRoundRect(long, long, long, long, long)
+_ZN4lgfx2v18LGFXBase13fillRoundRectElllll                    # lgfx::v1::LGFXBase::fillRoundRect(long, long, long, long, long)
+_ZN4lgfx2v18LGFXBase14drawEllipseArcEllllllff                # lgfx::v1::LGFXBase::drawEllipseArc(long, long, long, long, long, long, float, float)
+_ZN4lgfx2v18LGFXBase14draw_wedgelineEffffffm                 # lgfx::v1::LGFXBase::draw_wedgeline(float, float, float, float, float, float, unsigned long)
+_ZN4lgfx2v18LGFXBase14fillEllipseArcEllllllff                # lgfx::v1::LGFXBase::fillEllipseArc(long, long, long, long, long, long, float, float)
+_ZN4lgfx2v18LGFXBase19fillSmoothRoundRectElllll              # lgfx::v1::LGFXBase::fillSmoothRoundRect(long, long, long, long, long)
+_ZN4lgfx2v18LGFXBase5writeEh                                 # lgfx::v1::LGFXBase::write(unsigned char)
+_ZN4lgfx2v18LGFXBase7setFontEPKNS0_5IFontE                   # lgfx::v1::LGFXBase::setFont(lgfx::v1::IFont const*)
+_ZN4lgfx2v18LGFXBase8drawLineEllll                           # lgfx::v1::LGFXBase::drawLine(long, long, long, long)
+_ZN4lgfx2v18LGFXBase8drawRectEllll                           # lgfx::v1::LGFXBase::drawRect(long, long, long, long)
+_ZN4lgfx2v18LGFXBase8fillRectEllll                           # lgfx::v1::LGFXBase::fillRect(long, long, long, long)
+_ZN4lgfx2v18LGFXBase9pushImageEllllPNS0_11pixelcopy_tEb      # lgfx::v1::LGFXBase::pushImage(long, long, long, long, lgfx::v1::pixelcopy_t*, bool)
+_ZN4lgfx2v18LGFXBase9textWidthEPKcPKNS0_5IFontE              # lgfx::v1::LGFXBase::textWidth(char const*, lgfx::v1::IFont const*)
+_ZdaPv                                                       # operator delete[](void*)
+_ZdlPv                                                       # operator delete(void*)
+_ZdlPvj                                                      # operator delete(void*, unsigned int)
+_Znaj                                                        # operator new[](unsigned int)
+_Znwj                                                        # operator new(unsigned int)
+__cxa_guard_acquire
+__cxa_guard_release
+__divdi3
+__divsf3
+__fixdfsi
+__fixsfdi
+__fixunsdfsi
+__floatdisf
+__gedf2
+__moddi3
+__popcountsi2
+_ctype_
+abs
+acosf
+asinf
+atan2f
+atoi
+cJSON_Delete
+cJSON_GetArrayItem
+cJSON_GetArraySize
+cJSON_GetObjectItem
+cJSON_IsArray
+cJSON_IsNumber
+cJSON_Parse
+calloc
+ceilf
+closedir
+cosf
+esp_random
+esp_task_wdt_reset
+esp_timer_get_time
+expf
+fabsf
+fclose
+fflush
+fgetc
+fgets
+floorf
+fmaxf
+fminf
+fmodf
+fopen
+fprintf
+fputc
+fputs
+fread
+free
+fseek
+ftell
+fwrite
+log10f
+logf
+lroundf
+malloc
+memchr
+memcmp
+memcpy
+memmove
+memset
+mkdir
+nucleo_app_content_height
+nucleo_app_content_top
+nucleo_app_exit
+nucleo_app_register = nucleo_native_capture_register
+nucleo_app_request_draw
+nucleo_app_set_back_handler
+nucleo_app_set_direct_draw
+nucleo_app_set_fullscreen
+nucleo_app_set_hint
+nucleo_app_set_keep_awake
+nucleo_app_set_poll_handler
+nucleo_app_set_ptt_handler
+nucleo_app_set_tab_handler
+nucleo_app_two_screens
+nucleo_audio_is_playing
+nucleo_audio_play
+nucleo_audio_set_volume
+nucleo_audio_stop
+nucleo_audio_tone
+nucleo_audio_volume
+nucleo_imu_energy
+nucleo_imu_gravity_screen
+nucleo_imu_motion
+nucleo_imu_present
+nucleo_imu_recenter
+nucleo_imu_sample
+nucleo_imu_tilt
+nucleo_kbd_char_down
+nucleo_kbd_mods
+nucleo_touch_add
+nucleo_touch_clear
+nucleo_touch_commit
+nucleo_ui_is_adv
+opendir
+pnet_channel
+pnet_name
+pnet_recv
+pnet_send
+pnet_start
+pnet_stop
+powf
+qsort
+readdir
+remove
+rename
+rewind
+roundf
+sinf
+snprintf
+sqrtf
+sscanf
+stat
+strcat
+strchr
+strcmp
+strcpy
+strlen
+strncat
+strncmp
+strncpy
+strrchr
+strstr
+strtof
+strtol
+strtoul
+tanf
+tolower
+toupper
+unlink
+vsnprintf
+_ZN2lg3tapEicPiS0_                                           # lg::tap(int, char, int*, int*)
+_ZN2lg5fieldEiiii                                            # lg::field(int, int, int, int)
+_ZN2lg5frameEPFvPvES0_iib                                    # lg::frame(void (*)(void*), void*, int, int, bool)
+nucleo_touch_add_pad
+nucleo_touch_add_scroll
+_ZN2lg4listEiiiiiiiPiPFviiiiibtPvES1_t                       # lg::list(int, int, int, int, int, int, int, int*, void (*)(int, int, int, int, int, bool, unsigned short, void*), void*, unsigned short)
+_ZN2lg4tabsEiPKPKciitS1_                                     # lg::tabs(int, char const* const*, int, int, unsigned short, char const*)
+_ZN2lg5panelEiiiit                                           # lg::panel(int, int, int, int, unsigned short)
+_ZN2lg6headerEPKcS1_tii                                      # lg::header(char const*, char const*, unsigned short, int, int)
+_ZN2lg7messageEiiiiPKcS1_t                                   # lg::message(int, int, int, int, char const*, char const*, unsigned short)
+_ZN2lg7row_tapEiciiPi                                        # lg::row_tap(int, char, int, int, int*)
+_ZN2lg8row_textEiiiibtPKcS1_t                                # lg::row_text(int, int, int, int, bool, unsigned short, char const*, char const*, unsigned short)
+_ZN2lg9text_listEiiiiiiPiPFPKciPvES5_PFtiS3_ES3_ti           # lg::text_list(int, int, int, int, int, int, int*, char const* (*)(int, void*), char const* (*)(int, void*), unsigned short (*)(int, void*), void*, unsigned short, int)
+THEME_ACC
+THEME_INK
+_Z18nucleo_app_set_gfxPN4lgfx2v19LovyanGFXE                  # nucleo_app_set_gfx(lgfx::v1::LovyanGFX*)
+_Z21nucleo_screen_releasev                                   # nucleo_screen_release()
+_ZN4lgfx2v112Panel_Sprite12createSpriteEllPNS0_12color_conv_tEb # lgfx::v1::Panel_Sprite::createSprite(long, long, lgfx::v1::color_conv_t*, bool)
+_ZN4lgfx2v112Panel_Sprite12deleteSpriteEv                    # lgfx::v1::Panel_Sprite::deleteSprite()
+_ZN4lgfx2v112Panel_Sprite13setColorDepthENS0_13color_depth_tE # lgfx::v1::Panel_Sprite::setColorDepth(lgfx::v1::color_depth_t)
+_ZN4lgfx2v112SpriteBuffer5resetEjNS0_16AllocationSourceE     # lgfx::v1::SpriteBuffer::reset(unsigned int, lgfx::v1::AllocationSource)
+_ZN4lgfx2v112SpriteBuffer7releaseEv                          # lgfx::v1::SpriteBuffer::release()
+_ZN4lgfx2v18LGFXBase11setRotationEj                          # lgfx::v1::LGFXBase::setRotation(unsigned int)
+_ZN4lgfx2v18LGFXBase6printfEPKcz                             # lgfx::v1::LGFXBase::printf(char const*, ...)
+_ZNK4lgfx2v112SpriteBuffer7use_dmaEv                         # lgfx::v1::SpriteBuffer::use_dma() const
+_ZSt7nothrow                                                 # std::nothrow
+_ZTVN4lgfx2v112Panel_SpriteE                                 # vtable for lgfx::v1::Panel_Sprite
+_ZnwjRKSt9nothrow_t                                          # operator new(unsigned int, std::nothrow_t const&)
+__bswapsi2
+esp_log_timestamp
+esp_log_write
+heap_caps_get_free_size
+heap_caps_get_largest_free_block
+heap_caps_malloc
+localtime_r
+nucleo_anima_solo_active
+nucleo_app_brightness
+nucleo_app_force_repaint
+nucleo_app_release_buffers
+nucleo_audio_is_muted
+nucleo_audio_pcm_close
+nucleo_audio_pcm_open
+nucleo_audio_pcm_write
+nucleo_ble_radio_present
+nucleo_exclusive_active
+nucleo_exclusive_exit
+nucleo_extdisp_internal_gfx
+nucleo_kbd_read
+nucleo_power_battery_pct
+nucleo_power_perf_begin
+nucleo_power_perf_end
+nucleo_prefs_save
+nucleo_setup_mode
+nucleo_surface_large
+nucleo_surface_large_ok
+nucleo_surface_set_large
+nucleo_tr5
+strcasecmp
+strcasestr
+strncasecmp
+time
+tinfl_decompress
+vTaskDelay
+vfprintf
+nucleo_extdisp_hud_overlay
+nucleo_audio_pcm_open_ex
+nucleo_app_take_open_file

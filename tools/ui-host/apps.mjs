@@ -14,6 +14,9 @@
 //   @reg nucleo_register_x                     the register function (default nucleo_register_<key>)
 //   @app <id>                                  which registered app (a file may register two)
 //   @file <key>                                the source is app_<key>.cpp (two scene files for one source)
+//   @main <file.cpp>                           the source is nucleo_app/<file.cpp> (not an app_ file: gamefront)
+//   @direct                                    the compact and companion looks draw straight to the screen (a
+//                                              launcher state that composes its own frames), not into the canvas
 //   @lib <name>                                a host library to link (-l<name>), e.g. z for a stub's inflate
 //   host:<n> (a key token)                     the app's own scene n (ui_host_scene): views no key sequence reaches
 //   @sd <path under sd/> <content>             a file the scenes find on the card (\n = newline)
@@ -61,7 +64,7 @@ for (const d of [OUT, COMMON_OBJ, SHOTS, SHEETS, LGFX_OBJ]) mkdirSync(d, { recur
 // ---- scene files -------------------------------------------------------------------------------------------
 function readScenes(key) {
   const f = join(sceneDir, key + '.txt');
-  const spec = { key, file: key, src: [], host: [], libs: [], reg: `nucleo_register_${key}`, app: null, sd: [], scenes: [] };
+  const spec = { key, file: key, main: null, direct: false, src: [], host: [], libs: [], reg: `nucleo_register_${key}`, app: null, sd: [], scenes: [] };
   const text = existsSync(f) ? readFileSync(f, 'utf8') : 'home\n';
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
@@ -72,9 +75,11 @@ function readScenes(key) {
     else if (w === '@reg') spec.reg = rest[0];
     else if (w === '@app') spec.app = rest[0];
     else if (w === '@file') spec.file = rest[0];
+    else if (w === '@main') spec.main = rest[0];
+    else if (w === '@direct') spec.direct = true;
     else if (w === '@lib') spec.libs.push(...rest);
-    else if (w === '@sdfile') spec.sd.push([rest[0], readFileSync(join(here, rest[1]))]);
-    else if (w === '@sd') spec.sd.push([rest[0], line.slice(line.indexOf(rest[0]) + rest[0].length + 1).replace(/\\n/g, '\n')]);
+    else if (w === '@sdfile') spec.sd.push([decodeURIComponent(rest[0]), readFileSync(join(here, rest[1]))]);
+    else if (w === '@sd') spec.sd.push([decodeURIComponent(rest[0]), line.slice(line.indexOf(rest[0]) + rest[0].length + 1).replace(/\\n/g, '\n')]);
     else spec.scenes.push({ name: w, keys: rest });
   }
   if (!spec.scenes.length) spec.scenes.push({ name: 'home', keys: [] });
@@ -161,7 +166,7 @@ function stubAsm(syms) {
 async function buildApp(spec) {
   const dir = join(OUT, 'obj', spec.key);
   mkdirSync(dir, { recursive: true });
-  const srcs = [join(APPS, `app_${spec.file}.cpp`), ...spec.src.map((s) => (s.includes('/') ? join(FW, s) : join(APPS, s))), ...spec.host.map((s) => join(here, s))];
+  const srcs = [join(APPS, spec.main || `app_${spec.file}.cpp`), ...spec.src.map((s) => (s.includes('/') ? join(FW, s) : join(APPS, s))), ...spec.host.map((s) => join(here, s))];
   const objs = await pool(srcs.map((src, i) => () => {
     const obj = join(dir, basename(src) + '.o');
     return stale([src, join(APPS, 'app_large.h')], obj) ? compile(src, obj, [], i === 0) : obj;
@@ -225,7 +230,7 @@ for (const key of keys) {
     rmSync(box, { recursive: true, force: true });
     for (const d of ['sd/system/config', 'cfg/config', 'sd/data']) mkdirSync(join(box, d), { recursive: true });
     for (const [p, c] of spec.sd) { mkdirSync(dirname(join(box, 'sd', p)), { recursive: true }); writeFileSync(join(box, 'sd', p), c); }
-    const p = spawn(b.exe, [SHOTS, `${key}.${sc.name}`, v, lang, ...sc.keys], { cwd: box, env: { ...env, ...(spec.app ? { GALLERY_APP: spec.app } : {}) } });
+    const p = spawn(b.exe, [SHOTS, `${key}.${sc.name}`, v, lang, ...sc.keys], { cwd: box, env: { ...env, ...(spec.app ? { GALLERY_APP: spec.app } : {}), ...(spec.direct ? { GALLERY_DIRECT: '1' } : {}) } });
     let out = '';
     p.stdout.on('data', (x) => { out += x; });
     p.stderr.on('data', (x) => { out += x; });

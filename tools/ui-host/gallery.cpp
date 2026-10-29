@@ -182,6 +182,10 @@ int main(int argc, char **argv)
     if (g_host.large && s_app->on_draw_large) {
         nucleo_touch_clear();
         d.startWrite(); s_app->on_draw_large(); d.endWrite();
+    } else if (getenv("GALLERY_DIRECT")) {             // a launcher state composes its own frames on the screen
+        nucleo_touch_clear();
+        if (s_app->on_draw) s_app->on_draw();
+        nucleo_touch_commit();
     } else {
         M5Canvas *cv = nucleo_screen();
         nucleo_app_set_gfx(cv);

@@ -671,6 +671,11 @@ void launcher_draw_icon(M5GFX *c, int cx, int cy, int r, const char *id, char le
 {
     ui_icon(c, cx, cy, r, id, letter, col, bg);
 }
+void launcher_draw_icon(lgfx::LovyanGFX *c, int cx, int cy, int r, const char *id, char letter,
+                        unsigned short col, unsigned short bg)
+{
+    ui_icon(c, cx, cy, r, id, letter, col, bg);
+}
 
 // Red alert label for ANY background radio-offensive op (Evil Portal / Deauth Flood / Beacon Spam).
 // All three keep running after you leave their app and suspend the OS network/web — the bar makes that

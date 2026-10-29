@@ -404,6 +404,8 @@ struct EState {
     int      shot_next;      // ...the source line it expects next (-1 = waiting for line 0)
     M5Canvas *mq;            // dedicated sprite for the scrolling shelf title (ANTI-FLICKER technique 3)
     int      mq_w;           // its current width, 0 = none
+    char     autoplay[PATHMAX];   // the cartridge the Games gallery opened us on ("" = none / already started):
+                                  // quitting it goes back to the gallery, not to this shelf
 };
 static EState *st = nullptr;
 static inline const char *ent_name(int i) { return st->sh->pool + st->sh->list[i].off; }
@@ -535,9 +537,11 @@ static void shelf_swap_in(void)
 }
 
 // Resolve a bare filename to a full path, trying both system folders.
+// A path (the Games gallery finds cartridges anywhere on the card) is taken as it is.
 static bool rom_path(const char *name, char *out, size_t n)
 {
     struct stat sb;
+    if (strchr(name, '/')) { snprintf(out, n, "%s", name); return stat(out, &sb) == 0; }
     snprintf(out, n, "%s/%s", SYS->dir_a, name);
     if (stat(out, &sb) == 0) return true;
     if (!SYS->dir_b) return false;
@@ -891,8 +895,21 @@ static void mq_free(void)
 // is the flicker). It draws straight to the panel over just the one row.
 static int wheel_offset(void);
 static int64_t s_wheel_t0_peek(void);
+static void play(const char *name);
 static bool shelf_poll(void)
 {
+    // Opened from the Games gallery on one cartridge: start it here, once the run loop has set the surface up
+    // (on_enter is too early for the second screen). However the game ends — quit from its menu, or a cartridge
+    // the core refuses (the reason goes to the trace) — the player goes back to the gallery, never to this shelf.
+    if (st && st->autoplay[0] && !st->running) {
+        char name[PATHMAX];
+        snprintf(name, sizeof name, "%s", st->autoplay);
+        st->autoplay[0] = '\0';
+        play(name);
+        if (st && st->fail[0]) trace("  back to the gallery after: %s", st->fail);
+        nucleo_app_exit();
+        return false;
+    }
     if (nucleo_app_two_screens()) {                  // the gallery on the panel: frames only while the wheel turns
         if (!s_wheel_t0_peek()) return false;
         return true;                                 // the paint itself ends the turn (wheel_offset clears t0)
@@ -2549,6 +2566,15 @@ static void enter(void)
     if (st->have_resume) {
         for (int i = 0; i < st->n; i++)
             if (!strcmp(ent_name(i), st->resume)) { st->sel = i; break; }
+    }
+    // The Games gallery opened us on one cartridge ("open with", carried across the Solo reboot), by its whole path:
+    // it may be in any folder. shelf_poll() plays it straight away, and quitting it goes back to the gallery.
+    if (const char *of = nucleo_app_take_open_file()) {
+        const char *base = strrchr(of, '/');
+        snprintf(st->autoplay, sizeof st->autoplay, "%s", of);
+        for (int i = 0; i < st->n; i++)
+            if (!strcmp(ent_name(i), base ? base + 1 : of)) { st->sel = i; break; }
+        trace("  opened on '%s'", st->autoplay);
     }
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_poll_handler(shelf_poll);   // 50 Hz title scroll, sprite-blitted (no list repaint)
