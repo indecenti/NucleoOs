@@ -440,3 +440,17 @@ number that decides what to optimise next; the QIO flash question in §6 applies
 **Not done, needs a decision:** caching the ROM in the *inactive OTA partition* and
 `esp_partition_mmap`-ing it would remove every SD miss and hand the page cache's ~55 KB back — at the
 price of overwriting the rollback image in that partition (§2 rules out a dedicated one).
+
+## 8. Next: PC Engine, NES, Commodore 64 (prepared, not built yet)
+
+Prepared so far: their console pictures and marks (`gbemu_art.h`, public-domain photos), and the ROM folders on the
+card (`/data/ROMs/pcengine`, `nes`, `c64`). What each needs, against the two rules every core here follows — a
+licence compatible with the firmware's (no GPL code), and no single block larger than the heap's 32 KB:
+
+| Console | Core | Licence | RAM the console needs | Notes |
+|---|---|---|---|---|
+| NES | [agnes](https://github.com/kgabis/agnes) (single header) | MIT | 2 KB work + 2 KB name tables + palette, cartridge CHR-RAM up to 8 KB | the lightest of the three; mappers 0-4 cover most of the library; the 256x240 picture fills the panel at 5/4 like the Master System |
+| Commodore 64 | [chips](https://github.com/floooh/chips) (`c64.h`: m6502, m6569 VIC-II, m6581 SID, m6526 CIA) | zlib | **64 KB** RAM + 1 KB colour RAM | the 64 KB must be split (chips addresses memory through 1 KB pages, so the RAM can be 2-4 host blocks, a patch like Walnut's W1); the KERNAL / BASIC / character ROMs are Commodore's and cannot ship: the user supplies them, or open replacement ROMs are needed; keyboard: the Cardputer's own maps naturally |
+| PC Engine | none found under a compatible licence (HuExpress, Mednafen, Geargrafx, PCE-Go are GPL) | — | 8 KB work RAM + **64 KB** VRAM + 512-colour VCE | our own machine around a permissive 65C02 core (chips `m6502` is zlib; HuC6280 adds a bank MMU, block transfers, timer, PSG), as nucleo_gg.c is around z80emu; VRAM in banks; HuCards up to 2.5 MB (Street Fighter II) from the SD page cache |
+
+Order of work, cheapest first: NES, then C64 (with the ROM question settled), then the PC Engine machine.

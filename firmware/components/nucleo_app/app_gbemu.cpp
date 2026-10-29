@@ -274,7 +274,12 @@ static int  s_out_y0 = 0, s_out_h = OUT_H;
 #define BIG_H (s_src_w == SRC_W ? (s_stretch ? 240 : 216) : 240)
 #define BIG_X ((320 - BIG_W) / 2)
 #define BIG_Y ((240 - BIG_H) / 2)
+#ifdef NUCLEO_UI_HOST
+static int s_host_view;                  // the ui-host gallery's scene for an in-game view (ui_host_scene)
+static LovyanGFX *igfx(void) { return s_host_view ? &d : s_big ? (LovyanGFX *)nucleo_extdisp_internal_gfx() : nullptr; }
+#else
 static LovyanGFX *igfx(void) { return s_big ? (LovyanGFX *)nucleo_extdisp_internal_gfx() : nullptr; }
+#endif
 
 static inline uint16_t swap16(uint16_t c) { return (uint16_t)((c >> 8) | (c << 8)); }
 static void pal_apply(void)
@@ -822,8 +827,14 @@ static void mq_free(void)
 // ~50 Hz. Scrolls the selected title if it overflows its row; a title that fits was already drawn
 // static by draw(), so this does nothing. Returns false: it must NEVER request a list repaint (that
 // is the flicker). It draws straight to the panel over just the one row.
+static int wheel_offset(void);
+static int64_t s_wheel_t0_peek(void);
 static bool shelf_poll(void)
 {
+    if (nucleo_app_two_screens()) {                  // the gallery on the panel: frames only while the wheel turns
+        if (!s_wheel_t0_peek()) return false;
+        return true;                                 // the paint itself ends the turn (wheel_offset clears t0)
+    }
     if (!st || st->running || !st->sel_title[0] || st->fail[0]) return false;   // never draw over the failure box
     const int avail = st->sel_avail;
     int tw = (int)strlen(st->sel_title) * 12;          // size-2 glyphs are ~12 px wide
@@ -962,6 +973,15 @@ static void chrome_draw(void)
 // shelf the Master System's.
 static const EmuArt *sys_icon(void) { return s_src_w == SRC_W ? &SYS->icon_a : &SYS->icon_b; }
 
+// The game's title for the screens: the cartridge header's, else the file name made readable.
+static void pretty(const char *file, char *out, size_t n);
+static void game_title(char *out, size_t n)
+{
+    const char *t = SYS->title();
+    if (t && t[0]) { snprintf(out, n, "%s", t); return; }
+    pretty(st->resume, out, n);
+}
+
 // A key cap: the key on a raised cap, what it does beside it. Returns the x after it.
 static int keycap(LovyanGFX *g, int x, int y, const char *key, const char *what)
 {
@@ -985,27 +1005,28 @@ static void card_draw(bool full)
     if (full) {
         g->fillScreen(BG);
         const int iw = icon_draw(g, 4, 1, sys_icon());
-        char t[40]; snprintf(t, sizeof t, "%s", SYS->title());
+        char t[40]; game_title(t, sizeof t);
         g->setFont(&fonts::FreeSansBold9pt7b);
         while (t[0] && (int)g->textWidth(t) > 228 - iw) t[strlen(t) - 1] = '\0';
         g->setTextColor(FG, BG); g->setCursor(iw + 10, 5); g->print(t);
         g->setFont(&fonts::Font0);
-        g->drawFastHLine(6, 88, 228, LINE);
+        g->drawFastHLine(6, 87, 228, LINE);
         // The controls, as the keys they are on this keyboard.
-        int x = keycap(g, 4, 94, "E S A D", TR5("muovi", "move", "mover", "bouger", "bewegen"));
+        // Three rows of caps, 14 px apart: the last one ends on row 132 of 135.
+        int x = keycap(g, 4, 91, "E S A D", TR5("muovi", "move", "mover", "bouger", "bewegen"));
         if (!strcmp(SYS->id, "gbemu")) {
-            x = keycap(g, x, 94, "K", "A");
-            keycap(g, x, 94, "J", "B");
-            x = keycap(g, 4, 109, TR5("Invio", "Enter", "Intro", "Entree", "Enter"), "START");
-            keycap(g, x, 109, TR5("Spazio", "Space", "Espacio", "Espace", "Leer"), "SELECT");
+            x = keycap(g, x, 91, "K", "A");
+            keycap(g, x, 91, "J", "B");
+            x = keycap(g, 4, 105, TR5("Invio", "Enter", "Intro", "Entree", "Enter"), "START");
+            keycap(g, x, 105, TR5("Spazio", "Space", "Espacio", "Espace", "Leer"), "SELECT");
         } else {
-            x = keycap(g, x, 94, "J", "1");
-            keycap(g, x, 94, "K", "2");
-            keycap(g, 4, 109, TR5("Invio", "Enter", "Intro", "Entree", "Enter"), s_src_w == SRC_W ? "START" : TR5("PAUSA", "PAUSE", "PAUSA", "PAUSE", "PAUSE"));
+            x = keycap(g, x, 91, "J", "1");
+            keycap(g, x, 91, "K", "2");
+            keycap(g, 4, 105, TR5("Invio", "Enter", "Intro", "Entree", "Enter"), s_src_w == SRC_W ? "START" : TR5("PAUSA", "PAUSE", "PAUSA", "PAUSE", "PAUSE"));
         }
-        x = keycap(g, 4, 123, "M", "menu");
-        x = keycap(g, x, 123, "TAB", TR5("veloce", "fast", "rapido", "vite", "schnell"));
-        keycap(g, x, 123, "- =", "volume");
+        x = keycap(g, 4, 119, "M", "menu");
+        x = keycap(g, x, 119, "TAB", TR5("veloce", "fast", "rapido", "vite", "schnell"));
+        keycap(g, x, 119, "- =", "volume");
     }
     // ── what changes: the clock and battery, the frame rate and its sparkline, the volume (or the toast) ──
     g->setFont(&fonts::Font0); g->setTextSize(1);
@@ -1112,7 +1133,8 @@ static const char *menu_label(int i, char *buf, size_t n)
                                             : TR5("Carica stato (vuoto)", "Load state (empty)", "Cargar (vacio)", "Charger (vide)", "Laden (leer)");
         case MI_VOL:    snprintf(buf, n, "%s: %d%%", TR5("Volume", "Volume", "Volumen", "Volume", "Lauts."), nucleo_audio_volume()); return buf;
         case MI_SCREEN: snprintf(buf, n, "%s: %s", TR5("Schermo", "Screen", "Pantalla", "Ecran", "Bild"),
-                                 s_stretch ? TR5("Pieno", "Filled", "Lleno", "Complet", "Voll") : "1:1"); return buf;
+                                 s_stretch ? TR5("Pieno", "Filled", "Lleno", "Complet", "Voll")
+                                           : TR5("Originale", "Original", "Original", "Original", "Original")); return buf;
         case MI_LINES:  snprintf(buf, n, "%s: %s", TR5("Righe", "Lines", "Lineas", "Lignes", "Linien"),
                                  s_sharp ? TR5("Nette", "Sharp", "Nitida", "Nette", "Scharf") : TR5("Fuse", "Blended", "Fundido", "Fondu", "Gemischt")); return buf;
         case MI_RESET:  return TR5("Reset gioco", "Reset game", "Reiniciar", "Reinit.", "Zuruecksetzen");
@@ -1174,8 +1196,19 @@ static void menu_row(int i)
 #define BMENU_ROW 28
 static int s_bm_scroll;
 static bool menu_danger(int i) { return i == MI_RESET || i == MI_QUIT; }
-static void menu_row_big(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+// On the panel the line blending and the pillars' info do not exist (the picture is scaled whole): no rows.
+static bool menu_shown(int i) { return !s_big || (i != MI_LINES && i != MI_INFO); }
+static int  bm_rows(int *map)
 {
+    int n = 0;
+    for (int i = 0; i < MI_N; i++) if (menu_shown(i)) map[n++] = i;
+    return n;
+}
+static int  bm_index(int item) { int map[MI_N], n = bm_rows(map); for (int i = 0; i < n; i++) if (map[i] == item) return i; return 0; }
+static void menu_row_big(int row, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    int map[MI_N]; bm_rows(map);
+    const int i = map[row];
     char buf[48];
     const char *t = menu_label(i, buf, sizeof buf);
     // "Label: value" becomes the row's label and its right-hand value.
@@ -1189,18 +1222,23 @@ static void menu_draw_big(void)
 {
     const int W = d.width(), H = d.height(), cx = (W - BMENU_W) / 2, cy = (H - BMENU_H) / 2;
     nucleo_touch_clear();
+    d.fillScreen(BEZEL);                                // nothing of the bezel peeks out from under the card
     lg::panel(cx, cy, BMENU_W, BMENU_H, BG);
     d.drawRoundRect(cx, cy, BMENU_W, BMENU_H, 10, LINE);
-    nucleo_gb_stats_t w; SYS->get_stats(&w);
+    nucleo_gb_stats_t w = {}; SYS->get_stats(&w);
     lg::font(1); d.setTextDatum(middle_left);
     d.setTextColor(w.core_errors ? AMB : ACC, BG);
-    d.drawString(w.core_errors ? TR5("CPU bloccata", "CPU crashed", "CPU bloqueada", "CPU bloquee", "CPU blockiert")
-                               : TR5("Pausa", "Paused", "Pausa", "Pause", "Pause"), cx + 14, cy + 17);
-    char title[24]; lg::font(0); lg::fit(title, sizeof title, SYS->title(), BMENU_W / 2);
+    const char *head = w.core_errors ? TR5("CPU bloccata", "CPU crashed", "CPU bloqueada", "CPU bloquee", "CPU blockiert")
+                                     : TR5("Pausa", "Paused", "Pausa", "Pause", "Pause");
+    d.drawString(head, cx + 14, cy + 17);
+    const int hw = (int)d.textWidth(head);
+    char gt[40]; game_title(gt, sizeof gt);
+    char title[40]; lg::font(0); lg::fit(title, sizeof title, gt, BMENU_W - 28 - hw - 16);   // never under the heading
     d.setTextDatum(middle_right); d.setTextColor(MUTED, BG);
     d.drawString(title, cx + BMENU_W - 14, cy + 17);
     d.setTextDatum(top_left);
-    lg::list(cx + 6, cy + 34, BMENU_W - 12, BMENU_H - 40, BMENU_ROW, MI_N, st->msel, &s_bm_scroll, menu_row_big, nullptr, ACC);
+    int map[MI_N]; const int nrows = bm_rows(map);
+    lg::list(cx + 6, cy + 34, BMENU_W - 12, BMENU_H - 40, BMENU_ROW, nrows, bm_index(st->msel), &s_bm_scroll, menu_row_big, nullptr, ACC);
     // Outside the card: resume (the panel's whole top band, sides and bottom).
     nucleo_touch_add(0, 0, W, cy, NK_BACK, 0);
     nucleo_touch_add(0, cy + BMENU_H, W, H - cy - BMENU_H, NK_BACK, 0);
@@ -1346,14 +1384,21 @@ static void menu_activate(void)
 static void menu_key(nucleo_key_t k)
 {
     if (s_big && nucleo_touch_is_row(k.key, k.ch)) {   // a row of the panel's menu: pick it, or do it
-        int r = lg::row_tap(k.key, k.ch, s_bm_scroll, MI_N, &st->msel);
+        int map[MI_N]; const int nrows = bm_rows(map);
+        int row = bm_index(st->msel);
+        int r = lg::row_tap(k.key, k.ch, s_bm_scroll, nrows, &row);
+        st->msel = map[row];
         if (r == 2) menu_activate(); else if (r == 1) menu_draw();
         return;
     }
     if (k.key == NK_BACK || k.ch == '`' || k.ch == 'm' || k.ch == 'M') { menu_close(); return; }
-    if (k.ch >= '1' && k.ch <= '0' + (MI_N < 9 ? MI_N : 9)) { st->msel = k.ch - '1'; menu_activate(); return; }
-    if (k.key == NK_UP   || k.ch == 'e' || k.ch == 'E' || k.ch == ';') { st->msel = (st->msel + MI_N - 1) % MI_N; menu_draw(); return; }
-    if (k.key == NK_DOWN || k.ch == 's' || k.ch == 'S' || k.ch == '.') { st->msel = (st->msel + 1) % MI_N; menu_draw(); return; }
+    if (k.ch >= '1' && k.ch <= '9') {
+        int map[MI_N]; const int nrows = bm_rows(map), want = k.ch - '1';
+        if (want < nrows) { st->msel = map[want]; menu_activate(); }
+        return;
+    }
+    if (k.key == NK_UP   || k.ch == 'e' || k.ch == 'E' || k.ch == ';') { do st->msel = (st->msel + MI_N - 1) % MI_N; while (!menu_shown(st->msel)); menu_draw(); return; }
+    if (k.key == NK_DOWN || k.ch == 's' || k.ch == 'S' || k.ch == '.') { do st->msel = (st->msel + 1) % MI_N; while (!menu_shown(st->msel)); menu_draw(); return; }
     if (k.key == NK_LEFT  || k.ch == 'a' || k.ch == 'A' || k.ch == ',') { menu_adjust(-1); return; }
     if (k.key == NK_RIGHT || k.ch == 'd' || k.ch == 'D' || k.ch == '/') { menu_adjust(+1); return; }
     if (k.key == NK_ENTER || k.ch == '\n' || k.ch == ' ' || k.ch == 'k' || k.ch == 'K') menu_activate();
@@ -1769,8 +1814,34 @@ static void pretty(const char *file, char *out, size_t n)
 }
 
 static void draw_companion(void);
+#ifdef NUCLEO_UI_HOST
+// ui-host gallery scenes for what only a running game shows: 1 = playing at 3/2 (the companion, the bezel),
+// 2 = the pause menu on the panel, 3 = playing filled. A fake session: the selected cartridge's name, 58 fps
+// with a dip in the sparkline, 12:34 played, the picture a pattern where the game would be.
+extern "C" void ui_host_scene(int n)
+{
+    s_host_view = n;
+    s_big = true; s_src_w = SRC_W; s_src_h = 144; s_stretch = n == 3;
+    geom_apply();
+    snprintf(st->resume, sizeof st->resume, "%s", st->n ? ent_name(st->sel) : "Game");
+    st->fps = 58; st->fps_hn = 32;
+    for (int i = 0; i < 32; i++) st->fps_hist[i] = (uint8_t)(i > 20 && i < 24 ? 44 : 59);
+    st->play_t0 = esp_timer_get_time() - 754LL * 1000000;
+    st->menu = n == 2; st->msel = 3;
+}
+static void host_view_large(void)
+{
+    bezel_draw();
+    for (int y = 0; y < s_out_h; y += 8)               // a stand-in picture: bands where the game would be
+        d.fillRect(s_out_x, s_out_y0 + y, s_out_w, 8, (y / 8) & 1 ? 0x6D2B : 0x8E2E);
+    if (st->menu) menu_draw_big();
+}
+#endif
 static void draw(void)
 {
+#ifdef NUCLEO_UI_HOST
+    if (s_host_view) { bool m = st->menu; st->menu = false; card_draw(true); st->menu = m; return; }
+#endif
     if (!st) return;
     if (!st->sh) shelf_swap_in();                // a failed swap-in retries on the next repaint
     if (nucleo_app_two_screens()) { draw_companion(); return; }
@@ -1883,6 +1954,22 @@ static const uint8_t WHEEL_H[WHEEL_SLOTS] = { 21, 23, 25, 32, 25, 23, 21 };
 #define SNAP_MAXH   112
 #define SNAP_MAXZ   40000
 static int s_gal_h;                          // the surface height (240 built in; 210 under a store app's system bar)
+// The wheel turns, it does not jump: a new selection slides in from the side it came from through the fixed
+// pill, ~150 ms with an ease-out, and ticks as it lands (HyperSpin's wheel). Drawn by the gallery's poll.
+#define WHEEL_ANIM_US 150000
+static int     s_wheel_last = -1;            // the selection the wheel last showed (-1 = none yet)
+static int     s_wheel_dir;                  // +1: the titles move up (the next one comes from below), -1: down
+static int64_t s_wheel_t0;                   // when the turn started (0 = still)
+static int     s_wheel_off;                  // this frame's slide, read ONCE per frame (lg::frame paints in strips)
+static int64_t s_wheel_t0_peek(void) { return s_wheel_t0; }
+static int wheel_offset(void)
+{
+    if (!s_wheel_t0) return 0;
+    const int64_t t = esp_timer_get_time() - s_wheel_t0;
+    if (t >= WHEEL_ANIM_US) { s_wheel_t0 = 0; return 0; }
+    const int q = (int)(t * 256 / WHEEL_ANIM_US), rest = 256 - q;          // ease-out: (1 - p)^2 of the step
+    return s_wheel_dir * WHEEL_H[WHEEL_SLOTS / 2] * rest * rest / 65536;
+}
 // The selection's picture, kept while the selection stays (a repaint, a typed letter that keeps it) and freed
 // before a game starts: the card is read and the picture inflated once per selection, not once per paint.
 static uint16_t *s_pic;
@@ -2034,25 +2121,30 @@ static void gal_paint(void *)
     // ── right: the wheel. Slot k shows the title k - 3 away; the middle one is the selection, on its pill ──
     const int ww = W - WHEEL_X - 6;
     int sum = 0; for (int k = 0; k < WHEEL_SLOTS; k++) sum += WHEEL_H[k];
-    int wy = top + (bh - sum) / 2;
+    const int wy0 = top + (bh - sum) / 2, off = s_wheel_off;
+    int my = wy0; for (int k = 0; k < WHEEL_SLOTS / 2; k++) my += WHEEL_H[k];
+    const int mh = WHEEL_H[WHEEL_SLOTS / 2];
+    d.fillRoundRect(WHEEL_X, my + 1, ww, mh - 2, (mh - 2) / 2, ACC);  // the selection's pill: fixed, the titles move
+    int wy = wy0;
     for (int k = 0; k < WHEEL_SLOTS; k++) {
-        const int i = wheel_at(k), h = WHEEL_H[k], dist = abs(k - WHEEL_SLOTS / 2);
-        if (i >= 0) {
+        const int i = wheel_at(k), h = WHEEL_H[k], dist = abs(k - WHEEL_SLOTS / 2), ty = wy + off;
+        if (i >= 0 && ty >= top && ty + h <= H) {                  // a row sliding out of the wheel is not drawn
             char t[NAMEMAX], fitted[NAMEMAX];
             pretty(ent_name(i), t, sizeof t);
             const bool mid = dist == 0;
             const int ix = WHEEL_X + 12 + dist * 5;                        // the wheel's curve: far rows step in
-            if (mid) d.fillRoundRect(WHEEL_X, wy + 1, ww, h - 2, (h - 2) / 2, ACC);
             lg::font(mid ? 1 : 0);                                         // 16 px everywhere: readable at arm's length
             lg::fit(fitted, sizeof fitted, t, WHEEL_X + ww - 8 - ix);
             d.setTextDatum(middle_left);
-            d.setTextColor(mid ? INK : dist == 1 ? FG : MUTED, mid ? ACC : BG);
-            d.drawString(fitted, ix, wy + h / 2 + (mid ? 0 : 1));
+            // No text background: a title sliding across the pill's edge must not drag a box of the wrong colour.
+            const bool on_pill = ty + h / 2 > my && ty + h / 2 < my + mh;
+            d.setTextColor(on_pill ? INK : dist <= 1 ? FG : MUTED);
+            d.drawString(fitted, ix, ty + h / 2 + (mid ? 0 : 1));
             d.setTextDatum(top_left);
             if (st->have_resume && !strcmp(ent_name(i), st->resume))
-                d.fillCircle(ix - 6, wy + h / 2, 2, mid ? INK : GRN);
-            nucleo_touch_add(WHEEL_X, wy, ww, h, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+                d.fillCircle(ix - 6, ty + h / 2, 2, on_pill ? INK : GRN);
         }
+        if (i >= 0) nucleo_touch_add(WHEEL_X, wy, ww, h, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
         wy += h;
     }
     // A drag on the wheel turns it, one title per 22 px of finger travel (finger up = later titles).
@@ -2069,9 +2161,21 @@ static void gal_paint(void *)
 static void draw_large(void)
 {
     if (!st) return;
+#ifdef NUCLEO_UI_HOST
+    if (s_host_view) { host_view_large(); return; }
+#endif
     if (!st->sh) shelf_swap_in();
     if (!st->sh) return;
     s_gal_h = d.height();
+    if (s_wheel_last >= 0 && st->sel != s_wheel_last && st->n > 1) {
+        int dlt = st->sel - s_wheel_last;
+        if (st->n > WHEEL_SLOTS && abs(dlt) > st->n / 2) dlt = dlt > 0 ? dlt - st->n : dlt + st->n;   // round the ring
+        s_wheel_dir = dlt > 0 ? 1 : -1;
+        s_wheel_t0 = esp_timer_get_time();
+        nucleo_audio_tone(2600, 4, 12);                             // the wheel's click
+    }
+    s_wheel_last = st->sel;
+    s_wheel_off = wheel_offset();
     if (st->n) pic_for(st->sel);
     nucleo_touch_clear();
     lg::frame(gal_paint, nullptr, 0, 0, true);    // exact: the picture and the theme's cards in true colour

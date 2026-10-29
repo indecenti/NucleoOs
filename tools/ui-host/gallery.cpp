@@ -95,6 +95,7 @@ static void key(int k, char ch = 0)
     if (s_app && s_app->on_key) s_app->on_key(k, ch);
     tick(1);
 }
+extern "C" void ui_host_scene(int n);
 static void token(const char *t)
 {
     static const struct { const char *n; int k; char ch; } K[] = {
@@ -129,6 +130,9 @@ static void token(const char *t)
         return;
     }
     if (!strncmp(t, "tick:", 5)) { tick(atoi(t + 5)); return; }
+    // An app's own scene: a view no key sequence can reach on the PC (a running game). Apps without one get the
+    // generated stub, which does nothing.
+    if (!strncmp(t, "host:", 5)) { ui_host_scene(atoi(t + 5)); tick(1); return; }
     fprintf(stderr, "unknown key token '%s'\n", t);
     exit(3);
 }

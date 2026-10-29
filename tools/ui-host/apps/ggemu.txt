@@ -10,3 +10,5 @@
 shelf
 sms D D
 search c:r c:i
+play_gg host:1
+menu_gg host:2
