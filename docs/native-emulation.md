@@ -470,3 +470,37 @@ pulses, triangle, noise, DMC level; nesdev's non-linear mixer as tables in singl
 its number. Host test: `tools/emu-host/nes_test.c` (SMB, Zelda, Mega Man 2, SMB3, Tetris, Contra, state
 round-trip). agnes's PPU works per dot (~2-3 ms a frame on the PC against Walnut's 0.4 ms): the next step is a
 scanline renderer, measured on the device first.
+
+**NES, measured and rebuilt for speed.** On the ADV (Castlevania, panel on): agnes as shipped ran at **10 fps, 105 ms
+of CPU a frame**. Four patches later (`agnes.nucleo.patch`): **57 fps, 15.6 ms**.
+- A4, a scanline PPU: the frame runs a line at a time (the CPU runs each line's 341 dots in three legs with the
+  PPU's events between them: dot 257 scroll copy, the MMC3 counter, the pre-render copy), each visible line drawn
+  whole from the registers (33 background tiles, eight sprites, priority, sprite-0 hit). 89,342 per-dot calls a
+  frame were the whole cost. Raster effects land on line boundaries (SMB, SMB3, Kirby splits verified).
+- A5, 1 KB windows: the CPU and PPU read the cartridge through cached pointers to the host's pages (pages counted
+  from the PRG data so a bank is whole pages); a mapper write, an evicted page or a new frame drops them.
+- A6, the 6502 as one switch: each opcode's addressing mode and operation inlined (generated from agnes's table).
+- A2, lines leave agnes in RGB565 through a 32-entry per-line palette: no second pass on the host.
+- Frame-skip keeps only the sprite-0 hit on the skipped frame (games wait on it).
+
+Every step is checked the same way: the six reference cartridges pass `nes_test` (exact save-state replay), and a
+frame-by-frame dump of Contra (900 frames, running and firing) is byte-identical to the previous build.
+
+**References studied** (none of their code is used): retro-go (GPL-2, ESP32: nofrendo with a display task pinned
+to the other core, per-line checksums to send only changed lines, automatic frame-skip); LaiNES (BSD-2) and
+smolnes (MIT): accurate per-dot PPUs, the slower class agnes was in. What the device taught on top: the external
+panel shares the SD card's SPI bus at 40 MHz **without DMA** (the SD driver owns the channel), so a full 320x240
+picture is ~30 ms of CPU time — more than the emulation itself. Hence the NES at its own 256 columns on the panel
+(a quarter fewer pixels), the line diff over all 240 lines, and the next step: a firmware service that pushes the
+bands from the other core (retro-go's display task), which needs an ABI level and a firmware update.
+
+**Sound and RAM (1.0.6).** The device profile (cycle counter, written to the trace on quit) for Castlevania, per
+frame: 6502 6.6 ms, PPU 4.8 ms, panel lines 2.1 ms, APU 2.3 ms; dips to ~40 fps where the picture scrolls (the
+panel's 8.9 ms). The front-end does not chase a late frame, so below 60 emulated frames a second the speaker runs
+dry: that was the stuttering sound. Now the NES's frame-skip is adaptive and on from the start: a frame that starts
+more than 2 ms late is run unseen (three at most in a row), so the console — and the sound — stay at 60 while the
+picture gives way. Anemoia-ESP32 (GPL-3, studied only) reaches 60 fps without PSRAM the same way on 40 MHz panels
+(one skipped frame), with its hot code in IRAM (not open to a store module) and its APU on the other core.
+RAM: the mapper's 8 KB CHR RAM and 8 KB PRG RAM (A8) are allocated apart and only when the cartridge has them:
+a CHR-ROM game carries 8 KB less and the console is no longer one 24 KB block (SMB3, Kirby, Contra: 72 cache pages
+instead of 64 on the same heap). States are `NNS2` (the console, the APU, then those RAM blocks).

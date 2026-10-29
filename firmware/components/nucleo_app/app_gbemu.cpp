@@ -272,7 +272,9 @@ static int  s_out_y0 = 0, s_out_h = OUT_H;
 // A 256x192 Master System picture fills it whole at exactly 5/4: 320x240, every fourth pixel and line twice.
 // "Filled" (s_stretch) takes a 160x144 picture to the whole panel too: every pixel twice across, lines 1-2-2
 // down (5/3), 320x240 — wider than its own aspect, as the Cardputer's filled view is.
-#define BIG_W (s_src_w == SRC_W ? (s_stretch ? 320 : 240) : 320)
+// A 256x240 NES picture is already the panel's height: 1:1, its own 256 columns centred (the panel shares the SD
+// card's SPI bus without DMA, so every pixel costs CPU time — 320 columns are a quarter more), 5/4 across if filled.
+#define BIG_W (s_src_w == SRC_W ? (s_stretch ? 320 : 240) : (s_src_h == 240 && !s_stretch) ? 256 : 320)
 #define BIG_H (s_src_w == SRC_W ? (s_stretch ? 240 : 216) : 240)
 #define BIG_X ((320 - BIG_W) / 2)
 #define BIG_Y ((240 - BIG_H) / 2)
@@ -392,12 +394,14 @@ struct EState {
     bool     have_stash;
     // Two screens: the external panel keeps what it was sent, so a source line identical to the one it
     // had last frame is not sent again (a hash per line; a static HUD or a still background costs no bus).
-    uint32_t lhash[192];
+    uint32_t lhash[240];
     bool     diff_ok;        // lhash describes what the panel shows; false after anything else drew there
     bool     crash_told;     // the crash menu opens once per crash, not every second
     bool     mute_keys;      // buttons held when the menu closed stay OUT of the game until released
     bool     state_ok;       // a save state exists — looked up once per menu open, not per repaint
     char     fail[48];       // why the last start failed; drawn over the shelf until the next key
+    FILE    *shot;           // Fn+P: the BMP the next frame is being written into (nullptr = none)
+    int      shot_next;      // ...the source line it expects next (-1 = waiting for line 0)
     M5Canvas *mq;            // dedicated sprite for the scrolling shelf title (ANTI-FLICKER technique 3)
     int      mq_w;           // its current width, 0 = none
     char     autoplay[PATHMAX];   // the cartridge the Games gallery opened us on ("" = none / already started):
@@ -556,10 +560,12 @@ static void row_done(void);
 static void rows_skip(int rows);
 static bool line_same(const void *px, int bytes, int line);
 __attribute__((optimize("-O2")))
+static void shot_line(const uint16_t *px16, const uint8_t *px8, int line);
 static void on_line(const uint8_t *px, int line, void *user)
 {
     (void)user;
     if (!st || !st->band[0]) return;
+    if (st->shot) shot_line(nullptr, px, line);
     if (s_big) {                                 // 3/2: a pair of pixels -> 3, every odd line drawn twice
         if (st->out_y >= s_out_h) return;
         if (s_stretch) {                         // filled: 2x across, rows 1-2-2 down (5/3)
@@ -666,6 +672,7 @@ static void on_line16(const uint16_t *px, int line, void *user)
 {
     (void)user;
     if (!st || !st->band[0]) return;
+    if (st->shot) shot_line(px, nullptr, line);
     if (s_big) {                                 // Game Gear 160x144: the same exact 3/2; Master System 256x192: 5/4
         if (st->out_y >= s_out_h) return;
         if (s_stretch && s_src_w == SRC_W) {     // filled: 2x across, rows 1-2-2 down (5/3)
@@ -693,6 +700,9 @@ static void on_line16(const uint16_t *px, int line, void *user)
                 row[o] = a; row[o + 1] = a; row[o + 2] = b;
             }
             twice = line & 1;
+        } else if (s_out_w == 256) {             // the NES at 1:1: a straight copy
+            memcpy(row, px, 256 * sizeof *row);
+            twice = false;
         } else {
             for (int x = 0, o = 0; x < 256; x += 4, o += 5) {
                 uint16_t a = px[x], b = px[x + 1], c = px[x + 2], e = px[x + 3];
@@ -746,6 +756,51 @@ static void on_line16(const uint16_t *px, int line, void *user)
     row_done();
 }
 
+static void toast(const char *msg);
+// ── Fn+P: the game's own picture, at its own size, top-down 16-bit BMP (RGB565 bit fields) ──────────────
+static void shot_start(void)
+{
+    if (st->shot) return;
+    mkdir(NUCLEO_SD_MOUNT "/data", 0775); mkdir(NUCLEO_SD_MOUNT "/data/Screenshots", 0775);
+    char p[96];
+    FILE *f = nullptr;
+    for (int n = 1; n < 1000 && !f; n++) {           // <console>_<n>.bmp, the first number not taken
+        snprintf(p, sizeof p, NUCLEO_SD_MOUNT "/data/Screenshots/%s_%03d.bmp", SYS->id, n);
+        struct stat sb;
+        if (stat(p, &sb) != 0) f = fopen(p, "wb");
+    }
+    if (!f) { toast("screenshot: SD?"); return; }
+    const uint32_t w = (uint32_t)s_src_w, h = (uint32_t)s_src_h, img = w * h * 2, off = 14 + 40 + 12;
+    uint8_t hd[66] = { 'B', 'M' };
+    auto le32 = [&](int at, uint32_t v) { hd[at] = (uint8_t)v; hd[at + 1] = (uint8_t)(v >> 8); hd[at + 2] = (uint8_t)(v >> 16); hd[at + 3] = (uint8_t)(v >> 24); };
+    le32(2, off + img); le32(10, off); le32(14, 40); le32(18, w); le32(22, (uint32_t)-(int32_t)h);   // negative: top-down
+    hd[26] = 1; hd[28] = 16; le32(30, 3); le32(34, img);                                              // BI_BITFIELDS
+    le32(54, 0xF800); le32(58, 0x07E0); le32(62, 0x001F);
+    if (fwrite(hd, 1, sizeof hd, f) != sizeof hd) { fclose(f); toast("screenshot: SD?"); return; }
+    st->shot = f;
+    st->shot_next = -1;
+}
+// One source line of the picture: RGB565 in the panel's byte order (colour cores), or the four shades (Game Boy).
+static void shot_line(const uint16_t *px16, const uint8_t *px8, int line)
+{
+    if (!st->shot) return;
+    if (st->shot_next < 0) { if (line != 0) return; st->shot_next = 0; }   // from the top of a frame
+    if (line != st->shot_next) return;
+    uint16_t row[256];
+    for (int x = 0; x < s_src_w; x++) {
+        const uint16_t c = px16 ? px16[x] : SHADE_TX[px8[x] & 3];
+        row[x] = (uint16_t)((c >> 8) | (c << 8));                           // the panel's order -> the file's
+    }
+    bool ok = fwrite(row, 2, (size_t)s_src_w, st->shot) == (size_t)s_src_w;
+    st->shot_next++;
+    if (!ok || st->shot_next >= s_src_h) {
+        ok = fclose(st->shot) == 0 && ok;
+        st->shot = nullptr;
+        toast(ok ? TR5("screenshot salvato", "screenshot saved", "captura guardada", "capture enregistree", "Screenshot gespeichert")
+                 : "screenshot: SD?");
+    }
+}
+
 static void band_push(void);
 // One output row is in the band buffer: count it, and push the band once it is full.
 static void row_done(void)
@@ -767,7 +822,7 @@ static void rows_skip(int rows)
 __attribute__((optimize("-O2")))
 static bool line_same(const void *px, int bytes, int line)
 {
-    if (line < 0 || line >= 192 || ((uintptr_t)px & 3)) return false;
+    if (line < 0 || line >= 240 || ((uintptr_t)px & 3)) return false;
     const uint32_t *w = (const uint32_t *)px;
     uint32_t h = 2166136261u;
     for (int i = 0, n = bytes >> 2; i < n; i++) h = (h ^ w[i]) * 16777619u;
@@ -926,6 +981,9 @@ static void marquee(int x, int y, int w, int h, const char *t,
 // so with half the lines arriving the picture only reaches y~67 and the bottom half of the screen
 // simply stops updating — the "split down the middle" the player saw. Frame-skip has no such problem:
 // a skipped frame calls the scanline callback zero times, so nothing half-draws. It is the only lever.
+// The NES's frame-skip draws whenever the console is on time and skips only to catch up (nucleo_nes.c); the
+// other cores skip every other frame.
+static bool skip_adaptive(void) { return SYS && !strcmp(SYS->id, "nesemu"); }
 static void set_relief(int level)
 {
     if (level < 0) level = 0;
@@ -960,7 +1018,7 @@ static void hud_draw(void)
     d.setCursor(PILL_R + 4, 14); d.printf("b%2d.%d", st->ms_blit / 10, st->ms_blit % 10);
     d.setCursor(PILL_R + 4, 25); d.printf("a%2d.%d", st->ms_aud  / 10, st->ms_aud  % 10);
     d.setTextColor(st->relief ? AMB : DIM, BG);
-    d.setCursor(PILL_R + 4, 36); d.print(st->relief == 1 ? "30fps" : "  --");
+    d.setCursor(PILL_R + 4, 36); d.print(st->relief == 1 ? (skip_adaptive() ? " auto" : "30fps") : "  --");
 }
 
 // Everything in the pillars that is NOT the per-second HUD: palette name, the keys that are not
@@ -1169,7 +1227,7 @@ static const char *menu_label(int i, char *buf, size_t n)
                                  SYS->palettes ? PAL_NAME[s_pal] : TR5("della cartuccia", "cartridge", "del cartucho", "de cartouche", "der Patrone"));
                         return buf;
         case MI_PIC:    snprintf(buf, n, "%s: %s", TR5("Immagine", "Picture", "Imagen", "Image", "Bild"),
-                                 st->relief == 1 ? "30 fps" : TR5("Piena", "Full", "Completa", "Complete", "Vollst."));
+                                 st->relief == 1 ? (skip_adaptive() ? "Auto" : "30 fps") : TR5("Piena", "Full", "Completa", "Complete", "Vollst."));
                         return buf;
         default:        return TR5("Esci dal gioco", "Quit game", "Salir juego", "Quitter jeu", "Spiel beenden");
     }
@@ -1489,9 +1547,11 @@ static void play_session(const char *name)
     trace("--- play '%s' ---", name);
     // Record what is actually RUNNING, not what we intended: "solo=1 wifi=off" is the only honest
     // answer to "is the radio really down while I play?", and the heap line proves what it bought.
+    // In a Solo boot the radio is never started (the store launches an offline emulator with NX_SOLO | NX_WIFI):
+    // the setup mode is then only the last configured one, so say "off" rather than echo it.
     trace("  solo=%d exclusive=%d wifi=%s ble=%d",
           (int)nucleo_anima_solo_active(), (int)nucleo_exclusive_active(),
-          nucleo_setup_mode() ? nucleo_setup_mode() : "off",
+          nucleo_anima_solo_active() ? "off" : nucleo_setup_mode() ? nucleo_setup_mode() : "off",
           (int)nucleo_ble_radio_present());
     trace_heap("at entry");
 
@@ -1613,7 +1673,10 @@ static void play_session(const char *name)
     st->us_blit = 0; st->ms_cpu = st->ms_blit = st->ms_aud = 0;
     st->slow_secs = 0;
     st->tw_n = 0; st->tw_fps_sum = st->tw_cpu_sum = st->tw_blit_sum = st->tw_aud_sum = 0; st->tw_miss = 0;
-    set_relief(0);                       // every cartridge starts at the full picture and earns relief
+    // Every cartridge starts at the full picture and earns relief — except where relief is adaptive (the NES): it
+    // skips a frame only when the console is late, so it costs nothing when the game keeps up and it is what keeps
+    // the sound from running dry when it does not. On from the start there.
+    set_relief(skip_adaptive() ? 1 : 0);
     SYS->reset_counters();
     st->fps_frames = 0; st->fps = 0; st->fps_t0 = esp_timer_get_time();
     st->play_t0 = st->fps_t0; st->fps_hn = 0;
@@ -1679,6 +1742,7 @@ static void play_session(const char *name)
                 if (ms > 200) trace("  menu: save+lookup took %d ms", ms);
                 menu_draw();
             }
+            else if ((k.ch == 'p' || k.ch == 'P' || k.ch == 0x10) && (nucleo_kbd_mods() & NK_MOD_FN)) shot_start();
             else if (k.ch == 'p' || k.ch == 'P') pal_cycle();
             // Two things a player changes mid-game without wanting to pause: how loud it is, and
             // whether the pillars are there at all. Both are one key, both echo in the toast.
@@ -1815,6 +1879,7 @@ static void play_session(const char *name)
     state_save(st->resume);
     nucleo_prefs_save(nucleo_app_brightness(), nucleo_audio_volume(), nucleo_audio_is_muted());
     trace("  END fps=%d palette=%s", st->fps, PAL_NAME[s_pal]);
+    if (st->shot) { fclose(st->shot); st->shot = nullptr; }   // a capture cut short by quitting: what was written
     SYS->close();
     free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
     d.setSwapBytes(false);                 // leave the shared display as every other app expects it

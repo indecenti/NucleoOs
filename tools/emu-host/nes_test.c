@@ -80,6 +80,11 @@ esp_err_t nucleo_audio_pcm_write(const int16_t *pcm, size_t bytes)
     return ESP_OK;
 }
 void nucleo_audio_pcm_close(void) { nucleo_hm_free(g_dma); g_dma = NULL; }
+/* The second core (nucleo_cowork): on the PC a job runs at once, on the caller — run() returning true but doing the
+ * work inline exercises the hand-over path (batches, flushes, settles) with a deterministic result. */
+bool nucleo_cowork_run(void (*fn)(void *), void *arg) { fn(arg); return true; }
+void nucleo_cowork_wait(void) {}
+void nucleo_cowork_stop(void) {}
 
 static long g_lines;
 static unsigned long g_hash;

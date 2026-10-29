@@ -5,11 +5,49 @@
      uint8_t palette[32];
  
 -    uint8_t screen_buffer[AGNES_SCREEN_HEIGHT * AGNES_SCREEN_WIDTH];
-+    uint8_t line[AGNES_SCREEN_WIDTH];   /* NUCLEO PATCH (A2): one scanline, handed to agnes->on_line when full */
++    uint16_t line[AGNES_SCREEN_WIDTH];  /* NUCLEO PATCH (A2): one scanline in the host's colours (agnes->rgb), to on_line */
  
      int scanline;
      int dot;
-@@ -223,7 +223,7 @@
+@@ -176,7 +176,7 @@
+ 
+     unsigned prg_bank_offsets[2];
+     bool use_chr_ram;
+-    uint8_t chr_ram[8 * 1024];
++    uint8_t *chr_ram;   /* NUCLEO PATCH (A8): allocated by mapper_init only when the cartridge has it (agnes_ram) */
+ } mapper0_t;
+ 
+ typedef struct mapper1 {
+@@ -192,15 +192,15 @@
+     unsigned chr_bank_offsets[2];
+     unsigned prg_bank_offsets[2];
+     bool use_chr_ram;
+-    uint8_t chr_ram[8 * 1024];
+-    uint8_t prg_ram[8 * 1024];
++    uint8_t *chr_ram;   /* NUCLEO PATCH (A8): allocated by mapper_init only when the cartridge has it (agnes_ram) */
++    uint8_t *prg_ram;
+ } mapper1_t;
+ 
+ typedef struct mapper2 {
+     struct agnes *agnes;
+ 
+     unsigned prg_bank_offsets[2];
+-    uint8_t chr_ram[8 * 1024];
++    uint8_t *chr_ram;   /* NUCLEO PATCH (A8): allocated by mapper_init only when the cartridge has it (agnes_ram) */
+ } mapper2_t;
+ 
+ typedef struct mapper4 {
+@@ -215,15 +215,15 @@
+     uint8_t counter_reload;
+     unsigned chr_bank_offsets[8];
+     unsigned prg_bank_offsets[4];
+-    uint8_t prg_ram[8 * 1024];
++    uint8_t *prg_ram;   /* NUCLEO PATCH (A8): allocated by mapper_init only when the cartridge has it (agnes_ram) */
+     bool use_chr_ram;
+-    uint8_t chr_ram[8 * 1024];
++    uint8_t *chr_ram;
+ } mapper4_t;
+ 
  /********************************* GAMEPACK **********************************/
  
  typedef struct {
@@ -18,7 +56,7 @@
      unsigned prg_rom_offset;
      unsigned chr_rom_offset;
      int prg_rom_banks_count;
-@@ -256,8 +256,20 @@
+@@ -256,8 +256,74 @@
      } mapper;
  
      mirroring_mode_t mirroring_mode;
@@ -28,47 +66,318 @@
 +     * to on_line (256 palette indices) instead of a 61 KB frame buffer; the APU registers ($4000-$4013, $4015,
 +     * $4017) go to apu_write / apu_read — agnes has no sound of its own. Kept across agnes_restore_state. */
 +    uint8_t (*rom_read)(void *user, uint32_t offset);
-+    void (*on_line)(void *user, const uint8_t *line, int y);
++    void (*on_line)(void *user, const uint16_t *line, int y);
++    const uint16_t *rgb;                /* the host's 64 NES colours, already in its pixel format */
 +    void (*apu_write)(void *user, uint16_t addr, uint8_t val);
 +    uint8_t (*apu_read)(void *user);
 +    void *host;
++
++    /* NUCLEO PATCH (A5): direct windows onto the cartridge. rom_page returns the host's copy of the 1 KB page
++     * holding a file offset (page boundaries counted from the PRG data, so a CPU or PPU 1 KB window is one page);
++     * prg_win / chr_win cache those pointers per 1 KB of the CPU's $8000-$FFFF and the PPU's $0000-$1FFF. Any
++     * mapper register write, any page the host evicts and every new frame drop them (agnes_drop_windows). */
++    const uint8_t *(*rom_page)(void *user, uint32_t offset);
++    const uint8_t *prg_win[32];
++    const uint8_t *chr_win[8];
++    /* NUCLEO PATCH (A4): the PPU dot the CPU has reached on the current scanline (the frame runs a line at a time);
++     * skip_draw: this frame is not shown (the host's frame-skip), so lines only resolve the sprite-0 hit */
++    int ln_dot;
++    bool skip_draw;
++    /* NUCLEO PATCH (A9): the idle-loop skip's evidence. io_seq counts what leaves the CPU and RAM (every write
++     * outside work RAM, every read with a side effect); wr_addr are the work-RAM bytes written since the detector
++     * last reset (up to four: a spin loop's counter or random byte); the rest is Brent's cycle search, carried
++     * across legs (abs_dot never resets) until an interrupt or an io event resets it. Not part of a save state's
++     * meaning (a loaded state just starts the search again). */
++    /* NUCLEO PATCH (A10): set by the host to draw lines on the other core: line_slot gives the description to
++     * fill, line_submit hands it over; vram_touch is called before a $2007 write (a queued line may read it). */
++    void *(*line_slot_raw)(void *host);
++    void (*line_submit)(void *host);
++    void (*vram_touch)(void *host);
++    uint32_t io_seq;
++    uint32_t abs_dot;
++    uint16_t wr_addr[4];
++    uint8_t wr_n;
++    bool wr_over;
++    bool cyc_found;
++    uint16_t cyc_pc, cyc_pow, cyc_lam;
++    uint32_t cyc_regs, cyc_ram, cyc_bytes, cyc_dot, cyc_period, cyc_io;
  } agnes_t;
  
++void agnes_rams(agnes_t *agnes, uint8_t ***chr, uint8_t ***prg);   /* NUCLEO PATCH (A8) */
++
++/* NUCLEO PATCH (A10): a visible line, described for drawing elsewhere (see line_describe). */
++#define AGNES_LF_RENDER   0x01
++#define AGNES_LF_BG       0x02
++#define AGNES_LF_SPR      0x04
++#define AGNES_LF_LEFT_BG  0x08
++#define AGNES_LF_LEFT_SPR 0x10
++typedef struct { uint8_t lo, hi, attr, x; bool zero; } agnes_sprite_t;
++typedef struct {
++    uint16_t v, bg_table;
++    uint8_t x, y, flags, nspr;
++    uint8_t palette[32];
++    const uint16_t *rgb;
++    const uint8_t *nt[4];
++    const uint8_t *chr[8];
++    agnes_sprite_t spr[8];
++} agnes_line_t;
++bool agnes_line_draw(const agnes_line_t *L, uint16_t *out);
++
++#define agnes_drop_windows(agn) do { memset((agn)->prg_win, 0, sizeof (agn)->prg_win); \
++                                     memset((agn)->chr_win, 0, sizeof (agn)->chr_win); } while (0)
++
 +#define AGNES_ROM(agn, off) ((agn)->rom_read((agn)->host, (uint32_t)(off)))
 +
  #endif /* agnes_types_h */
  //FILE_END
  //FILE_START:cpu.h
-@@ -588,8 +600,14 @@
+@@ -588,8 +654,30 @@
  
  bool agnes_restore_state(agnes_t *agnes, const agnes_state_t *state) {
      const uint8_t *gamepack_data = agnes->gamepack.data;
 +    uint8_t (*rr)(void *, uint32_t) = agnes->rom_read;                     /* NUCLEO PATCH (A1-A3) */
-+    void (*ol)(void *, const uint8_t *, int) = agnes->on_line;
++    void (*ol)(void *, const uint16_t *, int) = agnes->on_line;
 +    void (*aw)(void *, uint16_t, uint8_t) = agnes->apu_write;
 +    uint8_t (*ar)(void *) = agnes->apu_read;
 +    void *host = agnes->host;
++    const uint16_t *rgb = agnes->rgb;
++    void *(*ls)(void *) = agnes->line_slot_raw;       /* NUCLEO PATCH (A10) */
++    void (*lsub)(void *) = agnes->line_submit;
++    void (*vt)(void *) = agnes->vram_touch;
++    const uint8_t *(*rp)(void *, uint32_t) = agnes->rom_page;
++    uint8_t **chr, **prg, *chr_p = NULL, *prg_p = NULL;
++    agnes_rams(agnes, &chr, &prg);
++    if (chr) chr_p = *chr;
++    if (prg) prg_p = *prg;
      memmove(agnes, state, sizeof(agnes_t));
++    agnes_rams(agnes, &chr, &prg);
++    if (chr) *chr = chr_p;
++    if (prg) *prg = prg_p;
      agnes->gamepack.data = gamepack_data;
 +    agnes->rom_read = rr; agnes->on_line = ol; agnes->apu_write = aw; agnes->apu_read = ar; agnes->host = host;
++    agnes->rom_page = rp;
++    agnes->rgb = rgb;
++    agnes->line_slot_raw = ls; agnes->line_submit = lsub; agnes->vram_touch = vt;
++    agnes_drop_windows(agnes);
      agnes->cpu.agnes = agnes;
      agnes->ppu.agnes = agnes;
      switch (agnes->gamepack.mapper) {
-@@ -629,11 +647,8 @@
+@@ -615,27 +703,171 @@
      return true;
  }
+ 
+-bool agnes_next_frame(agnes_t *agnes) {
+-    while (true) {
+-        bool new_frame = false;
+-        bool ok = agnes_tick(agnes, &new_frame);
+-        if (!ok) {
++/* NUCLEO PATCH (A4): the frame runs a scanline at a time instead of a PPU dot at a time (89,342 calls a frame
++ * were most of agnes's cost on the ESP32). Each visible line is drawn whole at its start from the registers the
++ * CPU left (ppu_render_line), then the CPU runs the line's 341 dots in three legs, with the PPU's line events
++ * between them: dot 257 (the next line's vertical step and horizontal scroll from t), the MMC3 counter's dot
++ * (270 or 324, as agnes had it), and the pre-render line's vertical copy. Raster effects land on line
++ * boundaries; the sprite-0 hit is known as the line is drawn. The frame ends after the pre-render line. */
++static void inc_vert_v(ppu_t *ppu);
++static void ppu_render_line(ppu_t *ppu, int y, bool rendering);
++static int cpu_step(cpu_t *cpu);   /* NUCLEO PATCH (A6) */
++
++static uint32_t agnes_ccount(void);
++static uint64_t g_prof_cpu, g_prof_ppu, g_prof_line;
++static bool run_cpu_to_(agnes_t *agnes, int dot);
++static bool run_cpu_to(agnes_t *agnes, int dot) {
++    const uint32_t c0 = agnes_ccount();
++    const bool ok = run_cpu_to_(agnes, dot);
++    g_prof_cpu += (uint32_t)(agnes_ccount() - c0);
++    return ok;
++}
++/* NUCLEO PATCH (A9): idle-loop skip, exact. Most games finish their frame's work early and spin until the NMI:
++ * a JMP to itself, a loop polling RAM or $2002 — or, like Konami's, a loop stirring a random byte in RAM
++ * ($6F = table[($6F | frame) & 15]). Between interrupts nothing outside the CPU touches work RAM, and the PPU's
++ * events change nothing such a loop can see (a $2002 read that would clear a flag counts as an io event). So at a
++ * loop's head the machine's whole state is: the registers, the flags, and the few RAM bytes the loop writes. When
++ * that state recurs (Brent's cycle search: one saved state, compared at each loop head, re-saved at doubling
++ * distances) the loop is periodic, and whole periods are skipped at once: the CPU — random byte included — ends
++ * exactly where running them would have left it. Any io event or interrupt resets the search; a loop writing
++ * more than four RAM bytes is never skipped. Delay loops count a register down and never recur within a leg. */
++static uint64_t g_prof_idle;
++static inline void idle_reset(agnes_t *agnes) {
++    agnes->wr_n = 0; agnes->wr_over = false;
++    agnes->cyc_found = false; agnes->cyc_pow = 1; agnes->cyc_lam = 0; agnes->cyc_pc = 0xffff;
++    agnes->cyc_io = agnes->io_seq;
++}
++static bool run_cpu_to_(agnes_t *agnes, int dot) {
++    cpu_t *cpu = &agnes->cpu;
++    while (agnes->ln_dot < dot) {
++        if (cpu->stall > 0) {                         // OAM DMA: the CPU only waits, a whole leg at once
++            uint32_t need = (uint32_t)(dot - agnes->ln_dot + 2) / 3;
++            uint32_t take = cpu->stall < need ? cpu->stall : need;
++            cpu->stall -= take;
++            agnes->ln_dot += (int)take * 3;
++            agnes->abs_dot += take * 3;
++            continue;
++        }
++        if (cpu->interrupt != INTERRPUT_NONE) {
++            idle_reset(agnes);                        // the handler may change anything
++        }
++        const uint16_t pc0 = cpu->pc;
++        int c = cpu_step(cpu);
++        if (c == 0) {
+             return false;
+         }
+-        if (new_frame) {
+-            break;
++        agnes->ln_dot += c * 3;
++        agnes->abs_dot += (uint32_t)c * 3;
++        if (cpu->pc > pc0 || pc0 - cpu->pc >= 64) {
++            continue;                                 // not a short jump back: not a loop's head
++        }
++        if (agnes->io_seq != agnes->cyc_io || agnes->wr_over) {
++            idle_reset(agnes);
++            continue;
++        }
++        const uint32_t regs = (uint32_t)cpu->acc | (uint32_t)cpu->x << 8 | (uint32_t)cpu->y << 16 | (uint32_t)cpu->sp << 24;
++        uint32_t ram = (uint32_t)cpu->flag_carry | (uint32_t)cpu->flag_zero << 1 | (uint32_t)cpu->flag_dis_interrupt << 2
++                     | (uint32_t)cpu->flag_decimal << 3 | (uint32_t)cpu->flag_overflow << 4 | (uint32_t)cpu->flag_negative << 5;
++        uint32_t bytes = 0;                           // the written bytes, exactly: one per byte lane (four at most)
++        for (int i = 0; i < agnes->wr_n; i++) bytes |= (uint32_t)agnes->ram[agnes->wr_addr[i]] << (8 * i);
++        ram |= (uint32_t)agnes->wr_n << 8;            // ...and how many there are (a new one changes the state's shape)
++        if (agnes->cyc_found) {
++            if (cpu->pc == agnes->cyc_pc && regs == agnes->cyc_regs && ram == agnes->cyc_ram && bytes == agnes->cyc_bytes) {
++                const int left = dot - agnes->ln_dot;
++                const int skip = left > 0 ? (int)((uint32_t)left / agnes->cyc_period * agnes->cyc_period) : 0;
++                if (skip > 0) {                       // whole periods: the state after them is this one
++                    cpu->cycles += (uint64_t)(skip / 3);
++                    agnes->ln_dot += skip;
++                    agnes->abs_dot += (uint32_t)skip;
++                    g_prof_idle += (uint64_t)(skip / 3);
++                }
++            }
++            continue;
++        }
++        if (cpu->pc == agnes->cyc_pc && regs == agnes->cyc_regs && ram == agnes->cyc_ram && bytes == agnes->cyc_bytes) {
++            agnes->cyc_found = true;                  // the same state, cyc_lam heads later: that is the period
++            agnes->cyc_period = agnes->abs_dot - agnes->cyc_dot;
++            if (agnes->cyc_period == 0 || agnes->cyc_period % 3) agnes->cyc_found = false;
++            continue;
++        }
++        if (++agnes->cyc_lam >= agnes->cyc_pow) {     // Brent: save this state, look twice as far next time
++            agnes->cyc_pow = agnes->cyc_pow ? (agnes->cyc_pow < 1024 ? agnes->cyc_pow << 1 : 1024) : 2;
++            agnes->cyc_lam = 0;
++            agnes->cyc_pc = cpu->pc; agnes->cyc_regs = regs; agnes->cyc_ram = ram; agnes->cyc_bytes = bytes; agnes->cyc_dot = agnes->abs_dot;
+         }
+     }
+     return true;
+ }
++uint32_t agnes_idle_cycles(void) {                    /* the CPU cycles skipped since the last call */
++    const uint32_t c = (uint32_t)g_prof_idle;
++    g_prof_idle = 0;
++    return c;
++}
  
 -agnes_color_t agnes_get_screen_pixel(const agnes_t *agnes, int x, int y) {
 -    int ix = (y * AGNES_SCREEN_WIDTH) + x;
 -    uint8_t color_ix = agnes->ppu.screen_buffer[ix];
 -    return g_colors[color_ix & 0x3f];
--}
++bool agnes_next_frame(agnes_t *agnes) {
++    ppu_t *ppu = &agnes->ppu;
++    agnes_drop_windows(agnes);                        // the page cache's ages see what is in use, every frame
++    for (int sl = 0; sl < 262; sl++) {
++        ppu->scanline = sl;
++        bool rendering = ppu->masks.show_background || ppu->masks.show_sprites;
++        // NUCLEO PATCH (A9): what a loop can read of the PPU without a side effect — the status flags — changes
++        // only here, between legs: a change is an io event for the idle-loop skip (a vblank wait must see it).
++        const uint8_t status0 = (uint8_t)(ppu->status.in_vblank | ppu->status.sprite_overflow << 1 | ppu->status.sprite_zero_hit << 2);
++        if (sl < 240) {
++            const uint32_t c0 = agnes_ccount();
++            ppu_render_line(ppu, sl, rendering);
++            g_prof_ppu += (uint32_t)(agnes_ccount() - c0);     // includes the host's line (subtracted below)
++        } else if (sl == 241) {
++            ppu->status.in_vblank = true;
++            if (ppu->ctrl.nmi_enabled) {
++                cpu_trigger_nmi(&agnes->cpu);
++            }
++        } else if (sl == 261) {
++            ppu->status.sprite_overflow = false;
++            ppu->status.sprite_zero_hit = false;
++            ppu->status.in_vblank = false;
++        }
++        const bool fetch_line = sl < 240 || sl == 261;
++        if ((uint8_t)(ppu->status.in_vblank | ppu->status.sprite_overflow << 1 | ppu->status.sprite_zero_hit << 2) != status0) {
++            agnes->io_seq++;
++        }
++        if (!run_cpu_to(agnes, 257)) {
++            return false;
++        }
++        rendering = ppu->masks.show_background || ppu->masks.show_sprites;
++        if (rendering && fetch_line) {
++            inc_vert_v(ppu);                                                      // dot 256
++            ppu->regs.v = (ppu->regs.v & 0xfbe0) | (ppu->regs.t & ~(0xfbe0));      // dot 257
++        }
++        if (!run_cpu_to(agnes, ppu->ctrl.bg_table_addr == 0x0000 ? 270 : 324)) {
++            return false;
++        }
++        if (fetch_line && ppu->masks.show_background && ppu->masks.show_sprites) {
++            mapper_pa12_rising_edge(agnes);
++        }
++        rendering = ppu->masks.show_background || ppu->masks.show_sprites;
++        if (sl == 261 && rendering) {
++            ppu->regs.v = (ppu->regs.v & 0x841f) | (ppu->regs.t & ~(0x841f));      // dots 280-304
++        }
++        const int end = (sl == 261 && rendering && ppu->is_odd_frame) ? 340 : 341;   // the odd frame's short line
++        if (!run_cpu_to(agnes, end)) {
++            return false;
++        }
++        agnes->ln_dot -= end;
++    }
++    ppu->is_odd_frame = !ppu->is_odd_frame;
++    return true;
+ }
+ 
 +/* NUCLEO PATCH (A2): no frame buffer to read back; the host colours each line itself (agnes_palette). */
 +const agnes_color_t *agnes_palette(void) { return g_colors; }
- 
++
  void agnes_destroy(agnes_t *agnes) {
++    if (!agnes) return;
++    uint8_t **chr, **prg;                             /* NUCLEO PATCH (A8) */
++    agnes_rams(agnes, &chr, &prg);
++    if (chr) free(*chr);
++    if (prg) free(*prg);
      free(agnes);
-@@ -794,7 +809,7 @@
+ }
+ 
+@@ -778,7 +1010,31 @@
+     cpu->stall = (cpu->cycles & 0x1) ? 514 : 513;
+ }
+ 
++static void cpu_write8_io(cpu_t *cpu, uint16_t addr, uint8_t val);
++/* NUCLEO PATCH (A6): work RAM (stack, zero page, variables: most writes) inline; the rest out of line. */
++static inline __attribute__((always_inline)) void cpu_write8_fast(cpu_t *cpu, uint16_t addr, uint8_t val) {
++    agnes_t *agnes = cpu->agnes;
++    if (addr < 0x2000) {
++        const uint16_t a = addr & 0x7ff;
++        agnes->ram[a] = val;
++        if (!agnes->wr_over) {                        /* NUCLEO PATCH (A9): which work-RAM bytes the loop changes */
++            int i = 0;
++            while (i < agnes->wr_n && agnes->wr_addr[i] != a) i++;
++            if (i == agnes->wr_n) {
++                if (i < 4) agnes->wr_addr[agnes->wr_n++] = a; else agnes->wr_over = true;
++            }
++        }
++        return;
++    }
++    agnes->io_seq++;                                  /* NUCLEO PATCH (A9) */
++    cpu_write8_io(cpu, addr, val);
++}
+ void cpu_write8(cpu_t *cpu, uint16_t addr, uint8_t val) {
++    cpu_write8_fast(cpu, addr, val);
++}
++#define cpu_write8(cpu, addr, val) cpu_write8_fast((cpu), (addr), (val))
++
++static void cpu_write8_io(cpu_t *cpu, uint16_t addr, uint8_t val) {
+     agnes_t *agnes = cpu->agnes;
+ 
+     if (addr < 0x2000) {
+@@ -794,17 +1050,40 @@
              agnes->controllers[1].shift = agnes->controllers[1].state;
          }
      } else if (addr < 0x4018) { // apu and io
@@ -77,16 +386,84 @@
      } else if (addr < 0x4020) { // disabled
  
      } else {
-@@ -813,7 +828,7 @@
+         mapper_write(agnes, addr, val);
++        if (addr >= 0x8000) agnes_drop_windows(agnes);   /* NUCLEO PATCH (A5): the banks may have moved */
+     }
+ }
+ 
+-uint8_t cpu_read8(cpu_t *cpu, uint16_t addr) {
++static const uint8_t *agnes_prg_window(agnes_t *agnes, uint16_t addr);
++static uint8_t cpu_read8_io(cpu_t *cpu, uint16_t addr);
++
++/* NUCLEO PATCH (A5): the cartridge through its 1 KB window and the work RAM inline (every later caller in this
++ * file, the instructions included, gets this body through the macro below); registers and the rest out of line. */
++static inline __attribute__((always_inline)) uint8_t cpu_read8_fast(cpu_t *cpu, uint16_t addr) {
+     agnes_t *agnes = cpu->agnes;
++    if (addr >= 0x8000) {
++        const uint8_t *w = agnes->prg_win[(addr >> 10) & 31];
++        if (!w) w = agnes_prg_window(agnes, addr);
++        return w[addr & 0x3ff];
++    }
++    if (addr < 0x2000) {
++        return agnes->ram[addr & 0x7ff];
++    }
++    return cpu_read8_io(cpu, addr);
++}
++
++uint8_t cpu_read8(cpu_t *cpu, uint16_t addr) {
++    return cpu_read8_fast(cpu, addr);
++}
++#define cpu_read8(cpu, addr) cpu_read8_fast((cpu), (addr))
+ 
++static uint8_t cpu_read8_io(cpu_t *cpu, uint16_t addr) {
++    agnes_t *agnes = cpu->agnes;
+     uint8_t res = 0;
+     if (addr >= 0x4020) { // moved to top because it's the most common case
+         res = mapper_read(agnes, addr);
+@@ -813,8 +1092,9 @@
      } else if (addr < 0x4000) {
          res = ppu_read_register(&agnes->ppu, 0x2000 | (addr & 0x7));
      } else if (addr < 0x4016) {
 -        // apu
 +        if (addr == 0x4015 && agnes->apu_read) res = agnes->apu_read(agnes->host);   /* NUCLEO PATCH (A3) */
      } else if (addr < 0x4018) {
++        agnes->io_seq++;                              /* NUCLEO PATCH (A9): the pad's shift register moves */
          int controller = addr & 0x1; // 0: 0x4016, 1: 0x4017
          if (agnes->controllers_latch) {
-@@ -1393,8 +1408,8 @@
+             agnes->controllers[controller].shift = agnes->controllers[controller].state;
+@@ -942,6 +1222,7 @@
+ static uint8_t ppu_read8(ppu_t *ppu, uint16_t addr);
+ static void ppu_write8(ppu_t *ppu, uint16_t addr, uint8_t val);
+ static uint16_t mirror_address(ppu_t *ppu, uint16_t addr);
++static inline uint8_t chr_read(agnes_t *agnes, uint16_t addr);   /* NUCLEO PATCH (A5) */
+ 
+ static unsigned g_palette_addr_map[32] = {
+     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+@@ -1279,6 +1560,7 @@
+ uint8_t ppu_read_register(ppu_t *ppu, uint16_t addr) {
+     switch (addr) {
+         case 0x2002: { // PPUSTATUS
++            if (ppu->status.in_vblank || ppu->regs.w) ppu->agnes->io_seq++;   /* NUCLEO PATCH (A9): it clears them */
+             uint8_t res = 0;
+             res |= ppu->last_reg_write & 0x1f;
+             res |= ppu->status.sprite_overflow << 5;
+@@ -1294,6 +1576,7 @@
+             return ppu->oam_data[ppu->oam_address];
+         }
+         case 0x2007: { // PPUDATA
++            ppu->agnes->io_seq++;                     /* NUCLEO PATCH (A9): v moves, the read buffer changes */
+             uint8_t res = 0;
+             if (ppu->regs.v < 0x3f00) {
+                 res = ppu->ppudata_buffer;
+@@ -1375,6 +1658,7 @@
+             break;
+         }
+         case 0x2007: { // PPUDATA
++            if (ppu->agnes->vram_touch) ppu->agnes->vram_touch(ppu->agnes->host);   /* NUCLEO PATCH (A10) */
+             ppu_write8(ppu, ppu->regs.v, val);
+             ppu->regs.v += ppu->ctrl.addr_increment;
+             break;
+@@ -1393,8 +1677,8 @@
  }
  
  static void set_pixel_color_ix(ppu_t *ppu, int x, int y, uint8_t color_ix) {
@@ -97,7 +474,556 @@
  }
  
  static uint8_t ppu_read8(ppu_t *ppu, uint16_t addr) {
-@@ -2238,14 +2253,14 @@
+@@ -1404,7 +1688,7 @@
+         unsigned palette_ix = g_palette_addr_map[addr & 0x1f];
+         res = ppu->palette[palette_ix];
+     } else if (addr < 0x2000) { // $0000 - $1FFF
+-        res = mapper_read(ppu->agnes, addr);
++        res = chr_read(ppu->agnes, addr);   /* NUCLEO PATCH (A5) */
+     } else { // $2000 - $3EFF
+         uint16_t mirrored_addr = mirror_address(ppu, addr);
+         res = ppu->nametables[mirrored_addr];
+@@ -1425,6 +1709,328 @@
+     }
+ }
+ 
++/* NUCLEO PATCH (A5): where a CPU or PPU address lands in the file, per mapper (the same arithmetic as
++ * mapperN_read), and the host's page for it. */
++static const uint8_t g_open_bus[1024] = { 0 };
++static const uint8_t *agnes_page(agnes_t *agnes, uint32_t off) {
++    const uint8_t *p = agnes->rom_page ? agnes->rom_page(agnes->host, off) : NULL;
++    return p ? p : g_open_bus;
++}
++static const uint8_t *agnes_prg_window(agnes_t *agnes, uint16_t addr) {
++    unsigned off = 0;
++    switch (agnes->gamepack.mapper) {
++        case 0: off = agnes->mapper.m0.prg_bank_offsets[(addr >> 14) & 1] + (addr & 0x3fff); break;
++        case 1: off = agnes->mapper.m1.prg_bank_offsets[(addr >> 14) & 1] + (addr & 0x3fff); break;
++        case 2: off = agnes->mapper.m2.prg_bank_offsets[(addr >> 14) & 1] + (addr & 0x3fff); break;
++        case 4: off = agnes->mapper.m4.prg_bank_offsets[(addr >> 13) & 3] + (addr & 0x1fff); break;
++    }
++    const uint8_t *p = agnes_page(agnes, agnes->gamepack.prg_rom_offset + off);
++    agnes->prg_win[(addr >> 10) & 31] = p;            // after the page call: a miss there drops every window
++    return p;
++}
++static const uint8_t *agnes_chr_window(agnes_t *agnes, uint16_t addr) {
++    const uint8_t *p = g_open_bus;
++    const unsigned chr = agnes->gamepack.chr_rom_offset;
++    switch (agnes->gamepack.mapper) {
++        case 0:
++            p = agnes->mapper.m0.use_chr_ram ? agnes->mapper.m0.chr_ram + (addr & 0x1c00) : agnes_page(agnes, chr + (addr & 0x1fff));
++            break;
++        case 1:
++            if (agnes->mapper.m1.use_chr_ram) {
++                p = agnes->mapper.m1.chr_ram + (addr & 0x1c00);
++            } else {
++                p = agnes_page(agnes, chr + agnes->mapper.m1.chr_bank_offsets[(addr >> 12) & 1] + (addr & 0xfff));
++            }
++            break;
++        case 2:
++            p = agnes->mapper.m2.chr_ram + (addr & 0x1c00);
++            break;
++        case 4: {
++            unsigned off = agnes->mapper.m4.chr_bank_offsets[(addr >> 10) & 7];
++            if (agnes->mapper.m4.use_chr_ram) {
++                p = agnes->mapper.m4.chr_ram + (off & 0x1c00);
++            } else {
++                unsigned size = (unsigned)agnes->gamepack.chr_rom_banks_count * 8 * 1024;
++                p = agnes_page(agnes, chr + (size ? off % size : 0));
++            }
++            break;
++        }
++    }
++    agnes->chr_win[(addr >> 10) & 7] = p;
++    return p;
++}
++static inline uint8_t chr_read(agnes_t *agnes, uint16_t addr) {
++    const uint8_t *w = agnes->chr_win[(addr >> 10) & 7];
++    if (!w) w = agnes_chr_window(agnes, addr);
++    return w[addr & 0x3ff];
++}
++
++/* NUCLEO PATCH (A4): one visible scanline, whole. The background: 33 tiles from v (the fine x scroll picks the
++ * 256 pixels), each a name-table byte, its attribute's two bits and the pattern's two planes. The sprites: the
++ * first eight in OAM order that cover the line (the line after their y, as on the console), lower index in front.
++ * Then the priority rule and the sprite-0 hit (an opaque sprite-0 pixel over an opaque background pixel, not at
++ * x 255), and the palette. With rendering off the line is the backdrop (or the colour v points at). */
++static const uint32_t g_nib[16];                     /* defined below with the tile code */
++/* NUCLEO PATCH (A10): a visible line as a self-contained description — everything drawing it reads, captured
++ * when the line starts: the scroll, the masks and tables, the palette, the four name tables and the eight 1 KB
++ * pattern windows as pointers, and the (at most eight) sprites on the line. agnes_line_draw() needs nothing else,
++ * so it can run on the other core while the CPU goes on (the host makes sure nothing those pointers reach changes
++ * before it has run: a VRAM write or an evicted cartridge page waits for it). */
++static void line_describe(ppu_t *ppu, int y, bool rendering, agnes_line_t *L) {
++    agnes_t *agnes = ppu->agnes;
++    L->y = (uint8_t)y;
++    L->v = ppu->regs.v;
++    L->x = ppu->regs.x;
++    L->flags = (uint8_t)((rendering ? AGNES_LF_RENDER : 0) | (ppu->masks.show_background ? AGNES_LF_BG : 0)
++             | (ppu->masks.show_sprites ? AGNES_LF_SPR : 0) | (ppu->masks.show_leftmost_bg ? AGNES_LF_LEFT_BG : 0)
++             | (ppu->masks.show_leftmost_sprites ? AGNES_LF_LEFT_SPR : 0));
++    L->bg_table = ppu->ctrl.bg_table_addr;
++    memcpy(L->palette, ppu->palette, sizeof L->palette);
++    L->rgb = agnes->rgb;
++    L->nspr = 0;
++    if (!rendering) {
++        return;
++    }
++    for (int i = 0; i < 4; i++) L->nt[i] = ppu->nametables + mirror_address(ppu, (uint16_t)(0x2000 | (i << 10)));
++    for (int k = 0; k < 8; k++) {
++        L->chr[k] = agnes->chr_win[k] ? agnes->chr_win[k] : agnes_chr_window(agnes, (uint16_t)(k << 10));
++    }
++    if (!ppu->masks.show_sprites) {
++        return;
++    }
++    // The first eight sprites in OAM order that cover the line (the line after their y, as on the console); a
++    // ninth sets the overflow flag. Each kept as its pattern row's two planes, ready to draw.
++    const int h = ppu->ctrl.use_8x16_sprites ? 16 : 8;
++    for (int i = 0; i < 64; i++) {
++        const uint8_t *o = &ppu->oam_data[i * 4];
++        if (o[0] > 0xef) {
++            continue;
++        }
++        int row = y - 1 - o[0];
++        if (row < 0 || row >= h) {
++            continue;
++        }
++        if (L->nspr == 8) {
++            ppu->status.sprite_overflow = true;
++            break;
++        }
++        uint8_t tile = o[1];
++        const uint8_t attr = o[2];
++        if (attr & 0x80) {
++            row = h - 1 - row;
++        }
++        uint16_t table = ppu->ctrl.sprite_table_addr;
++        if (h == 16) {
++            table = (tile & 1) ? 0x1000 : 0x0000;
++            tile &= 0xfe;
++            if (row >= 8) {
++                tile++;
++                row -= 8;
++            }
++        }
++        const uint16_t pa = (uint16_t)(table + (tile << 4) + row);
++        agnes_sprite_t *sp = &L->spr[L->nspr++];
++        sp->lo = L->chr[(pa >> 10) & 7][pa & 0x3ff];
++        sp->hi = L->chr[((pa + 8) >> 10) & 7][(pa + 8) & 0x3ff];
++        sp->attr = attr;
++        sp->x = o[3];
++        sp->zero = i == 0;
++    }
++}
++
++/* Draw a described line into out (256 pixels in the host's colours). Returns whether sprite 0 hit the background
++ * (an opaque sprite-0 pixel over an opaque background pixel, not at x 255). Reads only L. */
++bool agnes_line_draw(const agnes_line_t *L, uint16_t *out) {
++    uint16_t pal[32];                                 // the line's palette in the host's colours
++    for (int i = 0; i < 32; i++) pal[i] = L->rgb[L->palette[i] & 0x3f];
++    if (!(L->flags & AGNES_LF_RENDER)) {
++        const uint16_t v = L->v & 0x3fff;
++        const uint16_t c = v >= 0x3f00 ? pal[g_palette_addr_map[v & 0x1f]] : pal[0];
++        for (int x = 0; x < AGNES_SCREEN_WIDTH; x++) out[x] = c;
++        return false;
++    }
++    uint8_t bgbuf[33 * 8];
++    const uint8_t *bg = bgbuf;
++    if (L->flags & AGNES_LF_BG) {
++        uint16_t v = L->v;
++        const unsigned fine_y = (v >> 12) & 7;
++        uint8_t *dst = bgbuf;
++        for (int t = 0; t < 33; t++) {
++            const uint8_t *nt_tab = L->nt[(v >> 10) & 3];
++            const uint8_t nt = nt_tab[v & 0x3ff];
++            uint8_t at = nt_tab[0x3C0 | ((v >> 4) & 0x38) | ((v >> 2) & 0x07)];
++            if (v & 0x40) at >>= 4;
++            if (v & 0x02) at >>= 2;
++            const uint16_t pa = (uint16_t)(L->bg_table + (nt << 4) + fine_y);
++            const uint8_t *w = L->chr[(pa >> 10) & 7];
++            const uint8_t lo = w[pa & 0x3ff], hi = w[(pa + 8) & 0x3ff];   // a tile's two planes: one 1 KB window
++            uint32_t pl = 0, pr = 0;                                   // the tile's left and right four pixels
++            if (lo | hi) {
++                const uint32_t pb = (uint32_t)((at & 3) << 2);
++                pl = g_nib[lo >> 4] | g_nib[hi >> 4] << 1;
++                pr = g_nib[lo & 15] | g_nib[hi & 15] << 1;
++                pl |= ((pl | pl >> 1) & 0x01010101u) * pb;            // + palette, opaque pixels only
++                pr |= ((pr | pr >> 1) & 0x01010101u) * pb;
++            }
++            memcpy(dst, &pl, 4);
++            memcpy(dst + 4, &pr, 4);
++            dst += 8;
++            if ((v & 0x1f) == 31) {                   // coarse x wraps into the next name table
++                v = (uint16_t)((v & ~0x1f) ^ 0x0400);
++            } else {
++                v++;
++            }
++        }
++        bg = bgbuf + L->x;
++        if (!(L->flags & AGNES_LF_LEFT_BG)) {
++            memset(bgbuf + L->x, 0, 8);
++        }
++    } else {
++        memset(bgbuf, 0, AGNES_SCREEN_WIDTH);
++    }
++    for (int x = 0; x < AGNES_SCREEN_WIDTH; x++) out[x] = pal[bg[x]];
++    if (!L->nspr) {
++        return false;
++    }
++    // Sprites: the lowest index wins a pixel (even one behind the background: the SMB3 trick), then priority.
++    uint8_t sp[AGNES_SCREEN_WIDTH];
++    memset(sp, 0, sizeof sp);
++    int x0 = 256, x1 = -1;
++    for (int i = 0; i < L->nspr; i++) {
++        const agnes_sprite_t *s = &L->spr[i];
++        if (!(s->lo | s->hi)) {
++            continue;
++        }
++        const uint8_t base = (uint8_t)(0x10 | ((s->attr & 3) << 2) | ((s->attr & 0x20) ? 0x20 : 0) | (s->zero ? 0x40 : 0));
++        for (int px = 0; px < 8; px++) {
++            const int x = s->x + px;
++            if (x > 255) {
++                break;
++            }
++            const int bit = (s->attr & 0x40) ? px : 7 - px;
++            const int ix = ((s->lo >> bit) & 1) | (((s->hi >> bit) & 1) << 1);
++            if (!ix || (sp[x] & 3)) {
++                continue;
++            }
++            sp[x] = (uint8_t)(base | ix);
++            if (x < x0) x0 = x;
++            if (x > x1) x1 = x;
++        }
++    }
++    if (!(L->flags & AGNES_LF_LEFT_SPR)) {
++        memset(sp, 0, 8);
++        if (x0 < 8) x0 = 8;
++    }
++    bool hit = false;
++    for (int x = x0; x <= x1; x++) {                  // only where a sprite pixel is: the rest is background
++        const uint8_t sv = sp[x], b = bg[x];
++        if (!(sv & 3)) continue;
++        if ((sv & 0x40) && b && x != 255) hit = true;
++        if (!(b && (sv & 0x20))) out[x] = pal[sv & 0x1f];
++    }
++    return hit;
++}
++
++/* The four logical name tables as pointers, for the mirroring in force. */
++static void nt_pointers(ppu_t *ppu, const uint8_t *ntp[4]) {
++    for (int i = 0; i < 4; i++) ntp[i] = ppu->nametables + mirror_address(ppu, (uint16_t)(0x2000 | (i << 10)));
++}
++/* Four bits of a pattern byte as four bytes, the leftmost pixel first in memory (both hosts are little-endian):
++ * bit 3 -> byte 0 ... bit 0 -> byte 3. Two lookups per plane per tile; 32-bit arithmetic only. */
++static const uint32_t g_nib[16] = {
++    0x00000000, 0x01000000, 0x00010000, 0x01010000, 0x00000100, 0x01000100, 0x00010100, 0x01010100,
++    0x00000001, 0x01000001, 0x00010001, 0x01010001, 0x00000101, 0x01000101, 0x00010101, 0x01010101,
++};
++
++/* NUCLEO PATCH (A7): where a frame's time goes, in CPU cycles (the S3's cycle counter; 0 on other hosts).
++ * The host reads and clears it (agnes_profile). Not part of the console's state. */
++static uint64_t g_prof_cpu, g_prof_ppu, g_prof_line;
++static inline uint32_t agnes_ccount(void) {
++#if defined(__XTENSA__)
++    uint32_t c;
++    __asm__ volatile("rsr %0, ccount" : "=r"(c));
++    return c;
++#else
++    return 0;
++#endif
++}
++void agnes_profile(uint64_t *cpu, uint64_t *ppu, uint64_t *line) {
++    *cpu = g_prof_cpu; *ppu = g_prof_ppu; *line = g_prof_line;
++    g_prof_cpu = g_prof_ppu = g_prof_line = 0;
++}
++/* A frame the host skips: no pixels, only the sprite-0 hit (games wait on it to split the screen), from sprite
++ * 0's row and the background under it. */
++static void ppu_hit_line(ppu_t *ppu, int y) {
++    if (!ppu->masks.show_background || !ppu->masks.show_sprites || ppu->status.sprite_zero_hit) {
++        return;
++    }
++    agnes_t *agnes = ppu->agnes;
++    const uint8_t *o = ppu->oam_data;
++    const int h = ppu->ctrl.use_8x16_sprites ? 16 : 8;
++    int row = y - 1 - o[0];
++    if (o[0] > 0xef || row < 0 || row >= h) {
++        return;
++    }
++    uint8_t tile = o[1];
++    const uint8_t attr = o[2];
++    if (attr & 0x80) row = h - 1 - row;
++    uint16_t table = ppu->ctrl.sprite_table_addr;
++    if (h == 16) {
++        table = (tile & 1) ? 0x1000 : 0x0000;
++        tile &= 0xfe;
++        if (row >= 8) { tile++; row -= 8; }
++    }
++    const uint16_t pa = (uint16_t)(table + (tile << 4) + row);
++    const uint8_t slo = chr_read(agnes, pa), shi = chr_read(agnes, (uint16_t)(pa + 8));
++    if (!(slo | shi)) {
++        return;
++    }
++    const uint8_t *ntp[4];
++    nt_pointers(ppu, ntp);
++    const unsigned fine_y = (ppu->regs.v >> 12) & 7;
++    for (int px = 0; px < 8; px++) {
++        const int x = o[3] + px;
++        if (x > 254) break;
++        if (x < 8 && (!ppu->masks.show_leftmost_bg || !ppu->masks.show_leftmost_sprites)) continue;
++        const int sb = (attr & 0x40) ? px : 7 - px;
++        if (!(((slo | shi) >> sb) & 1)) continue;
++        const unsigned at_x = ppu->regs.x + (unsigned)x;
++        uint16_t v = ppu->regs.v;
++        unsigned cx = (v & 0x1f) + (at_x >> 3);
++        if (cx >= 32) { v ^= 0x0400; cx -= 32; }
++        const uint8_t nt = ntp[(v >> 10) & 3][(v & 0x3e0) | cx];
++        const uint16_t bpa = (uint16_t)(ppu->ctrl.bg_table_addr + (nt << 4) + fine_y);
++        const int bb = 7 - (int)(at_x & 7);
++        if (((chr_read(agnes, bpa) | chr_read(agnes, (uint16_t)(bpa + 8))) >> bb) & 1) {
++            ppu->status.sprite_zero_hit = true;
++            return;
++        }
++    }
++}
++
++static void ppu_render_line(ppu_t *ppu, int y, bool rendering) {
++    agnes_t *agnes = ppu->agnes;
++    if (agnes->skip_draw) {
++        if (rendering) ppu_hit_line(ppu, y);
++        return;
++    }
++    if (agnes->line_submit) {                         /* NUCLEO PATCH (A10): drawn on the other core */
++        agnes_line_t *L = (agnes_line_t *)agnes->line_slot_raw(agnes->host);
++        line_describe(ppu, y, rendering, L);
++        if (rendering) ppu_hit_line(ppu, y);          // what the CPU can read must be known now
++        agnes->line_submit(agnes->host);
++        return;
++    }
++    agnes_line_t L;
++    line_describe(ppu, y, rendering, &L);
++    if (agnes_line_draw(&L, ppu->line)) ppu->status.sprite_zero_hit = true;
++    if (agnes->on_line) {
++        const uint32_t c0 = agnes_ccount();
++        agnes->on_line(agnes->host, ppu->line, y);
++        g_prof_line += (uint32_t)(agnes_ccount() - c0);
++    }
++}
++
+ static uint16_t mirror_address(ppu_t *ppu, uint16_t addr) {
+     switch (ppu->agnes->mirroring_mode)
+     {
+@@ -1773,6 +2379,174 @@
+     return &instructions[opc];
+ }
+ 
++/* NUCLEO PATCH (A6): cpu_tick as one switch. agnes dispatched every instruction through a table of function
++ * pointers with the addressing mode as a run-time argument; here each case names its mode and operation as
++ * constants, so the compiler inlines the operand fetch and the operation for that opcode (generated from the
++ * table above, same cycles, same page-cross rule). Unknown opcodes stop the CPU as before. */
++static int cpu_step(cpu_t *cpu) {
++    int cycles = 0;
++    if (cpu->interrupt != INTERRPUT_NONE) {
++        cycles += handle_interrupt(cpu);
++    }
++    switch (cpu_read8(cpu, cpu->pc)) {
++        case 0x00: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED_BRK, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED_BRK); cycles += 7 + op_brk(cpu, a, ADDR_MODE_IMPLIED_BRK); break; }  /* BRK */
++        case 0x01: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_ora(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* ORA */
++        case 0x05: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_ora(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* ORA */
++        case 0x06: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 5 + op_asl(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* ASL */
++        case 0x08: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 3 + op_php(cpu, a, ADDR_MODE_IMPLIED); break; }  /* PHP */
++        case 0x09: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_ora(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* ORA */
++        case 0x0a: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ACCUMULATOR, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ACCUMULATOR); cycles += 2 + op_asl(cpu, a, ADDR_MODE_ACCUMULATOR); break; }  /* ASL */
++        case 0x0d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_ora(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* ORA */
++        case 0x0e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_asl(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* ASL */
++        case 0x10: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bpl(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BPL */
++        case 0x11: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_ora(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* ORA */
++        case 0x15: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_ora(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* ORA */
++        case 0x16: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 6 + op_asl(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* ASL */
++        case 0x18: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_clc(cpu, a, ADDR_MODE_IMPLIED); break; }  /* CLC */
++        case 0x19: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_ora(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* ORA */
++        case 0x1d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_ora(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* ORA */
++        case 0x1e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 7 + op_asl(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* ASL */
++        case 0x20: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_jsr(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* JSR */
++        case 0x21: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_and(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* AND */
++        case 0x24: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_bit(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* BIT */
++        case 0x25: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_and(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* AND */
++        case 0x26: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 5 + op_rol(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* ROL */
++        case 0x28: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 4 + op_plp(cpu, a, ADDR_MODE_IMPLIED); break; }  /* PLP */
++        case 0x29: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_and(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* AND */
++        case 0x2a: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ACCUMULATOR, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ACCUMULATOR); cycles += 2 + op_rol(cpu, a, ADDR_MODE_ACCUMULATOR); break; }  /* ROL */
++        case 0x2c: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_bit(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* BIT */
++        case 0x2d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_and(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* AND */
++        case 0x2e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_rol(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* ROL */
++        case 0x30: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bmi(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BMI */
++        case 0x31: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_and(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* AND */
++        case 0x35: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_and(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* AND */
++        case 0x36: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 6 + op_rol(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* ROL */
++        case 0x38: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_sec(cpu, a, ADDR_MODE_IMPLIED); break; }  /* SEC */
++        case 0x39: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_and(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* AND */
++        case 0x3d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_and(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* AND */
++        case 0x3e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 7 + op_rol(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* ROL */
++        case 0x40: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 6 + op_rti(cpu, a, ADDR_MODE_IMPLIED); break; }  /* RTI */
++        case 0x41: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_eor(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* EOR */
++        case 0x45: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_eor(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* EOR */
++        case 0x46: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 5 + op_lsr(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* LSR */
++        case 0x48: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 3 + op_pha(cpu, a, ADDR_MODE_IMPLIED); break; }  /* PHA */
++        case 0x49: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_eor(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* EOR */
++        case 0x4a: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ACCUMULATOR, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ACCUMULATOR); cycles += 2 + op_lsr(cpu, a, ADDR_MODE_ACCUMULATOR); break; }  /* LSR */
++        case 0x4c: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 3 + op_jmp(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* JMP */
++        case 0x4d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_eor(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* EOR */
++        case 0x4e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_lsr(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* LSR */
++        case 0x50: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bvc(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BVC */
++        case 0x51: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_eor(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* EOR */
++        case 0x55: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_eor(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* EOR */
++        case 0x56: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 6 + op_lsr(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* LSR */
++        case 0x58: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_cli(cpu, a, ADDR_MODE_IMPLIED); break; }  /* CLI */
++        case 0x59: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_eor(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* EOR */
++        case 0x5d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_eor(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* EOR */
++        case 0x5e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 7 + op_lsr(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* LSR */
++        case 0x60: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 6 + op_rts(cpu, a, ADDR_MODE_IMPLIED); break; }  /* RTS */
++        case 0x61: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_adc(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* ADC */
++        case 0x65: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_adc(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* ADC */
++        case 0x66: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 5 + op_ror(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* ROR */
++        case 0x68: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 4 + op_pla(cpu, a, ADDR_MODE_IMPLIED); break; }  /* PLA */
++        case 0x69: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_adc(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* ADC */
++        case 0x6a: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ACCUMULATOR, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ACCUMULATOR); cycles += 2 + op_ror(cpu, a, ADDR_MODE_ACCUMULATOR); break; }  /* ROR */
++        case 0x6c: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT); cycles += 5 + op_jmp(cpu, a, ADDR_MODE_INDIRECT); break; }  /* JMP */
++        case 0x6d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_adc(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* ADC */
++        case 0x6e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_ror(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* ROR */
++        case 0x70: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bvs(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BVS */
++        case 0x71: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_adc(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* ADC */
++        case 0x75: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_adc(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* ADC */
++        case 0x76: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 6 + op_ror(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* ROR */
++        case 0x78: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_sei(cpu, a, ADDR_MODE_IMPLIED); break; }  /* SEI */
++        case 0x79: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_adc(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* ADC */
++        case 0x7d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_adc(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* ADC */
++        case 0x7e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 7 + op_ror(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* ROR */
++        case 0x81: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_sta(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* STA */
++        case 0x84: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_sty(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* STY */
++        case 0x85: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_sta(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* STA */
++        case 0x86: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_stx(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* STX */
++        case 0x88: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_dey(cpu, a, ADDR_MODE_IMPLIED); break; }  /* DEY */
++        case 0x8a: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_txa(cpu, a, ADDR_MODE_IMPLIED); break; }  /* TXA */
++        case 0x8c: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_sty(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* STY */
++        case 0x8d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_sta(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* STA */
++        case 0x8e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_stx(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* STX */
++        case 0x90: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bcc(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BCC */
++        case 0x91: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 6 + op_sta(cpu, a, ADDR_MODE_INDIRECT_Y); break; }  /* STA */
++        case 0x94: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_sty(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* STY */
++        case 0x95: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_sta(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* STA */
++        case 0x96: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_Y, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_Y); cycles += 4 + op_stx(cpu, a, ADDR_MODE_ZERO_PAGE_Y); break; }  /* STX */
++        case 0x98: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_tya(cpu, a, ADDR_MODE_IMPLIED); break; }  /* TYA */
++        case 0x99: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 5 + op_sta(cpu, a, ADDR_MODE_ABSOLUTE_Y); break; }  /* STA */
++        case 0x9a: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_txs(cpu, a, ADDR_MODE_IMPLIED); break; }  /* TXS */
++        case 0x9d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 5 + op_sta(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* STA */
++        case 0xa0: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_ldy(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* LDY */
++        case 0xa1: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_lda(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* LDA */
++        case 0xa2: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_ldx(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* LDX */
++        case 0xa4: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_ldy(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* LDY */
++        case 0xa5: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_lda(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* LDA */
++        case 0xa6: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_ldx(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* LDX */
++        case 0xa8: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_tay(cpu, a, ADDR_MODE_IMPLIED); break; }  /* TAY */
++        case 0xa9: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_lda(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* LDA */
++        case 0xaa: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_tax(cpu, a, ADDR_MODE_IMPLIED); break; }  /* TAX */
++        case 0xac: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_ldy(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* LDY */
++        case 0xad: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_lda(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* LDA */
++        case 0xae: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_ldx(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* LDX */
++        case 0xb0: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bcs(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BCS */
++        case 0xb1: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_lda(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* LDA */
++        case 0xb4: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_ldy(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* LDY */
++        case 0xb5: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_lda(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* LDA */
++        case 0xb6: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_Y, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_Y); cycles += 4 + op_ldx(cpu, a, ADDR_MODE_ZERO_PAGE_Y); break; }  /* LDX */
++        case 0xb8: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_clv(cpu, a, ADDR_MODE_IMPLIED); break; }  /* CLV */
++        case 0xb9: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_lda(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* LDA */
++        case 0xba: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_tsx(cpu, a, ADDR_MODE_IMPLIED); break; }  /* TSX */
++        case 0xbc: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_ldy(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* LDY */
++        case 0xbd: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_lda(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* LDA */
++        case 0xbe: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_ldx(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* LDX */
++        case 0xc0: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_cpy(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* CPY */
++        case 0xc1: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_cmp(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* CMP */
++        case 0xc4: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_cpy(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* CPY */
++        case 0xc5: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_cmp(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* CMP */
++        case 0xc6: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 5 + op_dec(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* DEC */
++        case 0xc8: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_iny(cpu, a, ADDR_MODE_IMPLIED); break; }  /* INY */
++        case 0xc9: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_cmp(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* CMP */
++        case 0xca: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_dex(cpu, a, ADDR_MODE_IMPLIED); break; }  /* DEX */
++        case 0xcc: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_cpy(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* CPY */
++        case 0xcd: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_cmp(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* CMP */
++        case 0xce: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_dec(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* DEC */
++        case 0xd0: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bne(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BNE */
++        case 0xd1: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_cmp(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* CMP */
++        case 0xd5: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_cmp(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* CMP */
++        case 0xd6: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 6 + op_dec(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* DEC */
++        case 0xd8: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_cld(cpu, a, ADDR_MODE_IMPLIED); break; }  /* CLD */
++        case 0xd9: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_cmp(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* CMP */
++        case 0xdd: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_cmp(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* CMP */
++        case 0xde: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 7 + op_dec(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* DEC */
++        case 0xe0: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_cpx(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* CPX */
++        case 0xe1: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_sbc(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* SBC */
++        case 0xe4: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_cpx(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* CPX */
++        case 0xe5: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_sbc(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* SBC */
++        case 0xe6: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 5 + op_inc(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* INC */
++        case 0xe8: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_inx(cpu, a, ADDR_MODE_IMPLIED); break; }  /* INX */
++        case 0xe9: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_sbc(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* SBC */
++        case 0xea: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_nop(cpu, a, ADDR_MODE_IMPLIED); break; }  /* NOP */
++        case 0xec: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_cpx(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* CPX */
++        case 0xed: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_sbc(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* SBC */
++        case 0xee: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_inc(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* INC */
++        case 0xf0: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_beq(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BEQ */
++        case 0xf1: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_sbc(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* SBC */
++        case 0xf5: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_sbc(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* SBC */
++        case 0xf6: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 6 + op_inc(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* INC */
++        case 0xf8: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_sed(cpu, a, ADDR_MODE_IMPLIED); break; }  /* SED */
++        case 0xf9: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_sbc(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* SBC */
++        case 0xfd: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_sbc(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* SBC */
++        case 0xfe: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 7 + op_inc(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* INC */
++        default: return 0;
++    }
++    cpu->cycles += cycles;
++    return cycles;
++}
++
++
+ uint8_t instruction_get_size(addr_mode_t mode) {
+     switch (mode) {
+         case ADDR_MODE_NONE:        return 0;
+@@ -2184,12 +2958,31 @@
+ 
+ bool mapper_init(agnes_t *agnes) {
+     switch (agnes->gamepack.mapper) {
+-        case 0: mapper0_init(&agnes->mapper.m0, agnes); return true;
+-        case 1: mapper1_init(&agnes->mapper.m1, agnes); return true;
+-        case 2: mapper2_init(&agnes->mapper.m2, agnes); return true;
+-        case 4: mapper4_init(&agnes->mapper.m4, agnes); return true;
++        case 0: mapper0_init(&agnes->mapper.m0, agnes); break;
++        case 1: mapper1_init(&agnes->mapper.m1, agnes); break;
++        case 2: mapper2_init(&agnes->mapper.m2, agnes); break;
++        case 4: mapper4_init(&agnes->mapper.m4, agnes); break;
+         default: return false;
+     }
++    /* NUCLEO PATCH (A8): 8 KB of CHR RAM only for a cartridge without CHR ROM, 8 KB of PRG RAM only for MMC1/MMC3;
++     * a CHR-ROM game no longer carries an unused 8 KB, and the console is no longer one 24 KB block. */
++    uint8_t **chr, **prg;
++    agnes_rams(agnes, &chr, &prg);
++    bool need_chr = agnes->gamepack.chr_rom_banks_count == 0;
++    if (chr && need_chr && !*chr) *chr = (uint8_t *)calloc(1, 8 * 1024);
++    if (prg && !*prg) *prg = (uint8_t *)calloc(1, 8 * 1024);
++    return (!chr || !need_chr || *chr) && (!prg || *prg);
++}
++
++/* Where the mapper keeps its RAM pointers (NULL: this mapper has none of that kind). */
++void agnes_rams(agnes_t *agnes, uint8_t ***chr, uint8_t ***prg) {
++    *chr = NULL; *prg = NULL;
++    switch (agnes->gamepack.mapper) {
++        case 0: *chr = &agnes->mapper.m0.chr_ram; break;
++        case 1: *chr = &agnes->mapper.m1.chr_ram; *prg = &agnes->mapper.m1.prg_ram; break;
++        case 2: *chr = &agnes->mapper.m2.chr_ram; break;
++        case 4: *chr = &agnes->mapper.m4.chr_ram; *prg = &agnes->mapper.m4.prg_ram; break;
++    }
+ }
+ 
+ uint8_t mapper_read(agnes_t *agnes, uint16_t addr) {
+@@ -2238,14 +3031,14 @@
          if (mapper->use_chr_ram) {
              res = mapper->chr_ram[addr];
          } else {
@@ -114,7 +1040,7 @@
      }
      return res;
  }
-@@ -2293,7 +2308,7 @@
+@@ -2293,7 +3086,7 @@
              unsigned bank_offset = mapper->chr_bank_offsets[bank];
              unsigned addr_offset = addr & 0xfff;
              unsigned offset = mapper->agnes->gamepack.chr_rom_offset + bank_offset + addr_offset;
@@ -123,7 +1049,7 @@
          }
      } else if (addr >= 0x6000 && addr < 0x8000) {
          res = mapper->prg_ram[addr - 0x6000];
-@@ -2302,7 +2317,7 @@
+@@ -2302,7 +3095,7 @@
          unsigned bank_offset = mapper->prg_bank_offsets[bank];
          unsigned addr_offset = addr & 0x3fff;
          unsigned offset = mapper->agnes->gamepack.prg_rom_offset + bank_offset + addr_offset;
@@ -132,7 +1058,7 @@
      }
      return res;
  }
-@@ -2408,7 +2423,7 @@
+@@ -2408,7 +3201,7 @@
          unsigned bank_offset = mapper->prg_bank_offsets[bank];
          unsigned addr_offset = addr & 0x3fff;
          unsigned offset = mapper->agnes->gamepack.prg_rom_offset + bank_offset + addr_offset;
@@ -141,7 +1067,7 @@
      }
      return res;
  }
-@@ -2481,7 +2496,7 @@
+@@ -2481,7 +3274,7 @@
          } else {
              unsigned chr_rom_size = (mapper->agnes->gamepack.chr_rom_banks_count * 8 * 1024);
              offset = offset % chr_rom_size;
@@ -150,7 +1076,7 @@
          }
      } else if (addr >= 0x6000 && addr < 0x8000) {
          return mapper->prg_ram[addr - 0x6000];
-@@ -2490,7 +2505,7 @@
+@@ -2490,7 +3283,7 @@
          unsigned bank_offset = mapper->prg_bank_offsets[bank];
          unsigned addr_offset = addr & 0x1fff;
          unsigned offset = mapper->agnes->gamepack.prg_rom_offset + bank_offset + addr_offset;
