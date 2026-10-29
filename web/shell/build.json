@@ -257,13 +257,13 @@
  "budget": {
   "bytes": 75497472,
   "ok": true,
-  "used": 38294674
+  "used": 38329385
  },
- "bytes": 59181791,
+ "bytes": 59216502,
  "caps_row": {
   "since": "0.8.0"
  },
- "commit": "be4296b02980c27c332a3d0079a9d78529ffda7b",
+ "commit": "2d05afec0c3088f7718bcf79fc4b4bb2d4015dbc",
  "edition": "cardputer",
  "externals": [
   {
@@ -551,11 +551,11 @@
    "why": "unRAR license is not free software: out until verified (external-resources.json)"
   }
  ],
- "files": 1573,
+ "files": 1577,
  "format": 1,
  "generator": "nucleo-webos tools/build.py",
- "gz_twins": 710,
- "hash": "914df7b4166142377e9adfbe50c220d7267835568a76e76bf59de6cc326dc76e",
+ "gz_twins": 712,
+ "hash": "96670c6f44ea7947079d55ba73e7e5a32fa226f90201756bd20652e8dbd3beb3",
  "left_out": [
   {
    "id": "cast",
@@ -598,8 +598,8 @@
  },
  "profile_sha256": "f84fc128e9d0121dd7a732107ea112fac273696d36da3aa9fb35ff5d3c8948d8",
  "shell": {
-  "cache": "nucleo-shell-v162-dbe5abe172d6",
-  "hash": "dbe5abe172d6"
+  "cache": "nucleo-shell-v163-29b23e590b84",
+  "hash": "29b23e590b84"
  },
  "shell_dir": "www/shell",
  "uncommitted_files": 0,

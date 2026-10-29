@@ -18,6 +18,8 @@ import fs from './nucleo-fs.js';                     // the one way to the devic
 import { createOpenWith } from './open-with.js';     // which app opens a file, and the "Open with" sheet
 import Caps from './nucleo-caps.js';                               // what this device can do (contract/api.yaml)        // capability broker for sandboxed (agent-written) apps
 import { initSystemUI } from './system-ui.js';        // night light, lock screen, shortcuts sheet, widgets
+import { CATEGORIES, CATEGORY_IDS, categoryOf, categoryKey } from './app-categories.js';   // one category vocabulary
+import Host from './nucleo-host.js';                  // a hosting server's session: real lock, sign out
 
 // Shell-namespaced translator: t(key, vars) → active-language string, falling back to core then key.
 // The catalog is loaded by I18N.init('shell') at boot; before that, calls return the key (harmless,
@@ -214,10 +216,11 @@ const ICONS = {
 const START_PINS = ['file-commander', 'settings', 'store', 'anima', 'browser', 'notepad', 'photo-viewer',
   'media-player', 'calculator', 'calendar', 'terminal', 'help'];
 const startPinsSeed = () => START_PINS.filter((id) => byId(id));
-// "All apps" groups by the manifest's category, in this order; anything else is "other".
-const START_CATS = ['system', 'productivity', 'media', 'games', 'tools', 'connectivity', 'other'];
+// "All apps" and the category cards group by ONE vocabulary (app-categories.js): the person's choice, the app's own
+// category, the store's (installed apps), the built-in catalog — in that order; anything unknown is "other".
+const START_CATS = CATEGORY_IDS;
 let catalogCats = {};      // id -> category from app-catalog.json, for registries that do not carry it
-const appCat = (a) => { const c = a.category || catalogCats[a.id]; return START_CATS.includes(c) ? c : 'other'; };
+const appCat = (a) => categoryOf(a, { overrides: state.appCats, catalog: catalogCats });
 
 // The desktop shown when /api/apps does not answer (offline, development): the core apps, without routes.
 const MOCK = ['file-commander', 'notepad', 'photo-viewer', 'media-player', 'video-player', 'settings', 'log-viewer',
@@ -253,12 +256,18 @@ const UI_STATE_PATH = '/system/config/ui-state.json';
 // same system); the shared default stays the gradient until that becomes an edition overlay.
 const GRADIENT_WALLPAPER = { type: 'gradient', gradient: 'linear-gradient(135deg, #0b1533 0%, #0f2350 50%, #16346a 100%)' };
 const DEFAULT_WALLPAPER = GRADIENT_WALLPAPER;
-const UI_DEFAULTS = { pins: [], wallpaper: DEFAULT_WALLPAPER, desktop: null, startPins: null, recent: [], recoCollapsed: false, iconSize: 'md', autoArrange: false, seenApps: null };
+const UI_DEFAULTS = { pins: [], wallpaper: DEFAULT_WALLPAPER, desktop: null, startPins: null, recent: [], recoCollapsed: false, iconSize: 'md', autoArrange: false, seenApps: null, appCats: {} };
 const RECENT_CAP = 12;
+// The person's own category for an app ({ id: category }): only known categories, only app-like ids.
+function cleanAppCats(v) {
+  const out = {};
+  if (v && typeof v === 'object') for (const [id, c] of Object.entries(v)) if (/^[a-z0-9][a-z0-9._-]{0,63}$/.test(id) && CATEGORY_IDS.includes(c)) out[id] = c;
+  return out;
+}
 
 const state = { apps: [], pins: [...UI_DEFAULTS.pins], wallpaper: UI_DEFAULTS.wallpaper,
   startPins: [], recent: [], recoCollapsed: false, iconSize: UI_DEFAULTS.iconSize, autoArrange: UI_DEFAULTS.autoArrange,
-  desktop: [], assoc: {
+  appCats: {}, desktop: [], assoc: {
     default_open: {
       txt: 'notepad', md: 'notepad', log: 'notepad', json: 'notepad', csv: 'spreadsheet',
       ini: 'notepad', cfg: 'notepad', yaml: 'notepad', yml: 'notepad', toml: 'notepad',
@@ -759,6 +768,9 @@ function initOS() {
   // wireChrome() painted the Action Center night-light tile BEFORE SysUI existed (always "off", even
   // with the saved veil already applied) — repaint it now that the truth is known.
   { const acN = document.getElementById('ac-night'); if (acN) acN.classList.toggle('active', !!(SysUI && SysUI.nightOn())); }
+  // Reloaded while the hosting server holds the screen locked: the veil comes back before anything else is usable.
+  import('./nucleo-host.js').then(({ default: Host }) => Host.session())
+    .then((s) => { if (s && s.locked && SysUI) SysUI.lock(true); }).catch(() => {});
   import('./copilot.js').then((m) => { Copilot = m.initCopilot(OS_API); }).catch((e) => console.warn('[copilot] load failed', e));
   // System Notification Center: one surface for every source (calendar, ANIMA, system, …).
   import('./notify.js').then((m) => { Notify = m.initNotify(OS_API); window.Notify = Notify; }).catch((e) => console.warn('[notify] load failed', e));
@@ -817,7 +829,7 @@ let saveTimer = null, lastSaved = '';
 // then written over B).
 let uiSaveInFlight = 0;
 function saveUiState() {
-  const body = JSON.stringify({ pins: state.pins, wallpaper: state.wallpaper, desktop: state.desktop, startPins: state.startPins, startv: 1, recent: state.recent, recoCollapsed: state.recoCollapsed, iconSize: state.iconSize, autoArrange: state.autoArrange, seenApps: state.seenApps, wpv: DEFAULT_WALLPAPER.type === 'console' ? 2 : undefined });   // wpv: versione del modello dello sfondo (vedi la migrazione al boot); only where that migration exists — undefined is dropped by JSON
+  const body = JSON.stringify({ pins: state.pins, wallpaper: state.wallpaper, desktop: state.desktop, startPins: state.startPins, startv: 1, recent: state.recent, recoCollapsed: state.recoCollapsed, iconSize: state.iconSize, autoArrange: state.autoArrange, seenApps: state.seenApps, appCats: state.appCats, wpv: DEFAULT_WALLPAPER.type === 'console' ? 2 : undefined });   // wpv: versione del modello dello sfondo (vedi la migrazione al boot); only where that migration exists — undefined is dropped by JSON
   lastSaved = body;              // remember our own write so we can ignore its echo
   if (!saveTimer) uiSaveInFlight++;
   clearTimeout(saveTimer);
@@ -878,6 +890,7 @@ async function syncUiState() {
     state.startPins = Array.isArray(s.startPins) ? s.startPins : startPinsSeed();
     state.recent = Array.isArray(s.recent) ? s.recent : [];
     state.recoCollapsed = !!s.recoCollapsed;
+    state.appCats = cleanAppCats(s.appCats);
     if (s.iconSize === 'sm' || s.iconSize === 'md' || s.iconSize === 'lg') state.iconSize = s.iconSize;
     state.autoArrange = !!s.autoArrange;
     state.desktop = Array.isArray(s.desktop) ? s.desktop : seedDesktop();
@@ -1393,6 +1406,7 @@ async function boot() {
   if (!Array.isArray(ui.startPins)) needSeed = true;
   state.recent = Array.isArray(ui.recent) ? ui.recent : [];
   state.recoCollapsed = !!ui.recoCollapsed;
+  state.appCats = cleanAppCats(ui.appCats);
   if (ui.iconSize === 'sm' || ui.iconSize === 'md' || ui.iconSize === 'lg') state.iconSize = ui.iconSize;
   state.autoArrange = !!ui.autoArrange;
   applyIconSize();                               // size the grid before the first desktop render
@@ -2126,8 +2140,18 @@ function applyDeviceName(name) {
 let startPersonDone = false;
 async function showStartPerson() {
   if (startPersonDone) return;
-  const st = await import('./nucleo-user.js').then((m) => m.default.status()).catch(() => null);
   const el = document.getElementById('sm-device'), acct = document.getElementById('sm-account');
+  const host = await Host.session();
+  if (host && host.user && el && acct) {           // behind a hosting server's sign-in: the person signed in there
+    startPersonDone = true;
+    el.dataset.user = 'host';
+    el.textContent = host.user.name;
+    const av = acct.querySelector('.sm-avatar');
+    if (av) { av.textContent = (host.user.name || '?').slice(0, 1).toUpperCase(); av.classList.add('letter'); }
+    acct.title = host.user.name;
+    return;
+  }
+  const st = await import('./nucleo-user.js').then((m) => m.default.status()).catch(() => null);
   if (!el || !acct || !st) return;                 // unreadable now: asked again on the next open
   if (!st.multi) { if (!st.setup) startPersonDone = true; return; }   // setup pending: accounts may be turned on now
   if (!st.user) return;                            // accounts, nobody signed in yet
@@ -3579,7 +3603,34 @@ function renderStartMenu() {
   renderStartGames();
   renderStartPinned();
   renderRecommended();
+  renderStartCategories();
   renderAllApps();
+}
+
+// "Apps by category" (Windows 11's category view): one card per category that has apps, four icons each, the name and
+// how many; a card opens "All apps" on that category.
+function renderStartCategories() {
+  const g = document.getElementById('sm-catgrid');
+  if (!g) return;
+  g.innerHTML = '';
+  const coll = new Intl.Collator(I18N.locale());
+  const groups = new Map(START_CATS.map((c) => [c, []]));
+  for (const a of state.apps) groups.get(appCat(a)).push(a);
+  for (const c of CATEGORIES) {
+    const apps = groups.get(c.id);
+    if (!apps.length) continue;
+    apps.sort((x, y) => coll.compare(appName(x), appName(y)));
+    const card = document.createElement('button');
+    card.type = 'button'; card.className = 'sm-catcard'; card.dataset.cat = c.id;
+    const name = t(categoryKey(c.id));
+    card.title = name;
+    card.setAttribute('aria-label', name + ' (' + apps.length + ')');
+    const icons = apps.slice(0, 4).map((a) => `<span class="ci">${a.glyph}</span>`).join('');
+    card.innerHTML = `<span class="sm-catgl">${icons}</span>` +
+      `<span class="sm-catn">${escapeHtml(name)}</span><span class="sm-catc">${apps.length}</span>`;
+    card.addEventListener('click', () => { startCat = c.id; renderAllApps(); showStartView('sm-allapps'); });
+    g.appendChild(card);
+  }
 }
 
 // Pinned apps grid (the "Aggiunte" section). Drag-free, but right-click toggles pin/taskbar.
@@ -3623,7 +3674,7 @@ function renderAllApps() {
     for (const c of ['', ...present]) {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'sm-chip'; b.dataset.cat = c;
-      b.textContent = t(c ? 'start_cat_' + c : 'start_cat_all');
+      b.textContent = t(c ? categoryKey(c) : 'start_cat_all');
       b.addEventListener('click', () => { startCat = c; renderAllApps(); startNavReset(); });
       chips.appendChild(b);
     }
@@ -3632,7 +3683,7 @@ function renderAllApps() {
   for (const c of present) {
     if (startCat && c !== startCat) continue;
     const head = document.createElement('div');
-    head.className = 'sm-cathead'; head.textContent = t('start_cat_' + c);
+    head.className = 'sm-cathead'; head.textContent = t(categoryKey(c));
     list.appendChild(head);
     for (const a of groups.get(c).sort((x, y) => coll.compare(appName(x), appName(y)))) list.appendChild(allAppsRow(a));
   }
@@ -3704,9 +3755,25 @@ function startAppMenu(e, a) {
         fn: () => (onDesk ? removeItem(onDesk.uid) : addItem({ uid: 'app-' + a.id, type: 'app', target: a.id })) },
     { label: inStart ? t('ctx_unpin') : t('ctx_pin'), glyph: '📌', fn: () => toggleStartPin(a.id) },
     { label: state.pins.includes(a.id) ? t('ctx_unpin_taskbar') : t('ctx_pin_taskbar'), glyph: '📎', fn: () => togglePin(a.id) },
+    { label: t('ctx_category'), glyph: '🗂️', sub: categoryMenu(a) },
     a.store ? { sep: true } : null,
     a.store ? { label: t('ctx_uninstall'), glyph: '🧹', danger: true, fn: () => { closeStart(); uninstallApp(a); } } : null,
   ].filter(Boolean));
+}
+
+// The category submenu of an app: every category (the current one ticked) and "As the app says" (its own / the
+// store's category). The choice follows the person on every client (ui-state.json, appCats).
+function categoryMenu(a) {
+  const cur = appCat(a), own = !!state.appCats[a.id];
+  const set = (c) => {
+    if (c) state.appCats[a.id] = c; else delete state.appCats[a.id];
+    saveUiState(); renderStartCategories(); renderAllApps();
+  };
+  return [
+    ...CATEGORIES.map((c) => ({ label: t(categoryKey(c.id)), glyph: c.id === cur ? '✓' : '', fn: () => set(c.id) })),
+    { sep: true },
+    { label: t('ctx_category_default'), glyph: own ? '↺' : '✓', fn: () => set('') },
+  ];
 }
 
 // Disinstallare un'app dello Store dal desktop o da Start, senza aprire lo Store.
@@ -4117,22 +4184,45 @@ function onSearchKey(e, onEscape) {
 // The companion apps (Windows, Android) only where the device serves them (downloads.companion): a link to a 404 elsewhere.
 Caps.has('downloads.companion').then((on) => { if (on) document.querySelectorAll('.sm-dl').forEach((a) => { a.style.display = ''; }); }).catch(() => {});
 // The Start power button: lock, sign out where there are accounts, restart where the device can (power).
-async function powerMenu() {
-  const [me, canReboot] = await Promise.all([
+// Lock and Sign out, the same in the power and account menus. Behind a hosting server's sign-in (host.session) Lock
+// is a real lock and Sign out ends the server session and clears this browser; on a device with accounts Sign out
+// is the account's; elsewhere there is nothing to sign out of.
+async function sessionItems() {
+  const [me, hosted] = await Promise.all([
     import('./nucleo-user.js').then((m) => m.default.current()).catch(() => null),
-    Caps.has('power').catch(() => false),
+    Host.available(),
   ]);
-  const r = document.getElementById('sm-power').getBoundingClientRect();
-  const items = [
+  return [
     { label: t('start_lock'), glyph: '🔒', fn: () => { closeStart(); if (SysUI) SysUI.lock(); } },
-    me && me.multi ? { label: t('start_signout'), glyph: '↩', fn: async () => {
+    hosted ? { label: t('start_signout'), glyph: '↩', fn: hostSignOut }
+      : me && me.multi ? { label: t('start_signout'), glyph: '↩', fn: async () => {
         const { default: User } = await import('./nucleo-user.js');
         await User.signOut().catch(() => {}); location.reload();
       } } : null,
-    canReboot ? { sep: true } : null,
-    canReboot ? rebootItem() : null,
   ].filter(Boolean);
+}
+async function hostSignOut() {
+  closeStart();
+  const ok = await osConfirm({ title: t('signout_title'), body: t('signout_body'), okText: t('signout_ok'), danger: true });
+  if (!ok) return;
+  showToast(t('signout_going'), '↩', 'info', 8000);
+  if (!(await Host.signOut().catch(() => false))) showToast(t('signout_fail'), '⚠️', 'error');
+}
+async function powerMenu() {
+  const [items, canReboot] = await Promise.all([sessionItems(), Caps.has('power').catch(() => false)]);
+  if (canReboot) items.push({ sep: true }, rebootItem());
+  const r = document.getElementById('sm-power').getBoundingClientRect();
   showCtx(r.left - 150, r.top - 12 - items.length * 38, items);
+}
+async function accountMenu() {
+  const acct = document.getElementById('sm-account');
+  const items = [
+    { label: t('start_account_settings'), glyph: '👤', fn: () => openSettings(acct.dataset.user ? 'accounts' : '') },
+    { sep: true },
+    ...(await sessionItems()),
+  ];
+  const r = acct.getBoundingClientRect();
+  showCtx(r.left, r.top - 12 - items.length * 38, items);
 }
 function rebootItem() {
   return { label: t('start_power_title'), glyph: '🔄', danger: true, fn: async () => {
@@ -4241,7 +4331,12 @@ function wireChrome() {
   const setBtn = document.getElementById('sm-settings');
   if (setBtn) setBtn.addEventListener('click', () => openSettings());
   const acct = document.getElementById('sm-account');
-  if (acct) acct.addEventListener('click', () => openSettings(acct.dataset.user ? 'accounts' : ''));
+  if (acct) acct.addEventListener('click', (e) => { e.stopPropagation(); accountMenu(); });
+  for (const [id, path] of [['sm-docs', '/data/Documents'], ['sm-pics', '/data/Pictures']]) {
+    const b = document.getElementById(id);
+    const fc = byId('file-commander');
+    if (b && fc) { b.hidden = false; b.addEventListener('click', () => { WM.open(fc, 'path=' + encodeURIComponent(path)); closeStart(); }); }
+  }
   showStartPerson();
   // Collapsible "Consigliati": persist on the device so the choice follows the user across clients.
   const recoToggle = document.getElementById('sm-reco-toggle');

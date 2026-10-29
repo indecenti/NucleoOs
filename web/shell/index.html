@@ -92,6 +92,11 @@
           <button class="sm-reco-toggle" id="sm-reco-toggle" type="button" aria-expanded="true" data-i18n-attr="title:start_reco_toggle;aria-label:start_reco_toggle" title="Mostra o nascondi i consigliati" aria-label="Mostra o nascondi i consigliati"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
         <div id="sm-reco" class="sm-reco"></div>
+        <!-- Apps by category: one card per category, a card opens All apps on it -->
+        <div class="sm-sechead sm-cat-head">
+          <span class="sm-sectitle" data-i18n="start_categories">Categorie</span>
+        </div>
+        <div id="sm-catgrid" class="sm-catgrid"></div>
       </div>
 
       <!-- All apps view: full alphabetical list -->
@@ -117,6 +122,8 @@
       <div class="sm-foot-actions">
         <a class="sm-iconbtn sm-dl" style="display:none" href="/downloads/NucleoConnect.exe" download data-i18n-attr="title:start_dl_win" title="Scarica l'app per Windows"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg></a>
         <a class="sm-iconbtn sm-dl" style="display:none" href="/downloads/NucleoMind.apk" download data-i18n-attr="title:start_dl_apk" title="Scarica NucleoMind (server LLM per Android)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg></a>
+        <button class="sm-iconbtn" id="sm-docs" type="button" hidden data-i18n-attr="title:start_docs;aria-label:start_docs" title="Documenti" aria-label="Documenti"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg></button>
+        <button class="sm-iconbtn" id="sm-pics" type="button" hidden data-i18n-attr="title:start_pics;aria-label:start_pics" title="Immagini" aria-label="Immagini"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></svg></button>
         <button class="sm-iconbtn" id="sm-settings" type="button" data-i18n-attr="title:start_settings;aria-label:start_settings" title="Impostazioni" aria-label="Impostazioni"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
         <button class="sm-iconbtn sm-power" id="sm-power" type="button" data-i18n-attr="title:start_power;aria-label:start_power" title="Alimentazione" aria-label="Alimentazione"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg></button>
       </div>

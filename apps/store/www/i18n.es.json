@@ -56,5 +56,6 @@
  "installed_ok": "{n} instalada.",
  "removed_ok": "{n} eliminada.",
  "open": "Abrir",
- "install_on_device": "Se instala desde la Tienda nativa del dispositivo"
+ "install_on_device": "Se instala desde la Tienda nativa del dispositivo",
+ "categories": "Categorías"
 }

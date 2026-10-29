@@ -6,8 +6,12 @@ import Caps from '/nucleo-caps.js';
 import fs from '/nucleo-fs.js';
 import os from '/nucleo-shell.js';   // open-app and the OS dialogs
 import { makeStore, StoreError } from '/store-client.js';
+import { CATEGORIES, normalize, categoryKey } from '/app-categories.js';   // the same categories as Start
 
 const t = await I18N.init('store');
+await I18N.init('shell', { apply: false, observe: false }).catch(() => {});   // category names live with Start
+const ts = I18N.scope('shell');
+const catOf = (a) => normalize(a.category) || 'other';
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const size = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
@@ -32,7 +36,7 @@ const hasSystem = info.caps.includes('store.native');
 const tabs = store.sources().map((s) => ({ id: s.id, src: s }));
 if (hasSystem) tabs.push({ id: 'system' });
 
-let current = tabs[0] ? tabs[0].id : null, filter = 'all', busy = false;
+let current = tabs[0] ? tabs[0].id : null, filter = 'all', busy = false, category = '';
 const catalogs = new Map();          // source id -> { apps, serial } | { error }
 
 const lang = () => (I18N.lang || 'it').slice(0, 2);
@@ -119,8 +123,30 @@ function render() {
   let apps = cat.apps.filter((a) => !needle || (a.names[lang()] + ' ' + a.descriptions[lang()] + ' ' + a.id).toLowerCase().includes(needle));
   if (filter === 'installed') apps = apps.filter((a) => a.installed > 0);
   if (filter === 'updates') apps = apps.filter((a) => a.update);
+  renderCats(apps);
+  if (category) apps = apps.filter((a) => catOf(a) === category);
   if (!apps.length) { grid.appendChild(el('div', 'empty', t('empty'))); return; }
   for (const a of apps) grid.appendChild(card(src, a));
+}
+
+// One chip per category the catalog has (Start's names, Start's order); the chips are rebuilt only when that set
+// changes, so a chip is never replaced under the pointer.
+function renderCats(apps) {
+  const box = $('cats');
+  const present = CATEGORIES.map((c) => c.id).filter((id) => apps.some((a) => catOf(a) === id));
+  if (category && !present.includes(category)) category = '';
+  const key = [I18N.lang, ...present].join(',');
+  box.hidden = present.length < 2;
+  if (box.dataset.key !== key) {
+    box.dataset.key = key;
+    box.textContent = '';
+    for (const id of ['', ...present]) {
+      const b = el('button', '', id ? ts(categoryKey(id)) : ts('start_cat_all'));
+      b.type = 'button'; b.dataset.c = id;
+      box.appendChild(b);
+    }
+  }
+  for (const b of box.children) { const on = b.dataset.c === category; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
 }
 
 function card(src, a) {
@@ -128,7 +154,8 @@ function card(src, a) {
   const hd = el('div', 'hd');
   hd.appendChild(iconFor(src, a));
   const nm = el('div', 'grow'); nm.appendChild(el('div', 'nm', a.names[lang()] || a.id));
-  nm.appendChild(el('div', 'mt', [a.version && 'v' + a.version, a.size ? size(a.size) : '', a.author].filter(Boolean).join(' · ')));
+  nm.appendChild(el('div', 'mt', [ts(categoryKey(catOf(a))), a.version && 'v' + a.version, a.size ? size(a.size) : '', a.author]
+    .filter(Boolean).join(' · ')));
   hd.appendChild(nm); c.appendChild(hd);
   c.appendChild(el('div', 'ds', a.descriptions[lang()] || ''));
   if (a.requires && a.requires.length) {
@@ -195,6 +222,12 @@ async function doRemove(a) {
 $('refresh').addEventListener('click', async () => { if (busy || !current || current === 'system') return; catalogs.delete(current); await load(current); render(); });
 let qt = null;
 $('q').addEventListener('input', () => { clearTimeout(qt); qt = setTimeout(render, 150); });
+$('cats').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  category = b.dataset.c || '';
+  render();
+});
 $('filter').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-f]'); if (!b) return;
   filter = b.dataset.f;

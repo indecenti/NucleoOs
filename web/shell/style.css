@@ -537,6 +537,26 @@ html[data-theme="light"] .sm-rowtag { background: rgba(0,0,0,0.06); border-color
   box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 1px var(--accent-line);
 }
 
+/* Apps by category (Windows 11 category view): 3 cards a row, four icons, name and count */
+.sm-cat-head { margin-top: 20px; }
+.sm-catgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex: none; padding-bottom: 14px; }
+.sm-catcard { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px;
+  align-items: center; padding: 10px; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+  background: rgba(255,255,255,0.04); color: inherit; font: inherit; text-align: left; cursor: pointer;
+  transition: background .15s, border-color .15s; }
+.sm-catcard:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.14); }
+.sm-catcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sm-catgl { grid-row: 1 / 3; display: grid; grid-template-columns: repeat(2, 20px); grid-auto-rows: 20px; gap: 3px;
+  padding: 5px; border-radius: 9px; background: rgba(0,0,0,0.22); }
+.sm-catgl .ci { font-size: 16px; line-height: 20px; text-align: center; }
+.sm-catn { font-size: 12px; font-weight: 600; line-height: 1.25; overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sm-catc { font-size: 11px; color: var(--muted); }
+html[data-theme="light"] .sm-catcard { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.08); }
+html[data-theme="light"] .sm-catcard:hover { background: rgba(0,0,0,0.06); }
+html[data-theme="light"] .sm-catgl { background: rgba(0,0,0,0.06); }
+.sm-avatar.letter { font-size: 14px; font-weight: 700; color: #fff; background: var(--accent-grad); }
+@media (max-width: 520px) { .sm-catgrid { grid-template-columns: repeat(2, 1fr); } }
 .sm-empty { padding: 20px 10px; color: var(--muted); font-size: 12.5px; text-align: center; grid-column: 1 / -1; }
 
 /* Footer */
@@ -941,6 +961,16 @@ html[data-theme="light"] #lock-screen { background: rgba(235, 240, 252, 0.5); }
 .lk-hint { margin-top: 6px; font-size: 12.5px; color: var(--muted); opacity: .8;
   animation: lkPulse 2.6s ease-in-out infinite; }
 @keyframes lkPulse { 0%, 100% { opacity: .8; } 50% { opacity: .35; } }
+/* A real lock (host.session): nothing of the desktop shows through, one way out (the passkey) */
+#lock-screen.lk-secure { background: rgba(5, 9, 20, 0.94); backdrop-filter: blur(60px) brightness(.5); }
+html[data-theme="light"] #lock-screen.lk-secure { background: rgba(235, 240, 252, 0.96); }
+#lock-screen.lk-secure .lk-dev { font-size: 17px; font-weight: 600; color: var(--text); }
+#lock-screen.lk-secure .lk-hint { animation: none; opacity: .85; }
+.lk-unlock { margin-top: 22px; min-width: 200px; min-height: 44px; padding: 0 22px; border: 0; border-radius: 10px;
+  font: inherit; font-weight: 600; background: var(--accent); color: #fff; cursor: pointer; }
+.lk-unlock:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.lk-unlock[disabled] { opacity: .6; cursor: progress; }
+.lk-msg { margin-top: 12px; min-height: 1.4em; font-size: 13px; color: var(--muted); }
 
 /* Shortcuts cheat-sheet overlay */
 #kbd-overlay { position: fixed; inset: 0; z-index: 100210; background: rgba(6, 10, 22, 0.55);

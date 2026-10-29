@@ -289,7 +289,8 @@
      "fs.mounts",
      "fs.stat",
      "games.library",
-     "games.roms"
+     "games.roms",
+     "host.session"
     ]
    }
   ]

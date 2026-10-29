@@ -340,6 +340,9 @@ export function makeStore({ fetch = globalThis.fetch, dev, caps = [], appsDir = 
     let w = 0;
     for (const [path, bytes] of files) { await dev.writeBytes(tmp + '/' + path, bytes); onStep({ step: 'write', done: ++w, total: files.length }); }
     await dev.writeBytes(tmp + '/.package.sig', pkgBytes);
+    // The store's category, from the signed catalog line, beside the app: Start files it under the same category the
+    // store shows (shell/app-categories.js), even when the app's own manifest names none.
+    await dev.writeBytes(tmp + '/.store.json', enc.encode(JSON.stringify({ category: String(app.category || '') })));
     onStep({ step: 'swap' });
     const had = (await installedCode(app.id)) > 0;
     if (had) { await dev.mkdir(appsDir + '/.old').catch(() => {}); await removeTree(old); await dev.move(dest, old); }
@@ -356,6 +359,7 @@ export function makeStore({ fetch = globalThis.fetch, dev, caps = [], appsDir = 
     if (pkg) {
       for (const f of pkg.files) await dev.remove(dir + '/' + f.path).catch(() => {});
       await dev.remove(dir + '/.package.sig').catch(() => {});
+      await dev.remove(dir + '/.store.json').catch(() => {});
       const dirs = new Set();
       for (const f of pkg.files) { const parts = f.path.split('/'); for (let i = parts.length - 1; i > 0; i--) dirs.add(parts.slice(0, i).join('/')); }
       for (const d of [...dirs].sort((a, b) => b.length - a.length)) await dev.remove(dir + '/' + d).catch(() => {});

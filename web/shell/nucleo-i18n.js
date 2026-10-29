@@ -317,11 +317,17 @@ const I18N = {
 
   // Switch the OS language. Persists to the runtime key (which fires `storage` in every other
   // same-origin iframe → they repaint), updates this document, asks the shell to persist it to
-  // settings.json, and repaints here. Pass the same value twice = no-op.
+  // settings.json, and repaints here. A no-op only when the language is already the OS's: this
+  // document may show it without the OS having it (a page written in Italian, `<html lang="it">`,
+  // reads as Italian while nothing is chosen yet) — then the choice must still reach the OS.
   async setLang(code) {
-    const l = normalize(code); if (!l || l === activeLang) return;
+    const l = normalize(code); if (!l) return;
+    let stored = null;
+    try { stored = normalize(localStorage.getItem(RUNTIME_KEY)); } catch {}
+    if (l === activeLang && l === stored) return;
     try { localStorage.setItem(RUNTIME_KEY, l); } catch {}
-    await applyNewLang(l);
+    if (l !== activeLang) await applyNewLang(l);
+    else syncDocAttrs();
     // Persist to the canonical store. The shell listens for this and writes settings.json once.
     try {
       const msg = { type: 'set-language', lang: l };
