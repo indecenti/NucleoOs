@@ -237,6 +237,11 @@ def cmd_release(a):
             # The OTA image must be the very build the release published (its SHA256SUMS line).
             if not re.search(r"^%s [ *]?%s$" % (hashlib.sha256(data).hexdigest(), re.escape(n)), sums, re.M):
                 sys.exit("%s does not match SHA256SUMS" % n)
+            # A release from before signatures carries no key and no check: devices on it install anything,
+            # devices with the check never install it (signed or not), so it stays as published.
+            if point(load_pub("primary")) not in data:
+                print("%s predates release signatures: left unsigned" % n)
+                continue
             out, version = sign_bin(data, "primary")
             if not version.startswith(tag.lstrip("v")):
                 sys.exit("%s is version %s, not %s" % (n, version, tag))
@@ -249,9 +254,10 @@ def cmd_release(a):
             sp = p[:-len(".txt")] + ".sig"
             open(sp, "wb").write(make_block(load_priv("primary"), DOMAIN_SD, manifest_tag(data), data))
             upload.append(sp)
-        sp = os.path.join(tmp, "SHA256SUMS")
-        open(sp, "w", newline="\n").write(sums)
-        upload.append(sp)
+        if sums != open(os.path.join(tmp, "SHA256SUMS")).read():
+            sp = os.path.join(tmp, "SHA256SUMS")
+            open(sp, "w", newline="\n").write(sums)
+            upload.append(sp)
         print("to upload:", ", ".join(os.path.basename(u) for u in upload))
         if a.dry_run:
             print("dry run: nothing uploaded")
