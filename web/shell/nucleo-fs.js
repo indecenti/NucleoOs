@@ -49,6 +49,8 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 const ABSENT = new Set([404, 405, 501]);        // a route this backend does not have
 const BUSY = new Set([502, 503, 504]);
+const TRASH_DB = '/system/config/trash.json';
+const TRASH_CAP = 20;
 
 // '/data//a/./b/../c' → '/data/a/c'; never climbs above the root. Paths are always absolute.
 export function normPath(p) {
@@ -79,8 +81,10 @@ function toBytes(data) {
 }
 const isBlob = (d) => typeof Blob !== 'undefined' && d instanceof Blob;
 
+// drives(path) → a drive object or null: a path served by code of the web OS instead of the device's /api/fs (the
+// encrypted cloud archive's /r2, nucleo-archive.js). The default instance below wires it.
 export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
-  timeoutMs = 20000, chunk = 256 * 1024 } = {}) {
+  timeoutMs = 20000, chunk = 256 * 1024, drives = null } = {}) {
   // Upload progress byte by byte needs XMLHttpRequest (fetch has none): used for whole-file writes when this
   // instance talks to the real network, never when a test injects its own fetch.
   const useXhr = !fetchFn && typeof XMLHttpRequest !== 'undefined';
@@ -139,10 +143,13 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
     if ((n === '/' && !root) || typeof p !== 'string' || !p.startsWith('/')) throw new FsError('bad-path', String(p));
     return n;
   };
+  const drive = async (p) => (drives ? drives(normPath(p)) : null);
+  const onChanged = (p) => { if (onChange) try { onChange(p); } catch {} };
 
   // ── reading ──
   async function read(path) {
     const p = checkPath(path);
+    const d = await drive(p); if (d) return d.read(p);
     const r = await req(R.read + encodeURIComponent(p), {}, { retry: true });
     if (r.status === 404) return null;
     if (!r.ok) await fail(r, p);
@@ -151,6 +158,7 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
   // Bytes [start, end] (inclusive) of a file: a Range read where the backend honours it, else a slice.
   async function readRange(path, start, end) {
     const p = checkPath(path);
+    const d = await drive(p); if (d) return d.readRange(p, start, end);
     const r = await req(R.read + encodeURIComponent(p), { headers: { Range: 'bytes=' + start + '-' + end } }, { retry: true });
     if (r.status === 404) return null;
     if (!r.ok) await fail(r, p);
@@ -170,6 +178,7 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
   }
   async function listAll(dir) {
     const p = checkPath(dir, true);
+    const d = await drive(p); if (d) return d.list(p);
     const r = await req(R.list + encodeURIComponent(p), {}, { retry: true });
     if (r.status === 404) return [];
     if (!r.ok) await fail(r, p);
@@ -184,6 +193,7 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
   // Where the device has /api/fs/stat (capability fs.stat) it answers with more (protected, read_only, trash…).
   async function stat(path) {
     const p = checkPath(path, true);
+    const d = await drive(p); if (d) return d.stat(p);
     if (p === '/' || p === '/data') return { type: 'dir', size: 0 };
     if (!TMP_RE.test(nameOf(p)) && (await capInfo()).caps.includes('fs.stat')) {
       const r = await req(R.stat + encodeURIComponent(p), {}, { retry: true });
@@ -234,6 +244,7 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
   const forgetDirs = (p) => { for (const d of [...madeDirs]) if (d === p || d.startsWith(p + '/')) madeDirs.delete(d); };
   async function mkdirp(dir) {
     const p = checkPath(dir);
+    const dv = await drive(p); if (dv) return dv.mkdirp(p);
     const segs = p.split('/').filter(Boolean);
     let acc = '';
     for (const s of segs) {
@@ -331,6 +342,8 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
     return locked(p, () => writeNow(p, data, opts));
   }
   async function writeNow(p, data, opts) {
+    const dv = await drive(p);
+    if (dv) { const out = await dv.write(p, data, opts); onChanged(p); return out; }
     // keepalive: the one request that survives the page closing (history, last state on exit). Small (the
     // browser caps it at 64 KB), straight to the file, not atomic, never waited for by an unloading page.
     if (opts.keepalive) {
@@ -396,6 +409,8 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
   async function remove(path) {
     const p = checkPath(path);
     if (p === '/data') throw new FsError('denied', p);
+    const dv = await drive(p);
+    if (dv) { await dv.remove(p); onChanged(p); return true; }
     forgetDirs(p);
     const r = await req(R.remove + encodeURIComponent(p), { method: 'POST' });
     if (r.status === 404) return false;
@@ -408,6 +423,8 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
   async function move(from, to, opts = {}) {
     const a = checkPath(from), b = checkPath(to);
     if (a === b) return { path: b };
+    const dv = (await drive(a)) || (await drive(b));
+    if (dv) { await dv.move(a, b, opts); onChanged(a); onChanged(b); return { path: b }; }
     const there = await stat(b);
     if (there && !opts.overwrite) throw new FsError('exists', b);
     await mkdirp(dirOf(b));
@@ -427,6 +444,8 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
   // copy: the device's own copy where it has one (fs.copy), else read and write here.
   async function copy(from, to, opts = {}) {
     const a = checkPath(from), b = checkPath(to);
+    const dv = (await drive(a)) || (await drive(b));
+    if (dv) { await dv.copy(a, b, opts); onChanged(b); return { path: b }; }
     if (!opts.overwrite && await exists(b)) throw new FsError('exists', b);
     const info = await capInfo();
     if (info.caps.includes('fs.copy') && !opts.overwrite) {
@@ -448,13 +467,80 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
     for (let i = 2; ; i++) { const c = `${base} (${i})${ext}`; if (!have.has(c)) return joinPath(d, c); }
   }
 
+  // ── the Recycle Bin: one for every app (the format File Commander and the Recycle Bin app have always used) ──
+  // trash(path) moves a file or folder to the bin and records it in /system/config/trash.json ({orig, trash, name, ts}),
+  // so the Recycle Bin app lists and restores it. Every step is checked and the original goes LAST; any failure leaves
+  // it where it was. Where the device trashes by itself (/api/fs/stat answers trash:true for the path, the Handheld's
+  // cards) a delete is that move, and the device writes the entry. With accounts the bin is the user's own
+  // (/system/config is theirs); without, it stays /system/.trash as it always was.
+  async function trashIndex() {
+    let txt;
+    try { txt = await readText(TRASH_DB); } catch { return null; }      // a read that broke off is not an index
+    if (txt == null || !txt.trim()) return { items: [] };
+    try {
+      const d = JSON.parse(txt);
+      if (d && typeof d === 'object' && !Array.isArray(d)) {
+        if (d.items === undefined) return { ...d, items: [] };
+        if (Array.isArray(d.items)) return d;
+      }
+    } catch {}
+    // A readable but damaged index: kept aside byte for byte, and a fresh one started (never an "empty bin" saved
+    // over the record of every trashed file).
+    try { await write(TRASH_DB.replace(/\.json$/, '.corrupt.json'), txt); return { items: [] }; } catch { return null; }
+  }
+  async function trash(path) {
+    const p = checkPath(path);
+    if (p === '/data' || p.split('/').length < 3) throw new FsError('denied', p);
+    const info = await capInfo();
+    if (info.caps.includes('fs.stat')) {
+      const st = await stat(p);
+      if (!st) throw new FsError('not-found', p);
+      if (st.trash === true) {
+        if (!(await remove(p))) throw new FsError('not-found', p);
+        const db = await trashIndex();
+        return ((db && db.items) || []).find((i) => i.orig === p) || { orig: p, name: nameOf(p), ts: Date.now() };
+      }
+    }
+    const db = await trashIndex();
+    if (!db) throw new FsError('failed', p, 0, 'trash_index');
+    const bin = info.caps.includes('users.multi') ? '/system/config/.trash' : '/system/.trash';
+    const name = nameOf(p);
+    const entry = { orig: p, trash: joinPath(bin, Date.now() + '_' + Math.floor(Math.random() * 9999) + '_' + name), name, ts: Date.now() };
+    db.items.unshift(entry);
+    await write(TRASH_DB, JSON.stringify(db));      // the entry first: a file in the bin is never unlisted
+    const unlist = async () => { db.items = db.items.filter((i) => i !== entry); await write(TRASH_DB, JSON.stringify(db)).catch(() => {}); };
+    // A move is one rename on the device: files and folders alike, no bytes through the browser. Across two disks it
+    // cannot be one, so the bytes are copied and the original removed only once the copy is there.
+    let moved = false;
+    try { await move(p, entry.trash); moved = true; } catch {}
+    if (!moved) {
+      try { await copy(p, entry.trash); } catch (e) { await remove(entry.trash).catch(() => {}); await unlist(); throw e; }
+      let gone = false;
+      try { gone = await remove(p); } catch {}
+      if (!gone) { await remove(entry.trash).catch(() => {}); await unlist(); throw new FsError('failed', p, 0, 'trash_failed'); }
+    }
+    if (db.items.length > TRASH_CAP) {              // the oldest go only once this one is safely in
+      while (db.items.length > TRASH_CAP) { const old = db.items.pop(); if (old.trash) await remove(old.trash).catch(() => {}); }
+      await write(TRASH_DB, JSON.stringify(db)).catch(() => {});
+    }
+    return entry;
+  }
+
   return { read, readRange, readText, readJSON, url, list, stat, exists, free, mounts, mkdirp, write, writeText, writeJSON, remove, move,
-    copy, uniquePath, normPath, dirOf, nameOf, joinPath, FsError };
+    copy, uniquePath, trash, trashIndex, normPath, dirOf, nameOf, joinPath, FsError };
 }
 
 // The instance every page of this origin shares. Shell and apps that want the file index refreshed after their
 // writes listen with fs.onChange(fn).
 const listeners = new Set();
-const fs = createFs({ onChange: (p) => { for (const fn of listeners) { try { fn(p); } catch {} } } });
+// The encrypted cloud archive's drive (/r2), where the device declares cloud.archive: loaded on first use only.
+let r2 = null;
+async function cloudDrive(p) {
+  if (p !== '/r2' && !p.startsWith('/r2/')) return null;
+  try { if (!(await Caps.has('cloud.archive'))) return null; } catch { return null; }
+  if (!r2) r2 = import('./nucleo-archive.js').then((m) => m.createDrive(m.archive, fs));
+  return r2;
+}
+const fs = createFs({ onChange: (p) => { for (const fn of listeners) { try { fn(p); } catch {} } }, drives: cloudDrive });
 fs.onChange = (fn) => { if (typeof fn === 'function') listeners.add(fn); return () => listeners.delete(fn); };
 export default fs;

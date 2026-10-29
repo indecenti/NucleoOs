@@ -63,14 +63,25 @@ export function sanitizeApp(a) {
   return out;
 }
 
+// A sandboxed frame's broker token: in the fragment of the URL the shell gives it (nucleo-app.js reads it, removes it
+// from the address and sends it with every broker call). The broker answers only a message carrying the token of
+// the frame it comes from, so a page the frame was navigated to (a link in a hostile document) gets nothing.
+export function brokerToken() {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+}
+export const withToken = (src, token) => (token ? src + (src.includes('#') ? '&' : '#') + 'nucleo-broker=' + token : src);
+
 // ── path policy (pure) ────────────────────────────────────────────────────────────────────────
 // An app's reach is decided by what its manifest DECLARED, not by what it asks for:
 //   storage.app     → /data/apps/<id>/…      its own private corner
 //   storage.shared  → /data/…                the shared user area (documents, pictures, recordings)
-// Anything else — /system, /apps, /www, the ANIMA brain, another app's folder — is out of reach for
-// both. Note /data/anima is excluded even under storage.shared: that is where the key vault lives.
+// Anything else — /system, /apps, /www — is out of reach for both. OS_PRIVATE stays out of reach even under
+// storage.shared: the key vault and ANIMA's brain, the agent, every app's private corner, the code of the store apps,
+// SSH hosts. The Open/Save sheet hides the same folders (filedialog.js), so the user never hands one over either.
 const SHARED_ROOT = '/data';
-const DENY_UNDER_SHARED = ['/data/anima', '/data/agent'];
+export const OS_PRIVATE = ['/data/anima', '/data/agent', '/data/apps', '/data/store-apps', '/data/ssh'];
 
 // Normalise like the device does: collapse //, drop ./, resolve .. WITHOUT ever climbing past the root.
 export function normPath(p) {
@@ -97,7 +108,7 @@ export function resolveAppPath(appId, permissions, path) {
 
   if (perms.includes('storage.shared')) {
     if (abs !== SHARED_ROOT && !abs.startsWith(SHARED_ROOT + '/')) return null;
-    for (const d of DENY_UNDER_SHARED) if (abs === d || abs.startsWith(d + '/')) return null;
+    for (const d of OS_PRIVATE) if (abs === d || abs.startsWith(d + '/')) return null;
     return abs;
   }
   return null;
@@ -573,12 +584,13 @@ export function createBroker({ fetchFn, fs: fsIn, findApp, notify, onFsChange, g
   }
 
   // The message handler the shell installs. IDENTITY IS BY SOURCE, never by origin: a sandboxed frame
-  // has an opaque origin that arrives as the string "null", so e.origin proves nothing. findApp maps
-  // e.source back to the window WE created — the only frames that exist.
+  // has an opaque origin that arrives as the string "null", so e.origin proves nothing. findApp(source, event)
+  // maps e.source back to the window WE created, and checks the frame still holds our page: the token of a
+  // sandboxed frame (wm.js brokerToken), the shell's origin for the others.
   const onMessage = async function onMessage(e) {
     const d = e && e.data;
     if (!d || d.type !== 'nucleo.broker' || typeof d.method !== 'string') return;
-    const app = findApp ? findApp(e.source) : null;
+    const app = findApp ? findApp(e.source, e) : null;
     const reply = (payload) => { try { e.source.postMessage({ type: 'nucleo.broker.reply', id: d.id, ...payload }, '*'); } catch {} };
     if (!app) { reply({ ok: false, error: 'unknown caller' }); return; }
     reply(await exec(app, d.method, d.args || {}));

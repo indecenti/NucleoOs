@@ -9,7 +9,7 @@
 // reads as one steady "busy", and only a genuine idle gap clears it.
 //
 // Pure + injectable scheduler ⇒ unit-testable with no DOM and no real timers (see the manual
-// scheduler in tools/shell-busy.test.mjs). debounceMs is the knob to tune once the real device's
+// scheduler in tests/suite/shell-busy.test.mjs). debounceMs is the knob to tune once the real device's
 // busy cadence is observed (short proxy fetches vs long model pulls).
 export function createBusyController({
   show, hide, debounceMs = 600,

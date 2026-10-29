@@ -13,7 +13,9 @@
 //   const text = await GPU.chat([{role:'user', content:'ciao'}], {signal});
 //   await GPU.unload(); await GPU.remove(id);
 
-const CDN = 'https://esm.run/@mlc-ai/web-llm';
+// Pinned (the same release ANIMA loads, apps/anima/www/local-llm.js): an unpinned name runs whatever is published
+// under it next, with the shell's origin.
+const CDN = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.84/+esm';
 const KEY = 'anima.webgpuModel';            // the chosen model id (per browser)
 
 let _lib = null, _engine = null, _loaded = null, _loading = null, _caps = null;

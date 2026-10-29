@@ -60,5 +60,20 @@
   "p_sram_loaded": "Salvataggio caricato dalla scheda SD",
   "p_sram_unread": "Impossibile leggere il salvataggio sulla SD: il salvataggio sulla SD è sospeso per non sovrascriverlo.",
   "p_rom_corrupt": "File ROM corrotto: archivio zip troncato.",
-  "p_start_failed": "Avvio fallito"
+  "p_start_failed": "Avvio fallito",
+  "scrape": "Copertine",
+  "scrape_none": "Tutti i giochi hanno già la loro immagine.",
+  "scrape_offline": "Serve una connessione a internet per scaricare le immagini.",
+  "scrape_progress": "Immagini: {done} di {total}…",
+  "scrape_done": "Immagini trovate per {found} giochi su {total}, salvate sulla scheda: le vede anche il dispositivo.",
+  "add_roms_btn": "Aggiungi giochi",
+  "drop_here": "Rilascia qui i giochi: ognuno va nella cartella della sua console",
+  "upload_progress": "Copio {i} di {n}: {pct}%",
+  "upload_done": "{n} giochi copiati nelle cartelle delle loro console.",
+  "upload_skipped": "{n} copiati; {skipped} lasciati da parte ({names}): apri prima la console giusta e trascinali lì.",
+  "play_device": "Gioca sul dispositivo, con il suo emulatore",
+  "play_device_short": "Dispositivo",
+  "play_device_started": "Il gioco parte sul dispositivo: la rete si spegne finché non esci dal gioco.",
+  "play_device_failed": "Il dispositivo non ha un emulatore per questo gioco (installalo dallo Store).",
+  "lib_unsaved": "Non riesco a leggere la libreria sulla scheda: la stella non è stata salvata."
 }

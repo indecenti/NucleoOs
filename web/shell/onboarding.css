@@ -15,6 +15,7 @@
 .nob-body p{margin:10px 0;color:#c4cfe4}
 .nob-body b{color:#fff}
 .nob-feat{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 4px}
+.nob-feat.one{grid-template-columns:1fr}
 .nob-feat>div{background:#161b27;border:1px solid #232d44;border-radius:12px;padding:12px 14px}
 .nob-feat .ic{font-size:18px}
 .nob-feat .t{font-weight:600;margin:6px 0 2px;font-size:13px}
@@ -43,7 +44,8 @@
 .nob-select{cursor:pointer}
 .nob-stat{font-size:12.5px;min-height:18px;color:#9fb0cf;margin:2px 0 0}
 .nob-stat.ok{color:#6aee9f}.nob-stat.err{color:#ff8a8a}
-.nob-note{font-size:11.5px;color:#7c8aa6;margin:12px 0 2px;display:flex;gap:8px;align-items:flex-start}
+.nob-note{font-size:11.5px;color:#7c8aa6;margin:12px 0 2px;line-height:1.5}   /* block: inline <b> in a note stays in the sentence */
+.nob-body>.nob-btn{margin-top:10px}
 .nob-ft{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:18px 28px 24px}
 .nob-dots{display:flex;gap:7px}
 .nob-dots i{width:7px;height:7px;border-radius:50%;background:#2c3654;transition:.2s}
@@ -57,3 +59,4 @@
 .nob-btn.ghost{background:transparent;border-color:transparent;color:#8ea0c0}
 .nob-btn:disabled{opacity:.45;cursor:default;pointer-events:none}
 @media (max-width:520px){.nob-feat{grid-template-columns:1fr}}
+.nob-body>.nob-input{display:block;width:100%;box-sizing:border-box;margin-bottom:10px}

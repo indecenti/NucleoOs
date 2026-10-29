@@ -1,6 +1,7 @@
 {
   "id": "media-player",
   "name": "Media Player",
+  "icon": "/apps/media-player/icon.svg",
   "version": "0.1.2",
   "version_code": 2,
   "description": "Play audio files through the I2S speaker.",

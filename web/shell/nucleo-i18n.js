@@ -15,7 +15,7 @@
 //                   using the browser's same-origin `storage` event (fires in all iframes but the
 //                   setter) plus an in-document event for same-frame subscribers.
 //  • HONEST       — a missing key falls back lang→base(en)→key and is never a blank; the i18n gate
-//                   (tools/i18n-check.mjs) keeps catalogs in parity so that fallback rarely fires.
+//                   (tests/i18n-shape.test.mjs, tests/suite/app-i18n-keys.test.mjs) keeps catalogs in parity so that fallback rarely fires.
 //  • DEVICE-CHEAP — all of this runs in the browser; the Cardputer only serves small static JSON.
 //
 // Quick start (in an app):

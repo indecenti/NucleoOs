@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
 // Pure keyboard-shortcut resolution shared by the shell (osKeydown) and its unit tests. No DOM and
 // no side effects: given the salient bits of a keydown event plus the focus context, decide what the
-// OS should do. Keeping this pure makes the routing exhaustively testable (tools/shortcuts.test.mjs).
+// OS should do. Keeping this pure makes the routing exhaustively testable (tests/suite/shortcuts.test.mjs).
 //
 // Returns exactly one of:
 //   { type: 'doc',    action }       document/app action (save | saveAs | new | open) — fires even
@@ -45,7 +45,7 @@ export function resolveShortcut(e, ctx = {}) {
 // then leaves the event untouched so the focused app's own Esc handler runs (cancel a dialog, clear a
 // selection, …). The OS NEVER closes a window on Esc; closing is an explicit gesture (title-bar ✕ /
 // Ctrl+W). So resolveEscape can ONLY ever return a surface name or 'app' — never a "close" verdict.
-// That invariant is the anti-regression guard locked down in tools/shortcuts.test.mjs.
+// That invariant is the anti-regression guard locked down in tests/suite/shortcuts.test.mjs.
 export const ESC_SURFACES = ['taskSwitcher', 'dialog', 'copilot', 'actionCenter', 'start', 'contextMenu'];
 
 // `open` maps each surface name to whether it is currently visible. Returns the highest-priority open

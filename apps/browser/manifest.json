@@ -1,6 +1,7 @@
 {
   "id": "browser",
   "name": "Browser",
+  "icon": "/apps/browser/icon.svg",
   "version": "0.2.2",
   "version_code": 4,
   "min_os": "0.1.0",

@@ -61,5 +61,20 @@
   "p_sram_loaded": "Spielstand von der SD-Karte geladen",
   "p_sram_unread": "Der Spielstand auf der SD-Karte konnte nicht gelesen werden – das Speichern auf die SD ist pausiert, damit er nicht überschrieben wird.",
   "p_rom_corrupt": "ROM-Datei beschädigt: unvollständiges Zip-Archiv.",
-  "p_start_failed": "Start fehlgeschlagen"
+  "p_start_failed": "Start fehlgeschlagen",
+  "scrape": "Bilder",
+  "scrape_none": "Jedes Spiel hat schon sein Bild.",
+  "scrape_offline": "Zum Laden der Bilder wird eine Internetverbindung gebraucht.",
+  "scrape_progress": "Bilder: {done} von {total}…",
+  "scrape_done": "Bilder für {found} von {total} Spielen gefunden und auf der Karte gespeichert: das Gerät zeigt sie auch.",
+  "add_roms_btn": "Spiele hinzufügen",
+  "drop_here": "Spiele hier ablegen: jedes kommt in den Ordner seiner Konsole",
+  "upload_progress": "Kopiere {i} von {n}: {pct} %",
+  "upload_done": "{n} Spiele in die Ordner ihrer Konsolen kopiert.",
+  "upload_skipped": "{n} kopiert; {skipped} zurückgestellt ({names}): erst die richtige Konsole öffnen und dort ablegen.",
+  "play_device": "Auf dem Gerät spielen, mit seinem eigenen Emulator",
+  "play_device_short": "Gerät",
+  "play_device_started": "Das Spiel startet auf dem Gerät: sein Netzwerk ist aus, bis du das Spiel verlässt.",
+  "play_device_failed": "Das Gerät hat keinen Emulator für dieses Spiel (im Store installieren).",
+  "lib_unsaved": "Die Bibliothek auf der Karte ist nicht lesbar: der Stern wurde nicht gespeichert."
 }

@@ -185,6 +185,30 @@
     // filesystem (live system state as plain text), NOT real SD files — so cat/ls/cd route to it directly.
     const isProc = (p) => p === '/proc' || p.startsWith('/proc/');
     const readJSON = (path) => fs.readJSON(path, null).catch(() => null);
+    // The manual of this web OS, one file per language (/help/<lang>.json): fetched once per language.
+    const helpFiles = new Map();
+    const helpFile = (l) => {
+      if (!helpFiles.has(l)) helpFiles.set(l, fetch('/help/' + l + '.json').then((r) => (r.ok ? r.json() : null)).catch(() => null));
+      return helpFiles.get(l);
+    };
+    // A page in the shape `man` prints ({ <lang>: { synopsis, description, details } }), from a command page or a topic.
+    // A command this device does not have (its page names a capability the device lacks) answers `unavailable`,
+    // as the Help app leaves its page out.
+    async function manualEntry(id) {
+      const entry = {};
+      for (const l of new Set([manLang(), 'en'])) {
+        const d = await helpFile(l);
+        const c = d && (d.commands || []).find((x) => x.id === id);
+        const tp = !c && d && (d.topics || []).find((x) => x.id === id);
+        if (c) {
+          const ok = (await Promise.all((c.requires || []).map(hasCap))).every(Boolean)
+            && (!(c.any || []).length || (await Promise.all(c.any.map(hasCap))).some(Boolean));
+          if (!ok) return 'unavailable';
+          entry[l] = { synopsis: c.synopsis, description: c.description, details: c.details || '' };
+        } else if (tp) entry[l] = { synopsis: tp.title, description: tp.md.replace(/\*\*|`/g, '') };
+      }
+      return Object.keys(entry).length ? entry : null;
+    }
     // The root '/' too: the core lists and stats it like any folder.
     const listDir = (p) => fs.list(p);
     const statPath = (p) => fs.stat(p);
@@ -653,7 +677,7 @@
           if (ctx?.stdin != null) { emit(ctx.stdin); return; }   // `a | cat` is the identity stage
           emit('cat: missing file', 'err'); return;
         }
-        const path = norm(arg);
+        const path = norm(arg.trim().replace(/^"|"$/g, ''));   // "name with spaces.txt", as cp takes it
         if (isProc(path)) {                                      // live system node, served as plain text
           let r;
           try { r = await fetch(path, { cache: 'no-store' }); }
@@ -866,7 +890,8 @@
         const used = total - free;
         const pct = total ? Math.round((used / total) * 100) : 0;
         emit('Filesystem      Size      Used     Avail  Use%  Mounted on');
-        emit(`SDCard          ${fmtBytes(total).padEnd(9)} ${fmtBytes(used).padEnd(9)} ${fmtBytes(free).padEnd(8)}  ${pct}%   /data`);
+        const fsName = String(s.storage.fs || 'storage').slice(0, 15);   // what the device reports (sd, ext4, IndexedDB...)
+        emit(`${fsName.padEnd(16)}${fmtBytes(total).padEnd(9)} ${fmtBytes(used).padEnd(9)} ${fmtBytes(free).padEnd(8)}  ${pct}%   /data`);
       },
       async uptime() {
         let s;
@@ -1029,10 +1054,12 @@
           return;
         }
         const cmd = arg.trim().toLowerCase();
-        // The canonical home is /system/registry/manual — where the SD image puts the 43 pages and
-        // where the Help app reads them. The old path is tried second, and only when the first
-        // misses, so an SD laid out before the move still answers.
-        let entry = await readJSON(`/system/registry/manual/${cmd}.info`);
+        // The manual that ships with this web OS (docs/user, tools/gen_help.py), the one the Help app shows: a
+        // command page, else a topic of the same name (`man anima`). Then the device's own pages, for a device
+        // that has pages of its own.
+        let entry = await manualEntry(cmd);
+        if (entry === 'unavailable') { emit(`${cmd}: not available on this device`, 'warn'); return; }
+        if (!entry) entry = await readJSON(`/system/registry/manual/${cmd}.info`);
         if (!entry) entry = await readJSON(`/system/manual/${cmd}.info`);
         const hit = pick(entry);
         if (hit) {
@@ -1067,7 +1094,10 @@
         const osName = s?.os || 'NucleoOS';
         const version = s?.version || '0.1.0';
         if (wantAll) {
-          emit(`${osName} cardputer ${version} esp32s3 generic xtensa`);
+          // the edition and version this device reports (nucleo-caps.js), never a fixed machine name
+          const C = await capsP;
+          const edition = C ? (await C.info().catch(() => ({}))).edition || '' : '';
+          emit([osName, edition, version].filter(Boolean).join(' '));
         } else {
           emit(osName);
         }

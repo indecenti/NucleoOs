@@ -327,6 +327,12 @@
     @media(max-width:720px){ .sidebar{width:62px} .nav-item .lbl{display:none} .pulse-grid{grid-template-columns:repeat(2,1fr)} .info-grid{grid-template-columns:1fr} }
     /* Phone: label above, control below at full width. With the label fixed at 158 px the control
        kept 60 px: sliders and "Turn on" overflowed the card (checked at 375 px). */
+    .acc-h3{margin:16px 0 8px;font-size:0.9286rem}
+    .acc-form{gap:8px;flex-wrap:wrap}
+    .acc-form input,.acc-form select{min-width:0;flex:1 1 150px}
+    .acc-list{display:flex;flex-direction:column;gap:6px}
+    .acc-list .arow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line, #2a3a5e)}
+    .acc-list .arow .grow{flex:1 1 200px;min-width:0;overflow-wrap:anywhere}
     @media(max-width:560px){
       main.content{padding:12px 10px}
       .sect{padding-left:14px;padding-right:14px}
@@ -630,6 +636,8 @@
           <div class="hint" style="margin-top:10px" data-i18n="sessionsHint">Ogni browser associato col PIN è una sessione. Se hai perso un dispositivo o usato una rete non fidata, revoca le sessioni. Quelle inutilizzate scadono da sole dopo 90 giorni.</div></div>
       </section>
 
+      <section id="tab-accounts" class="tab-content"><div id="acc-host"></div></section>
+
       <!-- ═══════════ DIAGNOSTICS ═══════════ -->
       <section id="tab-diagnostics" class="tab-content">
         <div class="sect"><h2><span data-i18n="selfTestEndpoints">Self-Test endpoint</span> <span class="badge" data-i18n="badgePulse">Battito</span></h2>
@@ -763,6 +771,8 @@ import { PRESETS, applyPreset, planPreset, feasibility, buildRegistry, gaps, APP
 import { buildActionRegistry, filterActions } from './actions.js';
 import { ENDPOINTS, runSelfTest, formatReport } from './selftest.js';
 import { initUpdatesTab } from './fwupdate.js';
+import { mountAccounts, ICON as ACCOUNTS_ICON } from './accounts.js';   // Accounts tab (users.multi)
+import User from '/nucleo-user.js';
 import fs from '/nucleo-fs.js';
 import Caps from '/nucleo-caps.js';   // what this device has: one shared answer (/api/system/caps, or the fallback table)
 import os from '/nucleo-shell.js';    // the OS around this window: status snapshot, dialogs, open app, clipboard
@@ -861,6 +871,7 @@ function applyGates() {
   if (ht && ht.getAttribute('data-i18n') !== hk) { ht.setAttribute('data-i18n', hk); ht.textContent = T(hk); }
   // the Updates tab drives the firmware OTA + SD-content install (/api/ota, status.ota/.sdc): ota.firmware only
   const nav = $$('.nav-item')[TABS.findIndex(([id]) => id === 'updates')]; if (nav) nav.hidden = !updatesTab();
+  const accNav = $$('.nav-item')[TABS.findIndex(([id]) => id === 'accounts')]; if (accNav) accNav.hidden = !has('users.multi');
   const key = JSON.stringify(DEV) + [...CAP].join();       // scenes / toggles / palette follow the feature set
   if (key !== gatesKey) {
     gatesKey = key; buildScenes(); buildQuick(); buildActions();
@@ -895,7 +906,7 @@ async function probe(path) { try { const r = await api(path); return answered(r)
 // ═══════════ tabs / sidebar ═══════════
 const TABS = [
   ['control', '🎛'], ['display', '📺'], ['personalization', '🎨'], ['network', '🌐'],
-  ['ai', '🧠'], ['device', '💻'], ['diagnostics', '🩺'], ['updates', '⬆️'], ['about', 'ℹ️'],
+  ['ai', '🧠'], ['device', '💻'], ['accounts', ACCOUNTS_ICON], ['diagnostics', '🩺'], ['updates', '⬆️'], ['about', 'ℹ️'],
 ];
 let activeTab = 'control';
 function buildSidebar() {
@@ -904,6 +915,7 @@ function buildSidebar() {
     const el = document.createElement('div');
     el.className = 'nav-item' + (id === activeTab ? ' active' : '');
     if (id === 'updates' && !updatesTab()) el.hidden = true;     // see applyGates
+    if (id === 'accounts' && !has('users.multi')) el.hidden = true;     // also before the first account: the setup is there
     el.innerHTML = `<span class="ni">${icon}</span><span class="lbl">${T('tab_' + id)}</span>`;
     el.addEventListener('click', () => selectTab(id));
     sb.appendChild(el);
@@ -921,6 +933,7 @@ function selectTab(id) {
   if (id === 'diagnostics') refreshLogs();
 }
 function onTabFirstOpen(id) {
+  if (id === 'accounts') mountAccounts($('acc-host'), { T, os, User });
   if (id === 'personalization') loadWallpapers();
   if (id === 'diagnostics') refreshHeapDetail();   // selectTab already refreshes the logs on every open
   if (id === 'device') { refreshSessions(); loadPairing(); loadDevice(); }

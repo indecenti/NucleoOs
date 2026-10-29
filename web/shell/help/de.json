@@ -1,0 +1,885 @@
+{
+ "format": 1,
+ "lang": "de",
+ "topics": [
+  {
+   "id": "desktop",
+   "title": "Desktop, Start und Fenster",
+   "md": "Der Desktop beginnt mit wenigen Symbolen: **File Commander**, **Papierkorb**, **ANIMA** und **Hilfe**. Alle anderen Apps sind im **Start**-Menü.\n\n## Start\n- Die Schaltfläche links in der Taskleiste öffnet Start. Tippe sofort, um Apps, Dateien und Einstellungen zu suchen.\n- **Angeheftet** zeigt die Apps, die du angeheftet hast. **Alle Apps** listet sie nach Kategorie: Tippe auf eine Kategorie, um nur diese zu sehen.\n- Unten in Start: dein Name (oder der des Geräts), die Schaltfläche **Einstellungen** und die **Ein/Aus**-Schaltfläche (sperren, abmelden, neu starten, wo das Gerät es erlaubt).\n\n## Fenster\n- Ziehe die Titelleiste, um ein Fenster zu verschieben; zieh es an einen Bildschirmrand, um es anzudocken.\n- Das ✕ schließt es, ebenso `Strg` + `W`. `Esc` schließt nie ein Fenster: Es schließt Menüs und Bereiche des Systems.\n- `Alt` + `Tab` wechselt zwischen Fenstern.\n\n## Taskleiste\nGeöffnete Apps erscheinen in der Taskleiste. Mit Rechtsklick auf eine App in Start heftest du sie an die Taskleiste, an Start oder auf den Desktop.\n",
+   "icon": "🖥️"
+  },
+  {
+   "id": "apps",
+   "title": "Apps und Store",
+   "md": "## Wo die Apps sind\nAlle installierten Apps sind in **Start › Alle Apps**, nach Kategorie: System, Produktivität, Fotos Musik und Video, Spiele, Werkzeuge, Netzwerk und Nachrichten.\n\n## Eine App auf dem Desktop\nRechtsklick (oder lange drücken) auf eine App in Start, dann **Zum Desktop hinzufügen**. Dasselbe Menü entfernt sie vom Desktop oder heftet sie an Start oder die Taskleiste.\n\n## Der Store\nÖffne den **Store** über Start für weitere Apps. Jedes Paket ist signiert, und das System prüft die Signatur vor der Installation und, wo nötig, vor jedem Start. Der Store zeigt nur Apps, die zu diesem Gerät passen.\n\nEine aus dem Store installierte App entfernen: Rechtsklick auf sie in Start, dann **Deinstallieren**. System-Apps lassen sich nicht deinstallieren.\n",
+   "icon": "🧩",
+   "app": "store"
+  },
+  {
+   "id": "files",
+   "title": "Dateien und Papierkorb",
+   "md": "## File Commander\n**File Commander** ist die Dateiverwaltung: Ordner, kopieren, verschieben, umbenennen, Vorschauen. Eine geöffnete Datei geht an die App, die zu ihrem Typ gehört.\n\n## Der Papierkorb\n- Eine in File Commander oder auf dem Desktop gelöschte Datei kommt in den **Papierkorb**, von wo du sie in ihren Ordner wiederherstellen kannst.\n- Der Papierkorb behält die letzten 20 Elemente: Kommt ein neues hinzu, wird das älteste endgültig gelöscht.\n- Ein in File Commander gelöschter Ordner geht nicht über den Papierkorb: Das System sagt es dir vorher.\n- Im Papierkorb kannst du ein Element oder alle **Wiederherstellen** oder den **Papierkorb leeren** (das lässt sich nicht rückgängig machen).\n\nDas Papierkorb-Symbol bleibt immer auf dem Desktop: Es lässt sich nicht entfernen.\n",
+   "icon": "🗂️",
+   "app": "file-commander"
+  },
+  {
+   "id": "settings",
+   "title": "Einstellungen",
+   "md": "Öffne die **Einstellungen** mit der Zahnrad-Schaltfläche unten in Start oder über Start › Alle Apps.\n\n- **Darstellung**: helles oder dunkles Design, Hintergrund, Symbolgröße.\n- **Netzwerk**: die Verbindungen des Geräts, wo es sie verwalten kann.\n- **KI / Modelle**: Anbieter und Schlüssel für ANIMA oder ein Modell, das im Browser läuft.\n- **Konten**: die Personen, die das Gerät nutzen, wo es mehrere geben kann.\n- **Updates**: die installierte Version und neue Versionen.\n- **Info**: das Gerät, die Version, der Speicherplatz.\n\nDie Sprache wird in den Einstellungen geändert und gilt für das ganze System und alle Apps.\n",
+   "icon": "⚙️",
+   "app": "settings"
+  },
+  {
+   "id": "keyboard",
+   "title": "Tastenkürzel",
+   "md": "## System\n- `Win` (allein gedrückt): öffnet oder schließt Start\n- `Strg` + `Leertaste`: ANIMA, von überall\n- `Alt` + `Tab`: wechselt zwischen Fenstern\n- `Win` + Pfeiltasten: dockt das aktive Fenster an\n- `Strg` + `Alt` + `L`: sperrt den Bildschirm\n- `Strg` + `W`: schließt das aktive Fenster\n- `Strg` + `Umschalt` + `V`: Verlauf der Zwischenablage\n- `Esc`: schließt Menüs und Bereiche des Systems\n\n## Desktop\n- Pfeiltasten: wechseln zwischen Symbolen; `Eingabe` öffnet\n- `F2`: benennt das ausgewählte Symbol um\n- `Entf`: löscht die Auswahl (Dateien kommen in den Papierkorb)\n- `Strg` + `A`: wählt alles aus\n\n## Dokumente\n- `Strg` + `S` speichert, `Strg` + `Umschalt` + `S` speichert unter, `Strg` + `O` öffnet, `Strg` + `N` neu\n",
+   "icon": "⌨️"
+  },
+  {
+   "id": "accounts",
+   "title": "Konten",
+   "md": "Bis zu fünf Personen können an diesem Gerät arbeiten, jede mit ihrem eigenen Konto.\n\n## Was jedem gehört\nJede Person hat eigene Dokumente, Einstellungen, einen eigenen Desktop, Papierkorb und ein eigenes Archiv in der Cloud. Niemand sieht die Dateien der anderen.\n\n## Administrator\nDas erste Konto ist der Administrator. Unter **Einstellungen › Konten** legt er Konten an und entfernt sie, setzt Passwörter zurück und bestimmt, wer noch Administrator ist.\n\n## Anmelden und abmelden\n- Beim Öffnen fragt das System nach Name und Passwort.\n- Zum Abmelden: Ein/Aus-Schaltfläche unten in Start › **Abmelden**.\n- Ein vom Administrator vergebenes Passwort wird bei der ersten Anmeldung geändert.\n\nNach einigen falschen Versuchen pausiert die Anmeldung eine Weile: Das schützt Passwörter vor Leuten, die sie erraten wollen.\n",
+   "icon": "👥",
+   "requires": [
+    "users.multi"
+   ]
+  },
+  {
+   "id": "cloud-archive",
+   "title": "Verschlüsseltes Archiv in der Cloud",
+   "md": "Das Laufwerk **/r2** in File Commander ist dein Archiv in der Cloud.\n\n- Dateien werden im Browser verschlüsselt, bevor sie losgehen: Der Cloud-Dienst sieht nur unlesbare Daten.\n- Das Archiv-Passwort verlässt nie das Gerät und lässt sich nicht wiederherstellen: Bewahre es gut auf. Beim Anlegen erhältst du einen Wiederherstellungsschlüssel.\n- Bei mehreren Konten hat jede Person ihr eigenes Archiv.\n- Setzt jemand das Archiv auf einen alten Stand zurück, bemerkt das System es und sagt es dir.\n",
+   "icon": "☁️",
+   "requires": [
+    "cloud.archive"
+   ]
+  },
+  {
+   "id": "anima",
+   "title": "ANIMA",
+   "md": "**ANIMA** ist der Assistent des Systems. Öffne ihn über den Desktop oder mit `Strg` + `Leertaste` von überall.\n\n- Er beantwortet Fragen, schreibt und fasst Texte zusammen, öffnet Apps und Dateien für dich.\n- Er arbeitet mit einem KI-Anbieter und deinem eigenen Schlüssel (Einstellungen › KI / Modelle) oder mit einem Modell im Browser, ohne dass deine Daten den Computer verlassen.\n- Vor allem, was deine Dateien oder das Gerät verändert, fragt er nach deiner Zustimmung.\n",
+   "icon": "✨",
+   "app": "anima"
+  },
+  {
+   "id": "updates",
+   "title": "Updates",
+   "md": "**Einstellungen › Updates** zeigt die installierte Version und prüft, ob es eine neue gibt. Wenn ja, sagt es dir das System, und du installierst sie dort.\n\n- Ein Update bringt System, mitgelieferte Apps und dieses Handbuch zusammen: Das Handbuch beschreibt immer die Version, die du hast.\n- Apps aus dem Store werden über den Store aktualisiert.\n- Deine Dateien und Einstellungen bleiben, wo sie sind.\n",
+   "icon": "⬆️",
+   "any": [
+    "ota",
+    "ota.firmware",
+    "ota.package"
+   ]
+  },
+  {
+   "id": "games",
+   "title": "Spiele",
+   "md": "- **Bibliothek** sammelt die Spiele des Geräts, mit Covern und zuletzt gespielten.\n- Zuletzt gespielte Spiele erscheinen auch oben in Start und in der Spiele-Schaltfläche der Taskleiste.\n- Spielstände bleiben auf dem Gerät.\n",
+   "icon": "🎮",
+   "requires": [
+    "games.library"
+   ]
+  },
+  {
+   "id": "terminal",
+   "title": "Terminal",
+   "md": "**Terminal** öffnet eine Kommandozeile. Es ist für alle, die eine kennen: Befehle wirken direkt auf Dateien und auf das Gerät, ohne den Schutz der Apps.\n\n- Wo das Gerät eine System-Shell anbietet, öffnet Terminal diese: Befehle und Handbuch sind die des Systems.\n- Sonst bietet Terminal die Befehle von NucleoOS: `help` listet sie auf, `man` mit dem Namen eines Befehls zeigt seine Seite. Dieselben Seiten stehen in diesem Handbuch unter **Terminalbefehle**, nur für die Befehle, die dieses Gerät hat.\n- `Strg` + `C` bricht den laufenden Befehl ab.\n",
+   "icon": "⌨",
+   "app": "terminal"
+  }
+ ],
+ "commands": [
+  {
+   "id": "alias",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "alias - Einem langen Befehl einen kurzen Namen geben",
+   "synopsis": "alias [name=command]",
+   "description": "Ohne Argumente listet er die Aliasse auf. Mit name=command definiert er einen, gespeichert auf der Karte, sodass er ein Neuladen übersteht. Auf einer 56-Tasten-Daumentastatur ist das Tippen der Aufwand, und genau das macht dies seine Bytes wert.",
+   "details": "NAME\n  alias - Einem langen Befehl einen kurzen Namen geben\n\nÜBERSICHT\n  alias [name=command]\n\nBESCHREIBUNG\n  Ohne Argumente listet er die Aliasse auf. Mit name=command definiert er einen, gespeichert auf der Karte, sodass er ein Neuladen übersteht. Auf einer 56-Tasten-Daumentastatur ist das Tippen der Aufwand, und genau das macht dies seine Bytes wert.\n\nOPTIONEN\n  name=command\n    Einen Alias definieren.\n  name\n    Einen Alias anzeigen.\n\nGERÄTEKOSTEN\n  Ein POST /api/fs/write, wenn sich ein Alias ändert, in den eigenen Ordner der App. Gar nichts, wenn ein Befehl läuft.\n\nANMERKUNGEN\n  Ein Alias wird einmal expandiert, nur auf dem Befehlswort, und ein Alias-Rumpf, der eine Pipe, eine Umleitung oder ; && || enthält, wird abgelehnt: Eine gespeicherte Zeichenkette darf keinen Operator einschleusen können, den der Benutzer nie getippt hat.\n\nSIEHE AUCH\n  unalias(1), which(1), export(1)\n\nBEISPIELE\n  alias ll='ls /data'\n  alias errs='dmesg -l E'\n  alias"
+  },
+  {
+   "id": "apps",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "apps - Installierte Apps auflisten oder eine öffnen",
+   "synopsis": "apps [-a]   |   apps open <id>",
+   "description": "Gibt eine tabulatorgetrennte Zeile pro installierter App aus: id, Name, ob sie aktiviert ist, und ihre Route. Mit open wird die Shell gebeten, eine zu starten.",
+   "details": "NAME\n  apps - Installierte Apps auflisten oder eine öffnen\n\nÜBERSICHT\n  apps [-a]   |   apps open <id>\n\nBESCHREIBUNG\n  Gibt eine tabulatorgetrennte Zeile pro installierter App aus: id, Name, ob sie aktiviert ist, und ihre Route. Mit open wird die Shell gebeten, eine zu starten.\n\nOPTIONEN\n  -a\n    Deaktivierte Apps einbeziehen.\n  open <id>\n    Diese App in der Shell öffnen.\n\nGERÄTEKOSTEN\n  Ein GET /api/apps, für 30 s zwischengespeichert. Das Öffnen einer App ist eine Shell-Nachricht, kein Geräteaufruf.\n\nANMERKUNGEN\n  Dies ist bewusst KEINE Prozessliste. Nichts auf dem Gerät weiß, welche Fenster geöffnet sind, sodass ein auf diesem Endpunkt aufgebautes ps alle 46 installierten Apps ausgeben würde, als liefen sie.\n\nSIEHE AUCH\n  which(1), assoc(1), open(1)\n\nBEISPIELE\n  apps\n  apps -a | grep off\n  apps open notepad"
+  },
+  {
+   "id": "assoc",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "assoc - Anzeigen, welche App open(1) auswählt",
+   "synopsis": "assoc [extension]",
+   "description": "Gibt die Dateizuordnungstabelle aus oder den einzelnen Eintrag für eine Erweiterung, samt dem Rückfall, der greift, wenn nichts passt.",
+   "details": "NAME\n  assoc - Anzeigen, welche App open(1) auswählt\n\nÜBERSICHT\n  assoc [extension]\n\nBESCHREIBUNG\n  Gibt die Dateizuordnungstabelle aus oder den einzelnen Eintrag für eine Erweiterung, samt dem Rückfall, der greift, wenn nichts passt.\n\nOPTIONEN\n  [extension]\n    Nur diese Erweiterung, mit oder ohne den Punkt.\n\nGERÄTEKOSTEN\n  Ein GET /api/associations.\n\nSIEHE AUCH\n  open(1), apps(1)\n\nBEISPIELE\n  assoc\n  assoc txt\n  assoc | grep notepad"
+  },
+  {
+   "id": "base64",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "base64 - Base64 kodieren oder dekodieren",
+   "synopsis": "base64 [-d] [file]",
+   "description": "Kodiert eine Datei oder die Standardeingabe nach Base64, oder dekodiert sie mit -d zurück. Dies ist der einzige Weg, auf dem ein Binär-Blob eine Text-Pipeline oder die OS-Zwischenablage passiert.",
+   "details": "NAME\n  base64 - Base64 kodieren oder dekodieren\n\nÜBERSICHT\n  base64 [-d] [file]\n\nBESCHREIBUNG\n  Kodiert eine Datei oder die Standardeingabe nach Base64, oder dekodiert sie mit -d zurück. Dies ist der einzige Weg, auf dem ein Binär-Blob eine Text-Pipeline oder die OS-Zwischenablage passiert.\n\nOPTIONEN\n  -d\n    Dekodieren statt kodieren.\n  [file]\n    Diese Datei lesen; ohne sie die Standardeingabe lesen.\n\nGERÄTEKOSTEN\n  Ein GET /api/fs/read, wenn eine Datei genannt wird, und gar nichts in einer Pipeline.\n\nANMERKUNGEN\n  Der Kodierer arbeitet auf Bytes, nicht auf Zeichen: Das im Browser eingebaute btoa ist nur latin1-fähig und würde jedes Byte über 0x7F beschädigen.\n\nSIEHE AUCH\n  hexdump(1), clip(1), tee(1)\n\nBEISPIELE\n  base64 /data/logo.png\n  base64 /data/logo.b64 | base64 -d | tee /data/logo.png"
+  },
+  {
+   "id": "cat",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cat - Dateiinhalt anzeigen",
+   "synopsis": "cat [file]",
+   "description": "Den Textinhalt einer Datei ausgeben oder die Eingabe einer Pipe durchreichen.",
+   "details": "NAME\n  cat - Dateiinhalt anzeigen.\n\nÜBERSICHT\n  cat [file]\n\nBESCHREIBUNG\n  Liest die Datei aus dem Speicher des Geräts und gibt sie als UTF-8-Text aus, ohne den letzten Zeilenumbruch. Eine leere Datei gibt '(empty file)' aus. Pfade unter /proc sind Live-Systemknoten, die das Gerät als Text liefert, auf Geräten, die sie haben. Ohne Datei, innerhalb einer Pipe (zum Beispiel 'diag | cat'), reicht cat seine Eingabe unverändert durch. Eine Datei pro Aufruf: cat fügt nicht mehrere Dateien zusammen.\n\nOPTIONEN\n  [file]\n    Der Pfad der anzuzeigenden Datei, absolut oder relativ zum aktuellen Ordner. Fehlt er, gibt cat die Eingabe aus der Pipe aus.\n\nSYSTEMARCHITEKTUR\n  Liest über die Dateischicht des Web-OS, die auf dem Gerät GET '/api/fs/read?path=<file>' aufruft; ein /proc-Pfad wird direkt beim Gerät abgefragt. Fehlermeldungen: 'no such file or directory', wenn die Datei nicht existiert, 'not paired (401)', wenn dieser Browser nicht gekoppelt ist, 'cannot reach the file API', wenn das Gerät nicht antwortet.\n\nEXIT-CODES\n  0\n    Erfolg. Die Datei wurde gelesen und ausgegeben.\n  1\n    Datei konnte nicht gelesen werden (fehlt, Browser nicht gekoppelt, Gerät nicht erreichbar oder anderer Fehler).\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  grep(1), head(1), tail(1)\n\nERWEITERTE BEISPIELE\n  cat /system/config/settings.json\n  cat logs.txt"
+  },
+  {
+   "id": "cd",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cd - Arbeitsverzeichnis wechseln",
+   "synopsis": "cd [path]",
+   "description": "Das aktuelle Arbeitsverzeichnis der Terminal-Sitzung wechseln.",
+   "details": "NAME\n  cd - Arbeitsverzeichnis wechseln.\n\nÜBERSICHT\n  cd [path]\n\nBESCHREIBUNG\n  Ändert den aktiven Kontextpfad (CWD) des Terminals. Wird kein Pfad angegeben, wird auf die Systemwurzel '/' zurückgegriffen.\n  Um die Integrität des Dateisystems zu gewährleisten, führt der Client vor dem Pfadwechsel eine Probelauf-Prüfung über '/api/fs/list' auf dem Zielordner aus. Gibt die Prüfung 404 zurück, wird die Pfadaktualisierung abgebrochen.\n\nOPTIONEN\n  [path]\n    Der Zielordnerpfad (z. B. '..', '/data', 'Pictures').\n\nSYSTEMARCHITEKTUR\n  Aktualisiert die lokalen Browser-Variablen 'cwd' und 'envVars.CWD'. Relative Pfade werden normalisiert, um '.' zu entfernen und '..'-Segmente aufzulösen, bevor die Sicherheitsprüfung ausgeführt wird.\n\nEXIT-CODES\n  0\n    Erfolg. Verzeichnis existiert und aktiver Pfad aktualisiert.\n  1\n    Zielverzeichnis existiert nicht (Probelauf-Prüfung fehlgeschlagen).\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  ls(1), pwd(1)\n\nERWEITERTE BEISPIELE\n  cd /data         # Betritt /data\n  cd ..            # Geht eine Verzeichnisebene nach oben\n  cd               # Setzt das Arbeitsverzeichnis auf die Wurzel / zurück"
+  },
+  {
+   "id": "clear",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "clear - Bildschirmpuffer leeren",
+   "synopsis": "clear",
+   "description": "Den Ausgabepuffer des Terminalbildschirms leeren.",
+   "details": "NAME\n  clear - Terminalbildschirm leeren.\n\nÜBERSICHT\n  clear\n\nBESCHREIBUNG\n  Löscht den aktiven Textausgabepuffer. Verschiebt die Eingabeaufforderung nach oben.\n\nSYSTEMARCHITEKTUR\n  Setzt 'out.innerHTML = \"\"', um den Browser-DOM-Baum zu beschneiden.\n\nEXIT-CODES\n  0\n    Erfolg.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  history(1)\n\nERWEITERTE BEISPIELE\n  clear"
+  },
+  {
+   "id": "clip",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "clip - In die OS-Zwischenablage schreiben oder daraus lesen",
+   "synopsis": "clip   |   clip -o",
+   "description": "Ohne Argumente legt es die Standardeingabe in die Zwischenablage; mit -o gibt es aus, was darin liegt. Dies ist der Ausgang der Pipeline zum restlichen OS und ihr Eingang.",
+   "details": "NAME\n  clip - In die OS-Zwischenablage schreiben oder daraus lesen\n\nÜBERSICHT\n  clip   |   clip -o\n\nBESCHREIBUNG\n  Ohne Argumente legt es die Standardeingabe in die Zwischenablage; mit -o gibt es aus, was darin liegt. Dies ist der Ausgang der Pipeline zum restlichen OS und ihr Eingang.\n\nOPTIONEN\n  -o\n    Die Zwischenablage lesen statt schreiben.\n\nGERÄTEKOSTEN\n  Keine auf dem Gerät: Die Zwischenablage ist ein Shell-Dienst, den das OS behält.\n\nANMERKUNGEN\n  Benötigt die Berechtigung system.clipboard.\n\nSIEHE AUCH\n  tee(1), base64(1), say(1)\n\nBEISPIELE\n  stat /data/notes.txt | clip\n  clip -o | wc"
+  },
+  {
+   "id": "cp",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cp - Datei kopieren",
+   "synopsis": "cp <source> <dest>",
+   "description": "Eine Datei von einem Quellpfad zu einem Zielpfad kopieren.",
+   "details": "NAME\n  cp - Datei kopieren.\n\nÜBERSICHT\n  cp <source> <dest>\n\nBESCHREIBUNG\n  Kopiert eine Datei Byte für Byte vom Quellpfad zum Zielpfad. Existiert das Ziel bereits, wird es ersetzt. Namen mit Leerzeichen stehen in doppelten Anführungszeichen. Gibt 'copying <Quelle> to <Ziel> ...' und danach 'copied successfully' aus.\n\nOPTIONEN\n  <source>\n    Der ursprüngliche Dateipfad, der kopiert werden soll.\n  <dest>\n    Der Zielpfad, an dem die Kopie erstellt wird.\n\nSYSTEMARCHITEKTUR\n  Läuft über die Dateischicht des Web-OS, die die Quelle liest und die Kopie schreibt (auf den meisten Geräten mit '/api/fs/read' und '/api/fs/write'). Das Schreiben ist atomar: Die Bytes landen zuerst in einer temporären Datei, sodass ein bereits vorhandenes Ziel unverändert bleibt, wenn die Kopie fehlschlägt. Eine Kopie, die nicht in den freien Speicher passt, wird vor dem Start abgelehnt.\n\nEXIT-CODES\n  0\n    Erfolg. Die Kopie wurde abgeschlossen.\n  1\n    Kopie fehlgeschlagen: Quelle nicht gefunden, zu wenig Speicher, Browser nicht gekoppelt oder Gerät nicht erreichbar.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  mv(1), rm(1)\n\nERWEITERTE BEISPIELE\n  cp /data/orig.txt /data/dest.txt\n  cp \"my file.txt\" \"/data/copy.txt\""
+  },
+  {
+   "id": "cpu",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "cpu - Kerne, Frequenz, Task-Anzahl und Last",
+   "synopsis": "cpu",
+   "description": "Gibt aus, was das Gerät über seinen Prozessor meldet, eine Zeile 'Schlüssel Wert' pro Feld: meist die Anzahl der Kerne, die Taktfrequenz, die laufenden Tasks oder Prozesse und die Last. Die Felder hängen vom Gerät ab.",
+   "details": "NAME\n  cpu - Kerne, Frequenz, Task-Anzahl und Last\n\nÜBERSICHT\n  cpu\n\nBESCHREIBUNG\n  Gibt aus, was das Gerät über seinen Prozessor meldet, eine Zeile 'Schlüssel Wert' pro Feld: meist die Anzahl der Kerne, die Taktfrequenz, die laufenden Tasks oder Prozesse und die Last. Die Felder hängen vom Gerät ab.\n\nOPTIONEN\n  Dieser Befehl akzeptiert keine Optionen.\n\nGERÄTEKOSTEN\n  Ein GET /api/cpu.\n\nSIEHE AUCH\n  heap(1), diag(1), uptime(1)\n\nBEISPIELE\n  cpu\n  watch -n 5 cpu"
+  },
+  {
+   "id": "curl",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "curl - HTTP-Web-Anfrage",
+   "synopsis": "curl <url>",
+   "description": "Eine HTTP-GET-Anfrage an eine URL ausführen und den Inhalt der Antwort ausgeben.",
+   "details": "NAME\n  curl - HTTP-Web-Ressource abrufen.\n\nÜBERSICHT\n  curl <url>\n\nBESCHREIBUNG\n  Führt eine HTTP-GET-Anfrage aus und gibt die Antwortnutzlast auf stdout des Terminals aus.\n\nOPTIONEN\n  <url>\n    Die Ziel-Webadresse.\n\nSYSTEMARCHITEKTUR\n  Versendet eine GET-Anfrage. In simulierten Umgebungen den CORS-Beschränkungen unterworfen. Läuft auf physischen Geräten direkt über den Wi-Fi-Socket-Stack (LwIP) von ESP-IDF.\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Netzwerk offline, CORS-Blockade oder Host-Zeitüberschreitung.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  wget(1), ping(1)\n\nERWEITERTE BEISPIELE\n  curl ipify.org\n  curl http://example.com"
+  },
+  {
+   "id": "cut",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cut - Felder oder Spalten aus jeder Zeile auswählen",
+   "synopsis": "cut -d<char> -f<list>   |   cut -c<from>-<to>",
+   "description": "Behält nur einen Teil jeder Zeile. Ohne es ist die Spaltenausgabe von /proc und des Gerätelogs nicht durch Pipes verarbeitbar.",
+   "details": "NAME\n  cut - Felder oder Spalten aus jeder Zeile auswählen\n\nÜBERSICHT\n  cut -d<char> -f<list>   |   cut -c<from>-<to>\n\nBESCHREIBUNG\n  Behält nur einen Teil jeder Zeile. Ohne es ist die Spaltenausgabe von /proc und des Gerätelogs nicht durch Pipes verarbeitbar.\n\nOPTIONEN\n  -d C\n    Feldtrenner (standardmäßig ein Tabulator).\n  -f LIST\n    Welche Felder behalten werden: 1, 1,3 oder 2-4.\n  -c A-B\n    Zeichen A bis B behalten statt Felder.\n\nGERÄTEKOSTEN\n  Keine. Vollständig browserseitig.\n\nSIEHE AUCH\n  grep(1), sort(1)\n\nBEISPIELE\n  cat /proc/meminfo | cut -d\" \" -f1\n  apps | cut -f1"
+  },
+  {
+   "id": "date",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "date - Datum und Uhrzeit von Browser und Gerät",
+   "synopsis": "date [-u] [-s]",
+   "description": "Datum und Uhrzeit dieses Browsers und des Geräts anzeigen und bei Bedarf die Uhr des Geräts stellen.",
+   "details": "NAME\n  date - Datum und Uhrzeit von Browser und Gerät.\n\nÜBERSICHT\n  date [-u] [-s]\n\nBESCHREIBUNG\n  Gibt zwei Uhren aus: 'local', die Zeit dieses Browsers, und 'device', die Uhr des Geräts, gefolgt von '(NTP-synced)', wenn das Gerät sie über das Internet synchronisiert hat, oder '(no NTP)', wenn nicht. Die Zeiten erscheinen als YYYY-MM-DDTHH:MM:SS (ISO 8601) in der Zeitzone dieses Browsers. Meldet das Gerät seine Uhr nicht, lautet die zweite Zeile 'device clock not reported'.\n\nOPTIONEN\n  -u\n    Zeigt beide Zeiten in UTC (mit einem abschließenden Z).\n  -s\n    Stellt die Uhr des Geräts nach der Uhr dieses Browsers; nützlich, wenn sich das Gerät nicht per NTP synchronisiert hat. Auf Geräten, die das unterstützen; wo es Benutzerkonten gibt, ist ein Administrator nötig.\n\nSYSTEMARCHITEKTUR\n  Liest die Uhr des Geräts aus GET '/api/status' (network.time und network.time_synced). Mit -s sendet es POST '/api/time/set' mit der Browserzeit in Sekunden. Ein Gerät, dessen Uhr sich nicht stellen lässt, antwortet 'date: not available on this device'.\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Gerät nicht erreichbar, Browser nicht gekoppelt oder Uhr nicht gestellt.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  status(1), uptime(1)\n\nERWEITERTE BEISPIELE\n  date\n  date -u\n  date -s"
+  },
+  {
+   "id": "df",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "df - Speicherplatznutzung",
+   "synopsis": "df",
+   "description": "Gesamten, belegten und freien Speicherplatz des Geräts anzeigen.",
+   "details": "NAME\n  df - Speicherplatznutzung.\n\nÜBERSICHT\n  df\n\nBESCHREIBUNG\n  Zeigt die Größe des Gerätespeichers, wie viel belegt und wie viel frei ist, in einer Tabelle mit den Spalten Filesystem, Size, Used, Avail, Use% und Mounted on. Der Speicher erscheint unter /data eingehängt.\n\nSYSTEMARCHITEKTUR\n  Liest GET '/api/status' (storage.total_bytes und storage.free_bytes); belegt ist gesamt minus frei. Meldet das Gerät keinen eingehängten Speicher oder antwortet es nicht, wird 'df: storage not mounted or unreachable' ausgegeben.\n\nEXIT-CODES\n  0\n    Erfolg. Statistiken ausgegeben.\n  1\n    Speicher nicht eingehängt oder Gerät nicht erreichbar.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  status(1), free(1)\n\nERWEITERTE BEISPIELE\n  df"
+  },
+  {
+   "id": "diag",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "diag - Die gesamte Diagnosetabelle, ein Schlüssel pro Zeile",
+   "synopsis": "diag [key-prefix]",
+   "description": "Flacht alles, was /api/diag meldet, in Zeilen 'Schlüssel Wert' ab; verschachtelte Schlüssel werden mit einem Punkt verbunden (zum Beispiel mem.free), Ja/Nein-Werte werden zu 1/0 und Listen zu kommagetrennten Werten. Was erscheint, hängt vom Gerät ab: meist Speicher, CPU, Netzwerk, Laufzeit und Systemzähler. Es ist der am besten durch Pipes verarbeitbare Befehl im Satz und das Beste, was man an anima übergeben kann.",
+   "details": "NAME\n  diag - Die gesamte Diagnosetabelle, ein Schlüssel pro Zeile\n\nÜBERSICHT\n  diag [key-prefix]\n\nBESCHREIBUNG\n  Flacht alles, was /api/diag meldet, in Zeilen 'Schlüssel Wert' ab; verschachtelte Schlüssel werden mit einem Punkt verbunden (zum Beispiel mem.free), Ja/Nein-Werte werden zu 1/0 und Listen zu kommagetrennten Werten. Was erscheint, hängt vom Gerät ab: meist Speicher, CPU, Netzwerk, Laufzeit und Systemzähler. Es ist der am besten durch Pipes verarbeitbare Befehl im Satz und das Beste, was man an anima übergeben kann.\n\nOPTIONEN\n  [key-prefix]\n    Nur Schlüssel anzeigen, die hiermit beginnen, z. B. mem oder cpu. Passt kein Schlüssel, wird 'diag: no key starts with ...' ausgegeben.\n\nGERÄTEKOSTEN\n  Ein GET /api/diag statt einer eigenen Anfrage für jeden Teil.\n\nSIEHE AUCH\n  heap(1), cpu(1), status(1), anima(1)\n\nBEISPIELE\n  diag\n  diag mem\n  diag | anima \"ist der Speicher in Ordnung?\"\n  diag | tee /data/diag.txt"
+  },
+  {
+   "id": "display",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.display"
+   ],
+   "title": "display - Das Panel ein- oder ausschalten",
+   "synopsis": "display on | display off",
+   "description": "Schaltet das physische Display und gibt die Helligkeit aus, die das Gerät danach meldet.",
+   "details": "NAME\n  display - Das Panel ein- oder ausschalten\n\nÜBERSICHT\n  display on | display off\n\nBESCHREIBUNG\n  Schaltet das physische Display und gibt die Helligkeit aus, die das Gerät danach meldet.\n\nOPTIONEN\n  on\n    Panel ein.\n  off\n    Panel aus.\n\nGERÄTEKOSTEN\n  Ein POST /api/display.\n\nANMERKUNGEN\n  Benötigt die Berechtigung device.display. Bei einem Budget von 120 mAh ist dies der größte Hebel überhaupt, und bislang war er nur über die Einstellungen erreichbar.\n\nSIEHE AUCH\n  screen(1), status(1)\n\nBEISPIELE\n  display off\n  display on"
+  },
+  {
+   "id": "dmesg",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "dmesg - Systemprotokoll des Geräts ausgeben",
+   "synopsis": "dmesg [-l E|W|I|D|V]",
+   "description": "Die neuesten Meldungen des Systemprotokolls des Geräts ausgeben.",
+   "details": "NAME\n  dmesg - Systemprotokoll des Geräts ausgeben.\n\nÜBERSICHT\n  dmesg [-l E|W|I|D|V]\n\nBESCHREIBUNG\n  Ruft die neuesten Meldungen des Systemprotokolls des Geräts ab und gibt sie unverändert aus. Was das Protokoll enthält und wie weit es zurückreicht, hängt vom Gerät ab.\n\nOPTIONEN\n  -l STUFE\n    Fragt nur Meldungen dieser Stufe oder schwerwiegendere ab: E (Fehler), W (Warnung), I (Info), D (Debug), V (ausführlich). Das Gerät filtert selbst; ein Gerät, das das nicht unterstützt, liefert das ganze Protokoll.\n\nSYSTEMARCHITEKTUR\n  Sendet GET '/api/logs' (mit '?level=X', wenn -l angegeben ist). Wo es Benutzerkonten gibt, ist das Protokoll einem Administrator vorbehalten. Fehlermeldungen: 'dmesg: not paired (401)', 'dmesg: failed to read logs (status N)', 'dmesg: device unreachable'.\n\nEXIT-CODES\n  0\n    Erfolg. Logs ausgegeben.\n  1\n    Browser nicht gekoppelt, Anfrage abgelehnt oder Gerät nicht erreichbar.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  status(1), reboot(1)\n\nERWEITERTE BEISPIELE\n  dmesg\n  dmesg -l W\n  dmesg | grep wifi"
+  },
+  {
+   "id": "du",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "du - Speichernutzung pro Verzeichnis, größte zuerst",
+   "synopsis": "du [-d N] [path]",
+   "description": "Durchläuft einen Teilbaum und summiert die Größe der Dateien in jedem Verzeichnis, wobei Kinder in ihre Eltern eingerechnet werden. Die Ausgabe ist nach Größe sortiert, sodass die Antwort auf \"was die Karte auffrisst\" die erste Zeile ist.",
+   "details": "NAME\n  du - Speichernutzung pro Verzeichnis, größte zuerst\n\nÜBERSICHT\n  du [-d N] [path]\n\nBESCHREIBUNG\n  Durchläuft einen Teilbaum und summiert die Größe der Dateien in jedem Verzeichnis, wobei Kinder in ihre Eltern eingerechnet werden. Die Ausgabe ist nach Größe sortiert, sodass die Antwort auf \"was die Karte auffrisst\" die erste Zeile ist.\n\nOPTIONEN\n  -d N\n    Höchstens N Ebenen absteigen (Standard 2, hartes Maximum 6).\n  [path]\n    Wo begonnen wird; standardmäßig das Arbeitsverzeichnis.\n\nGERÄTEKOSTEN\n  Ein GET /api/fs/list pro Verzeichnis, strikt sequenziell, und nie mehr als 60 pro Aufruf. Ctrl+C stoppt es.\n\nANMERKUNGEN\n  Eine Auflistung kostet das Gerät ein stat() pro Eintrag, daher ist der Durchlauf budgetiert statt vollständig: Wenn er stoppt, sagt er es.\n\nSIEHE AUCH\n  df(1), tree(1), stat(1)\n\nBEISPIELE\n  du\n  du -d 1 /data\n  du /data | sort -n -r | head -n 5"
+  },
+  {
+   "id": "echo",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "echo - Text ausgeben oder schreiben",
+   "synopsis": "echo [text] [> file]",
+   "description": "Text auf stdout ausgeben oder ihn umleiten, um eine Datei zu schreiben.",
+   "details": "NAME\n  echo - Nachrichten ausgeben und umleiten.\n\nÜBERSICHT\n  echo <text>\n  echo <text> > <file>\n\nBESCHREIBUNG\n  Gibt eine Textzeichenkette aus. Folgt der Umleitungsoperator '>', wird der Text in eine Datei geschrieben.\n\nOPTIONEN\n  <text>\n    Die auszugebende oder zu speichernde Zeichenkette.\n  > <file>\n    Der Pfad, in den die Ausgabezeichenkette geschrieben wird.\n\nSYSTEMARCHITEKTUR\n  Der Kommandozeilen-Parser erkennt das Umleitungstoken '>'. In solchen Fällen entfernt er äußere Anführungszeichen und versendet eine POST-Anfrage an '/api/fs/write?path=<file>'.\n\nEXIT-CODES\n  0\n    Erfolg. Ausgabe oder Schreibvorgang abgeschlossen.\n  1\n    Schreibfehler im Dateisystem.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  cat(1), open(1)\n\nERWEITERTE BEISPIELE\n  echo Hello user\n  echo \"THEME=dark\" > /data/theme.cfg"
+  },
+  {
+   "id": "env",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "env - Umgebungsvariablen anzeigen",
+   "synopsis": "env",
+   "description": "Alle aktiven Umgebungsvariablen der Shell-Sitzung auflisten.",
+   "details": "NAME\n  env - Aktive Umgebungsvariablen anzeigen.\n\nÜBERSICHT\n  env\n\nBESCHREIBUNG\n  Gibt System-Umgebungsvariablen im Format 'KEY=VALUE' zeilenweise aus.\n\nSYSTEMARCHITEKTUR\n  Liest und parst Eigenschaften aus dem lokalen Laufzeit-Speicherobjekt 'envVars'.\n\nEXIT-CODES\n  0\n    Erfolg.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  export(1)\n\nERWEITERTE BEISPIELE\n  env"
+  },
+  {
+   "id": "export",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "export - Umgebungsvariable setzen",
+   "synopsis": "export [NAME=value]",
+   "description": "Globale Umgebungsvariablen setzen oder aktualisieren.",
+   "details": "NAME\n  export - Umgebungsvariable setzen.\n\nÜBERSICHT\n  export [VAR=value]\n\nBESCHREIBUNG\n  Definiert eine Umgebungsvariable. Ist sie leer, werden alle aktiven Variablen im Format 'declare -x' ausgegeben.\n\nOPTIONEN\n  [VAR=value]\n    Das zu registrierende Schlüssel-Wert-Paar (z. B. 'LANG=it').\n\nSYSTEMARCHITEKTUR\n  Speichert Schlüssel und Werte in die lokale Speicherzuordnung 'envVars'. Mit '$' präfixierte Ausdrücke werden vom Parser ausgewertet.\n\nEXIT-CODES\n  0\n    Erfolg.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  env(1)\n\nERWEITERTE BEISPIELE\n  export LANG=it\n  export PATH=/apps/bin:/system/bin\n  export"
+  },
+  {
+   "id": "find",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "find - Dateien rekursiv finden",
+   "synopsis": "find [path] -name <pattern>",
+   "description": "Rekursiv nach Dateien suchen, die unter einem Pfad einem Muster entsprechen.",
+   "details": "NAME\n  find - Dateien rekursiv finden.\n\nÜBERSICHT\n  find [path] -name <pattern>\n  find <pattern>\n\nBESCHREIBUNG\n  Durchläuft den Verzeichnisbaum ausgehend vom Zielverzeichnis. Gleicht Namen mit einer Suche ohne Berücksichtigung der Groß-/Kleinschreibung ab.\n\nOPTIONEN\n  [path]\n    Der Startordner (standardmäßig das aktive CWD).\n  -name <pattern>\n    Die abzugleichende Dateinamensuche.\n\nSYSTEMARCHITEKTUR\n  Sendet rekursive asynchrone HTTP-Anfragen an '/api/fs/list'. Löst tiefes Scannen von Unterordnern aus und gibt Pfade dynamisch zurück.\n\nEXIT-CODES\n  0\n    Erfolg. Durchlauf abgeschlossen.\n  1\n    Fehler beim Dateisystem-Scan.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  ls(1), grep(1)\n\nERWEITERTE BEISPIELE\n  find .txt\n  find /data -name song.mp3"
+  },
+  {
+   "id": "free",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "free - Freier Speicher",
+   "synopsis": "free",
+   "description": "Anzeigen, wie viel freien Speicher das Gerät meldet.",
+   "details": "NAME\n  free - Freier Speicher.\n\nÜBERSICHT\n  free\n\nBESCHREIBUNG\n  Gibt eine Zeile 'free heap: <Größe>' mit dem freien Speicher aus, den das Gerät für sein System meldet. Es ist eine einzige Zahl: Für Details und Fragmentierung dient heap(1), auf Geräten, die es unterstützen. Meldet das Gerät den Wert nicht, wird 'free: status unavailable' ausgegeben.\n\nSYSTEMARCHITEKTUR\n  Liest das Feld free_heap aus GET '/api/status'.\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Gerät nicht erreichbar oder Wert nicht gemeldet.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  status(1), uptime(1), heap(1)\n\nERWEITERTE BEISPIELE\n  free"
+  },
+  {
+   "id": "gpio",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.gpio"
+   ],
+   "title": "gpio - Einen Pin lesen oder schreiben",
+   "synopsis": "gpio read <Pin>   |   gpio write <Pin> <0|1>",
+   "description": "Roh-E/A an den Pins, innerhalb der Pins, die das Gerät freigibt. Ein Pin außerhalb dieser Menge wird vom Gerät mit einem Fehler abgelehnt, wörtlich weitergegeben. Welche Pins freigegeben sind, hängt vom Gerät ab.",
+   "details": "NAME\n  gpio - Einen Pin lesen oder schreiben\n\nÜBERSICHT\n  gpio read <Pin>   |   gpio write <Pin> <0|1>\n\nBESCHREIBUNG\n  Roh-E/A an den Pins, innerhalb der Pins, die das Gerät freigibt. Ein Pin außerhalb dieser Menge wird vom Gerät mit einem Fehler abgelehnt, wörtlich weitergegeben. Welche Pins freigegeben sind, hängt vom Gerät ab.\n\nOPTIONEN\n  read PIN\n    Liest den Pin-Pegel und gibt 'pin PIN = WERT' aus. 'get' tut dasselbe.\n  write PIN 0|1\n    Setzt den Pegel: 1 oder high setzt ihn auf high, jeder andere Wert auf low. 'set' tut dasselbe.\n\nGERÄTEKOSTEN\n  Eine Anfrage an /api/gpio pro Aufruf (GET zum Lesen, POST zum Schreiben). Wo es Benutzerkonten gibt, ist ein Administrator nötig.\n\nSIEHE AUCH\n  ir(1), display(1)\n\nBEISPIELE\n  gpio read 1\n  gpio write 2 1"
+  },
+  {
+   "id": "grep",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "grep - Zeilen nach Muster filtern",
+   "synopsis": "grep <pattern> <file>",
+   "description": "In einer Datei nach einem Muster suchen und passende Zeilen mit Zeilennummern ausgeben.",
+   "details": "NAME\n  grep - Zeilen suchen, die einem Muster entsprechen.\n\nÜBERSICHT\n  grep <pattern> <file>\n\nBESCHREIBUNG\n  Durchsucht die Datei Zeile für Zeile nach exakten (Groß-/Kleinschreibung beachtenden) Teilzeichenketten-Übereinstimmungen.\n\nOPTIONEN\n  <pattern>\n    Die zu suchende Zeichenkette.\n  <file>\n    Der Pfad der zu durchsuchenden Zieldatei.\n\nSYSTEMARCHITEKTUR\n  Der Client ruft die Zielnutzlast per GET '/api/fs/read' ab. Er parst die Nutzlast im lokalen Speicher, trennt Zeilen mit einem regulären Ausdruck '\\r?\\n' und wendet 'String.prototype.includes()' an, um Übereinstimmungen zu isolieren. Gibt die Ergebnisse mit vorangestellten Zeilennummern aus.\n\nEXIT-CODES\n  0\n    Erfolg. Scan abgeschlossen.\n  1\n    Fehler beim Lesen der Datei oder Parser-Ausnahme.\n  404\n    Die angegebene Datei wurde nicht gefunden.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  cat(1), find(1)\n\nERWEITERTE BEISPIELE\n  grep SSID /system/config/settings.json\n  grep ERROR /data/logs.txt"
+  },
+  {
+   "id": "head",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "head - Erste Zeilen einer Datei anzeigen",
+   "synopsis": "head [-n lines] <file>",
+   "description": "Den ersten Teil (standardmäßig 10 Zeilen) einer Datei ausgeben.",
+   "details": "NAME\n  head - Erste Zeilen einer Datei ausgeben.\n\nÜBERSICHT\n  head [-n <lines>] <file>\n\nBESCHREIBUNG\n  Gibt den Anfangsabschnitt einer Datei aus (standardmäßig 10 Zeilen).\n\nOPTIONEN\n  -n <lines>\n    Die genaue Anzahl der auszugebenden Zeilen angeben (z. B. '-n 5').\n  <file>\n    Der Zieldateipfad.\n\nSYSTEMARCHITEKTUR\n  Lädt den Dateiinhalt per GET '/api/fs/read' herunter. Parst die Zeilen im Speicher und isoliert die obersten Elemente durch Array-Slicing ('slice(0, n)').\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Lesefehler oder ungültige Parameterformatierung.\n  404\n    Zieldatei nicht gefunden.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  tail(1), cat(1)\n\nERWEITERTE BEISPIELE\n  head logs.txt\n  head -n 5 /data/settings.json"
+  },
+  {
+   "id": "heap",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "heap - Heap-Details, einschließlich Fragmentierung",
+   "synopsis": "heap",
+   "description": "Gibt die internen, DMA- und Standard-Heap-Pools mit ihren freien Bytes, dem größten freien Block, dem je gesehenen Minimum und dem Fragmentierungsprozentsatz aus, dazu den minimal freien Stack des HTTP-Servers.",
+   "details": "NAME\n  heap - Heap-Details, einschließlich Fragmentierung\n\nÜBERSICHT\n  heap\n\nBESCHREIBUNG\n  Gibt die internen, DMA- und Standard-Heap-Pools mit ihren freien Bytes, dem größten freien Block, dem je gesehenen Minimum und dem Fragmentierungsprozentsatz aus, dazu den minimal freien Stack des HTTP-Servers.\n\nOPTIONEN\n  Dieser Befehl akzeptiert keine Optionen.\n\nGERÄTEKOSTEN\n  Ein GET /api/heap.\n\nANMERKUNGEN\n  Die Fragmentierung, nicht die freien Bytes, ist der dokumentierte Engpass auf diesem Chip — und free(1) kann sie nicht anzeigen.\n\nSIEHE AUCH\n  free(1), diag(1), cpu(1), watch(1)\n\nBEISPIELE\n  heap\n  watch -n 5 heap\n  heap | grep frag"
+  },
+  {
+   "id": "hexdump",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "hexdump - Hex und ASCII der ersten Bytes einer Datei",
+   "synopsis": "hexdump [-n bytes] [-s offset] <file>",
+   "description": "Gibt einen klassischen Hex-Dump aus: Offset, sechzehn Bytes hexadezimal, dann die druckbaren Zeichen zwischen senkrechten Strichen. So betrachtet man eine .ir-Aufnahme, ein Firmware-Image oder einen Save-Blob, ohne dass cat daraus Mojibake macht.",
+   "details": "NAME\n  hexdump - Hex und ASCII der ersten Bytes einer Datei\n\nÜBERSICHT\n  hexdump [-n bytes] [-s offset] <file>\n\nBESCHREIBUNG\n  Gibt einen klassischen Hex-Dump aus: Offset, sechzehn Bytes hexadezimal, dann die druckbaren Zeichen zwischen senkrechten Strichen. So betrachtet man eine .ir-Aufnahme, ein Firmware-Image oder einen Save-Blob, ohne dass cat daraus Mojibake macht.\n\nOPTIONEN\n  -n N\n    Wie viele Bytes gelesen werden (Standard 256, Maximum 4096).\n  -s N\n    Bei Byte N beginnen.\n  <file>\n    Die zu lesende Datei.\n\nGERÄTEKOSTEN\n  Ein GET /api/fs/read mit einem HTTP-Range-Header: Wo das Gerät ihn beachtet, werden nur die angeforderten Bytes übertragen (standardmäßig 256), selbst aus einer 640 MB großen Datei.\n\nSIEHE AUCH\n  cat(1), base64(1), wc(1)\n\nBEISPIELE\n  hexdump /data/remote.ir\n  hexdump -n 64 -s 512 /data/image.bin"
+  },
+  {
+   "id": "history",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "history - Liste des Befehlsverlaufs",
+   "synopsis": "history",
+   "description": "Frühere in der aktuellen Sitzung eingegebene Befehle auflisten.",
+   "details": "NAME\n  history - Liste des Befehlsverlaufs.\n\nÜBERSICHT\n  history\n\nBESCHREIBUNG\n  Zeigt die Liste der in der aktuellen Terminal-Sitzung eingegebenen Befehle an.\n\nSYSTEMARCHITEKTUR\n  Liest aus dem globalen Array 'hist', das im RAM gespeichert ist. Die Warteschlange ist auf höchstens 100 Befehle begrenzt.\n\nEXIT-CODES\n  0\n    Erfolg.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  clear(1)\n\nERWEITERTE BEISPIELE\n  history"
+  },
+  {
+   "id": "ir",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.ir"
+   ],
+   "title": "ir - Die Infrarot-LED ansteuern",
+   "synopsis": "ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status",
+   "description": "db gibt den GPIO, die von diesem Build kodierten Protokolle und die Größe der TV-B-Gone-Tabelle aus, damit man sieht, was möglich ist, bevor man etwas sendet. send überträgt einen dekodierten Code, raw überträgt eine Timing-Liste.",
+   "details": "NAME\n  ir - Die Infrarot-LED ansteuern\n\nÜBERSICHT\n  ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status\n\nBESCHREIBUNG\n  db gibt den GPIO, die von diesem Build kodierten Protokolle und die Größe der TV-B-Gone-Tabelle aus, damit man sieht, was möglich ist, bevor man etwas sendet. send überträgt einen dekodierten Code, raw überträgt eine Timing-Liste.\n\nOPTIONEN\n  db\n    Die Fähigkeiten anzeigen (die Vorgabe).\n  send <proto> <addr> <cmd> [rep]\n    Einen Code senden.\n  raw <us,…>\n    Rohe Mikrosekunden-Timings senden.\n  tvbgone start|stop|status\n    Den TV-B-Gone-Durchlauf ausführen.\n\nGERÄTEKOSTEN\n  Je eine Anfrage.\n\nANMERKUNGEN\n  Benötigt die Berechtigung device.ir. Der Störsender ist hier bewusst nicht verfügbar: Er flutet das Band aus einem Hintergrund-Task ohne Probelauf, deshalb bleibt er in der App IR Remote, wo ein sichtbarer Knopf ihn stoppen kann.\n\nSIEHE AUCH\n  display(1), link(1)\n\nBEISPIELE\n  ir db\n  ir send nec 4 8\n  ir tvbgone status"
+  },
+  {
+   "id": "kill",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "kill - Eine Vordergrund-App schließen",
+   "synopsis": "kill <App-id>",
+   "description": "Bittet die Shell, ein App-Fenster zu schließen und dessen RAM freizugeben. Benannt per id (die ps ausgibt), nicht per synthetischer PID.",
+   "details": "NAME\n  kill - Eine Vordergrund-App schließen\n\nÜBERSICHT\n  kill <App-id>\n\nBESCHREIBUNG\n  Bittet die Shell, ein App-Fenster zu schließen und dessen RAM freizugeben. Benannt per id (die ps ausgibt), nicht per synthetischer PID.\n\nOPTIONEN\n  Keine Optionen.\n\nGERÄTEKOSTEN\n  keine — eine Nachricht an die Shell\n\nSIEHE AUCH\n  ps(1), apps(1)\n\nBEISPIELE\n  ps\n  kill notes"
+  },
+  {
+   "id": "lang",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "lang - Anzeigesprache des OS lesen oder setzen",
+   "synopsis": "lang [it|en|fr|es|de]",
+   "description": "Ohne Argument gibt es die aktive Sprache und ihren Generationszähler aus. Mit einem setzt es die Sprache für das ganze OS, einschließlich der nativen Panel-Oberfläche.",
+   "details": "NAME\n  lang - Anzeigesprache des OS lesen oder setzen\n\nÜBERSICHT\n  lang [it|en|fr|es|de]\n\nBESCHREIBUNG\n  Ohne Argument gibt es die aktive Sprache und ihren Generationszähler aus. Mit einem setzt es die Sprache für das ganze OS, einschließlich der nativen Panel-Oberfläche.\n\nOPTIONEN\n  [code]\n    Eines von it, en, fr, es, de.\n\nGERÄTEKOSTEN\n  Ein GET oder ein POST /api/lang.\n\nSIEHE AUCH\n  status(1), theme(1)\n\nBEISPIELE\n  lang\n  lang it"
+  },
+  {
+   "id": "link",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.link"
+   ],
+   "title": "link - Die ESP-NOW-Nachbarn und den Übertragungsstatus anzeigen",
+   "synopsis": "link peers | link status",
+   "description": "peers listet die Geräte auf, die dieses über ESP-NOW sehen kann, mit dem lokalen Namen und dem Kanal; status zeigt, ob eine Übertragung läuft und wie weit sie fortgeschritten ist.",
+   "details": "NAME\n  link - Die ESP-NOW-Nachbarn und den Übertragungsstatus anzeigen\n\nÜBERSICHT\n  link peers | link status\n\nBESCHREIBUNG\n  peers listet die Geräte auf, die dieses über ESP-NOW sehen kann, mit dem lokalen Namen und dem Kanal; status zeigt, ob eine Übertragung läuft und wie weit sie fortgeschritten ist.\n\nOPTIONEN\n  peers\n    Die Nachbarn auflisten (die Vorgabe).\n  status\n    Den Übertragungsstatus anzeigen.\n\nGERÄTEKOSTEN\n  Je ein GET.\n\nANMERKUNGEN\n  Benötigt die Berechtigung mesh.peer. Absichtlich nur lesend: Einen Befehl an ein anderes Gerät zu senden würde einen Tippfehler zum Problem eines anderen machen, und der Bestätigungsschritt dafür liegt in der App Vicino.\n\nSIEHE AUCH\n  wifi(1), status(1)\n\nBEISPIELE\n  link peers\n  link status"
+  },
+  {
+   "id": "ls",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "ls - Verzeichnisinhalt auflisten",
+   "synopsis": "ls [path]",
+   "description": "Die Ordner und Dateien im aktuellen Verzeichnis oder unter einem angegebenen Pfad auflisten.",
+   "details": "NAME\n  ls - Verzeichnisinhalt auflisten.\n\nÜBERSICHT\n  ls [path]\n\nBESCHREIBUNG\n  Listet die Einträge des angegebenen Ordners im Speicher des Geräts auf. Ohne Pfad wird das aktuelle Arbeitsverzeichnis (CWD) aufgelistet.\n  Zuerst kommen die Ordner (hervorgehoben, mit abschließendem Schrägstrich '/'), dann die Dateien mit ihrer Größe; jede Gruppe ist alphabetisch sortiert. Die letzte Zeile zählt die Einträge; ein leerer Ordner gibt \"(empty)\" aus. Es werden höchstens 200 Einträge angezeigt, und eine längere Liste weist darauf hin.\n  Auf Geräten, die /proc anbieten, listet 'ls /proc' die Knoten mit aktuellen Systeminformationen auf; gelesen werden sie mit cat.\n\nOPTIONEN\n  [path]\n    Der relative oder absolute Pfad des aufzulistenden Ordners.\n\nSYSTEMARCHITEKTUR\n  Die Auflistung läuft über die Dateischicht des Systems, die sie mit GET /api/fs/list?path=<path> beim Gerät anfragt. Derselbe Befehl funktioniert auf jedem Gerät.\n\nEXIT-CODES\n  0\n    Erfolg. Der Ordner existiert und der Inhalt wurde ausgegeben.\n  1\n    Der Ordner existiert nicht, das Gerät ist nicht gekoppelt oder die Datei-API ist nicht erreichbar.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  cd(1), find(1), pwd(1), tree(1), stat(1)\n\nERWEITERTE BEISPIELE\n  ls               # Aktuelles Verzeichnis auflisten\n  ls /data         # Inhalt des Ordners data auflisten\n  ls ../system     # Auflistung über einen relativen Elternpfad"
+  },
+  {
+   "id": "man",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "man - Online-Befehlshandbuch",
+   "synopsis": "man <command>",
+   "description": "Die Handbuchseite eines Terminal-Befehls anzeigen.",
+   "details": "NAME\n  man - Online-Handbuchseiten.\n\nÜBERSICHT\n  man <command>\n\nBESCHREIBUNG\n  Zeigt die Handbuchseite eines Terminal-Befehls im UNIX-Stil: eine Zeile mit Name und Übersicht, danach Beschreibung und Details.\n  Die Seite stammt aus dem Handbuch, das mit dem System ausgeliefert wird, demselben, das die App Hilfe zeigt, in der eingestellten Systemsprache (Italienisch, Englisch, Spanisch, Französisch oder Deutsch). Ein Befehl, den dieses Handbuch nicht behandelt, wird unter den eigenen Seiten des Geräts in /system/registry/manual gesucht. Ohne Argument fragt man, welche Seite gewünscht ist.\n\nOPTIONEN\n  <command>\n    Der Name des Befehls, dessen Seite angezeigt werden soll.\n\nSYSTEMARCHITEKTUR\n  Sucht zuerst im Handbuch, das in die Web-OS eingebaut ist, und liest dann vom Gerät die Datei /system/registry/manual/<command>.info. Hat keine der beiden Quellen die Seite, gibt man \"No manual entry for <command>\" aus.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  help(1), clear(1)\n\nERWEITERTE BEISPIELE\n  man ls\n  man cd"
+  },
+  {
+   "id": "mkdir",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "mkdir - Verzeichnis erstellen",
+   "synopsis": "mkdir <dir>",
+   "description": "Einen neuen Ordner unter dem angegebenen Pfad erstellen, samt fehlender übergeordneter Ordner.",
+   "details": "NAME\n  mkdir - Verzeichnis erstellen.\n\nÜBERSICHT\n  mkdir <dir>\n\nBESCHREIBUNG\n  Erstellt den Ordner im Speicher des Geräts und, wie 'mkdir -p', auch alle fehlenden übergeordneten Ordner entlang des Pfads. Ein bereits vorhandener Ordner ist kein Fehler. Bei Erfolg wird \"created <Pfad>\" ausgegeben.\n\nOPTIONEN\n  <dir>\n    Der relative oder absolute Pfad des zu erstellenden Ordners.\n\nSYSTEMARCHITEKTUR\n  Läuft über die Dateischicht des Systems, die für jede noch nicht vorhandene Ebene POST /api/fs/mkdir?path=<dir> sendet.\n\nEXIT-CODES\n  0\n    Erfolg. Ordner erstellt oder bereits vorhanden.\n  1\n    Erstellung fehlgeschlagen (z. B. Speicher voll oder schreibgeschützt, Zugriff verweigert, Gerät nicht gekoppelt oder Datei-API nicht erreichbar).\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  touch(1), rm(1), ls(1)\n\nERWEITERTE BEISPIELE\n  mkdir /data/test\n  mkdir new_notes\n  mkdir /data/projects/2026/notes   # erstellt auch die fehlenden übergeordneten Ordner"
+  },
+  {
+   "id": "mv",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "mv - Datei verschieben oder umbenennen",
+   "synopsis": "mv <source> <dest>",
+   "description": "Eine Datei von der Quelle zum Ziel verschieben oder umbenennen.",
+   "details": "NAME\n  mv - Datei verschieben oder umbenennen.\n\nÜBERSICHT\n  mv <source> <dest>\n\nBESCHREIBUNG\n  Verschiebt eine Datei vom Quellpfad zum Zielpfad. Benennt die Datei um, wenn das übergeordnete Verzeichnis dasselbe bleibt.\n\nOPTIONEN\n  <source>\n    Die zu verschiebende Zieldatei.\n  <dest>\n    Der Zielpfad.\n\nSYSTEMARCHITEKTUR\n  Führt eine transaktionale Sequenz aus:\n  1. Holt die Quelldaten per GET '/api/fs/read' in den RAM.\n  2. Schreibt die Daten per POST '/api/fs/write' an das Ziel.\n  3. Gibt der Schreibvorgang HTTP 200 zurück, sendet er ein POST an '/api/fs/delete' auf die Quelldatei.\n  Diese Sequenz verhindert Datenverlust bei Schreibfehlern.\n\nEXIT-CODES\n  0\n    Erfolg. Datei erfolgreich verschoben.\n  1\n    Schreib- oder Löschfehler.\n  404\n    Quelldatei wurde nicht gefunden.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  cp(1), rm(1)\n\nERWEITERTE BEISPIELE\n  mv old.txt new.txt\n  mv /data/temp.txt /system/config/saved.txt"
+  },
+  {
+   "id": "notify",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "notify - Eine Benachrichtigung an das OS-Benachrichtigungscenter senden",
+   "synopsis": "notify <text>",
+   "description": "Wie ein langes watch dir mitteilt, dass es fertig ist, nachdem du zu einem anderen Fenster gewechselt bist.",
+   "details": "NAME\n  notify - Eine Benachrichtigung an das OS-Benachrichtigungscenter senden\n\nÜBERSICHT\n  notify <text>\n\nBESCHREIBUNG\n  Wie ein langes watch dir mitteilt, dass es fertig ist, nachdem du zu einem anderen Fenster gewechselt bist.\n\nOPTIONEN\n  <text>\n    Die Nachricht; ohne sie die Standardeingabe lesen.\n\nGERÄTEKOSTEN\n  Keine auf dem Gerät: Es geht über den Fähigkeiten-Broker der Shell.\n\nANMERKUNGEN\n  Benötigt die Berechtigung system.notify.\n\nSIEHE AUCH\n  watch(1), say(1)\n\nBEISPIELE\n  notify \"the copy is done\""
+  },
+  {
+   "id": "open",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "open - Datei mit der Standard-App öffnen",
+   "synopsis": "open <file>",
+   "description": "Eine Datei mit der zugeordneten grafischen Anwendung öffnen.",
+   "details": "NAME\n  open - Datei mit der Standardanwendung öffnen.\n\nÜBERSICHT\n  open <file>\n\nBESCHREIBUNG\n  Öffnet die angegebene Ressource. Die Desktop-Shell löst die Dateierweiterung auf und startet das standardmäßig zugeordnete Fenster.\n\nOPTIONEN\n  <file>\n    Der Pfad der zu öffnenden Datei.\n\nSYSTEMARCHITEKTUR\n  Verwendet 'postMessage'-Aufrufe des Browser-iframes. Das Terminal sendet '{ type: \"open-file\", path: file }' an das übergeordnete Fenster. Die Shell parst die Erweiterung, liest '/system/config/file-associations.json' und öffnet die App (z. B. 'notepad', 'photo-viewer').\n\nEXIT-CODES\n  0\n    Erfolg. Nachricht an die Shell versendet.\n  1\n    Shell-Host nicht erreichbar oder ungültige Dateizuordnung.\n\nKONFORM ZU\n  Proprietäre NucleoOS-Erweiterung.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  echo(1)\n\nERWEITERTE BEISPIELE\n  open /data/Pictures/wallpaper.png\n  open /data/document.txt"
+  },
+  {
+   "id": "ota",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "any": [
+    "ota",
+    "ota.firmware",
+    "ota.package"
+   ],
+   "title": "ota - Den laufenden Slot, den nächsten Slot und den Rollback-Status anzeigen",
+   "synopsis": "ota [status]",
+   "description": "Das, was man vor und nach einem Update liest: welche installierte Kopie des Systems (Slot) läuft, auf welche das nächste Update käme, der Zustand der aktuellen Kopie und ob die automatische Rückkehr zur vorherigen Version (Rollback) eingeschaltet ist.",
+   "details": "NAME\n  ota - Den laufenden Slot, den nächsten Slot und den Rollback-Status anzeigen\n\nÜBERSICHT\n  ota [status]\n\nBESCHREIBUNG\n  Das, was man vor und nach einem Update liest: welche installierte Kopie des Systems (Slot) läuft, auf welche das nächste Update käme, der Zustand der aktuellen Kopie und ob die automatische Rückkehr zur vorherigen Version (Rollback) eingeschaltet ist.\n  Gibt eine einzige Zeile aus: running <Slot>  next <Slot>  state <Zustand>  rollback on|off. Ein Feld, das das Gerät nicht meldet, erscheint als '?'.\n\nOPTIONEN\n  status\n    Das einzige akzeptierte Argument; es ist zugleich die Vorgabe. Jedes andere Argument wird mit einem Fehler abgelehnt.\n\nGERÄTEKOSTEN\n  Ein GET /api/status.\n\nANMERKUNGEN\n  Ein Update zu installieren ist hier bewusst NICHT möglich: Das Gerät startet neu, sobald ein Update geschrieben ist, sodass ein vertippter Pfad aus dem Verlauf ein unumkehrbares Update einen Tastendruck weit entfernt wäre. Updates laufen über das systemeigene Update-Verfahren.\n\nSIEHE AUCH\n  status(1), reboot(1), diag(1)\n\nBEISPIELE\n  ota"
+  },
+  {
+   "id": "ping",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "ping - Netzwerklatenz-Diagnose",
+   "synopsis": "ping [host]",
+   "description": "Die Antwortzeit des Geräts oder eines Web-Hosts messen.",
+   "details": "NAME\n  ping - Netzwerklatenz testen.\n\nÜBERSICHT\n  ping [host]\n\nBESCHREIBUNG\n  Misst die Umlaufzeit (RTT), indem 4 HTTP-HEAD-Anfragen nacheinander im Abstand von einer halben Sekunde gesendet werden. Ohne Host wird das Gerät selbst gemessen (seine Route /api/status); mit Host wird dieser Webserver über HTTPS gemessen. Am Ende wird ausgegeben, wie viele Antworten ankamen, sowie die minimale, maximale und durchschnittliche Zeit. Strg+C bricht ab.\n  Es ist kein ICMP-Ping: Die Anfragen gehen vom Browser aus, daher zählt ein Host, der nicht über HTTPS antwortet oder den der Browser blockiert, als verloren.\n\nOPTIONEN\n  [host]\n    Der Hostname oder die URL, die gemessen werden soll (z. B. 'google.com'); ohne Schema wird https:// ergänzt. Ohne Angabe wird das Gerät gemessen.\n\nSYSTEMARCHITEKTUR\n  Jede Anfrage wird im Browser mit 'performance.now()' vom Senden bis zur Antwort gemessen; die Zeit umfasst also den ganzen HTTP-Austausch, nicht nur das Netzwerk.\n\nEXIT-CODES\n  0\n    Erfolg. Mindestens eine Antwort empfangen.\n  1\n    Alle 4 Anfragen gingen verloren.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  curl(1), wget(1), status(1)\n\nERWEITERTE BEISPIELE\n  ping             # Das Gerät messen\n  ping google.com  # google.com messen"
+  },
+  {
+   "id": "ps",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "ps - Apps als Prozesstabelle auflisten",
+   "synopsis": "ps",
+   "description": "Zeigt die installierten, aktivierten Apps mit einem Laufstatus. Auf einem Gerät, das eine Vordergrund-App plus die Shell ausführt, ist das die nächste Entsprechung zu einer Prozessliste.",
+   "details": "NAME\n  ps - Apps als Prozesstabelle auflisten\n\nÜBERSICHT\n  ps\n\nBESCHREIBUNG\n  Zeigt die installierten, aktivierten Apps mit einem Laufstatus. Auf einem Gerät, das eine Vordergrund-App plus die Shell ausführt, ist das die nächste Entsprechung zu einer Prozessliste.\n\nOPTIONEN\n  Keine Optionen. Die angezeigte PID ist synthetisch und wird bei jeder Auflistung neu vergeben: um auf eine App zu wirken, nutze ihre id mit kill(1).\n\nGERÄTEKOSTEN\n  ein Lesen der App-Tabelle, 30 s zwischengespeichert\n\nSIEHE AUCH\n  kill(1), apps(1)\n\nBEISPIELE\n  ps\n  ps | grep run"
+  },
+  {
+   "id": "pwd",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "pwd - Arbeitsverzeichnis ausgeben",
+   "synopsis": "pwd",
+   "description": "Den absoluten Pfad des aktuellen Arbeitsverzeichnisses ausgeben.",
+   "details": "NAME\n  pwd - Arbeitsverzeichnis ausgeben.\n\nÜBERSICHT\n  pwd\n\nBESCHREIBUNG\n  Gibt den absoluten Pfad des aktiven CWD auf dem Terminal aus. Läuft lokal, ohne auf Hardware-Ressourcen zuzugreifen.\n\nSYSTEMARCHITEKTUR\n  Liest die normalisierte Laufzeitvariable 'cwd' und gibt sie direkt in den stdout-Puffer des Terminals aus.\n\nEXIT-CODES\n  0\n    Erfolg. Der Pfad wurde ausgegeben.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  cd(1), ls(1)\n\nERWEITERTE BEISPIELE\n  pwd"
+  },
+  {
+   "id": "reboot",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "power"
+   ],
+   "title": "reboot - Das Gerät neu starten",
+   "synopsis": "reboot",
+   "description": "Das Gerät auffordern, neu zu starten.",
+   "details": "NAME\n  reboot - Das System neu starten.\n\nÜBERSICHT\n  reboot\n\nBESCHREIBUNG\n  Fordert das Gerät auf, neu zu starten. Das Terminal gibt \"rebooting device ...\" und danach \"Reboot command sent.\" aus; die Verbindung bricht ab, bis das Gerät wieder läuft. Nur auf Geräten verfügbar, die sich von hier aus neu starten lassen.\n\nSYSTEMARCHITEKTUR\n  Sendet eine POST-Anfrage an '/api/reboot'; danach startet das Gerät von selbst neu.\n\nEXIT-CODES\n  0\n    Erfolg. Befehl gesendet.\n  1\n    Das Gerät hat die Anfrage abgelehnt oder ist nicht erreichbar.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  dmesg(1), uptime(1), status(1)\n\nERWEITERTE BEISPIELE\n  reboot"
+  },
+  {
+   "id": "rm",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "rm - Datei oder Verzeichnis entfernen",
+   "synopsis": "rm <path>",
+   "description": "Eine Datei oder einen leeren Ordner dauerhaft löschen, ohne Umweg über den Papierkorb.",
+   "details": "NAME\n  rm - Datei oder Verzeichnis entfernen.\n\nÜBERSICHT\n  rm <path>\n\nBESCHREIBUNG\n  Löscht eine Datei oder einen leeren Ordner dauerhaft aus dem Speicher des Geräts. Der Eintrag landet nicht im Papierkorb und lässt sich nicht wiederherstellen. Bei Erfolg wird \"removed <Pfad>\" ausgegeben. Der Ordner /data selbst kann nicht entfernt werden.\n\nOPTIONEN\n  <path>\n    Die zu löschende Datei oder der zu löschende leere Ordner.\n\nSYSTEMARCHITEKTUR\n  Läuft über die Dateischicht des Systems, die POST /api/fs/delete?path=<path> sendet. Einen Ordner, der noch etwas enthält, lehnt das Gerät ab.\n\nEXIT-CODES\n  0\n    Erfolg. Eintrag gelöscht.\n  1\n    Löschen fehlgeschlagen: Der Eintrag existiert nicht, der Ordner ist nicht leer, Zugriff verweigert, Gerät nicht gekoppelt oder Datei-API nicht erreichbar.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  cp(1), mv(1), mkdir(1)\n\nERWEITERTE BEISPIELE\n  rm /data/temp_log.txt\n  rm /data/empty_dir"
+  },
+  {
+   "id": "say",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.tts"
+   ],
+   "title": "say - Text über das Gerät sprechen",
+   "synopsis": "say [text]",
+   "description": "Sendet Text an die Sprach-Engine, entweder als Argument oder aus einer Pipe. Innerhalb einer Pipeline reicht es den Text weiter, sodass eine gesprochene Zeile trotzdem aufgezeichnet werden kann.",
+   "details": "NAME\n  say - Text über das Gerät sprechen\n\nÜBERSICHT\n  say [text]\n\nBESCHREIBUNG\n  Sendet Text an die Sprach-Engine, entweder als Argument oder aus einer Pipe. Innerhalb einer Pipeline reicht es den Text weiter, sodass eine gesprochene Zeile trotzdem aufgezeichnet werden kann.\n\nOPTIONEN\n  [text]\n    Was gesagt werden soll; ohne es die Standardeingabe lesen.\n\nGERÄTEKOSTEN\n  Ein POST /api/tts.\n\nANMERKUNGEN\n  Benötigt die Berechtigung device.audio. Hat der Build keine Sprach-Engine, sagt er das, statt vorzugeben, gesprochen zu haben.\n\nSIEHE AUCH\n  notify(1), anima(1), clip(1)\n\nBEISPIELE\n  say \"the backup is finished\"\n  dmesg -l E | anima \"what is wrong?\" | say"
+  },
+  {
+   "id": "screen",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.display"
+   ],
+   "title": "screen - Speichern, was der Bildschirm anzeigt",
+   "synopsis": "screen [-o <file>]",
+   "description": "Erfasst, was der Bildschirm des Geräts anzeigt, und speichert es als Datei im Speicher des Geräts. Kein anderes Terminal hat ein Motiv zum Fotografieren.",
+   "details": "NAME\n  screen - Speichern, was der Bildschirm anzeigt\n\nÜBERSICHT\n  screen [-o <file>]\n\nBESCHREIBUNG\n  Erfasst, was der Bildschirm des Geräts anzeigt, und speichert es als Datei im Speicher des Geräts. Kein anderes Terminal hat ein Motiv zum Fotografieren.\n\nOPTIONEN\n  -o <file>\n    Wohin gespeichert wird (standardmäßig /data/screen.bmp).\n\nGERÄTEKOSTEN\n  Ein GET /api/screen, danach das Schreiben der Datei in den Speicher des Geräts.\n\nANMERKUNGEN\n  Nur auf Geräten mit eigenem Bildschirm (Berechtigung device.display). Wo das Gerät die Aufnahme nicht anbietet, antwortet es mit \"not available on this build\" (404); \"panel size unavailable\" (503) bedeutet, dass der Bildschirm noch nicht bereit ist: Schalte ihn ein und versuche es erneut.\n\nSIEHE AUCH\n  display(1), open(1)\n\nBEISPIELE\n  screen\n  screen -o /data/shot.bmp"
+  },
+  {
+   "id": "seq",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "seq - Einen Bereich ganzer Zahlen ausgeben",
+   "synopsis": "seq [first] last",
+   "description": "Gibt eine ganze Zahl pro Zeile aus, auf- oder abwärts zählend. Es ist der einzige Generator, den eine Pipeline hat.",
+   "details": "NAME\n  seq - Einen Bereich ganzer Zahlen ausgeben\n\nÜBERSICHT\n  seq [first] last\n\nBESCHREIBUNG\n  Gibt eine ganze Zahl pro Zeile aus, auf- oder abwärts zählend. Es ist der einzige Generator, den eine Pipeline hat.\n\nOPTIONEN\n  first\n    Wo begonnen wird (standardmäßig 1).\n  last\n    Wo aufgehört wird; zählt abwärts, wenn es kleiner als first ist.\n\nGERÄTEKOSTEN\n  Keine. Vollständig browserseitig.\n\nSIEHE AUCH\n  sort(1), uniq(1)\n\nBEISPIELE\n  seq 5\n  seq 10 1"
+  },
+  {
+   "id": "sleep",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "sleep - Ausführung anhalten",
+   "synopsis": "sleep <seconds>",
+   "description": "Eine zeitliche Verzögerung in Sekunden einfügen.",
+   "details": "NAME\n  sleep - Befehlsausführung anhalten.\n\nÜBERSICHT\n  sleep <seconds>\n\nBESCHREIBUNG\n  Fügt eine zeitliche Ausführungsverzögerung ein. Unterstützt Dezimalzahlen mit Nachkommastellen.\n\nOPTIONEN\n  <seconds>\n    Die Pausendauer in Sekunden (z. B. '1.5').\n\nSYSTEMARCHITEKTUR\n  Hält die Befehlsausführung mit einem JavaScript-Promise an, das in einem 'setTimeout'-Callback aufgelöst wird.\n\nEXIT-CODES\n  0\n    Erfolg.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  reboot(1)\n\nERWEITERTE BEISPIELE\n  sleep 3\n  sleep 1.5"
+  },
+  {
+   "id": "sort",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "sort - Standardeingabe sortieren",
+   "synopsis": "sort [-r] [-n] [-u] [-k N]",
+   "description": "Ordnet die Zeilen um, die aus einer Pipe eintreffen.",
+   "details": "NAME\n  sort - Standardeingabe sortieren\n\nÜBERSICHT\n  sort [-r] [-n] [-u] [-k N]\n\nBESCHREIBUNG\n  Ordnet die Zeilen um, die aus einer Pipe eintreffen.\n\nOPTIONEN\n  -r\n    Die Reihenfolge umkehren.\n  -n\n    Numerisch vergleichen.\n  -u\n    Benachbarte Duplikate verwerfen.\n  -k N\n    Nach dem N-ten durch Leerzeichen getrennten Feld sortieren.\n\nGERÄTEKOSTEN\n  Keine. Vollständig browserseitig.\n\nSIEHE AUCH\n  uniq(1), cut(1), du(1)\n\nBEISPIELE\n  du /data | sort -n -r\n  dmesg | sort -u"
+  },
+  {
+   "id": "stat",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "stat - Typ, Größe und Sperrstatus eines Eintrags anzeigen",
+   "synopsis": "stat <path>",
+   "description": "Meldet, was eine einzelne Datei oder ein Verzeichnis ist, ohne den ganzen Ordner aufzulisten, in dem es liegt.",
+   "details": "NAME\n  stat - Typ, Größe und Sperrstatus eines Eintrags anzeigen\n\nÜBERSICHT\n  stat <path>\n\nBESCHREIBUNG\n  Meldet, was eine einzelne Datei oder ein Verzeichnis ist, ohne den ganzen Ordner aufzulisten, in dem es liegt. Gibt den Pfad, den Typ (file oder dir), die Größe in Bytes und in lesbarer Form (\"-\" bei einem Verzeichnis) aus und ob der Eintrag geschützt ist.\n\nOPTIONEN\n  <path>\n    Die zu beschreibende Datei oder das Verzeichnis.\n\nGERÄTEKOSTEN\n  Ein GET /api/fs/stat auf Geräten, die es anbieten; auf den anderen ein GET /api/fs/list auf dem ÜBERGEORDNETEN Verzeichnis, aus dem stat den Eintrag nimmt.\n\nANMERKUNGEN\n  stat zeigt keine Änderungszeit: Die Zeile \"modified\" sagt, dass das Gerät keine meldet, statt eine zu erfinden.\n\nSIEHE AUCH\n  ls(1), du(1), tree(1)\n\nBEISPIELE\n  stat /data/notes.txt\n  stat /apps/terminal"
+  },
+  {
+   "id": "status",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "status - Globale Systemdiagnose",
+   "synopsis": "status",
+   "description": "Systemversion, Betriebszeit, freien Speicher, Datenspeicher, installierte Apps und Netzwerkstatus ausgeben.",
+   "details": "NAME\n  status - Diagnosestatus.\n\nÜBERSICHT\n  status\n\nBESCHREIBUNG\n  Zeigt eine Übersicht des Geräts, ein Punkt pro Zeile: Systemname und -version mit den Sekunden Betriebszeit, freier Arbeitsspeicher (Heap), Datenspeicher (Typ, freier und gesamter Platz), Anzahl installierter Apps und Netzwerk (Uhr per NTP synchronisiert oder nicht und, falls vorhanden, der Netzwerkname). Punkte, die das Gerät nicht meldet, werden weggelassen.\n\nSYSTEMARCHITEKTUR\n  Ein GET an '/api/status'; der Befehl formatiert die Felder der Antwort ohne weitere Anfragen.\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Gerät nicht erreichbar.\n\nKONFORM ZU\n  Proprietäre NucleoOS-Erweiterung.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  uptime(1), free(1)\n\nERWEITERTE BEISPIELE\n  status"
+  },
+  {
+   "id": "tail",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tail - Letzte Zeilen einer Datei anzeigen",
+   "synopsis": "tail [-n lines] <file>",
+   "description": "Den letzten Teil (standardmäßig 10 Zeilen) einer Datei ausgeben.",
+   "details": "NAME\n  tail - Letzte Zeilen einer Datei ausgeben.\n\nÜBERSICHT\n  tail [-n <lines>] <file>\n\nBESCHREIBUNG\n  Gibt den Endabschnitt einer Datei aus (standardmäßig 10 Zeilen).\n\nOPTIONEN\n  -n <lines>\n    Die genaue Anzahl der auszugebenden Zeilen angeben (z. B. '-n 5').\n  <file>\n    Der Zieldateipfad.\n\nSYSTEMARCHITEKTUR\n  Lädt den Dateiinhalt per GET '/api/fs/read' herunter. Parst die Zeilen im Speicher und isoliert die untersten Elemente durch Array-Slicing ('slice(allLines.length - n)').\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Lesefehler oder ungültige Parameterformatierung.\n  404\n    Zieldatei nicht gefunden.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  head(1), cat(1)\n\nERWEITERTE BEISPIELE\n  tail logs.txt\n  tail -n 3 /data/net.cfg"
+  },
+  {
+   "id": "tee",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tee - Standardeingabe in eine Datei schreiben und weiterreichen",
+   "synopsis": "tee <file>",
+   "description": "Speichert alles, was durch es fließt, und reicht denselben Text an die nächste Stufe weiter, was eine Pipeline dauerhaft macht.",
+   "details": "NAME\n  tee - Standardeingabe in eine Datei schreiben und weiterreichen\n\nÜBERSICHT\n  tee <file>\n\nBESCHREIBUNG\n  Speichert alles, was durch es fließt, und reicht denselben Text an die nächste Stufe weiter, was eine Pipeline dauerhaft macht.\n\nOPTIONEN\n  <file>\n    Wohin geschrieben wird.\n\nGERÄTEKOSTEN\n  Genau ein POST /api/fs/write.\n\nSIEHE AUCH\n  cat(1), clip(1), base64(1)\n\nBEISPIELE\n  diag | tee /data/diag.txt\n  dmesg -l E | tee /data/errors.txt | wc"
+  },
+  {
+   "id": "theme",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "theme - OS-Farbthema ändern",
+   "synopsis": "theme [dark|light]",
+   "description": "Das grafische Systemthema (dunkel oder hell) anzeigen oder umschalten.",
+   "details": "NAME\n  theme - Grafisches Systemthema.\n\nÜBERSICHT\n  theme [dark|light]\n\nBESCHREIBUNG\n  Ohne Argument oder mit einem anderen Wert als dark oder light gibt der Befehl das aktuelle Thema und die Syntax aus. Mit dark oder light wendet er das Thema sofort auf das Terminal an und speichert es in den Systemeinstellungen.\n\nOPTIONEN\n  [dark|light]\n    Der Name des anzuwendenden Themas.\n\nSYSTEMARCHITEKTUR\n  Setzt das Attribut 'data-theme' der Seite, liest dann '/system/config/settings.json', aktualisiert den Eintrag ui.theme und schreibt die Datei über '/api/fs/write' zurück. Schlägt das Speichern fehl, bleibt das Thema nur in diesem Fenster aktiv und der Befehl zeigt eine Warnung.\n\nEXIT-CODES\n  0\n    Erfolg, auch wenn das Thema nur lokal angewendet wurde (mit einer Warnung).\n\nKONFORM ZU\n  Proprietäre NucleoOS-Erweiterung.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  status(1)\n\nERWEITERTE BEISPIELE\n  theme            # Aktuelles Thema lesen\n  theme light      # Zum hellen Thema wechseln\n  theme dark       # Zum dunklen Thema wechseln"
+  },
+  {
+   "id": "touch",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "touch - Leere Datei erstellen",
+   "synopsis": "touch <file>",
+   "description": "Eine leere Datei am angegebenen Pfad erstellen, falls sie nicht existiert.",
+   "details": "NAME\n  touch - Leere Datei initialisieren.\n\nÜBERSICHT\n  touch <file>\n\nBESCHREIBUNG\n  Erstellt eine Datei mit null Bytes; fehlende Ordner im Pfad werden angelegt. Existiert die Datei bereits, bleibt sie unberührt (Inhalt und Datum ändern sich nicht), und der Befehl meldet das.\n\nOPTIONEN\n  <file>\n    Der Pfad der zu initialisierenden Datei.\n\nSYSTEMARCHITEKTUR\n  Prüft zuerst, ob die Datei vorhanden ist (mit '/api/fs/stat' oder der Ordnerliste). Nur wenn sie fehlt, sendet er ein POST an '/api/fs/write' mit leerem Inhalt und überschreibt nie. Lässt sich der Ordner nicht lesen, meldet er den Fehler und schreibt nichts.\n\nEXIT-CODES\n  0\n    Erfolg. Datei erstellt oder bereits vorhanden.\n  1\n    Lese- oder Schreibfehler im Speicher des Geräts.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  mkdir(1), rm(1)\n\nERWEITERTE BEISPIELE\n  touch /data/empty.txt"
+  },
+  {
+   "id": "tr",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tr - Zeichen übersetzen oder löschen",
+   "synopsis": "tr <Satz1> <Satz2>   |   tr -d <Satz>",
+   "description": "Ersetzt jedes Zeichen aus Satz1 durch das entsprechende in Satz2, oder löscht sie mit -d. Sätze sind wörtlich: keine Bereiche oder Klassen, um Bytes auf dem Gerät zu sparen.",
+   "details": "NAME\n  tr - Zeichen übersetzen oder löschen\n\nÜBERSICHT\n  tr <Satz1> <Satz2>   |   tr -d <Satz>\n\nBESCHREIBUNG\n  Ersetzt jedes Zeichen aus Satz1 durch das entsprechende in Satz2, oder löscht sie mit -d. Sätze sind wörtlich: keine Bereiche oder Klassen, um Bytes auf dem Gerät zu sparen.\n\nOPTIONEN\n  -d SATZ\n    Löscht jedes Zeichen des Satzes, statt es zu übersetzen.\n  Ist Satz2 kürzer als Satz1, füllt sein letztes Zeichen den Rest.\n\nGERÄTEKOSTEN\n  keine\n\nSIEHE AUCH\n  cut(1), sort(1)\n\nBEISPIELE\n  echo hallo | tr aeiou _\n  cat /data/f | tr -d \\r"
+  },
+  {
+   "id": "tree",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tree - Einen Verzeichnisbaum ausgeben",
+   "synopsis": "tree [-L N] [path]",
+   "description": "Gibt den Teilbaum unter einem Pfad aus, pro Tiefe um eine Ebene eingerückt, Verzeichnisse zuerst und mit einem abschließenden Schrägstrich markiert.",
+   "details": "NAME\n  tree - Einen Verzeichnisbaum ausgeben\n\nÜBERSICHT\n  tree [-L N] [path]\n\nBESCHREIBUNG\n  Gibt den Teilbaum unter einem Pfad aus, pro Tiefe um eine Ebene eingerückt, Verzeichnisse zuerst und mit einem abschließenden Schrägstrich markiert.\n\nOPTIONEN\n  -L N\n    Höchstens N Ebenen absteigen (Standard 3, hartes Maximum 6).\n  [path]\n    Wo begonnen wird; standardmäßig das Arbeitsverzeichnis.\n\nGERÄTEKOSTEN\n  Derselbe budgetierte Durchlauf wie bei du: eine Auflistung pro Verzeichnis, sequenziell, gedeckelt auf 60 Auflistungen und 200 ausgegebene Einträge.\n\nSIEHE AUCH\n  ls(1), du(1), find(1)\n\nBEISPIELE\n  tree\n  tree -L 1 /apps\n  tree /data | grep .txt"
+  },
+  {
+   "id": "unalias",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "unalias - Einen Alias entfernen",
+   "synopsis": "unalias <name>",
+   "description": "Löscht einen Alias und speichert die Liste erneut.",
+   "details": "NAME\n  unalias - Einen Alias entfernen\n\nÜBERSICHT\n  unalias <name>\n\nBESCHREIBUNG\n  Löscht einen Alias und speichert die Liste erneut.\n\nOPTIONEN\n  <name>\n    Der zu entfernende Alias.\n\nGERÄTEKOSTEN\n  Ein POST /api/fs/write.\n\nSIEHE AUCH\n  alias(1)\n\nBEISPIELE\n  unalias ll"
+  },
+  {
+   "id": "uname",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "uname - Systemname, Edition und Version",
+   "synopsis": "uname [-a]",
+   "description": "Den Namen des Betriebssystems ausgeben; mit -a auch Edition und Version.",
+   "details": "NAME\n  uname - Systeminformationen.\n\nÜBERSICHT\n  uname [-a]\n\nBESCHREIBUNG\n  Ohne Optionen gibt der Befehl den Namen des Betriebssystems aus. Mit '-a' gibt er in einer Zeile den Namen, die vom Gerät gemeldete Editionskennung und die Systemversion aus.\n\nOPTIONEN\n  -a\n    Fügt Edition und Version hinzu.\n\nSYSTEMARCHITEKTUR\n  Liest Name und Version aus '/api/status' und die Edition aus den Fähigkeiten des Geräts ('/api/system/caps', oder aus '/api/status' abgeleitet auf Geräten ohne diese Route). Antwortet das Gerät nicht, verwendet er die Standardwerte (NucleoOS, 0.1.0) und lässt die Edition weg, wenn sie nicht bekannt ist.\n\nEXIT-CODES\n  0\n    Immer: Ohne Antwort gibt der Befehl die Standardwerte aus.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  status(1), uptime(1)\n\nERWEITERTE BEISPIELE\n  uname\n  uname -a"
+  },
+  {
+   "id": "uniq",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "uniq - Wiederholte benachbarte Zeilen zusammenfassen",
+   "synopsis": "uniq [-c]",
+   "description": "Verwandelt eine Wand identischer Log-Zeilen in eine Zeile, optional mit Zähler. Dies ist der Schritt, der zwei Kilobyte dmesg klein genug macht, um sie an anima zu übergeben.",
+   "details": "NAME\n  uniq - Wiederholte benachbarte Zeilen zusammenfassen\n\nÜBERSICHT\n  uniq [-c]\n\nBESCHREIBUNG\n  Verwandelt eine Wand identischer Log-Zeilen in eine Zeile, optional mit Zähler. Dies ist der Schritt, der zwei Kilobyte dmesg klein genug macht, um sie an anima zu übergeben.\n\nOPTIONEN\n  -c\n    Jeder Zeile voranstellen, wie oft sie sich wiederholt hat.\n\nGERÄTEKOSTEN\n  Keine. Vollständig browserseitig.\n\nSIEHE AUCH\n  sort(1), grep(1), anima(1)\n\nBEISPIELE\n  dmesg | sort | uniq -c | sort -n -r"
+  },
+  {
+   "id": "uptime",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "uptime - Aktive Systemzeit",
+   "synopsis": "uptime",
+   "description": "Anzeigen, wie lange das Gerät schon läuft und wie viel freien Speicher es hat.",
+   "details": "NAME\n  uptime - Aktive Systemzeit.\n\nÜBERSICHT\n  uptime\n\nBESCHREIBUNG\n  Gibt die seit dem letzten Start des Geräts vergangene Zeit in Stunden, Minuten und Sekunden aus sowie den freien Arbeitsspeicher (Heap), den das Gerät meldet. Beispielzeile: up 2h 15m 4s, heap free: ...\n\nSYSTEMARCHITEKTUR\n  Liest die Felder uptime_s und free_heap aus '/api/status'.\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Gerät nicht erreichbar.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  status(1), free(1)\n\nERWEITERTE BEISPIELE\n  uptime"
+  },
+  {
+   "id": "verify",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "anima.l1"
+   ],
+   "title": "verify - Fundierte Faktenprüfung gegen das Wissen auf dem Gerät",
+   "synopsis": "verify <key> <asserted> [--kind fact|numeric] [-l it|en]",
+   "description": "Fragt ANIMA, ob ein behaupteter Wert für einen Schlüssel bestätigt, widerlegt oder unbekannt ist, und gibt die verwendeten Belege aus.",
+   "details": "NAME\n  verify - Fundierte Faktenprüfung gegen das Wissen auf dem Gerät\n\nÜBERSICHT\n  verify <key> <asserted> [--kind fact|numeric] [-l it|en]\n\nBESCHREIBUNG\n  Fragt ANIMA, ob ein behaupteter Wert für einen Schlüssel bestätigt, widerlegt oder unbekannt ist, und gibt die verwendeten Belege aus. Urteil und Belege erscheinen in einer Zeile, getrennt durch einen Tabulator. Das letzte Wort ist der behauptete Wert; alle Wörter davor bilden den Schlüssel.\n\nOPTIONEN\n  <key>\n    Wonach gefragt wird, z. B. \"capital of france\".\n  <asserted>\n    Der zu prüfende Wert.\n  --kind\n    fact oder numeric.\n  -l\n    Antwortsprache (it oder en).\n\nGERÄTEKOSTEN\n  Ein GET /api/anima/verify.\n\nANMERKUNGEN\n  Funktioniert auf Geräten mit ANIMA an Bord. Auf den anderen meldet der Befehl das als Warnung, nicht als Fehler: \"not available on this device\" oder \"not available on this build\", wenn die Route mit 404 antwortet.\n\nSIEHE AUCH\n  anima(1), diag(1)\n\nBEISPIELE\n  verify \"capital of france\" Lyon"
+  },
+  {
+   "id": "watch",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "watch - Einen Befehl alle paar Sekunden an Ort und Stelle neu ausführen",
+   "synopsis": "watch [-n seconds] [-c count] <command>",
+   "description": "Führt einen Befehl wiederholt aus und zeichnet seine Ausgabe über den vorigen Tick neu, statt den Bildschirm zu scrollen. Es ist das Fragmentierungsmikroskop: watch -n5 heap.",
+   "details": "NAME\n  watch - Einen Befehl alle paar Sekunden an Ort und Stelle neu ausführen\n\nÜBERSICHT\n  watch [-n seconds] [-c count] <command>\n\nBESCHREIBUNG\n  Führt einen Befehl wiederholt aus und zeichnet seine Ausgabe über den vorigen Tick neu, statt den Bildschirm zu scrollen. Es ist das Fragmentierungsmikroskop: watch -n5 heap.\n\nOPTIONEN\n  -n S\n    Sekunden zwischen den Ticks (standardmäßig 3, nie weniger als 2).\n  -c N\n    Wie viele Ticks (standardmäßig 10, höchstens 300).\n\nGERÄTEKOSTEN\n  Was auch immer der innere Befehl kostet, einmal pro Tick. Ticks überlappen nie, das Intervall wird auf zwei Sekunden begrenzt, und drei aufeinanderfolgende Fehlschläge stoppen es. Ctrl+C stoppt es sofort.\n\nANMERKUNGEN\n  Innerhalb einer Pipeline abgelehnt, und wifi scan weigert sich, darin zu laufen: Eine blockierende Funkoperation in einer Schleife würde das Gerät aus seinem eigenen Netzwerk werfen.\n\nSIEHE AUCH\n  heap(1), diag(1), notify(1)\n\nBEISPIELE\n  watch -n 5 heap\n  watch -n 10 -c 60 status"
+  },
+  {
+   "id": "wc",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "wc - Wort-, Zeilen- und Byte-Zählung",
+   "synopsis": "wc <file>",
+   "description": "Wort-, Zeilen- und Byte-Anzahl einer Datei ausgeben.",
+   "details": "NAME\n  wc - Wort-, Zeilen- und Byte-Zählung.\n\nÜBERSICHT\n  wc <file>\n\nBESCHREIBUNG\n  Führt eine Kennzahlenanalyse der Zieldatei durch und gibt die Anzahl der Zeilen, Wörter und Bytes aus.\n\nOPTIONEN\n  <file>\n    Die zu parsende Zieldatei.\n\nSYSTEMARCHITEKTUR\n  Holt Daten über den Dateisystem-Leseendpunkt. Zeilen werden mit einer '\\n'-Aufteilung ermittelt, Wörter mit einem '\\s+'-Regex-Filter und Bytes mit einer JavaScript-'Blob'-Größenprüfung.\n\nEXIT-CODES\n  0\n    Erfolg. Zählungen ausgegeben.\n  1\n    Lesefehler im Dateisystem.\n  404\n    Datei wurde nicht gefunden.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  cat(1), head(1), tail(1)\n\nERWEITERTE BEISPIELE\n  wc /data/notes.txt"
+  },
+  {
+   "id": "wget",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "wget - Datei aus dem Web herunterladen",
+   "synopsis": "wget <url> [-O outfile]",
+   "description": "Eine Datei von einer URL herunterladen und im Speicher des Geräts ablegen.",
+   "details": "NAME\n  wget - Datei über HTTP herunterladen.\n\nÜBERSICHT\n  wget <url> [-O <destination_file>]\n\nBESCHREIBUNG\n  Lädt eine Ressource mit einer GET-Anfrage herunter und schreibt sie in den Speicher des Geräts. Ohne -O erhält die Datei den Namen des letzten URL-Teils (ohne Query-String) oder 'downloaded_file' und landet im aktuellen Verzeichnis. Eine URL ohne Schema wird als https:// behandelt.\n\nOPTIONEN\n  <url>\n    Die URL der herunterzuladenden Datei.\n  -O <destination_file>\n    Pfad der Datei, in der die Ressource gespeichert wird. Eine vorhandene Datei wird ersetzt.\n\nSYSTEMARCHITEKTUR\n  Den Download führt der Browser aus, daher gelten seine CORS-Regeln: Eine Website, die ihn nicht erlaubt, scheitert mit 'network error or CORS blocked'. Die Daten werden dann per POST an '/api/fs/write' gesendet; fehlende Ordner werden angelegt.\n\nEXIT-CODES\n  0\n    Erfolg. Erfolgreich heruntergeladen und geschrieben.\n  1\n    Netzwerkfehler, fehlgeschlagene HTTP-Antwort oder Schreibfehler.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nSIEHE AUCH\n  curl(1), ping(1)\n\nERWEITERTE BEISPIELE\n  wget example.com/index.html\n  wget http://example.com/file.bin -O /data/file.bin"
+  },
+  {
+   "id": "which",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "which - Sagen, ob ein Name ein Builtin, ein Alias oder eine App ist",
+   "synopsis": "which <name>",
+   "description": "Beantwortet die Frage \"ist das ein Befehl oder eine App\" in einer Zeile.",
+   "details": "NAME\n  which - Sagen, ob ein Name ein Builtin, ein Alias oder eine App ist\n\nÜBERSICHT\n  which <name>\n\nBESCHREIBUNG\n  Beantwortet die Frage \"ist das ein Befehl oder eine App\" in einer Zeile.\n\nOPTIONEN\n  <name>\n    Der nachzuschlagende Name.\n\nGERÄTEKOSTEN\n  Ein GET /api/apps, für 30 s zwischengespeichert und mit dem Befehl apps geteilt.\n\nSIEHE AUCH\n  apps(1), alias(1), man(1)\n\nBEISPIELE\n  which ls\n  which notepad"
+  },
+  {
+   "id": "wifi",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "wifi.manage"
+   ],
+   "title": "wifi - Netzwerke scannen, verbinden, vergessen und priorisieren",
+   "synopsis": "wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect",
+   "description": "Das Funkgerät, aus einer Shell. scan listet auf, was in der Luft ist, mit Signal, Kanal und Sicherheit; known listet die gespeicherten Netzwerke auf und markiert das aktuelle mit einem Sternchen; der Rest ändert sie.",
+   "details": "NAME\n  wifi - Netzwerke scannen, verbinden, vergessen und priorisieren\n\nÜBERSICHT\n  wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect\n\nBESCHREIBUNG\n  Das Funkgerät, aus einer Shell. scan listet auf, was in der Luft ist, mit Signal, Kanal und Sicherheit; known listet die gespeicherten Netzwerke auf und markiert das aktuelle mit einem Sternchen; der Rest ändert sie.\n\nOPTIONEN\n  scan\n    Sichtbare Netzwerke auflisten.\n  known\n    Gespeicherte Netzwerke auflisten (die Vorgabe).\n  join <ssid> [pass]\n    Verbinden und speichern.\n  forget <ssid>\n    Ein gespeichertes Netzwerk löschen.\n  prio <ssid> <n>\n    Die Verbindungspriorität setzen.\n  reconnect\n    Jetzt neu verbinden.\n\nGERÄTEKOSTEN\n  Je eine Anfrage. scan ist eine BLOCKIERENDE Funkoperation, daher ist sie auf einmal alle zehn Sekunden begrenzt und innerhalb von watch abgelehnt.\n\nANMERKUNGEN\n  Benötigt die Berechtigung net.wifi. Ein inline getipptes Passwort wird nicht im Shell-Verlauf gespeichert.\n\nSIEHE AUCH\n  status(1), ping(1), link(1)\n\nBEISPIELE\n  wifi scan\n  wifi known\n  wifi join home-wifi secret\n  wifi scan | sort -k2 -n"
+  }
+ ]
+}

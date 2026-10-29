@@ -22,6 +22,7 @@
 //       the browser/device toggle (kept from the loaded value); tier:false hides the Gemini plan row.
 
 import * as AI from './ai.js';
+import fs from './nucleo-fs.js';     // the ANIMA workspace (SOUL.md, permissions.json...): atomic, space-checked
 import * as GPU from './webllm.js';   // browser-GPU models (WebGPU): offered wherever the browser has WebGPU
 
 const STR = {
@@ -617,7 +618,7 @@ export function mountKeyManager(container, opts = {}) {
         if (r === 'unpaired') { setStat(t().pairSave); return; }
         setStat(t().delfail); return;
       }
-      const r = await fetch('/api/fs/delete?path=' + encodeURIComponent(AI.AI_PATH), { method: 'POST' });
+      const r = await fetch('/api/fs/delete?path=' + encodeURIComponent(AI.AI_PATH), { method: 'POST' });   // nucleo-fs: allow (the key vault keeps its own rules)
       AI.invalidateTeacher();
       if (r.ok || r.status === 404) { cfg.key = ''; cfg.keys = {}; if ($('key')) $('key').value = ''; paint(); setStat(t().deleted); onChange(getCfg()); return; }
       if (r.status === 401 || r.status === 403) { setStat(t().pairSave); return; }
@@ -691,10 +692,10 @@ export function mountKeyManager(container, opts = {}) {
     $('wsfiles').querySelectorAll('.it').forEach((b) => b.classList.toggle('on', b.dataset.f === f));
     $('wsdesc').textContent = t().wsdesc[f]; $('wsstat').textContent = '';
     $('wstext').value = ''; $('wstext').placeholder = t().wsempty;
-    try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(WS_DIR + f), { cache: 'no-store' }); if (r.ok) $('wstext').value = await r.text(); } catch {}
+    try { const txt = await fs.readText(WS_DIR + f); if (txt != null) $('wstext').value = txt; } catch {}
   }
   async function wsWrite(path, text) {
-    try { const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: text }); return r.ok ? true : (r.status === 401 || r.status === 403 ? 'unpaired' : false); } catch { return false; }
+    try { await fs.write(path, text); return true; } catch (e) { return e && e.code === 'denied' ? 'unpaired' : false; }
   }
   async function savePerms() {
     const r = await wsWrite(WS_DIR + 'permissions.json', JSON.stringify(perms, null, 1));
@@ -722,7 +723,7 @@ export function mountKeyManager(container, opts = {}) {
     $('wsex').addEventListener('click', () => { if (!$('wstext').value.trim() || confirm(t().wsex + '?')) $('wstext').value = t().wsexample[wsFile]; });
     $('hbevery').addEventListener('change', () => hbLoad({ every: +$('hbevery').value }));
     (async () => {
-      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(WS_DIR + 'permissions.json'), { cache: 'no-store' }); if (r.ok) perms = JSON.parse(await r.text()) || {}; } catch { perms = {}; }
+      try { perms = (await fs.readJSON(WS_DIR + 'permissions.json', {})) || {}; } catch { perms = {}; }
       paintPerms();
     })();
     wsLoad('SOUL.md');

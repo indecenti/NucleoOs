@@ -120,7 +120,7 @@ export function createOs(env = globalThis) {
     return new Promise((resolve) => {
       pending.set(id, resolve);
       toParent({ type: 'os-ask', id, kind, text: String(text == null ? '' : text), title: opts.title || '', value: opts.value || '',
-        ok: opts.ok || '', cancel: opts.cancel || '', danger: !!opts.danger });
+        ok: opts.ok || '', cancel: opts.cancel || '', danger: !!opts.danger, password: !!opts.password });
     });
   }
 

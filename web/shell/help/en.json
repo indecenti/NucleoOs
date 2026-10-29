@@ -1,0 +1,885 @@
+{
+ "format": 1,
+ "lang": "en",
+ "topics": [
+  {
+   "id": "desktop",
+   "title": "Desktop, Start and windows",
+   "md": "The desktop starts with a few icons: **File Commander**, **Recycle Bin**, **ANIMA** and **Help**. Every other app is in the **Start** menu.\n\n## Start\n- The button at the left of the taskbar opens Start. Type straight away to search apps, files and settings.\n- **Pinned** shows the apps you pinned. **All apps** lists them by category: tap a category to see only that one.\n- At the bottom of Start: your name (or the device's), the **Settings** button and the **power** button (lock, sign out, restart where the device allows it).\n\n## Windows\n- Drag the title bar to move a window; drag it to a screen edge to snap it.\n- The ✕ closes it, and so does `Ctrl` + `W`. `Esc` never closes a window: it closes system menus and panels.\n- `Alt` + `Tab` switches between windows.\n\n## Taskbar\nOpen apps show in the taskbar. Right-click an app in Start to pin it to the taskbar, to Start or to the desktop.\n",
+   "icon": "🖥️"
+  },
+  {
+   "id": "apps",
+   "title": "Apps and the Store",
+   "md": "## Where the apps are\nEvery installed app is in **Start › All apps**, by category: System, Productivity, Photos music and video, Games, Tools, Network and messaging.\n\n## An app on the desktop\nRight-click (or press and hold) an app in Start, then **Add to desktop**. The same menu removes it from the desktop or pins it to Start or the taskbar.\n\n## The Store\nOpen **Store** from Start for more apps. Every package is signed, and the system checks the signature before installing it and, where needed, before every launch. The Store only shows apps that suit this device.\n\nTo remove an app installed from the Store: right-click it in Start, then **Uninstall**. System apps cannot be uninstalled.\n",
+   "icon": "🧩",
+   "app": "store"
+  },
+  {
+   "id": "files",
+   "title": "Files and the Recycle Bin",
+   "md": "## File Commander\n**File Commander** is the file manager: folders, copy, move, rename, previews. Opening a file hands it to the app associated with its type.\n\n## The Recycle Bin\n- A file deleted in File Commander or on the desktop goes to the **Recycle Bin**, where you can restore it to its folder.\n- The Recycle Bin keeps the last 20 items: when a new one arrives, the oldest is deleted for good.\n- A folder deleted in File Commander does not go through the Recycle Bin: the system tells you before doing it.\n- In the Recycle Bin you can **Restore** one item or all of them, or **Empty bin** (it cannot be undone).\n\nThe Recycle Bin icon always stays on the desktop: it cannot be removed.\n",
+   "icon": "🗂️",
+   "app": "file-commander"
+  },
+  {
+   "id": "settings",
+   "title": "Settings",
+   "md": "Open **Settings** with the gear button at the bottom of Start, or from Start › All apps.\n\n- **Appearance**: light or dark theme, wallpaper, icon size.\n- **Network**: the device's connections, where it can manage them.\n- **AI / Models**: providers and keys for ANIMA, or a model that runs in the browser.\n- **Accounts**: the people who use the device, where there can be more than one.\n- **Updates**: the installed version and new ones.\n- **About**: the device, the version, the space.\n\nThe language is changed in Settings and is the same for the whole system and every app.\n",
+   "icon": "⚙️",
+   "app": "settings"
+  },
+  {
+   "id": "keyboard",
+   "title": "Keyboard shortcuts",
+   "md": "## System\n- `Win` (pressed alone): opens or closes Start\n- `Ctrl` + `Space`: ANIMA, from anywhere\n- `Alt` + `Tab`: switches between windows\n- `Win` + arrows: snaps the active window\n- `Ctrl` + `Alt` + `L`: locks the screen\n- `Ctrl` + `W`: closes the active window\n- `Ctrl` + `Shift` + `V`: clipboard history\n- `Esc`: closes system menus and panels\n\n## Desktop\n- Arrows: move between icons; `Enter` opens\n- `F2`: renames the selected icon\n- `Delete`: deletes the selection (files go to the Recycle Bin)\n- `Ctrl` + `A`: selects all\n\n## Documents\n- `Ctrl` + `S` saves, `Ctrl` + `Shift` + `S` saves as, `Ctrl` + `O` opens, `Ctrl` + `N` new\n",
+   "icon": "⌨️"
+  },
+  {
+   "id": "accounts",
+   "title": "Accounts",
+   "md": "Up to five people can work on this device, each with their own account.\n\n## What belongs to each person\nEveryone has their own documents, settings, desktop, Recycle Bin and cloud archive. Nobody sees anyone else's files.\n\n## Administrator\nThe first account is the administrator. In **Settings › Accounts** they create and remove accounts, reset passwords and decide who else is an administrator.\n\n## Signing in and out\n- On opening, the system asks for a name and password.\n- To sign out: the power button at the bottom of Start › **Sign out**.\n- A password set by the administrator must be changed at the first sign-in.\n\nAfter a few wrong attempts sign-in pauses for a while: it protects passwords from anyone trying to guess them.\n",
+   "icon": "👥",
+   "requires": [
+    "users.multi"
+   ]
+  },
+  {
+   "id": "cloud-archive",
+   "title": "Encrypted cloud archive",
+   "md": "The **/r2** drive in File Commander is your archive in the cloud.\n\n- Files are encrypted in the browser before they leave: the cloud service only sees unreadable data.\n- The archive password never leaves the device and cannot be recovered: keep it safe. When you create the archive you get a recovery key.\n- With more than one account, each person has a separate archive.\n- If someone rolls the archive back to an old version, the system notices and tells you.\n",
+   "icon": "☁️",
+   "requires": [
+    "cloud.archive"
+   ]
+  },
+  {
+   "id": "anima",
+   "title": "ANIMA",
+   "md": "**ANIMA** is the system assistant. Open it from the desktop, or with `Ctrl` + `Space` from anywhere.\n\n- It answers questions, writes and summarises text, opens apps and files for you.\n- It works with an AI provider and your own key (Settings › AI / Models) or with a model that runs in the browser, without your data leaving the computer.\n- Before doing anything that changes your files or the device, it asks you to confirm.\n",
+   "icon": "✨",
+   "app": "anima"
+  },
+  {
+   "id": "updates",
+   "title": "Updates",
+   "md": "**Settings › Updates** shows the installed version and checks for a new one. When there is one, the system tells you and you install it from there.\n\n- An update brings the system, its built-in apps and this manual together: the manual always describes the version you have.\n- Store apps update from the Store.\n- Your files and settings stay where they are.\n",
+   "icon": "⬆️",
+   "any": [
+    "ota",
+    "ota.firmware",
+    "ota.package"
+   ]
+  },
+  {
+   "id": "games",
+   "title": "Games",
+   "md": "- **Library** gathers the device's games, with covers and recently played.\n- Recent games also show at the top of Start and in the games button of the taskbar.\n- Saves stay on the device.\n",
+   "icon": "🎮",
+   "requires": [
+    "games.library"
+   ]
+  },
+  {
+   "id": "terminal",
+   "title": "Terminal",
+   "md": "**Terminal** opens a command line. It is for people who know one: commands act directly on files and on the device, without the protection apps have.\n\n- Where the device offers a system shell, Terminal opens that one: the commands and their manual are the system's.\n- Elsewhere Terminal offers NucleoOS's own commands: `help` lists them, `man` followed by a command's name shows its page. The same pages are in this manual under **Terminal commands**, only for the commands this device has.\n- `Ctrl` + `C` stops the running command.\n",
+   "icon": "⌨",
+   "app": "terminal"
+  }
+ ],
+ "commands": [
+  {
+   "id": "alias",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "alias - Give a long command a short name",
+   "synopsis": "alias [name=command]",
+   "description": "Without arguments it lists the aliases. With name=command it defines one, saved on the card so it survives a reload. On a 56-key thumb keyboard the typing is the cost, which is what makes this worth its bytes.",
+   "details": "NAME\n  alias - Give a long command a short name\n\nSYNOPSIS\n  alias [name=command]\n\nDESCRIPTION\n  Without arguments it lists the aliases. With name=command it defines one, saved on the card so it survives a reload. On a 56-key thumb keyboard the typing is the cost, which is what makes this worth its bytes.\n\nOPTIONS\n  name=command\n    Define an alias.\n  name\n    Show one alias.\n\nDEVICE COST\n  One POST /api/fs/write when an alias changes, into the app's own folder. Nothing at all when a command runs.\n\nNOTES\n  An alias expands once, on the command word only, and an alias body containing a pipe, a redirect or ; && || is refused: a saved string must not be able to smuggle in an operator the user never typed.\n\nSEE ALSO\n  unalias(1), which(1), export(1)\n\nEXAMPLES\n  alias ll='ls /data'\n  alias errs='dmesg -l E'\n  alias"
+  },
+  {
+   "id": "apps",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "apps - List the installed apps, or open one",
+   "synopsis": "apps [-a]   |   apps open <id>",
+   "description": "Prints one tab-separated row per installed app: id, name, whether it is enabled, and its route. With open it asks the shell to launch one.",
+   "details": "NAME\n  apps - List the installed apps, or open one\n\nSYNOPSIS\n  apps [-a]   |   apps open <id>\n\nDESCRIPTION\n  Prints one tab-separated row per installed app: id, name, whether it is enabled, and its route. With open it asks the shell to launch one.\n\nOPTIONS\n  -a\n    Include disabled apps.\n  open <id>\n    Open that app in the shell.\n\nDEVICE COST\n  One GET /api/apps, memoised for 30 s. Opening an app is a shell message, not a device call.\n\nNOTES\n  This is deliberately NOT a process list. Nothing on the device knows which windows are open, so a ps built on this endpoint would print all 46 installed apps as if they were running.\n\nSEE ALSO\n  which(1), assoc(1), open(1)\n\nEXAMPLES\n  apps\n  apps -a | grep off\n  apps open notepad"
+  },
+  {
+   "id": "assoc",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "assoc - Show which app open(1) will pick",
+   "synopsis": "assoc [extension]",
+   "description": "Prints the file-association table, or the single entry for one extension, plus the fallback used when nothing matches.",
+   "details": "NAME\n  assoc - Show which app open(1) will pick\n\nSYNOPSIS\n  assoc [extension]\n\nDESCRIPTION\n  Prints the file-association table, or the single entry for one extension, plus the fallback used when nothing matches.\n\nOPTIONS\n  [extension]\n    Just this extension, with or without the dot.\n\nDEVICE COST\n  One GET /api/associations.\n\nSEE ALSO\n  open(1), apps(1)\n\nEXAMPLES\n  assoc\n  assoc txt\n  assoc | grep notepad"
+  },
+  {
+   "id": "base64",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "base64 - Encode or decode base64",
+   "synopsis": "base64 [-d] [file]",
+   "description": "Encodes a file or standard input to base64, or decodes it back with -d. This is the only way a binary blob crosses a text pipeline or the OS clipboard.",
+   "details": "NAME\n  base64 - Encode or decode base64\n\nSYNOPSIS\n  base64 [-d] [file]\n\nDESCRIPTION\n  Encodes a file or standard input to base64, or decodes it back with -d. This is the only way a binary blob crosses a text pipeline or the OS clipboard.\n\nOPTIONS\n  -d\n    Decode instead of encode.\n  [file]\n    Read this file; without it, read standard input.\n\nDEVICE COST\n  One GET /api/fs/read when a file is named, and nothing at all in a pipeline.\n\nNOTES\n  The encoder works on bytes, not on characters: the browser built-in btoa is latin1-only and would corrupt every byte above 0x7F.\n\nSEE ALSO\n  hexdump(1), clip(1), tee(1)\n\nEXAMPLES\n  base64 /data/logo.png\n  base64 /data/logo.b64 | base64 -d | tee /data/logo.png"
+  },
+  {
+   "id": "cat",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cat - Display file content",
+   "synopsis": "cat [file]",
+   "description": "Print the text content of a file, or pass piped input through.",
+   "details": "NAME\n  cat - Display the content of a file.\n\nSYNOPSIS\n  cat [file]\n\nDESCRIPTION\n  Reads the file from the device's storage and prints it as UTF-8 text, without the final newline. An empty file prints '(empty file)'. Paths under /proc are live system nodes that the device serves as plain text, on devices that have them. Without a file, inside a pipe (for example 'diag | cat'), cat passes its input through unchanged. One file at a time: cat does not join several files.\n\nOPTIONS\n  [file]\n    The path of the file to show, absolute or relative to the current folder. If omitted, cat prints the input it receives from the pipe.\n\nSYSTEM ARCHITECTURE\n  Reads through the web OS file layer, which calls GET '/api/fs/read?path=<file>' on the device; a /proc path is requested from the device directly. Error messages: 'no such file or directory' when the file does not exist, 'not paired (401)' when this browser is not paired, 'cannot reach the file API' when the device does not answer.\n\nEXIT CODES\n  0\n    Success. The file was read and printed.\n  1\n    The file could not be read (missing, browser not paired, device unreachable or another error).\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  grep(1), head(1), tail(1)\n\nADVANCED EXAMPLES\n  cat /system/config/settings.json\n  cat logs.txt"
+  },
+  {
+   "id": "cd",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cd - Change working directory",
+   "synopsis": "cd [path]",
+   "description": "Change the current working directory of the terminal session.",
+   "details": "NAME\n  cd - Change working directory.\n\nSYNOPSIS\n  cd [path]\n\nDESCRIPTION\n  Modifies the active context path (CWD) of the terminal. If no path is provided, falls back to the system root '/'.\n  To ensure filesystem integrity, the client executes a dry-run check via '/api/fs/list' on the target folder before changing paths. If the check returns 404, the path update is aborted.\n\nOPTIONS\n  [path]\n    The target folder path (e.g. '..', '/data', 'Pictures').\n\nSYSTEM ARCHITECTURE\n  Updates the local browser variables 'cwd' and 'envVars.CWD'. Relative paths are normalized to prune '.' and resolve '..' segments prior to executing the safety check.\n\nEXIT CODES\n  0\n    Success. Directory exists and active path updated.\n  1\n    Target directory does not exist (failed dry-run check).\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  ls(1), pwd(1)\n\nADVANCED EXAMPLES\n  cd /data         # Enters /data\n  cd ..            # Moves up one directory tier\n  cd               # Resets working directory to root /"
+  },
+  {
+   "id": "clear",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "clear - Clear screen buffer",
+   "synopsis": "clear",
+   "description": "Clear the terminal screen output buffer.",
+   "details": "NAME\n  clear - Clear terminal screen.\n\nSYNOPSIS\n  clear\n\nDESCRIPTION\n  Wipes the active text output buffer. Relocates the command prompt to the top.\n\nSYSTEM ARCHITECTURE\n  Sets 'out.innerHTML = \"\"' to prune the browser DOM tree.\n\nEXIT CODES\n  0\n    Success.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  history(1)\n\nADVANCED EXAMPLES\n  clear"
+  },
+  {
+   "id": "clip",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "clip - Write to or read the OS clipboard",
+   "synopsis": "clip   |   clip -o",
+   "description": "Without arguments it puts standard input on the clipboard; with -o it prints what is on it. This is the pipeline's exit to the rest of the OS, and its entrance.",
+   "details": "NAME\n  clip - Write to or read the OS clipboard\n\nSYNOPSIS\n  clip   |   clip -o\n\nDESCRIPTION\n  Without arguments it puts standard input on the clipboard; with -o it prints what is on it. This is the pipeline's exit to the rest of the OS, and its entrance.\n\nOPTIONS\n  -o\n    Read the clipboard instead of writing it.\n\nDEVICE COST\n  None on the device: the clipboard is a shell service, remembered by the OS.\n\nNOTES\n  Needs the system.clipboard permission.\n\nSEE ALSO\n  tee(1), base64(1), say(1)\n\nEXAMPLES\n  stat /data/notes.txt | clip\n  clip -o | wc"
+  },
+  {
+   "id": "cp",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cp - Copy file",
+   "synopsis": "cp <source> <dest>",
+   "description": "Copy a file from a source path to a destination path.",
+   "details": "NAME\n  cp - Copy file.\n\nSYNOPSIS\n  cp <source> <dest>\n\nDESCRIPTION\n  Copies a file from the source path to the destination path, byte for byte. If the destination already exists, it is replaced. Names with spaces go in double quotes. Prints 'copying <source> to <dest> ...' and then 'copied successfully'.\n\nOPTIONS\n  <source>\n    The original file path to copy.\n  <dest>\n    The target path where the copy will be created.\n\nSYSTEM ARCHITECTURE\n  Goes through the web OS file layer, which reads the source and writes the copy (on most devices with '/api/fs/read' and '/api/fs/write'). The write is atomic: the bytes go to a temporary file first, so if the copy fails an existing destination is left as it was. A copy that does not fit in the free space is refused before it starts.\n\nEXIT CODES\n  0\n    Success. The copy was completed.\n  1\n    The copy failed: source not found, not enough space, browser not paired or device unreachable.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  mv(1), rm(1)\n\nADVANCED EXAMPLES\n  cp /data/orig.txt /data/dest.txt\n  cp \"my file.txt\" \"/data/copy.txt\""
+  },
+  {
+   "id": "cpu",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "cpu - Cores, frequency, task count and load",
+   "synopsis": "cpu",
+   "description": "Prints what the device reports about its processor, one 'key value' line per field: typically the number of cores, the clock frequency, the running tasks or processes and the load. The fields depend on the device.",
+   "details": "NAME\n  cpu - Cores, frequency, task count and load\n\nSYNOPSIS\n  cpu\n\nDESCRIPTION\n  Prints what the device reports about its processor, one 'key value' line per field: typically the number of cores, the clock frequency, the running tasks or processes and the load. The fields depend on the device.\n\nOPTIONS\n  This command takes no options.\n\nDEVICE COST\n  One GET /api/cpu.\n\nSEE ALSO\n  heap(1), diag(1), uptime(1)\n\nEXAMPLES\n  cpu\n  watch -n 5 cpu"
+  },
+  {
+   "id": "curl",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "curl - HTTP web request",
+   "synopsis": "curl <url>",
+   "description": "Perform an HTTP GET request to a URL and output response content.",
+   "details": "NAME\n  curl - Fetch HTTP web resource.\n\nSYNOPSIS\n  curl <url>\n\nDESCRIPTION\n  Performs an HTTP GET request and prints the response payload to the terminal stdout.\n\nOPTIONS\n  <url>\n    The target web address.\n\nSYSTEM ARCHITECTURE\n  Dispatches a GET request. Subject to CORS restrictions in simulated environments. Runs directly through the ESP-IDF Wi-Fi socket stack (LwIP) on physical devices.\n\nEXIT CODES\n  0\n    Success.\n  1\n    Network offline, CORS block, or host timeout.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  wget(1), ping(1)\n\nADVANCED EXAMPLES\n  curl ipify.org\n  curl http://example.com"
+  },
+  {
+   "id": "cut",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cut - Select fields or columns from each line",
+   "synopsis": "cut -d<char> -f<list>   |   cut -c<from>-<to>",
+   "description": "Keeps only part of every line. Without it the column output of /proc and of the device log is not pipeable.",
+   "details": "NAME\n  cut - Select fields or columns from each line\n\nSYNOPSIS\n  cut -d<char> -f<list>   |   cut -c<from>-<to>\n\nDESCRIPTION\n  Keeps only part of every line. Without it the column output of /proc and of the device log is not pipeable.\n\nOPTIONS\n  -d C\n    Field separator (a tab by default).\n  -f LIST\n    Which fields to keep: 1, 1,3 or 2-4.\n  -c A-B\n    Keep characters A to B instead of fields.\n\nDEVICE COST\n  None. Entirely browser-side.\n\nSEE ALSO\n  grep(1), sort(1)\n\nEXAMPLES\n  cat /proc/meminfo | cut -d\" \" -f1\n  apps | cut -f1"
+  },
+  {
+   "id": "date",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "date - Browser and device date and time",
+   "synopsis": "date [-u] [-s]",
+   "description": "Show the date and time of this browser and of the device, and optionally set the device clock.",
+   "details": "NAME\n  date - Browser and device date and time.\n\nSYNOPSIS\n  date [-u] [-s]\n\nDESCRIPTION\n  Prints two clocks: 'local', the time of this browser, and 'device', the clock of the device, followed by '(NTP-synced)' when the device has synchronised it over the internet or '(no NTP)' when it has not. Times are shown as YYYY-MM-DDTHH:MM:SS (ISO 8601) in this browser's time zone. If the device does not report its clock, the second line says 'device clock not reported'.\n\nOPTIONS\n  -u\n    Show both times in UTC (with a trailing Z).\n  -s\n    Set the device clock from this browser's clock; useful when the device has not synchronised over NTP. On devices that support it; where there are user accounts it needs an administrator.\n\nSYSTEM ARCHITECTURE\n  Reads the device clock from GET '/api/status' (network.time and network.time_synced). With -s it sends POST '/api/time/set' with the browser's time in seconds. A device whose clock cannot be set answers 'date: not available on this device'.\n\nEXIT CODES\n  0\n    Success.\n  1\n    Device unreachable, browser not paired or clock not set.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  status(1), uptime(1)\n\nADVANCED EXAMPLES\n  date\n  date -u\n  date -s"
+  },
+  {
+   "id": "df",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "df - Disk space usage",
+   "synopsis": "df",
+   "description": "Display the total, used and free space of the device's storage.",
+   "details": "NAME\n  df - Disk space usage.\n\nSYNOPSIS\n  df\n\nDESCRIPTION\n  Shows the size of the device's storage, how much is used and how much is free, in a table with the columns Filesystem, Size, Used, Avail, Use% and Mounted on. The storage is shown mounted on /data.\n\nSYSTEM ARCHITECTURE\n  Reads GET '/api/status' (storage.total_bytes and storage.free_bytes); used space is total minus free. If the device reports no mounted storage or does not answer, prints 'df: storage not mounted or unreachable'.\n\nEXIT CODES\n  0\n    Success. Statistics printed.\n  1\n    Storage not mounted or device unreachable.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  status(1), free(1)\n\nADVANCED EXAMPLES\n  df"
+  },
+  {
+   "id": "diag",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "diag - The whole diagnostic table, one key per line",
+   "synopsis": "diag [key-prefix]",
+   "description": "Flattens everything /api/diag reports into 'key value' lines, with nested keys joined by a dot (for example mem.free); yes/no values become 1/0 and lists become comma-separated values. What appears depends on the device: typically memory, CPU, network, uptime and system counters. It is the most pipeable command in the set and the best thing to hand to anima.",
+   "details": "NAME\n  diag - The whole diagnostic table, one key per line\n\nSYNOPSIS\n  diag [key-prefix]\n\nDESCRIPTION\n  Flattens everything /api/diag reports into 'key value' lines, with nested keys joined by a dot (for example mem.free); yes/no values become 1/0 and lists become comma-separated values. What appears depends on the device: typically memory, CPU, network, uptime and system counters. It is the most pipeable command in the set and the best thing to hand to anima.\n\nOPTIONS\n  [key-prefix]\n    Show only keys starting with this, e.g. mem or cpu. If no key matches it prints 'diag: no key starts with ...'.\n\nDEVICE COST\n  One GET /api/diag, instead of a separate request for each part.\n\nSEE ALSO\n  heap(1), cpu(1), status(1), anima(1)\n\nEXAMPLES\n  diag\n  diag mem\n  diag | anima \"is the memory ok?\"\n  diag | tee /data/diag.txt"
+  },
+  {
+   "id": "display",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.display"
+   ],
+   "title": "display - Turn the panel on or off",
+   "synopsis": "display on | display off",
+   "description": "Switches the physical display, and prints the brightness the device reports afterwards.",
+   "details": "NAME\n  display - Turn the panel on or off\n\nSYNOPSIS\n  display on | display off\n\nDESCRIPTION\n  Switches the physical display, and prints the brightness the device reports afterwards.\n\nOPTIONS\n  on\n    Panel on.\n  off\n    Panel off.\n\nDEVICE COST\n  One POST /api/display.\n\nNOTES\n  Needs the device.display permission. On a 120 mAh budget this is the single biggest lever there is, and until now it was only reachable through Settings.\n\nSEE ALSO\n  screen(1), status(1)\n\nEXAMPLES\n  display off\n  display on"
+  },
+  {
+   "id": "dmesg",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "dmesg - Print the device's system log",
+   "synopsis": "dmesg [-l E|W|I|D|V]",
+   "description": "Print the recent messages of the device's system log.",
+   "details": "NAME\n  dmesg - Print the device's system log.\n\nSYNOPSIS\n  dmesg [-l E|W|I|D|V]\n\nDESCRIPTION\n  Fetches the recent messages of the device's system log and prints them as they are. What the log contains and how far back it goes depend on the device.\n\nOPTIONS\n  -l LEVEL\n    Ask only for messages of that level or more severe: E (error), W (warning), I (info), D (debug), V (verbose). The device does the filtering; a device that does not support it returns the whole log.\n\nSYSTEM ARCHITECTURE\n  Issues GET '/api/logs' (with '?level=X' when -l is given). Where there are user accounts, the log is reserved to an administrator. Error messages: 'dmesg: not paired (401)', 'dmesg: failed to read logs (status N)', 'dmesg: device unreachable'.\n\nEXIT CODES\n  0\n    Success. Logs printed.\n  1\n    Browser not paired, request refused or device unreachable.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  status(1), reboot(1)\n\nADVANCED EXAMPLES\n  dmesg\n  dmesg -l W\n  dmesg | grep wifi"
+  },
+  {
+   "id": "du",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "du - Disk usage per directory, biggest first",
+   "synopsis": "du [-d N] [path]",
+   "description": "Walks a subtree and adds up the size of the files in each directory, rolling children into their parents. The output is sorted by size, so the answer to \"what is eating the card\" is the first line.",
+   "details": "NAME\n  du - Disk usage per directory, biggest first\n\nSYNOPSIS\n  du [-d N] [path]\n\nDESCRIPTION\n  Walks a subtree and adds up the size of the files in each directory, rolling children into their parents. The output is sorted by size, so the answer to \"what is eating the card\" is the first line.\n\nOPTIONS\n  -d N\n    Descend at most N levels (default 2, hard maximum 6).\n  [path]\n    Where to start; the working directory by default.\n\nDEVICE COST\n  One GET /api/fs/list per directory, strictly sequential, and never more than 60 in one invocation. Ctrl+C stops it.\n\nNOTES\n  A listing costs the device a stat() per entry, so the walk is budgeted rather than complete: when it stops, it says so.\n\nSEE ALSO\n  df(1), tree(1), stat(1)\n\nEXAMPLES\n  du\n  du -d 1 /data\n  du /data | sort -n -r | head -n 5"
+  },
+  {
+   "id": "echo",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "echo - Print or write text",
+   "synopsis": "echo [text] [> file]",
+   "description": "Print text to stdout or redirect it to write a file.",
+   "details": "NAME\n  echo - Print and redirect messages.\n\nSYNOPSIS\n  echo <text>\n  echo <text> > <file>\n\nDESCRIPTION\n  Prints a text string. If followed by the '>' redirection operator, writes the text to a file.\n\nOPTIONS\n  <text>\n    The string to print or save.\n  > <file>\n    The path to write the output string to.\n\nSYSTEM ARCHITECTURE\n  The command line parser detects the redirection token '>'. In such cases, strips external quotation marks and dispatches a POST request to '/api/fs/write?path=<file>'.\n\nEXIT CODES\n  0\n    Success. Print or write completed.\n  1\n    Filesystem write error.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  cat(1), open(1)\n\nADVANCED EXAMPLES\n  echo Hello user\n  echo \"THEME=dark\" > /data/theme.cfg"
+  },
+  {
+   "id": "env",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "env - Show environment variables",
+   "synopsis": "env",
+   "description": "List all active environment variables of the shell session.",
+   "details": "NAME\n  env - Show active environment variables.\n\nSYNOPSIS\n  env\n\nDESCRIPTION\n  Outputs system environment variables formatted as 'KEY=VALUE' rows.\n\nSYSTEM ARCHITECTURE\n  Reads and parses properties from the local 'envVars' runtime memory object.\n\nEXIT CODES\n  0\n    Success.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  export(1)\n\nADVANCED EXAMPLES\n  env"
+  },
+  {
+   "id": "export",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "export - Set environment variable",
+   "synopsis": "export [NAME=value]",
+   "description": "Set or update global environment variables.",
+   "details": "NAME\n  export - Set environment variable.\n\nSYNOPSIS\n  export [VAR=value]\n\nDESCRIPTION\n  Defines an environment variable. If empty, prints all active variables in 'declare -x' format.\n\nOPTIONS\n  [VAR=value]\n    The key-value pair to register (e.g. 'LANG=it').\n\nSYSTEM ARCHITECTURE\n  Saves keys and values into the local 'envVars' memory map. Suffixes prefixed with '$' are evaluated by the parser.\n\nEXIT CODES\n  0\n    Success.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  env(1)\n\nADVANCED EXAMPLES\n  export LANG=it\n  export PATH=/apps/bin:/system/bin\n  export"
+  },
+  {
+   "id": "find",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "find - Find files recursively",
+   "synopsis": "find [path] -name <pattern>",
+   "description": "Recursively search for files matching a pattern under a path.",
+   "details": "NAME\n  find - Find files recursively.\n\nSYNOPSIS\n  find [path] -name <pattern>\n  find <pattern>\n\nDESCRIPTION\n  Traverses the directory tree starting from the target directory. Matches names using a case-insensitive query.\n\nOPTIONS\n  [path]\n    The starting folder (defaults to active CWD).\n  -name <pattern>\n    The filename query to match.\n\nSYSTEM ARCHITECTURE\n  Issues recursive asynchronous HTTP requests to '/api/fs/list'. Triggers deep scanning on child folders and returns paths dynamically.\n\nEXIT CODES\n  0\n    Success. Traverse completed.\n  1\n    Filesystem scan error.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  ls(1), grep(1)\n\nADVANCED EXAMPLES\n  find .txt\n  find /data -name song.mp3"
+  },
+  {
+   "id": "free",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "free - Free memory",
+   "synopsis": "free",
+   "description": "Display how much free memory the device reports.",
+   "details": "NAME\n  free - Free memory.\n\nSYNOPSIS\n  free\n\nDESCRIPTION\n  Prints one line, 'free heap: <size>', with the free memory the device reports for its system. It is a single number: for detail and fragmentation use heap(1), on devices that support it. If the device does not report it, prints 'free: status unavailable'.\n\nSYSTEM ARCHITECTURE\n  Reads the free_heap field of GET '/api/status'.\n\nEXIT CODES\n  0\n    Success.\n  1\n    Device unreachable or value not reported.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  status(1), uptime(1), heap(1)\n\nADVANCED EXAMPLES\n  free"
+  },
+  {
+   "id": "gpio",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.gpio"
+   ],
+   "title": "gpio - Read or write a pin",
+   "synopsis": "gpio read <pin>   |   gpio write <pin> <0|1>",
+   "description": "Raw pin I/O, within the set of pins the device allows. A pin outside that set is refused by the device with an error, surfaced verbatim. Which pins are allowed depends on the device.",
+   "details": "NAME\n  gpio - Read or write a pin\n\nSYNOPSIS\n  gpio read <pin>   |   gpio write <pin> <0|1>\n\nDESCRIPTION\n  Raw pin I/O, within the set of pins the device allows. A pin outside that set is refused by the device with an error, surfaced verbatim. Which pins are allowed depends on the device.\n\nOPTIONS\n  read PIN\n    Read the pin level and print 'pin PIN = VALUE'. 'get' does the same.\n  write PIN 0|1\n    Set the level: 1 or high sets it high, any other value sets it low. 'set' does the same.\n\nDEVICE COST\n  One request to /api/gpio per call (GET to read, POST to write). Where there are user accounts it needs an administrator.\n\nSEE ALSO\n  ir(1), display(1)\n\nEXAMPLES\n  gpio read 1\n  gpio write 2 1"
+  },
+  {
+   "id": "grep",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "grep - Filter lines by pattern",
+   "synopsis": "grep <pattern> <file>",
+   "description": "Search for a pattern in a file and output matching lines with numbers.",
+   "details": "NAME\n  grep - Search lines matching a pattern.\n\nSYNOPSIS\n  grep <pattern> <file>\n\nDESCRIPTION\n  Scans the file line by line for exact (case-sensitive) substring matches.\n\nOPTIONS\n  <pattern>\n    The string query to search for.\n  <file>\n    The path of the target file to scan.\n\nSYSTEM ARCHITECTURE\n  The client fetches the target payload via GET '/api/fs/read'. It parses the payload in local memory, splits lines using a '\\r?\\n' regular expression, and applies 'String.prototype.includes()' to isolate matches. Renders results prefixed with their line numbers.\n\nEXIT CODES\n  0\n    Success. Scan completed.\n  1\n    File read failure or parser exception.\n  404\n    The specified file was not found.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  cat(1), find(1)\n\nADVANCED EXAMPLES\n  grep SSID /system/config/settings.json\n  grep ERROR /data/logs.txt"
+  },
+  {
+   "id": "head",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "head - Show first lines of a file",
+   "synopsis": "head [-n lines] <file>",
+   "description": "Output the first part (default 10 lines) of a file.",
+   "details": "NAME\n  head - Output first lines of a file.\n\nSYNOPSIS\n  head [-n <lines>] <file>\n\nDESCRIPTION\n  Prints the initial segment of a file (defaults to 10 lines).\n\nOPTIONS\n  -n <lines>\n    Specify the exact count of lines to print (e.g. '-n 5').\n  <file>\n    The target file path.\n\nSYSTEM ARCHITECTURE\n  Downloads file contents via GET '/api/fs/read'. Parses lines in memory and isolates the top elements using array slicing ('slice(0, n)').\n\nEXIT CODES\n  0\n    Success.\n  1\n    Read error or invalid parameter formatting.\n  404\n    Target file not found.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  tail(1), cat(1)\n\nADVANCED EXAMPLES\n  head logs.txt\n  head -n 5 /data/settings.json"
+  },
+  {
+   "id": "heap",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "heap - Heap detail, including fragmentation",
+   "synopsis": "heap",
+   "description": "Prints the internal, DMA and default heap pools with their free bytes, largest free block, minimum ever seen and fragmentation percentage, plus the HTTP server's minimum free stack.",
+   "details": "NAME\n  heap - Heap detail, including fragmentation\n\nSYNOPSIS\n  heap\n\nDESCRIPTION\n  Prints the internal, DMA and default heap pools with their free bytes, largest free block, minimum ever seen and fragmentation percentage, plus the HTTP server's minimum free stack.\n\nOPTIONS\n  This command takes no options.\n\nDEVICE COST\n  One GET /api/heap.\n\nNOTES\n  Fragmentation, not free bytes, is the documented bottleneck on this chip — and free(1) cannot show it.\n\nSEE ALSO\n  free(1), diag(1), cpu(1), watch(1)\n\nEXAMPLES\n  heap\n  watch -n 5 heap\n  heap | grep frag"
+  },
+  {
+   "id": "hexdump",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "hexdump - Hex and ASCII of the first bytes of a file",
+   "synopsis": "hexdump [-n bytes] [-s offset] <file>",
+   "description": "Prints a classic hex dump: offset, sixteen bytes in hexadecimal, then the printable characters between pipes. It is how you look at an .ir capture, a firmware image or a save blob without cat turning it into mojibake.",
+   "details": "NAME\n  hexdump - Hex and ASCII of the first bytes of a file\n\nSYNOPSIS\n  hexdump [-n bytes] [-s offset] <file>\n\nDESCRIPTION\n  Prints a classic hex dump: offset, sixteen bytes in hexadecimal, then the printable characters between pipes. It is how you look at an .ir capture, a firmware image or a save blob without cat turning it into mojibake.\n\nOPTIONS\n  -n N\n    How many bytes to read (default 256, maximum 4096).\n  -s N\n    Start at byte N.\n  <file>\n    The file to read.\n\nDEVICE COST\n  One GET /api/fs/read with an HTTP Range header: where the device honours it, only the requested bytes travel (256 by default), even from a 640 MB file.\n\nSEE ALSO\n  cat(1), base64(1), wc(1)\n\nEXAMPLES\n  hexdump /data/remote.ir\n  hexdump -n 64 -s 512 /data/image.bin"
+  },
+  {
+   "id": "history",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "history - Command history list",
+   "synopsis": "history",
+   "description": "List previous commands entered in the current session.",
+   "details": "NAME\n  history - Command history list.\n\nSYNOPSIS\n  history\n\nDESCRIPTION\n  Displays the list of commands entered in the current terminal session.\n\nSYSTEM ARCHITECTURE\n  Reads from the global 'hist' array stored in RAM. The queue is bounded to a maximum of 100 commands.\n\nEXIT CODES\n  0\n    Success.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  clear(1)\n\nADVANCED EXAMPLES\n  history"
+  },
+  {
+   "id": "ir",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.ir"
+   ],
+   "title": "ir - Drive the infrared LED",
+   "synopsis": "ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status",
+   "description": "db prints the GPIO, the protocols this build encodes and the size of the TV-B-Gone table, so you can see what is possible before sending anything. send transmits one decoded code, raw transmits a timing list.",
+   "details": "NAME\n  ir - Drive the infrared LED\n\nSYNOPSIS\n  ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status\n\nDESCRIPTION\n  db prints the GPIO, the protocols this build encodes and the size of the TV-B-Gone table, so you can see what is possible before sending anything. send transmits one decoded code, raw transmits a timing list.\n\nOPTIONS\n  db\n    Show the capabilities (the default).\n  send <proto> <addr> <cmd> [rep]\n    Send a code.\n  raw <us,…>\n    Send raw microsecond timings.\n  tvbgone start|stop|status\n    Run the TV-B-Gone sweep.\n\nDEVICE COST\n  One request each.\n\nNOTES\n  Needs the device.ir permission. The jammer is deliberately not exposed here: it floods the band from a background task with no dry run, so it stays in the IR Remote app, where a visible button can stop it.\n\nSEE ALSO\n  display(1), link(1)\n\nEXAMPLES\n  ir db\n  ir send nec 4 8\n  ir tvbgone status"
+  },
+  {
+   "id": "kill",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "kill - Close a foreground app",
+   "synopsis": "kill <app-id>",
+   "description": "Asks the shell to close an app window, freeing its RAM. Named by id (the one ps prints), not by the synthetic PID.",
+   "details": "NAME\n  kill - Close a foreground app\n\nSYNOPSIS\n  kill <app-id>\n\nDESCRIPTION\n  Asks the shell to close an app window, freeing its RAM. Named by id (the one ps prints), not by the synthetic PID.\n\nOPTIONS\n  No options.\n\nDEVICE COST\n  none — a message to the shell\n\nSEE ALSO\n  ps(1), apps(1)\n\nEXAMPLES\n  ps\n  kill notes"
+  },
+  {
+   "id": "lang",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "lang - Read or set the OS display language",
+   "synopsis": "lang [it|en|fr|es|de]",
+   "description": "Without an argument it prints the active language and its generation counter. With one it sets the language for the whole OS, including the native panel UI.",
+   "details": "NAME\n  lang - Read or set the OS display language\n\nSYNOPSIS\n  lang [it|en|fr|es|de]\n\nDESCRIPTION\n  Without an argument it prints the active language and its generation counter. With one it sets the language for the whole OS, including the native panel UI.\n\nOPTIONS\n  [code]\n    One of it, en, fr, es, de.\n\nDEVICE COST\n  One GET or one POST /api/lang.\n\nSEE ALSO\n  status(1), theme(1)\n\nEXAMPLES\n  lang\n  lang it"
+  },
+  {
+   "id": "link",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.link"
+   ],
+   "title": "link - Show the ESP-NOW neighbours and the transfer state",
+   "synopsis": "link peers | link status",
+   "description": "peers lists the devices this one can see over ESP-NOW, with the local name and channel; status shows whether a transfer is running and how far along it is.",
+   "details": "NAME\n  link - Show the ESP-NOW neighbours and the transfer state\n\nSYNOPSIS\n  link peers | link status\n\nDESCRIPTION\n  peers lists the devices this one can see over ESP-NOW, with the local name and channel; status shows whether a transfer is running and how far along it is.\n\nOPTIONS\n  peers\n    List the neighbours (the default).\n  status\n    Show the transfer state.\n\nDEVICE COST\n  One GET each.\n\nNOTES\n  Needs the mesh.peer permission. Read-only on purpose: sending a command to another device turns a typo into someone else's problem, and the confirmation step for that lives in the Vicino app.\n\nSEE ALSO\n  wifi(1), status(1)\n\nEXAMPLES\n  link peers\n  link status"
+  },
+  {
+   "id": "ls",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "ls - List directory contents",
+   "synopsis": "ls [path]",
+   "description": "List the folders and files in the current directory or under a given path.",
+   "details": "NAME\n  ls - List directory contents.\n\nSYNOPSIS\n  ls [path]\n\nDESCRIPTION\n  Lists the entries of the given folder in the device's storage. Without a path it lists the current working directory (CWD).\n  Folders come first (highlighted, with a trailing slash '/'), then files with their size; each group is sorted alphabetically. The last line counts the items; an empty folder prints \"(empty)\". At most 200 entries are shown, and a longer listing says so.\n  On devices that provide /proc, 'ls /proc' lists the nodes with live system information; read them with cat.\n\nOPTIONS\n  [path]\n    The relative or absolute path of the folder to list.\n\nSYSTEM ARCHITECTURE\n  The listing goes through the system file layer, which asks the device with GET /api/fs/list?path=<path>. The same command works on every device.\n\nEXIT CODES\n  0\n    Success. The folder exists and its contents were printed.\n  1\n    The folder does not exist, the device is not paired, or the file API cannot be reached.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  cd(1), find(1), pwd(1), tree(1), stat(1)\n\nADVANCED EXAMPLES\n  ls               # List the current directory\n  ls /data         # List the contents of the data folder\n  ls ../system     # List using a relative path to the parent"
+  },
+  {
+   "id": "man",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "man - Online command manual",
+   "synopsis": "man <command>",
+   "description": "Display the manual page of a Terminal command.",
+   "details": "NAME\n  man - Online manual pages.\n\nSYNOPSIS\n  man <command>\n\nDESCRIPTION\n  Shows the UNIX-style manual page of a Terminal command: a line with the name and synopsis, then the description and the details.\n  The page comes from the manual that ships with the system, the same one the Help app shows, in the language the system is set to (Italian, English, Spanish, French or German). A command that manual does not cover is looked up among the device's own pages, in /system/registry/manual. Without an argument, man asks which page you want.\n\nOPTIONS\n  <command>\n    The name of the command whose page to show.\n\nSYSTEM ARCHITECTURE\n  Looks first in the manual built into the web OS, then reads the file /system/registry/manual/<command>.info from the device. If neither has the page, man prints \"No manual entry for <command>\".\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  help(1), clear(1)\n\nADVANCED EXAMPLES\n  man ls\n  man cd"
+  },
+  {
+   "id": "mkdir",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "mkdir - Create directory",
+   "synopsis": "mkdir <dir>",
+   "description": "Create a new folder at the given path, with any missing parent folders.",
+   "details": "NAME\n  mkdir - Create directory.\n\nSYNOPSIS\n  mkdir <dir>\n\nDESCRIPTION\n  Creates the folder in the device's storage and, like 'mkdir -p', any missing parent folders along the path. A folder that already exists is not an error. On success it prints \"created <path>\".\n\nOPTIONS\n  <dir>\n    The relative or absolute path of the folder to create.\n\nSYSTEM ARCHITECTURE\n  Goes through the system file layer, which sends POST /api/fs/mkdir?path=<dir> for each level that does not exist yet.\n\nEXIT CODES\n  0\n    Success. Folder created or already there.\n  1\n    Creation failed (e.g. storage full or read-only, permission denied, device not paired, or file API unreachable).\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  touch(1), rm(1), ls(1)\n\nADVANCED EXAMPLES\n  mkdir /data/test\n  mkdir new_notes\n  mkdir /data/projects/2026/notes   # also creates the missing parents"
+  },
+  {
+   "id": "mv",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "mv - Move or rename file",
+   "synopsis": "mv <source> <dest>",
+   "description": "Move or rename a file from source to destination.",
+   "details": "NAME\n  mv - Move or rename file.\n\nSYNOPSIS\n  mv <source> <dest>\n\nDESCRIPTION\n  Moves a file from the source path to the destination path. Renames the file if the parent directory remains the same.\n\nOPTIONS\n  <source>\n    The target file to move.\n  <dest>\n    The destination path.\n\nSYSTEM ARCHITECTURE\n  Executes a transactional sequence:\n  1. Fetches source payload in RAM via GET '/api/fs/read'.\n  2. Writes the payload to destination via POST '/api/fs/write'.\n  3. If write returns HTTP 200, sends a POST to '/api/fs/delete' targeting the source file.\n  This sequence prevents data loss during write faults.\n\nEXIT CODES\n  0\n    Success. File moved successfully.\n  1\n    Write or deletion failure.\n  404\n    Source file was not found.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  cp(1), rm(1)\n\nADVANCED EXAMPLES\n  mv old.txt new.txt\n  mv /data/temp.txt /system/config/saved.txt"
+  },
+  {
+   "id": "notify",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "notify - Post a notification to the OS notification centre",
+   "synopsis": "notify <text>",
+   "description": "How a long watch tells you it finished after you have switched to another window.",
+   "details": "NAME\n  notify - Post a notification to the OS notification centre\n\nSYNOPSIS\n  notify <text>\n\nDESCRIPTION\n  How a long watch tells you it finished after you have switched to another window.\n\nOPTIONS\n  <text>\n    The message; without it, read standard input.\n\nDEVICE COST\n  None on the device: it goes through the shell's capability broker.\n\nNOTES\n  Needs the system.notify permission.\n\nSEE ALSO\n  watch(1), say(1)\n\nEXAMPLES\n  notify \"the copy is done\""
+  },
+  {
+   "id": "open",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "open - Open file with default app",
+   "synopsis": "open <file>",
+   "description": "Open a file using the associated graphical application.",
+   "details": "NAME\n  open - Open file with default application.\n\nSYNOPSIS\n  open <file>\n\nDESCRIPTION\n  Opens the specified resource. The desktop shell resolves the file extension and launches the default associated window.\n\nOPTIONS\n  <file>\n    The path of the file to open.\n\nSYSTEM ARCHITECTURE\n  Uses browser iframe 'postMessage' calls. Terminal sends '{ type: \"open-file\", path: file }' to the parent window. The shell parses the extension, reads '/system/config/file-associations.json' and opens the app (e.g. 'notepad', 'photo-viewer').\n\nEXIT CODES\n  0\n    Success. Message dispatched to the shell.\n  1\n    Shell host unreachable or invalid file association.\n\nCONFORMING TO\n  NucleoOS proprietary extension.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  echo(1)\n\nADVANCED EXAMPLES\n  open /data/Pictures/wallpaper.png\n  open /data/document.txt"
+  },
+  {
+   "id": "ota",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "any": [
+    "ota",
+    "ota.firmware",
+    "ota.package"
+   ],
+   "title": "ota - Show the running slot, the next slot and the rollback state",
+   "synopsis": "ota [status]",
+   "description": "The thing to read before and after an update: which installed copy of the system (slot) is running, which one the next update would go to, the state of the current copy, and whether automatic return to the previous version (rollback) is on.",
+   "details": "NAME\n  ota - Show the running slot, the next slot and the rollback state\n\nSYNOPSIS\n  ota [status]\n\nDESCRIPTION\n  The thing to read before and after an update: which installed copy of the system (slot) is running, which one the next update would go to, the state of the current copy, and whether automatic return to the previous version (rollback) is on.\n  It prints a single line: running <slot>  next <slot>  state <state>  rollback on|off. A field the device does not report is shown as '?'.\n\nOPTIONS\n  status\n    The only accepted argument; it is also the default. Any other argument is refused with an error.\n\nDEVICE COST\n  One GET /api/status.\n\nNOTES\n  Installing an update is deliberately NOT possible here: the device restarts as soon as an update is written, so a mistyped path recalled from history would be an irreversible update one keystroke away. Updates go through the system's own update procedure.\n\nSEE ALSO\n  status(1), reboot(1), diag(1)\n\nEXAMPLES\n  ota"
+  },
+  {
+   "id": "ping",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "ping - Network latency diagnostics",
+   "synopsis": "ping [host]",
+   "description": "Measure the response time of the device or of a web host.",
+   "details": "NAME\n  ping - Test network latency.\n\nSYNOPSIS\n  ping [host]\n\nDESCRIPTION\n  Measures round-trip time (RTT) by sending 4 HTTP HEAD requests one after another, half a second apart. Without a host it measures the device itself (its /api/status route); with a host it measures that web server over HTTPS. At the end it prints how many replies arrived and the minimum, maximum and average time. Ctrl+C stops it.\n  It is not an ICMP ping: the requests leave from the browser, so a host that does not answer over HTTPS, or that the browser blocks, counts as lost.\n\nOPTIONS\n  [host]\n    The host name or URL to measure (e.g. 'google.com'); https:// is added when no scheme is given. If omitted, the device is measured.\n\nSYSTEM ARCHITECTURE\n  Each request is timed in the browser with 'performance.now()', from sending to the answer, so the time covers the whole HTTP exchange, not just the network.\n\nEXIT CODES\n  0\n    Success. At least one reply received.\n  1\n    All 4 requests were lost.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  curl(1), wget(1), status(1)\n\nADVANCED EXAMPLES\n  ping             # Measure the device\n  ping google.com  # Measure google.com"
+  },
+  {
+   "id": "ps",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "ps - List apps as a process table",
+   "synopsis": "ps",
+   "description": "Shows the installed, enabled apps with a run state. On a device that runs one foreground app plus the shell, this is the closest thing to a process list.",
+   "details": "NAME\n  ps - List apps as a process table\n\nSYNOPSIS\n  ps\n\nDESCRIPTION\n  Shows the installed, enabled apps with a run state. On a device that runs one foreground app plus the shell, this is the closest thing to a process list.\n\nOPTIONS\n  No options. The PID shown is synthetic and renumbers on every listing: to act on an app use its id with kill(1).\n\nDEVICE COST\n  one app-table read, cached 30s\n\nSEE ALSO\n  kill(1), apps(1)\n\nEXAMPLES\n  ps\n  ps | grep run"
+  },
+  {
+   "id": "pwd",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "pwd - Print working directory",
+   "synopsis": "pwd",
+   "description": "Output the absolute path of the current working directory.",
+   "details": "NAME\n  pwd - Print working directory.\n\nSYNOPSIS\n  pwd\n\nDESCRIPTION\n  Prints the absolute path of the active CWD to the terminal. Runs locally without accessing hardware resources.\n\nSYSTEM ARCHITECTURE\n  Reads the normalized runtime variable 'cwd' and outputs it directly to the terminal stdout buffer.\n\nEXIT CODES\n  0\n    Success. The path was printed.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  cd(1), ls(1)\n\nADVANCED EXAMPLES\n  pwd"
+  },
+  {
+   "id": "reboot",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "power"
+   ],
+   "title": "reboot - Reboot the device",
+   "synopsis": "reboot",
+   "description": "Ask the device to restart.",
+   "details": "NAME\n  reboot - Reboot the system.\n\nSYNOPSIS\n  reboot\n\nDESCRIPTION\n  Asks the device to restart. The Terminal prints \"rebooting device ...\" and then \"Reboot command sent.\"; the connection drops until the device is back up. Available only on devices that can be restarted from here.\n\nSYSTEM ARCHITECTURE\n  Sends a POST request to '/api/reboot'; the device then restarts on its own.\n\nEXIT CODES\n  0\n    Success. Command sent.\n  1\n    The device refused the request or could not be reached.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  dmesg(1), uptime(1), status(1)\n\nADVANCED EXAMPLES\n  reboot"
+  },
+  {
+   "id": "rm",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "rm - Remove file or directory",
+   "synopsis": "rm <path>",
+   "description": "Permanently delete a file or an empty folder, without going through the Recycle Bin.",
+   "details": "NAME\n  rm - Remove file or directory.\n\nSYNOPSIS\n  rm <path>\n\nDESCRIPTION\n  Permanently deletes a file or an empty folder from the device's storage. The item does not go to the Recycle Bin and cannot be recovered. On success it prints \"removed <path>\". The /data folder itself cannot be removed.\n\nOPTIONS\n  <path>\n    The file or empty folder to delete.\n\nSYSTEM ARCHITECTURE\n  Goes through the system file layer, which sends POST /api/fs/delete?path=<path>. A folder that still contains anything is refused by the device.\n\nEXIT CODES\n  0\n    Success. Item deleted.\n  1\n    Deletion failed: the item does not exist, the folder is not empty, permission denied, device not paired, or file API unreachable.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  cp(1), mv(1), mkdir(1)\n\nADVANCED EXAMPLES\n  rm /data/temp_log.txt\n  rm /data/empty_dir"
+  },
+  {
+   "id": "say",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.tts"
+   ],
+   "title": "say - Speak text through the device",
+   "synopsis": "say [text]",
+   "description": "Sends text to the speech engine, either as an argument or from a pipe. Inside a pipeline it passes the text on, so a spoken line can still be recorded.",
+   "details": "NAME\n  say - Speak text through the device\n\nSYNOPSIS\n  say [text]\n\nDESCRIPTION\n  Sends text to the speech engine, either as an argument or from a pipe. Inside a pipeline it passes the text on, so a spoken line can still be recorded.\n\nOPTIONS\n  [text]\n    What to say; without it, read standard input.\n\nDEVICE COST\n  One POST /api/tts.\n\nNOTES\n  Needs the device.audio permission. If the build has no speech engine, it says so instead of pretending to have spoken.\n\nSEE ALSO\n  notify(1), anima(1), clip(1)\n\nEXAMPLES\n  say \"the backup is finished\"\n  dmesg -l E | anima \"what is wrong?\" | say"
+  },
+  {
+   "id": "screen",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.display"
+   ],
+   "title": "screen - Save what the screen is showing",
+   "synopsis": "screen [-o <file>]",
+   "description": "Captures what the device's screen is showing and saves it as a file in the device's storage. No other terminal has a subject to photograph.",
+   "details": "NAME\n  screen - Save what the screen is showing\n\nSYNOPSIS\n  screen [-o <file>]\n\nDESCRIPTION\n  Captures what the device's screen is showing and saves it as a file in the device's storage. No other terminal has a subject to photograph.\n\nOPTIONS\n  -o <file>\n    Where to save it (/data/screen.bmp by default).\n\nDEVICE COST\n  One GET /api/screen, then one write of the file to the device's storage.\n\nNOTES\n  Only on devices with their own screen (device.display permission). Where the device does not offer the capture it answers \"not available on this build\" (404); \"panel size unavailable\" (503) means the screen is not ready yet: switch it on and try again.\n\nSEE ALSO\n  display(1), open(1)\n\nEXAMPLES\n  screen\n  screen -o /data/shot.bmp"
+  },
+  {
+   "id": "seq",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "seq - Print a range of integers",
+   "synopsis": "seq [first] last",
+   "description": "Prints one integer per line, counting up or down. It is the only generator a pipeline has.",
+   "details": "NAME\n  seq - Print a range of integers\n\nSYNOPSIS\n  seq [first] last\n\nDESCRIPTION\n  Prints one integer per line, counting up or down. It is the only generator a pipeline has.\n\nOPTIONS\n  first\n    Where to start (1 by default).\n  last\n    Where to stop; counts down when it is smaller than first.\n\nDEVICE COST\n  None. Entirely browser-side.\n\nSEE ALSO\n  sort(1), uniq(1)\n\nEXAMPLES\n  seq 5\n  seq 10 1"
+  },
+  {
+   "id": "sleep",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "sleep - Pause execution",
+   "synopsis": "sleep <seconds>",
+   "description": "Introduce a timed delay expressed in seconds.",
+   "details": "NAME\n  sleep - Pause command execution.\n\nSYNOPSIS\n  sleep <seconds>\n\nDESCRIPTION\n  Introduces a timed execution delay. Supports decimal float formatting.\n\nOPTIONS\n  <seconds>\n    The pause duration in seconds (e.g. '1.5').\n\nSYSTEM ARCHITECTURE\n  Suspends command execution using a JavaScript Promise resolving on a 'setTimeout' callback.\n\nEXIT CODES\n  0\n    Success.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  reboot(1)\n\nADVANCED EXAMPLES\n  sleep 3\n  sleep 1.5"
+  },
+  {
+   "id": "sort",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "sort - Sort standard input",
+   "synopsis": "sort [-r] [-n] [-u] [-k N]",
+   "description": "Reorders the lines that arrive from a pipe.",
+   "details": "NAME\n  sort - Sort standard input\n\nSYNOPSIS\n  sort [-r] [-n] [-u] [-k N]\n\nDESCRIPTION\n  Reorders the lines that arrive from a pipe.\n\nOPTIONS\n  -r\n    Reverse the order.\n  -n\n    Compare numerically.\n  -u\n    Drop adjacent duplicates.\n  -k N\n    Sort on the Nth whitespace-separated field.\n\nDEVICE COST\n  None. Entirely browser-side.\n\nSEE ALSO\n  uniq(1), cut(1), du(1)\n\nEXAMPLES\n  du /data | sort -n -r\n  dmesg | sort -u"
+  },
+  {
+   "id": "stat",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "stat - Show the type, size and lock state of one entry",
+   "synopsis": "stat <path>",
+   "description": "Reports what a single file or directory is, without listing the whole folder it lives in.",
+   "details": "NAME\n  stat - Show the type, size and lock state of one entry\n\nSYNOPSIS\n  stat <path>\n\nDESCRIPTION\n  Reports what a single file or directory is, without listing the whole folder it lives in. Prints the path, the type (file or dir), the size in bytes and in readable form (\"-\" for a directory) and whether the entry is protected.\n\nOPTIONS\n  <path>\n    The file or directory to describe.\n\nDEVICE COST\n  One GET /api/fs/stat on devices that offer it; on the others one GET /api/fs/list on the PARENT directory, from which stat picks the entry.\n\nNOTES\n  stat does not show a modification time: the \"modified\" line says the device does not report one, rather than inventing it.\n\nSEE ALSO\n  ls(1), du(1), tree(1)\n\nEXAMPLES\n  stat /data/notes.txt\n  stat /apps/terminal"
+  },
+  {
+   "id": "status",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "status - Global system diagnostics",
+   "synopsis": "status",
+   "description": "Print the system version, uptime, free memory, storage, installed apps and network state.",
+   "details": "NAME\n  status - Diagnostic status.\n\nSYNOPSIS\n  status\n\nDESCRIPTION\n  Displays a summary of the device, one item per line: system name and version with the seconds of uptime, free memory (heap), storage (type, free and total space), number of installed apps and network (clock synced via NTP or not and, if present, the network name). Items the device does not report are left out.\n\nSYSTEM ARCHITECTURE\n  One GET to '/api/status'; the command formats the fields of the answer without further requests.\n\nEXIT CODES\n  0\n    Success.\n  1\n    Device unreachable.\n\nCONFORMING TO\n  NucleoOS proprietary extension.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  uptime(1), free(1)\n\nADVANCED EXAMPLES\n  status"
+  },
+  {
+   "id": "tail",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tail - Show last lines of a file",
+   "synopsis": "tail [-n lines] <file>",
+   "description": "Output the last part (default 10 lines) of a file.",
+   "details": "NAME\n  tail - Output last lines of a file.\n\nSYNOPSIS\n  tail [-n <lines>] <file>\n\nDESCRIPTION\n  Prints the trailing segment of a file (defaults to 10 lines).\n\nOPTIONS\n  -n <lines>\n    Specify the exact count of lines to print (e.g. '-n 5').\n  <file>\n    The target file path.\n\nSYSTEM ARCHITECTURE\n  Downloads file contents via GET '/api/fs/read'. Parses lines in memory and isolates the bottom elements using array slicing ('slice(allLines.length - n)').\n\nEXIT CODES\n  0\n    Success.\n  1\n    Read error or invalid parameter formatting.\n  404\n    Target file not found.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  head(1), cat(1)\n\nADVANCED EXAMPLES\n  tail logs.txt\n  tail -n 3 /data/net.cfg"
+  },
+  {
+   "id": "tee",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tee - Write standard input to a file and pass it on",
+   "synopsis": "tee <file>",
+   "description": "Saves whatever flows through it and then hands the same text to the next stage, which is what makes a pipeline durable.",
+   "details": "NAME\n  tee - Write standard input to a file and pass it on\n\nSYNOPSIS\n  tee <file>\n\nDESCRIPTION\n  Saves whatever flows through it and then hands the same text to the next stage, which is what makes a pipeline durable.\n\nOPTIONS\n  <file>\n    Where to write.\n\nDEVICE COST\n  Exactly one POST /api/fs/write.\n\nSEE ALSO\n  cat(1), clip(1), base64(1)\n\nEXAMPLES\n  diag | tee /data/diag.txt\n  dmesg -l E | tee /data/errors.txt | wc"
+  },
+  {
+   "id": "theme",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "theme - Change OS color theme",
+   "synopsis": "theme [dark|light]",
+   "description": "Display or switch the system graphic theme (dark or light).",
+   "details": "NAME\n  theme - System graphic theme.\n\nSYNOPSIS\n  theme [dark|light]\n\nDESCRIPTION\n  With no argument, or with a value other than dark or light, prints the current theme and the usage. With dark or light it applies the theme to the Terminal at once and saves it in the system settings.\n\nOPTIONS\n  [dark|light]\n    The theme name to apply.\n\nSYSTEM ARCHITECTURE\n  Sets the 'data-theme' attribute of the page, then reads '/system/config/settings.json', updates the ui.theme entry and writes the file back through '/api/fs/write'. If saving fails, the theme stays applied in this window only and the command shows a warning.\n\nEXIT CODES\n  0\n    Success, also when the theme was applied only locally (with a warning).\n\nCONFORMING TO\n  NucleoOS proprietary extension.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  status(1)\n\nADVANCED EXAMPLES\n  theme            # Read current theme\n  theme light      # Switch to light theme\n  theme dark       # Switch to dark theme"
+  },
+  {
+   "id": "touch",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "touch - Create empty file",
+   "synopsis": "touch <file>",
+   "description": "Create a new empty file at the specified path, if it does not exist.",
+   "details": "NAME\n  touch - Initialize empty file.\n\nSYNOPSIS\n  touch <file>\n\nDESCRIPTION\n  Creates a file of zero bytes; missing folders along the path are created. If the file already exists, it is left untouched (content and date stay the same) and the command says so.\n\nOPTIONS\n  <file>\n    The path of the file to initialize.\n\nSYSTEM ARCHITECTURE\n  First checks whether the file is there (with '/api/fs/stat' or the folder listing). Only if it is missing does it send a POST to '/api/fs/write' with an empty body, never overwriting. If the folder cannot be read, it reports the error and writes nothing.\n\nEXIT CODES\n  0\n    Success. File created or already present.\n  1\n    Read or write error on the device's storage.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  mkdir(1), rm(1)\n\nADVANCED EXAMPLES\n  touch /data/empty.txt"
+  },
+  {
+   "id": "tr",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tr - Translate or delete characters",
+   "synopsis": "tr <set1> <set2>   |   tr -d <set>",
+   "description": "Replaces each character of set1 with the matching one in set2, or deletes them with -d. Sets are literal: no ranges or classes, to save bytes on the device.",
+   "details": "NAME\n  tr - Translate or delete characters\n\nSYNOPSIS\n  tr <set1> <set2>   |   tr -d <set>\n\nDESCRIPTION\n  Replaces each character of set1 with the matching one in set2, or deletes them with -d. Sets are literal: no ranges or classes, to save bytes on the device.\n\nOPTIONS\n  -d SET\n    Delete every character in the set instead of translating.\n  If set2 is shorter than set1, its last character fills the rest.\n\nDEVICE COST\n  none\n\nSEE ALSO\n  cut(1), sort(1)\n\nEXAMPLES\n  echo hello | tr aeiou _\n  cat /data/f | tr -d \\r"
+  },
+  {
+   "id": "tree",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tree - Print a directory tree",
+   "synopsis": "tree [-L N] [path]",
+   "description": "Prints the subtree under a path, indented one level per depth, directories first and marked with a trailing slash.",
+   "details": "NAME\n  tree - Print a directory tree\n\nSYNOPSIS\n  tree [-L N] [path]\n\nDESCRIPTION\n  Prints the subtree under a path, indented one level per depth, directories first and marked with a trailing slash.\n\nOPTIONS\n  -L N\n    Descend at most N levels (default 3, hard maximum 6).\n  [path]\n    Where to start; the working directory by default.\n\nDEVICE COST\n  The same budgeted walk du uses: one listing per directory, sequential, capped at 60 listings and 200 printed entries.\n\nSEE ALSO\n  ls(1), du(1), find(1)\n\nEXAMPLES\n  tree\n  tree -L 1 /apps\n  tree /data | grep .txt"
+  },
+  {
+   "id": "unalias",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "unalias - Remove an alias",
+   "synopsis": "unalias <name>",
+   "description": "Deletes one alias and saves the list again.",
+   "details": "NAME\n  unalias - Remove an alias\n\nSYNOPSIS\n  unalias <name>\n\nDESCRIPTION\n  Deletes one alias and saves the list again.\n\nOPTIONS\n  <name>\n    The alias to remove.\n\nDEVICE COST\n  One POST /api/fs/write.\n\nSEE ALSO\n  alias(1)\n\nEXAMPLES\n  unalias ll"
+  },
+  {
+   "id": "uname",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "uname - System name, edition and version",
+   "synopsis": "uname [-a]",
+   "description": "Print the operating system name; with -a also the edition and the version.",
+   "details": "NAME\n  uname - System information.\n\nSYNOPSIS\n  uname [-a]\n\nDESCRIPTION\n  Without options it prints the operating system name. With '-a' it prints on one line the name, the edition id the device reports and the system version.\n\nOPTIONS\n  -a\n    Adds the edition and the version.\n\nSYSTEM ARCHITECTURE\n  Reads the name and version from '/api/status' and the edition from the device capabilities ('/api/system/caps', or inferred from '/api/status' on devices without that route). If the device does not answer it uses the defaults (NucleoOS, 0.1.0) and leaves out the edition when it is not known.\n\nEXIT CODES\n  0\n    Always: without an answer the command prints the defaults.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  status(1), uptime(1)\n\nADVANCED EXAMPLES\n  uname\n  uname -a"
+  },
+  {
+   "id": "uniq",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "uniq - Collapse repeated adjacent lines",
+   "synopsis": "uniq [-c]",
+   "description": "Turns a wall of identical log lines into one line, optionally with a count. This is the step that makes two kilobytes of dmesg small enough to hand to anima.",
+   "details": "NAME\n  uniq - Collapse repeated adjacent lines\n\nSYNOPSIS\n  uniq [-c]\n\nDESCRIPTION\n  Turns a wall of identical log lines into one line, optionally with a count. This is the step that makes two kilobytes of dmesg small enough to hand to anima.\n\nOPTIONS\n  -c\n    Prefix each line with how many times it repeated.\n\nDEVICE COST\n  None. Entirely browser-side.\n\nSEE ALSO\n  sort(1), grep(1), anima(1)\n\nEXAMPLES\n  dmesg | sort | uniq -c | sort -n -r"
+  },
+  {
+   "id": "uptime",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "uptime - System active time",
+   "synopsis": "uptime",
+   "description": "Show how long the device has been running and how much free memory it has.",
+   "details": "NAME\n  uptime - System active time.\n\nSYNOPSIS\n  uptime\n\nDESCRIPTION\n  Prints the time elapsed since the device last started, in hours, minutes and seconds, and the free memory (heap) the device reports. Sample line: up 2h 15m 4s, heap free: ...\n\nSYSTEM ARCHITECTURE\n  Reads the uptime_s and free_heap fields from '/api/status'.\n\nEXIT CODES\n  0\n    Success.\n  1\n    Device unreachable.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  status(1), free(1)\n\nADVANCED EXAMPLES\n  uptime"
+  },
+  {
+   "id": "verify",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "anima.l1"
+   ],
+   "title": "verify - Grounded fact check against the on-device knowledge",
+   "synopsis": "verify <key> <asserted> [--kind fact|numeric] [-l it|en]",
+   "description": "Asks ANIMA whether an asserted value for a key is confirmed, contradicted or unknown, and prints the evidence it used.",
+   "details": "NAME\n  verify - Grounded fact check against the on-device knowledge\n\nSYNOPSIS\n  verify <key> <asserted> [--kind fact|numeric] [-l it|en]\n\nDESCRIPTION\n  Asks ANIMA whether an asserted value for a key is confirmed, contradicted or unknown, and prints the evidence it used. The verdict and the evidence come out on one line, separated by a tab. The last word is the asserted value; all the words before it form the key.\n\nOPTIONS\n  <key>\n    What is being asked about, e.g. \"capital of france\".\n  <asserted>\n    The value to check.\n  --kind\n    fact or numeric.\n  -l\n    Answer language (it or en).\n\nDEVICE COST\n  One GET /api/anima/verify.\n\nNOTES\n  Works on devices that have ANIMA on board. On the others the command reports it as a warning, not as an error: \"not available on this device\", or \"not available on this build\" when the route answers 404.\n\nSEE ALSO\n  anima(1), diag(1)\n\nEXAMPLES\n  verify \"capital of france\" Lyon"
+  },
+  {
+   "id": "watch",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "watch - Re-run a command in place every few seconds",
+   "synopsis": "watch [-n seconds] [-c count] <command>",
+   "description": "Runs a command repeatedly and redraws its output over the previous tick instead of scrolling the screen. It is the fragmentation microscope: watch -n5 heap.",
+   "details": "NAME\n  watch - Re-run a command in place every few seconds\n\nSYNOPSIS\n  watch [-n seconds] [-c count] <command>\n\nDESCRIPTION\n  Runs a command repeatedly and redraws its output over the previous tick instead of scrolling the screen. It is the fragmentation microscope: watch -n5 heap.\n\nOPTIONS\n  -n S\n    Seconds between ticks (3 by default, never less than 2).\n  -c N\n    How many ticks (10 by default, 300 at most).\n\nDEVICE COST\n  Whatever the inner command costs, once per tick. Ticks never overlap, the interval is clamped to two seconds, and three consecutive failures stop it. Ctrl+C stops it immediately.\n\nNOTES\n  Refused inside a pipeline, and wifi scan refuses to run inside it: a blocking radio operation on a loop would knock the device off its own network.\n\nSEE ALSO\n  heap(1), diag(1), notify(1)\n\nEXAMPLES\n  watch -n 5 heap\n  watch -n 10 -c 60 status"
+  },
+  {
+   "id": "wc",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "wc - Word, line, and byte count",
+   "synopsis": "wc <file>",
+   "description": "Print word, line, and byte counts of a file.",
+   "details": "NAME\n  wc - Word, line, and byte count.\n\nSYNOPSIS\n  wc <file>\n\nDESCRIPTION\n  Performs a metrics analysis of the target file, printing line, word, and byte counts.\n\nOPTIONS\n  <file>\n    The target file to parse.\n\nSYSTEM ARCHITECTURE\n  Fetches data via the filesystem read endpoint. Lines are resolved using a '\\n' split, words using a '\\s+' regex filter, and bytes using a JavaScript 'Blob' size check.\n\nEXIT CODES\n  0\n    Success. Counts printed.\n  1\n    Filesystem read error.\n  404\n    File was not found.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  cat(1), head(1), tail(1)\n\nADVANCED EXAMPLES\n  wc /data/notes.txt"
+  },
+  {
+   "id": "wget",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "wget - Download file from web",
+   "synopsis": "wget <url> [-O outfile]",
+   "description": "Download a file from a URL and save it to the device's storage.",
+   "details": "NAME\n  wget - Download file over HTTP.\n\nSYNOPSIS\n  wget <url> [-O <destination_file>]\n\nDESCRIPTION\n  Downloads a resource with a GET request and writes it to the device's storage. Without -O the file is named after the last part of the URL (without the query string), or 'downloaded_file', and lands in the current directory. A URL without a scheme is treated as https://.\n\nOPTIONS\n  <url>\n    The URL of the file to download.\n  -O <destination_file>\n    Path of the file to save the resource to. An existing file is replaced.\n\nSYSTEM ARCHITECTURE\n  The download is made by the browser, so its CORS rules apply: a site that does not allow it fails with 'network error or CORS blocked'. The data is then sent via POST to '/api/fs/write'; missing folders are created.\n\nEXIT CODES\n  0\n    Success. Downloaded and written successfully.\n  1\n    Network error, failed HTTP response or write error.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  curl(1), ping(1)\n\nADVANCED EXAMPLES\n  wget example.com/index.html\n  wget http://example.com/file.bin -O /data/file.bin"
+  },
+  {
+   "id": "which",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "which - Say whether a name is a builtin, an alias or an app",
+   "synopsis": "which <name>",
+   "description": "Answers the question \"is that a command or an app\" in one line.",
+   "details": "NAME\n  which - Say whether a name is a builtin, an alias or an app\n\nSYNOPSIS\n  which <name>\n\nDESCRIPTION\n  Answers the question \"is that a command or an app\" in one line.\n\nOPTIONS\n  <name>\n    The name to look up.\n\nDEVICE COST\n  One GET /api/apps, memoised for 30 s and shared with the apps command.\n\nSEE ALSO\n  apps(1), alias(1), man(1)\n\nEXAMPLES\n  which ls\n  which notepad"
+  },
+  {
+   "id": "wifi",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "wifi.manage"
+   ],
+   "title": "wifi - Scan, join, forget and prioritise networks",
+   "synopsis": "wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect",
+   "description": "The radio, from a shell. scan lists what is in the air with signal, channel and security; known lists the saved networks and marks the current one with an asterisk; the rest change them.",
+   "details": "NAME\n  wifi - Scan, join, forget and prioritise networks\n\nSYNOPSIS\n  wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect\n\nDESCRIPTION\n  The radio, from a shell. scan lists what is in the air with signal, channel and security; known lists the saved networks and marks the current one with an asterisk; the rest change them.\n\nOPTIONS\n  scan\n    List visible networks.\n  known\n    List saved networks (the default).\n  join <ssid> [pass]\n    Connect and save.\n  forget <ssid>\n    Delete a saved network.\n  prio <ssid> <n>\n    Set the join priority.\n  reconnect\n    Reconnect now.\n\nDEVICE COST\n  One request each. scan is a BLOCKING radio operation, so it is rate limited to once per ten seconds and refused inside watch.\n\nNOTES\n  Needs the net.wifi permission. A password typed inline is not stored in the shell history.\n\nSEE ALSO\n  status(1), ping(1), link(1)\n\nEXAMPLES\n  wifi scan\n  wifi known\n  wifi join home-wifi secret\n  wifi scan | sort -k2 -n"
+  }
+ ]
+}

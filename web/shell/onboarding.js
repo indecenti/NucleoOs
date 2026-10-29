@@ -8,6 +8,78 @@
 // keep it from ever nagging again once a key exists.
 
 import * as AI from './ai.js';
+import User from './nucleo-user.js';
+import Caps from './nucleo-caps.js';
+
+// The accounts step (users.multi, docs/multiuser.md): its own five-language table, keyed by meaning.
+const ACC = {
+  it: { title: 'Chi userà questo dispositivo?', sub: 'Puoi cambiare idea in Impostazioni ▸ Account', me: 'Solo io', meD: 'Come oggi: nessun account da creare.',
+    many: 'Più persone', manyD: 'Ognuno con i suoi file, le sue impostazioni e il suo assistente.', admin: "Crea l'amministratore",
+    adminSub: "Ciò che c'è ora sul dispositivo diventa suo. Altri account si aggiungono in Impostazioni ▸ Account.",
+    name: 'Nome', pw: 'Password', again: 'Ripeti la password', pin: 'PIN mostrato dal dispositivo', go: 'Crea', mismatch: 'Le due password non coincidono',
+    weak: 'Password troppo debole: almeno 8 caratteri e non una delle più comuni', proof: 'Inserisci il PIN mostrato dal dispositivo', fail: 'Non è riuscito: riprova', taken: 'Questo nome non si può usare' },
+  en: { title: 'Who will use this device?', sub: 'You can change your mind in Settings ▸ Accounts', me: 'Only me', meD: 'As today: no account to create.',
+    many: 'Several people', manyD: 'Each with their own files, settings and assistant.', admin: 'Create the administrator',
+    adminSub: 'What is on the device now becomes theirs. More accounts are added in Settings ▸ Accounts.',
+    name: 'Name', pw: 'Password', again: 'Password again', pin: 'PIN shown on the device', go: 'Create', mismatch: 'The two passwords do not match',
+    weak: 'Password too weak: at least 8 characters and not a common one', proof: 'Enter the PIN shown on the device', fail: 'It did not work: try again', taken: 'That name cannot be used' },
+  es: { title: '¿Quién usará este dispositivo?', sub: 'Puedes cambiarlo en Ajustes ▸ Cuentas', me: 'Solo yo', meD: 'Como hoy: ninguna cuenta que crear.',
+    many: 'Varias personas', manyD: 'Cada una con sus archivos, sus ajustes y su asistente.', admin: 'Crear el administrador',
+    adminSub: 'Lo que hay ahora en el dispositivo pasa a ser suyo. Más cuentas se añaden en Ajustes ▸ Cuentas.',
+    name: 'Nombre', pw: 'Contraseña', again: 'Repite la contraseña', pin: 'PIN que muestra el dispositivo', go: 'Crear', mismatch: 'Las dos contraseñas no coinciden',
+    weak: 'Contraseña demasiado débil: al menos 8 caracteres y no una de las más comunes', proof: 'Introduce el PIN que muestra el dispositivo', fail: 'No ha funcionado: inténtalo de nuevo', taken: 'Ese nombre no se puede usar' },
+  fr: { title: 'Qui utilisera cet appareil ?', sub: 'Vous pourrez changer dans Réglages ▸ Comptes', me: 'Moi seul', meD: "Comme aujourd'hui : aucun compte à créer.",
+    many: 'Plusieurs personnes', manyD: 'Chacune avec ses fichiers, ses réglages et son assistant.', admin: "Créer l'administrateur",
+    adminSub: "Ce qui est sur l'appareil maintenant devient le sien. D'autres comptes s'ajoutent dans Réglages ▸ Comptes.",
+    name: 'Nom', pw: 'Mot de passe', again: 'Répétez le mot de passe', pin: "PIN affiché par l'appareil", go: 'Créer', mismatch: 'Les deux mots de passe ne correspondent pas',
+    weak: 'Mot de passe trop faible : au moins 8 caractères et pas un des plus courants', proof: "Saisissez le PIN affiché par l'appareil", fail: "Cela n'a pas fonctionné : réessayez", taken: 'Ce nom ne peut pas être utilisé' },
+  de: { title: 'Wer wird dieses Gerät benutzen?', sub: 'Du kannst es in Einstellungen ▸ Konten ändern', me: 'Nur ich', meD: 'Wie bisher: kein Konto anzulegen.',
+    many: 'Mehrere Personen', manyD: 'Jede mit eigenen Dateien, Einstellungen und eigenem Assistenten.', admin: 'Administrator anlegen',
+    adminSub: 'Was jetzt auf dem Gerät ist, gehört dann ihm. Weitere Konten kommen in Einstellungen ▸ Konten dazu.',
+    name: 'Name', pw: 'Passwort', again: 'Passwort wiederholen', pin: 'PIN, die das Gerät zeigt', go: 'Anlegen', mismatch: 'Die beiden Passwörter stimmen nicht überein',
+    weak: 'Passwort zu schwach: mindestens 8 Zeichen und keines der häufigsten', proof: 'Gib die PIN ein, die das Gerät zeigt', fail: 'Das hat nicht geklappt: versuche es erneut', taken: 'Dieser Name ist nicht möglich' },
+};
+// The apps step: where the apps are, how one lands on the desktop, where more come from. Five languages, by meaning.
+const APPS = {
+  it: { title: 'Le tue app', sub: 'Sul desktop trovi solo l\'essenziale: tutto il resto è a un clic',
+    start: 'Start', startD: 'Il pulsante in basso apre tutte le app installate. Cerca per nome scrivendo subito.',
+    desk: 'Sul desktop', deskD: 'Tasto destro (o tieni premuto) su un\'app in Start, poi «Aggiungi al desktop».',
+    store: 'Store', storeD: 'Altre app, firmate e verificate prima di ogni installazione. Si installano e si tolgono con un clic.',
+    open: 'Apri lo Store alla fine', opened: 'Lo Store si aprirà quando avrai finito' },
+  en: { title: 'Your apps', sub: 'The desktop keeps only the essentials: everything else is one click away',
+    start: 'Start', startD: 'The button at the bottom opens every installed app. Type to search by name.',
+    desk: 'On the desktop', deskD: 'Right-click (or press and hold) an app in Start, then "Add to desktop".',
+    store: 'Store', storeD: 'More apps, signed and checked before every install. Installed and removed with one click.',
+    open: 'Open the Store at the end', opened: 'The Store will open when you are done' },
+  es: { title: 'Tus apps', sub: 'El escritorio solo tiene lo esencial: todo lo demás está a un clic',
+    start: 'Inicio', startD: 'El botón de abajo abre todas las apps instaladas. Escribe para buscar por nombre.',
+    desk: 'En el escritorio', deskD: 'Clic derecho (o mantén pulsado) sobre una app en Inicio y luego «Añadir al escritorio».',
+    store: 'Tienda', storeD: 'Más apps, firmadas y verificadas antes de cada instalación. Se instalan y se quitan con un clic.',
+    open: 'Abrir la Tienda al final', opened: 'La Tienda se abrirá cuando termines' },
+  fr: { title: 'Vos applications', sub: "Le bureau ne garde que l'essentiel : tout le reste est à un clic",
+    start: 'Démarrer', startD: "Le bouton en bas ouvre toutes les applications installées. Tapez pour chercher par nom.",
+    desk: 'Sur le bureau', deskD: "Clic droit (ou appui long) sur une application dans Démarrer, puis « Ajouter au bureau ».",
+    store: 'Store', storeD: "D'autres applications, signées et vérifiées avant chaque installation. Installées et retirées en un clic.",
+    open: 'Ouvrir le Store à la fin', opened: 'Le Store s\'ouvrira quand vous aurez terminé' },
+  de: { title: 'Deine Apps', sub: 'Auf dem Desktop liegt nur das Wichtigste: alles andere ist einen Klick entfernt',
+    start: 'Start', startD: 'Die Schaltfläche unten öffnet alle installierten Apps. Tippe, um nach Namen zu suchen.',
+    desk: 'Auf den Desktop', deskD: 'Rechtsklick (oder lange drücken) auf eine App in Start, dann „Zum Desktop hinzufügen“.',
+    store: 'Store', storeD: 'Weitere Apps, signiert und vor jeder Installation geprüft. Mit einem Klick installiert und entfernt.',
+    open: 'Am Ende den Store öffnen', opened: 'Der Store öffnet sich, wenn du fertig bist' },
+};
+
+// The device can have accounts and nobody has turned them on: the wizard asks, once per browser ("Only me" is
+// remembered here; Settings > Accounts turns them on later).
+const ACC_SKIP = 'nucleo.accounts.skip';
+let host = {};
+async function accountsToSet() {
+  try {
+    if (localStorage.getItem(ACC_SKIP) === '1') return null;
+    if (!(await Caps.has('users.multi'))) return null;
+    const st = await User.status();
+    return st && st.setup ? st : null;
+  } catch { return null; }
+}
 
 const ONB_KEY = 'nucleo.onboarded';
 const CODES = ['it', 'en', 'es', 'fr', 'de'];
@@ -35,7 +107,7 @@ const L10N = {
     'Optional cloud': 'Nube opcional',
     'Add a Claude key for deeper understanding & verification.': 'Añade una clave Claude para mayor comprensión y verificación.',
     'Your keys, your device': 'Tus claves, tu dispositivo',
-    'Keys stay on the SD; cloud calls go straight from your browser.': 'Las claves quedan en la SD; las llamadas a la nube salen directas desde tu navegador.',
+    'Keys stay on the device; cloud calls go straight from your browser.': 'Las claves quedan en el dispositivo; las llamadas a la nube salen directas desde tu navegador.',
     'Light on the device': 'Ligero para el dispositivo',
     'The heavy AI work runs in your browser, not the chip.': 'El trabajo pesado de la IA se ejecuta en tu navegador, no en el chip.',
     '✨ Two minutes now and ANIMA is ready everywhere in the OS.': '✨ Dos minutos ahora y ANIMA estará lista en todo el OS.',
@@ -79,7 +151,7 @@ const L10N = {
     'Connect ': 'Conecta ',
     'Your key stays on the device': 'Tu clave permanece en el dispositivo',
     'Model': 'Modelo',
-    'Stored only on your device (SD), never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': 'Se guarda solo en tu dispositivo (SD), nunca en registros. Con Claude la clave permanece en <b>tu navegador</b> y habla directamente con Anthropic — el dispositivo no se carga.',
+    'Stored only on your device, never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': 'Se guarda solo en tu dispositivo, nunca en registros. Con Claude la clave permanece en <b>tu navegador</b> y habla directamente con Anthropic — el dispositivo no se carga.',
     'Skip AI setup? You can do it later in Settings ▸ AI.': '¿Omitir la configuración de la IA? Puedes hacerlo luego en Ajustes ▸ IA.',
     'Set up later': 'Más tarde',
     '← Back': '← Atrás',
@@ -97,7 +169,7 @@ const L10N = {
     'Optional cloud': 'Cloud optionnel',
     'Add a Claude key for deeper understanding & verification.': 'Ajoutez une clé Claude pour une compréhension et une vérification accrues.',
     'Your keys, your device': 'Vos clés, votre appareil',
-    'Keys stay on the SD; cloud calls go straight from your browser.': 'Les clés restent sur la SD ; les appels cloud partent directement de votre navigateur.',
+    'Keys stay on the device; cloud calls go straight from your browser.': 'Les clés restent sur l’appareil ; les appels cloud partent directement de votre navigateur.',
     'Light on the device': 'Léger pour l’appareil',
     'The heavy AI work runs in your browser, not the chip.': 'Le gros du travail de l’IA s’exécute dans votre navigateur, pas sur la puce.',
     '✨ Two minutes now and ANIMA is ready everywhere in the OS.': '✨ Deux minutes maintenant et ANIMA est prête partout dans l’OS.',
@@ -141,7 +213,7 @@ const L10N = {
     'Connect ': 'Connecter ',
     'Your key stays on the device': 'Votre clé reste sur l’appareil',
     'Model': 'Modèle',
-    'Stored only on your device (SD), never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': 'Stockée uniquement sur votre appareil (SD), jamais journalisée. Avec Claude, la clé reste dans <b>votre navigateur</b> et communique directement avec Anthropic — l’appareil n’est pas sollicité.',
+    'Stored only on your device, never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': 'Stockée uniquement sur votre appareil, jamais journalisée. Avec Claude, la clé reste dans <b>votre navigateur</b> et communique directement avec Anthropic — l’appareil n’est pas sollicité.',
     'Skip AI setup? You can do it later in Settings ▸ AI.': 'Passer la configuration de l’IA ? Vous pourrez le faire plus tard dans Réglages ▸ IA.',
     'Set up later': 'Plus tard',
     '← Back': '← Retour',
@@ -159,7 +231,7 @@ const L10N = {
     'Optional cloud': 'Optionale Cloud',
     'Add a Claude key for deeper understanding & verification.': 'Füge einen Claude-Schlüssel für tieferes Verständnis und Verifizierung hinzu.',
     'Your keys, your device': 'Deine Schlüssel, dein Gerät',
-    'Keys stay on the SD; cloud calls go straight from your browser.': 'Die Schlüssel bleiben auf der SD; Cloud-Aufrufe gehen direkt von deinem Browser aus.',
+    'Keys stay on the device; cloud calls go straight from your browser.': 'Die Schlüssel bleiben auf dem Gerät; Cloud-Aufrufe gehen direkt von deinem Browser aus.',
     'Light on the device': 'Schonend für das Gerät',
     'The heavy AI work runs in your browser, not the chip.': 'Die schwere KI-Arbeit läuft in deinem Browser, nicht auf dem Chip.',
     '✨ Two minutes now and ANIMA is ready everywhere in the OS.': '✨ Zwei Minuten jetzt und ANIMA ist überall im OS bereit.',
@@ -203,7 +275,7 @@ const L10N = {
     'Connect ': 'Verbinde ',
     'Your key stays on the device': 'Dein Schlüssel bleibt auf dem Gerät',
     'Model': 'Modell',
-    'Stored only on your device (SD), never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': 'Nur auf deinem Gerät (SD) gespeichert, nie protokolliert. Mit Claude bleibt der Schlüssel in <b>deinem Browser</b> und spricht direkt mit Anthropic — das Gerät wird nicht belastet.',
+    'Stored only on your device, never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': 'Nur auf deinem Gerät gespeichert, nie protokolliert. Mit Claude bleibt der Schlüssel in <b>deinem Browser</b> und spricht direkt mit Anthropic — das Gerät wird nicht belastet.',
     'Skip AI setup? You can do it later in Settings ▸ AI.': 'KI-Einrichtung überspringen? Du kannst sie später unter Einstellungen ▸ KI vornehmen.',
     'Set up later': 'Später',
     '← Back': '← Zurück',
@@ -226,7 +298,11 @@ function h(tag, props, ...kids) {
   return e;
 }
 
-export async function ensureOnboarding() {
+export async function ensureOnboarding(opts = {}) {
+  host = opts;
+  const acc = await accountsToSet();
+  // A browser that already went through the wizard (a device updated to accounts) sees only the accounts step.
+  if (acc) { let seen = false; try { seen = localStorage.getItem(ONB_KEY) === '1'; } catch {} return runWizard(acc, seen); }
   try {
     if (localStorage.getItem(ONB_KEY) === '1') return;
     // A device that has its own first-run (the Handheld's setup, the browser edition's Configurazione) says
@@ -242,14 +318,21 @@ export async function ensureOnboarding() {
   return runWizard();
 }
 
-function runWizard() {
+function runWizard(acc = null, accountOnly = false) {
   return new Promise((resolve) => {
-    const state = { step: 0, provider: 'anthropic', model: AI.PROVIDERS.anthropic.def, key: '', exec: 'browser' };
-    const STEPS = ['language', 'welcome', 'install', 'provider', 'key'];
+    const state = { step: 0, provider: 'anthropic', model: AI.PROVIDERS.anthropic.def, key: '', exec: 'browser', many: false };
+    const STEPS = accountOnly ? ['account'] : acc ? ['language', 'account', 'welcome', 'apps', 'install', 'provider', 'key'] : ['language', 'welcome', 'apps', 'install', 'provider', 'key'];
+    const P = (k) => (APPS[lang()] || APPS.en)[k];
+    const nextAfterAccount = () => { if (accountOnly) done(); else { state.step++; render(); } };
+    const A = (k) => (ACC[lang()] || ACC.en)[k];
 
     const card = h('div', { id: 'nob-card' });
     const scrim = h('div', { id: 'nob-scrim' }, card);
-    const done = () => { localStorage.setItem(ONB_KEY, '1'); scrim.remove(); resolve(); };
+    const done = () => {
+      localStorage.setItem(ONB_KEY, '1'); scrim.remove(); resolve();
+      if (typeof host.onDone === 'function') host.onDone();
+      if (state.openStore && typeof host.openApp === 'function') host.openApp('store');
+    };
 
     function header(title, sub) {
       return h('div', { class: 'nob-hd' },
@@ -266,7 +349,9 @@ function runWizard() {
     function render() {
       card.textContent = '';
       if (STEPS[state.step] === 'language') renderLanguage();
+      else if (STEPS[state.step] === 'account') renderAccount();
       else if (STEPS[state.step] === 'welcome') renderWelcome();
+      else if (STEPS[state.step] === 'apps') renderApps();
       else if (STEPS[state.step] === 'install') renderInstall();
       else if (STEPS[state.step] === 'provider') renderProvider();
       else renderKey();
@@ -298,6 +383,44 @@ function runWizard() {
         footer({ next: true }));
     }
 
+    // ---- accounts (only where the device can have them and none exists) -----
+    function renderAccount() {
+      if (!state.many) {
+        card.append(header(A('title'), A('sub')),
+          h('div', { class: 'nob-body' }, h('div', { class: 'nob-choices' },
+            h('button', { class: 'nob-choice', on: { click: () => { try { localStorage.setItem(ACC_SKIP, '1'); } catch {} nextAfterAccount(); } } },
+              h('div', null, h('div', { class: 'ct' }, A('me')), h('div', { class: 'cd' }, A('meD')))),
+            h('button', { class: 'nob-choice', on: { click: () => { state.many = true; render(); } } },
+              h('div', null, h('div', { class: 'ct' }, A('many')), h('div', { class: 'cd' }, A('manyD')))))),
+          footer({ back: !accountOnly }));
+        return;
+      }
+      const field = (type, label, auto) => h('input', { class: 'nob-input', type, placeholder: label, 'aria-label': label, autocomplete: auto });
+      const name = field('text', A('name'), 'username'), pw = field('password', A('pw'), 'new-password'), again = field('password', A('again'), 'new-password');
+      const pin = acc.physical ? null : field('text', A('pin'), 'off');
+      const msg = h('div', { class: 'nob-note', role: 'status', 'aria-live': 'polite' });
+      const create = h('button', { class: 'nob-btn pri', on: { click: async () => {
+        if (!name.value.trim() || !pw.value) return;
+        if (pw.value !== again.value) { msg.textContent = A('mismatch'); return; }
+        create.disabled = true;
+        const r = await User.setup(name.value.trim(), pw.value, pin ? pin.value.trim() : '');
+        create.disabled = false;
+        if (!r.ok) {
+          const e = r.error;
+          msg.textContent = A(e === 'weak_password' ? 'weak' : e === 'proof_required' ? 'proof' : e === 'name_taken' || e === 'bad_request' ? 'taken' : 'fail');
+          return;
+        }
+        try { localStorage.removeItem(ACC_SKIP); } catch {}
+        await User.switchTo(r.user.id);
+        nextAfterAccount();
+      } } }, A('go'));
+      card.append(header(A('admin'), A('adminSub')),
+        h('div', { class: 'nob-body' }, name, pw, again, pin, msg),
+        h('div', { class: 'nob-ft' }, dots(), h('div', { class: 'nob-btns' },
+          h('button', { class: 'nob-btn', on: { click: () => { state.many = false; render(); } } }, TR('← Indietro', '← Back')), create)));
+      name.focus();
+    }
+
     // ---- step 1: welcome -----------------------------------------------------
     function renderWelcome() {
       card.append(
@@ -310,13 +433,25 @@ function runWizard() {
           h('div', { class: 'nob-feat' },
             feat('🧠', TR('Cervello offline', 'Offline brain'), TR('Risposte, ragionamento e memoria — senza cloud.', 'Answers, reasoning and memory — no cloud needed.')),
             feat('☁', TR('Cloud opzionale', 'Optional cloud'), TR('Aggiungi una chiave Claude per comprensione e verifica migliori.', 'Add a Claude key for deeper understanding & verification.')),
-            feat('🔒', TR('Le tue chiavi, il tuo device', 'Your keys, your device'), TR('Le chiavi restano sulla SD; le chiamate cloud partono dal tuo browser.', 'Keys stay on the SD; cloud calls go straight from your browser.')),
+            feat('🔒', TR('Le tue chiavi, il tuo device', 'Your keys, your device'), TR('Le chiavi restano sul dispositivo; le chiamate cloud partono dal tuo browser.', 'Keys stay on the device; cloud calls go straight from your browser.')),
             feat('⚡', TR('Leggero sul dispositivo', 'Light on the device'), TR('Il lavoro pesante dell’IA gira nel browser, non sul chip.', 'The heavy AI work runs in your browser, not the chip.'))),
           h('p', { class: 'nob-note', html: TR('✨ Due minuti adesso e ANIMA è pronta ovunque nell’OS.', '✨ Two minutes now and ANIMA is ready everywhere in the OS.') })),
         footer({ next: true, skip: true }));
     }
     function feat(ic, t, d) {
       return h('div', null, h('div', { class: 'ic' }, ic), h('div', { class: 't' }, t), h('div', { class: 'd' }, d));
+    }
+
+    // ---- your apps: Start, the desktop, the Store ---------------------------
+    function renderApps() {
+      const point = (title, text) => h('div', null, h('div', { class: 't' }, title), h('div', { class: 'd' }, text));
+      const go = h('button', { class: 'nob-btn' + (state.openStore ? ' pri' : ''), on: { click: () => {
+        state.openStore = !state.openStore; render();
+      } } }, state.openStore ? P('opened') : P('open'));
+      card.append(header(P('title'), P('sub')),
+        h('div', { class: 'nob-body' }, h('div', { class: 'nob-feat one' },
+          point(P('start'), P('startD')), point(P('desk'), P('deskD')), point(P('store'), P('storeD'))), go),
+        footer({ back: true, next: true }));
     }
 
     // ---- step 1: install NucleoOS -------------------------------------------
@@ -432,8 +567,8 @@ function runWizard() {
             h('label', null, 'API key'), input,
             h('div', { class: 'nob-row' }, testBtn), stat),
           h('div', { class: 'nob-note', html: '🔒 ' + TR(
-            'Salvata solo sul tuo dispositivo (SD), mai nei log. Con Claude la chiave resta nel <b>tuo browser</b> e parla direttamente con Anthropic — il dispositivo non viene caricato.',
-            'Stored only on your device (SD), never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.') })),
+            'Salvata solo sul tuo dispositivo, mai nei log. Con Claude la chiave resta nel <b>tuo browser</b> e parla direttamente con Anthropic — il dispositivo non viene caricato.',
+            'Stored only on your device, never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.') })),
         footer({ back: true, saveSlot: saveBtn }));
     }
 

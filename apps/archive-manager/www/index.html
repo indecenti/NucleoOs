@@ -301,6 +301,10 @@
     }
 
     const joinPath = (dir, rel) => (dir === '/' ? '' : dir) + '/' + rel.replace(/\/+$/, '');
+    // An entry may only land inside the chosen folder: no '..' segment, no absolute name, no backslash or drive colon
+    // (a FAT card takes '\' as a separator, so '..\..\system' would climb out).
+    const safeEntry = (name) => typeof name === 'string' && name !== '' && !/[\\:\0]/.test(name) &&
+      !name.startsWith('/') && !name.split('/').some((seg) => seg === '..');
     // Names already present in a folder (empty = the folder does not exist yet). Anything but an absent
     // folder is an error: we cannot promise "nothing gets overwritten" about a folder we could not list.
     async function listNames(dir) {
@@ -347,6 +351,7 @@
         const fs = await getFs();
         for (let i = 0; i < zipEntries.length; i++) {
           const entry = zipEntries[i];
+          if (!safeEntry(entry.name)) continue;
           const fullPath = joinPath(targetDir, entry.name);
 
           if (entry.dir) {

@@ -1,6 +1,7 @@
 {
   "id": "calculator",
   "name": "Calculator",
+  "icon": "/apps/calculator/icon.svg",
   "version": "0.1.2",
   "version_code": 3,
   "min_os": "0.1.0",

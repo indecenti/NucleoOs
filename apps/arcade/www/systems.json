@@ -3,6 +3,8 @@
   "_cores": "nes=fceumm · snes=snes9x · gb/gbc=gambatte · gba=mgba · segaMD/segaGG=genesis_plus_gx · segaMS=smsplus · pce=mednafen_pce · ngp=mednafen_ngp · lynx=handy · arcade=fbneo · cps1/cps2=fbalpha2012_*",
   "_zip": "Every system accepts 'zip': arcade sets are always zipped, and EmulatorJS extracts them in the browser (emulatorjs/compression/extractzip.js), which keeps the SD smaller.",
   "_arcade": "Neo Geo and CPS romsets must match the core's expected set — the fbalpha2012_* cores want FB Alpha 0.2.97.x, and fbneo wants a modern FBNeo set. A mismatched set fails to boot the game, it does not degrade.",
+  "_thumbs": "'thumbs' names the libretro-thumbnails repository whose Named_Snaps the Arcade fetches for games without a picture on the card (written to <folder>/.snaps/<file>.snp and .pic, the device's own formats); 'screen' is the console's resolution, so an integer upscale is undone before the picture is fitted. Arcade sets (neogeo, cps1, cps2) are named by romset: no thumbs.",
+  "_native": "'native': the device may have its own emulator for this console (store apps nesemu, gbemu, ggemu, pceemu): with capability games.play the Arcade offers to start the game there (POST /api/play), and the device answers when the emulator is not installed.",
   "systems": [
     {
       "id": "nes",
@@ -15,7 +17,13 @@
         "zip"
       ],
       "accent": "#e24b4a",
-      "coreFile": "fceumm"
+      "coreFile": "fceumm",
+      "thumbs": "Nintendo_-_Nintendo_Entertainment_System",
+      "screen": [
+        256,
+        240
+      ],
+      "native": true
     },
     {
       "id": "snes",
@@ -29,7 +37,12 @@
         "zip"
       ],
       "accent": "#7f77dd",
-      "coreFile": "snes9x"
+      "coreFile": "snes9x",
+      "thumbs": "Nintendo_-_Super_Nintendo_Entertainment_System",
+      "screen": [
+        256,
+        224
+      ]
     },
     {
       "id": "gb",
@@ -40,7 +53,13 @@
         "zip"
       ],
       "accent": "#639922",
-      "coreFile": "gambatte"
+      "coreFile": "gambatte",
+      "thumbs": "Nintendo_-_Game_Boy",
+      "screen": [
+        160,
+        144
+      ],
+      "native": true
     },
     {
       "id": "gbc",
@@ -52,7 +71,13 @@
         "zip"
       ],
       "accent": "#1d9e75",
-      "coreFile": "gambatte"
+      "coreFile": "gambatte",
+      "thumbs": "Nintendo_-_Game_Boy_Color",
+      "screen": [
+        160,
+        144
+      ],
+      "native": true
     },
     {
       "id": "gba",
@@ -63,7 +88,12 @@
         "zip"
       ],
       "accent": "#378add",
-      "coreFile": "mgba"
+      "coreFile": "mgba",
+      "thumbs": "Nintendo_-_Game_Boy_Advance",
+      "screen": [
+        240,
+        160
+      ]
     },
     {
       "id": "gg",
@@ -74,7 +104,13 @@
         "zip"
       ],
       "accent": "#d4537e",
-      "coreFile": "genesis_plus_gx"
+      "coreFile": "genesis_plus_gx",
+      "thumbs": "Sega_-_Game_Gear",
+      "screen": [
+        160,
+        144
+      ],
+      "native": true
     },
     {
       "id": "sms",
@@ -85,7 +121,13 @@
         "zip"
       ],
       "accent": "#ba7517",
-      "coreFile": "smsplus"
+      "coreFile": "smsplus",
+      "thumbs": "Sega_-_Master_System_-_Mark_III",
+      "screen": [
+        256,
+        192
+      ],
+      "native": true
     },
     {
       "id": "megadrive",
@@ -99,7 +141,12 @@
         "zip"
       ],
       "accent": "#d85a30",
-      "coreFile": "genesis_plus_gx"
+      "coreFile": "genesis_plus_gx",
+      "thumbs": "Sega_-_Mega_Drive_-_Genesis",
+      "screen": [
+        320,
+        224
+      ]
     },
     {
       "id": "pcengine",
@@ -110,7 +157,13 @@
         "zip"
       ],
       "accent": "#ef9f27",
-      "coreFile": "mednafen_pce"
+      "coreFile": "mednafen_pce",
+      "thumbs": "NEC_-_PC_Engine_-_TurboGrafx_16",
+      "screen": [
+        256,
+        240
+      ],
+      "native": true
     },
     {
       "id": "ngpc",
@@ -122,7 +175,12 @@
         "zip"
       ],
       "accent": "#1d9e75",
-      "coreFile": "mednafen_ngp"
+      "coreFile": "mednafen_ngp",
+      "thumbs": "SNK_-_Neo_Geo_Pocket_Color",
+      "screen": [
+        160,
+        152
+      ]
     },
     {
       "id": "linx",
@@ -133,7 +191,12 @@
         "zip"
       ],
       "accent": "#888780",
-      "coreFile": "handy"
+      "coreFile": "handy",
+      "thumbs": "Atari_-_Lynx",
+      "screen": [
+        160,
+        102
+      ]
     },
     {
       "id": "neogeo",
@@ -187,7 +250,5 @@
         "de": "Benötigt ein FB-Alpha-0.2.97.28-Romset"
       }
     }
-  ],
-  "_coreFile": "Actual libretro core shipped at emulatorjs/cores/<coreFile>-wasm.data. The player probes it: present -> run fully offline from the SD; absent -> fall back to the EmulatorJS CDN.",
-  "_romsets": "Arcade cores are romset-version locked: the core refuses to boot a set it does not recognise, it does not degrade. Verified on hardware: fbneo rejected an FBA 0.2.97.38 Neo Geo set ('Romset is unknown'), and fbalpha2012_cps1 (v0.2.97.28) dropped to the RetroArch menu on the same-era CPS set. 'warn' is surfaced in the game list so the user is told BEFORE launching instead of meeting a cryptic core error."
+  ]
 }

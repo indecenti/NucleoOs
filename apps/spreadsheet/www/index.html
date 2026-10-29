@@ -2484,7 +2484,7 @@ async function loadModels(which, progId) {
   const createEngine = async (id, o) => {
     let mlc;
     try { mlc = await import('/apps/anima/forge/vendor/web-llm.js'); }   // webfs maps /apps/<id>/<rest> → www/<rest>: NO /www/ in the URI (else 404)
-    catch { mlc = await import('https://esm.run/@mlc-ai/web-llm'); }
+    catch { mlc = await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.84/+esm'); }   // pinned: the release ANIMA loads
     return mlc.CreateMLCEngine(id, { initProgressCallback: (r) => setProg(r && r.progress) });
   };
   try {

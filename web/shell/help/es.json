@@ -1,0 +1,885 @@
+{
+ "format": 1,
+ "lang": "es",
+ "topics": [
+  {
+   "id": "desktop",
+   "title": "Escritorio, Inicio y ventanas",
+   "md": "El escritorio empieza con pocos iconos: **File Commander**, **Papelera**, **ANIMA** y **Ayuda**. Todas las demás apps están en el menú **Inicio**.\n\n## Inicio\n- El botón a la izquierda de la barra de tareas abre Inicio. Escribe enseguida para buscar apps, archivos y ajustes.\n- **Ancladas** muestra las apps que has anclado. **Todas las aplicaciones** las lista por categoría: toca una categoría para ver solo esa.\n- Al pie de Inicio: tu nombre (o el del dispositivo), el botón **Ajustes** y el botón de **encendido** (bloquear, cerrar sesión, reiniciar donde el dispositivo lo permite).\n\n## Ventanas\n- Arrastra la barra de título para mover una ventana; llévala a un borde de la pantalla para acoplarla.\n- La ✕ la cierra, y también `Ctrl` + `W`. `Esc` nunca cierra una ventana: cierra los menús y paneles del sistema.\n- `Alt` + `Tab` cambia de ventana.\n\n## Barra de tareas\nLas apps abiertas aparecen en la barra. Con clic derecho sobre una app en Inicio la anclas a la barra, a Inicio o al escritorio.\n",
+   "icon": "🖥️"
+  },
+  {
+   "id": "apps",
+   "title": "Apps y la Tienda",
+   "md": "## Dónde están las apps\nTodas las apps instaladas están en **Inicio › Todas las aplicaciones**, por categoría: Sistema, Productividad, Fotos música y vídeo, Juegos, Herramientas, Red y mensajería.\n\n## Una app en el escritorio\nClic derecho (o mantén pulsado) sobre una app en Inicio y luego **Añadir al escritorio**. El mismo menú la quita del escritorio o la ancla a Inicio o a la barra.\n\n## La Tienda\nAbre la **Tienda** desde Inicio para tener más apps. Cada paquete está firmado y el sistema comprueba la firma antes de instalarlo y, donde hace falta, antes de cada apertura. La Tienda solo muestra las apps adecuadas para este dispositivo.\n\nPara quitar una app instalada desde la Tienda: clic derecho sobre ella en Inicio y luego **Desinstalar**. Las apps del sistema no se pueden desinstalar.\n",
+   "icon": "🧩",
+   "app": "store"
+  },
+  {
+   "id": "files",
+   "title": "Archivos y Papelera",
+   "md": "## File Commander\n**File Commander** es el gestor de archivos: carpetas, copiar, mover, renombrar, vistas previas. Al abrir un archivo se pasa a la app asociada a su tipo.\n\n## La Papelera\n- Un archivo eliminado en File Commander o en el escritorio va a la **Papelera**, desde donde puedes restaurarlo a su carpeta.\n- La Papelera guarda los últimos 20 elementos: cuando llega uno nuevo, el más antiguo se elimina definitivamente.\n- Una carpeta eliminada en File Commander no pasa por la Papelera: el sistema te lo dice antes de hacerlo.\n- En la Papelera puedes **Restaurar** un elemento o todos, o **Vaciar la papelera** (no se puede deshacer).\n\nEl icono de la Papelera siempre está en el escritorio: no se puede quitar.\n",
+   "icon": "🗂️",
+   "app": "file-commander"
+  },
+  {
+   "id": "settings",
+   "title": "Ajustes",
+   "md": "Abre **Ajustes** con el botón del engranaje al pie de Inicio, o desde Inicio › Todas las aplicaciones.\n\n- **Apariencia**: tema claro u oscuro, fondo, tamaño de los iconos.\n- **Red**: las conexiones del dispositivo, donde puede gestionarlas.\n- **IA / Modelos**: proveedores y claves para ANIMA, o un modelo que funciona en el navegador.\n- **Cuentas**: las personas que usan el dispositivo, donde puede haber más de una.\n- **Actualizaciones**: la versión instalada y las nuevas.\n- **Información**: el dispositivo, la versión, el espacio.\n\nEl idioma se cambia en Ajustes y es el mismo para todo el sistema y todas las apps.\n",
+   "icon": "⚙️",
+   "app": "settings"
+  },
+  {
+   "id": "keyboard",
+   "title": "Atajos de teclado",
+   "md": "## Sistema\n- `Win` (pulsada sola): abre o cierra Inicio\n- `Ctrl` + `Espacio`: ANIMA, desde cualquier sitio\n- `Alt` + `Tab`: cambia de ventana\n- `Win` + flechas: acopla la ventana activa\n- `Ctrl` + `Alt` + `L`: bloquea la pantalla\n- `Ctrl` + `W`: cierra la ventana activa\n- `Ctrl` + `Mayús` + `V`: historial del portapapeles\n- `Esc`: cierra los menús y paneles del sistema\n\n## Escritorio\n- Flechas: se mueven entre los iconos; `Intro` abre\n- `F2`: renombra el icono seleccionado\n- `Supr`: elimina la selección (los archivos van a la Papelera)\n- `Ctrl` + `A`: selecciona todo\n\n## Documentos\n- `Ctrl` + `S` guarda, `Ctrl` + `Mayús` + `S` guarda como, `Ctrl` + `O` abre, `Ctrl` + `N` nuevo\n",
+   "icon": "⌨️"
+  },
+  {
+   "id": "accounts",
+   "title": "Cuentas",
+   "md": "En este dispositivo pueden trabajar hasta cinco personas, cada una con su cuenta.\n\n## Lo que es de cada uno\nCada persona tiene sus documentos, su configuración, su escritorio, su Papelera y su archivo en la nube. Nadie ve los archivos de los demás.\n\n## Administrador\nLa primera cuenta es la del administrador. En **Ajustes › Cuentas** crea y quita cuentas, restablece contraseñas y decide quién más es administrador.\n\n## Entrar y salir\n- Al abrir, el sistema pide nombre y contraseña.\n- Para salir: el botón de encendido al pie de Inicio › **Cerrar sesión**.\n- Una contraseña puesta por el administrador se cambia en el primer acceso.\n\nTras varios intentos fallidos el acceso se pausa un rato: protege las contraseñas de quien intenta adivinarlas.\n",
+   "icon": "👥",
+   "requires": [
+    "users.multi"
+   ]
+  },
+  {
+   "id": "cloud-archive",
+   "title": "Archivo cifrado en la nube",
+   "md": "La unidad **/r2** de File Commander es tu archivo en la nube.\n\n- Los archivos se cifran en el navegador antes de salir: el servicio en la nube solo ve datos ilegibles.\n- La contraseña del archivo nunca sale del dispositivo y no se puede recuperar: guárdala bien. Al crear el archivo recibes una clave de recuperación.\n- Con varias cuentas, cada persona tiene su propio archivo.\n- Si alguien devuelve el archivo a una versión antigua, el sistema lo detecta y te avisa.\n",
+   "icon": "☁️",
+   "requires": [
+    "cloud.archive"
+   ]
+  },
+  {
+   "id": "anima",
+   "title": "ANIMA",
+   "md": "**ANIMA** es el asistente del sistema. Ábrela desde el escritorio, o con `Ctrl` + `Espacio` desde cualquier sitio.\n\n- Responde preguntas, escribe y resume textos, abre apps y archivos por ti.\n- Funciona con un proveedor de IA y tu propia clave (Ajustes › IA / Modelos) o con un modelo que funciona en el navegador, sin que tus datos salgan del ordenador.\n- Antes de algo que cambie tus archivos o el dispositivo, te pide confirmación.\n",
+   "icon": "✨",
+   "app": "anima"
+  },
+  {
+   "id": "updates",
+   "title": "Actualizaciones",
+   "md": "**Ajustes › Actualizaciones** muestra la versión instalada y comprueba si hay una nueva. Cuando la hay, el sistema te avisa y la instalas desde ahí.\n\n- Una actualización trae juntos el sistema, sus apps incluidas y este manual: el manual siempre describe la versión que tienes.\n- Las apps de la Tienda se actualizan desde la Tienda.\n- Tus archivos y tu configuración se quedan donde están.\n",
+   "icon": "⬆️",
+   "any": [
+    "ota",
+    "ota.firmware",
+    "ota.package"
+   ]
+  },
+  {
+   "id": "games",
+   "title": "Juegos",
+   "md": "- **Biblioteca** reúne los juegos del dispositivo, con portadas y los jugados recientemente.\n- Los juegos recientes también aparecen arriba en Inicio y en el botón de juegos de la barra.\n- Las partidas guardadas se quedan en el dispositivo.\n",
+   "icon": "🎮",
+   "requires": [
+    "games.library"
+   ]
+  },
+  {
+   "id": "terminal",
+   "title": "Terminal",
+   "md": "**Terminal** abre una línea de comandos. Es para quien la conoce: los comandos actúan directamente sobre los archivos y el dispositivo, sin las protecciones de las apps.\n\n- Donde el dispositivo ofrece una shell del sistema, Terminal abre esa: los comandos y su manual son los del sistema.\n- En los demás, Terminal ofrece los comandos de NucleoOS: `help` los lista, `man` seguido del nombre de un comando muestra su página. Las mismas páginas están en este manual en **Comandos del terminal**, solo para los comandos que tiene este dispositivo.\n- `Ctrl` + `C` detiene el comando en curso.\n",
+   "icon": "⌨",
+   "app": "terminal"
+  }
+ ],
+ "commands": [
+  {
+   "id": "alias",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "alias - Dar un nombre corto a un comando largo",
+   "synopsis": "alias [name=command]",
+   "description": "Sin argumentos lista los alias. Con name=command define uno, guardado en la tarjeta para que sobreviva a una recarga. En un teclado de pulgares de 56 teclas el coste es escribir, y eso es lo que hace que valga sus bytes.",
+   "details": "NOMBRE\n  alias - Dar un nombre corto a un comando largo\n\nSINOPSIS\n  alias [name=command]\n\nDESCRIPCIÓN\n  Sin argumentos lista los alias. Con name=command define uno, guardado en la tarjeta para que sobreviva a una recarga. En un teclado de pulgares de 56 teclas el coste es escribir, y eso es lo que hace que valga sus bytes.\n\nOPCIONES\n  name=command\n    Define un alias.\n  name\n    Muestra un alias.\n\nCOSTE PARA EL DISPOSITIVO\n  Un POST /api/fs/write cuando cambia un alias, en la carpeta propia de la aplicación. Nada en absoluto cuando se ejecuta un comando.\n\nNOTAS\n  Un alias se expande una sola vez, solo sobre la palabra del comando, y se rechaza el cuerpo de un alias que contenga una tubería, una redirección o ; && ||: una cadena guardada no debe poder colar un operador que el usuario nunca escribió.\n\nVÉASE TAMBIÉN\n  unalias(1), which(1), export(1)\n\nEJEMPLOS\n  alias ll='ls /data'\n  alias errs='dmesg -l E'\n  alias"
+  },
+  {
+   "id": "apps",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "apps - Listar las aplicaciones instaladas, o abrir una",
+   "synopsis": "apps [-a]   |   apps open <id>",
+   "description": "Imprime una fila separada por tabuladores por cada aplicación instalada: id, nombre, si está habilitada y su ruta. Con open pide al intérprete que lance una.",
+   "details": "NOMBRE\n  apps - Listar las aplicaciones instaladas, o abrir una\n\nSINOPSIS\n  apps [-a]   |   apps open <id>\n\nDESCRIPCIÓN\n  Imprime una fila separada por tabuladores por cada aplicación instalada: id, nombre, si está habilitada y su ruta. Con open pide al intérprete que lance una.\n\nOPCIONES\n  -a\n    Incluir las aplicaciones deshabilitadas.\n  open <id>\n    Abrir esa aplicación en el intérprete.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/apps, memoizado durante 30 s. Abrir una aplicación es un mensaje al intérprete, no una llamada al dispositivo.\n\nNOTAS\n  Esto NO es deliberadamente una lista de procesos. Nada en el dispositivo sabe qué ventanas están abiertas, así que un ps construido sobre este punto de acceso imprimiría las 46 aplicaciones instaladas como si estuvieran en ejecución.\n\nVÉASE TAMBIÉN\n  which(1), assoc(1), open(1)\n\nEJEMPLOS\n  apps\n  apps -a | grep off\n  apps open notepad"
+  },
+  {
+   "id": "assoc",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "assoc - Mostrar qué aplicación elegirá open(1)",
+   "synopsis": "assoc [extension]",
+   "description": "Imprime la tabla de asociaciones de archivos, o la entrada única de una extensión, más el valor por defecto usado cuando no hay coincidencia.",
+   "details": "NOMBRE\n  assoc - Mostrar qué aplicación elegirá open(1)\n\nSINOPSIS\n  assoc [extension]\n\nDESCRIPCIÓN\n  Imprime la tabla de asociaciones de archivos, o la entrada única de una extensión, más el valor por defecto usado cuando no hay coincidencia.\n\nOPCIONES\n  [extension]\n    Solo esta extensión, con o sin el punto.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/associations.\n\nVÉASE TAMBIÉN\n  open(1), apps(1)\n\nEJEMPLOS\n  assoc\n  assoc txt\n  assoc | grep notepad"
+  },
+  {
+   "id": "base64",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "base64 - Codificar o decodificar base64",
+   "synopsis": "base64 [-d] [file]",
+   "description": "Codifica un archivo o la entrada estándar a base64, o lo decodifica con -d. Es la única manera en que un bloque binario atraviesa una tubería de texto o el portapapeles del SO.",
+   "details": "NOMBRE\n  base64 - Codificar o decodificar base64\n\nSINOPSIS\n  base64 [-d] [file]\n\nDESCRIPCIÓN\n  Codifica un archivo o la entrada estándar a base64, o lo decodifica con -d. Es la única manera en que un bloque binario atraviesa una tubería de texto o el portapapeles del SO.\n\nOPCIONES\n  -d\n    Decodificar en lugar de codificar.\n  [file]\n    Leer este archivo; sin él, leer la entrada estándar.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/fs/read cuando se nombra un archivo, y nada en absoluto en una tubería.\n\nNOTAS\n  El codificador trabaja sobre bytes, no sobre caracteres: la función interna btoa del navegador es solo latin1 y corrompería cada byte por encima de 0x7F.\n\nVÉASE TAMBIÉN\n  hexdump(1), clip(1), tee(1)\n\nEJEMPLOS\n  base64 /data/logo.png\n  base64 /data/logo.b64 | base64 -d | tee /data/logo.png"
+  },
+  {
+   "id": "cat",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cat - Mostrar el contenido de un archivo",
+   "synopsis": "cat [file]",
+   "description": "Imprime el contenido de texto de un archivo, o deja pasar la entrada de una tubería.",
+   "details": "NOMBRE\n  cat - Mostrar el contenido de un archivo.\n\nSINOPSIS\n  cat [file]\n\nDESCRIPCIÓN\n  Lee el archivo del almacenamiento del dispositivo y lo imprime como texto UTF-8, sin el último salto de línea. Un archivo vacío imprime '(empty file)'. Las rutas bajo /proc son nodos del sistema en tiempo real que el dispositivo sirve como texto, en los dispositivos que los tienen. Sin archivo, dentro de una tubería (por ejemplo 'diag | cat'), cat deja pasar su entrada sin cambios. Un solo archivo cada vez: cat no une varios archivos.\n\nOPCIONES\n  [file]\n    La ruta del archivo que se va a mostrar, absoluta o relativa a la carpeta actual. Si se omite, cat imprime la entrada que recibe de la tubería.\n\nARQUITECTURA DEL SISTEMA\n  Lee a través de la capa de archivos de la web OS, que llama a GET '/api/fs/read?path=<file>' en el dispositivo; una ruta /proc se pide directamente al dispositivo. Mensajes de error: 'no such file or directory' si el archivo no existe, 'not paired (401)' si este navegador no está emparejado, 'cannot reach the file API' si el dispositivo no responde.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. El archivo se leyó y se mostró.\n  1\n    No se pudo leer el archivo (no existe, navegador no emparejado, dispositivo inalcanzable u otro error).\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  grep(1), head(1), tail(1)\n\nEJEMPLOS AVANZADOS\n  cat /system/config/settings.json\n  cat logs.txt"
+  },
+  {
+   "id": "cd",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cd - Cambiar el directorio de trabajo",
+   "synopsis": "cd [path]",
+   "description": "Cambiar el directorio de trabajo actual de la sesión de terminal.",
+   "details": "NOMBRE\n  cd - Cambiar el directorio de trabajo.\n\nSINOPSIS\n  cd [path]\n\nDESCRIPCIÓN\n  Modifica la ruta de contexto activa (CWD) del terminal. Si no se indica ninguna ruta, recurre a la raíz del sistema '/'.\n  Para garantizar la integridad del sistema de archivos, el cliente ejecuta una comprobación en seco mediante '/api/fs/list' sobre la carpeta indicada antes de cambiar de ruta. Si la comprobación devuelve 404, se aborta la actualización de la ruta.\n\nOPCIONES\n  [path]\n    La ruta de la carpeta de destino (p. ej. '..', '/data', 'Pictures').\n\nARQUITECTURA DEL SISTEMA\n  Actualiza las variables locales del navegador 'cwd' y 'envVars.CWD'. Las rutas relativas se normalizan para eliminar los segmentos '.' y resolver los '..' antes de ejecutar la comprobación de seguridad.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. El directorio existe y la ruta activa se actualizó.\n  1\n    El directorio de destino no existe (falló la comprobación en seco).\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  ls(1), pwd(1)\n\nEJEMPLOS AVANZADOS\n  cd /data         # Entra en /data\n  cd ..            # Sube un nivel de directorio\n  cd               # Restablece el directorio de trabajo a la raíz /"
+  },
+  {
+   "id": "clear",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "clear - Limpiar el búfer de pantalla",
+   "synopsis": "clear",
+   "description": "Limpiar el búfer de salida de la pantalla del terminal.",
+   "details": "NOMBRE\n  clear - Limpiar la pantalla del terminal.\n\nSINOPSIS\n  clear\n\nDESCRIPCIÓN\n  Borra el búfer de salida de texto activo. Reubica el símbolo del sistema en la parte superior.\n\nARQUITECTURA DEL SISTEMA\n  Establece 'out.innerHTML = \"\"' para podar el árbol DOM del navegador.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  history(1)\n\nEJEMPLOS AVANZADOS\n  clear"
+  },
+  {
+   "id": "clip",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "clip - Escribir en el portapapeles del SO o leerlo",
+   "synopsis": "clip   |   clip -o",
+   "description": "Sin argumentos coloca la entrada estándar en el portapapeles; con -o imprime lo que hay en él. Es la salida de la tubería hacia el resto del SO, y su entrada.",
+   "details": "NOMBRE\n  clip - Escribir en el portapapeles del SO o leerlo\n\nSINOPSIS\n  clip   |   clip -o\n\nDESCRIPCIÓN\n  Sin argumentos coloca la entrada estándar en el portapapeles; con -o imprime lo que hay en él. Es la salida de la tubería hacia el resto del SO, y su entrada.\n\nOPCIONES\n  -o\n    Leer el portapapeles en lugar de escribirlo.\n\nCOSTE PARA EL DISPOSITIVO\n  Ninguno en el dispositivo: el portapapeles es un servicio del intérprete, recordado por el SO.\n\nNOTAS\n  Necesita el permiso system.clipboard.\n\nVÉASE TAMBIÉN\n  tee(1), base64(1), say(1)\n\nEJEMPLOS\n  stat /data/notes.txt | clip\n  clip -o | wc"
+  },
+  {
+   "id": "cp",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cp - Copiar un archivo",
+   "synopsis": "cp <source> <dest>",
+   "description": "Copiar un archivo de una ruta de origen a una ruta de destino.",
+   "details": "NOMBRE\n  cp - Copiar un archivo.\n\nSINOPSIS\n  cp <source> <dest>\n\nDESCRIPCIÓN\n  Copia un archivo de la ruta de origen a la ruta de destino, byte a byte. Si el destino ya existe, se sustituye. Los nombres con espacios van entre comillas dobles. Imprime 'copying <origen> to <destino> ...' y después 'copied successfully'.\n\nOPCIONES\n  <source>\n    La ruta del archivo original que se va a copiar.\n  <dest>\n    La ruta de destino donde se creará la copia.\n\nARQUITECTURA DEL SISTEMA\n  Pasa por la capa de archivos de la web OS, que lee el origen y escribe la copia (en la mayoría de los dispositivos con '/api/fs/read' y '/api/fs/write'). La escritura es atómica: los bytes van primero a un archivo temporal, así que si la copia falla un destino ya existente queda como estaba. Una copia que no cabe en el espacio libre se rechaza antes de empezar.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. La copia se completó.\n  1\n    La copia falló: origen inexistente, espacio insuficiente, navegador no emparejado o dispositivo inalcanzable.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  mv(1), rm(1)\n\nEJEMPLOS AVANZADOS\n  cp /data/orig.txt /data/dest.txt\n  cp \"my file.txt\" \"/data/copy.txt\""
+  },
+  {
+   "id": "cpu",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "cpu - Núcleos, frecuencia, número de tareas y carga",
+   "synopsis": "cpu",
+   "description": "Imprime lo que el dispositivo informa sobre su procesador, una línea 'clave valor' por campo: normalmente el número de núcleos, la frecuencia, las tareas o procesos activos y la carga. Los campos dependen del dispositivo.",
+   "details": "NOMBRE\n  cpu - Núcleos, frecuencia, número de tareas y carga\n\nSINOPSIS\n  cpu\n\nDESCRIPCIÓN\n  Imprime lo que el dispositivo informa sobre su procesador, una línea 'clave valor' por campo: normalmente el número de núcleos, la frecuencia, las tareas o procesos activos y la carga. Los campos dependen del dispositivo.\n\nOPCIONES\n  Este comando no admite opciones.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/cpu.\n\nVÉASE TAMBIÉN\n  heap(1), diag(1), uptime(1)\n\nEJEMPLOS\n  cpu\n  watch -n 5 cpu"
+  },
+  {
+   "id": "curl",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "curl - Petición web HTTP",
+   "synopsis": "curl <url>",
+   "description": "Realizar una petición HTTP GET a una URL y mostrar el contenido de la respuesta.",
+   "details": "NOMBRE\n  curl - Obtener un recurso web HTTP.\n\nSINOPSIS\n  curl <url>\n\nDESCRIPCIÓN\n  Realiza una petición HTTP GET e imprime la carga útil de la respuesta en la salida estándar del terminal.\n\nOPCIONES\n  <url>\n    La dirección web de destino.\n\nARQUITECTURA DEL SISTEMA\n  Envía una petición GET. Sujeto a restricciones CORS en entornos simulados. Se ejecuta directamente a través de la pila de sockets Wi-Fi de ESP-IDF (LwIP) en los dispositivos físicos.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Red sin conexión, bloqueo CORS o tiempo de espera agotado del host.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  wget(1), ping(1)\n\nEJEMPLOS AVANZADOS\n  curl ipify.org\n  curl http://example.com"
+  },
+  {
+   "id": "cut",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cut - Seleccionar campos o columnas de cada línea",
+   "synopsis": "cut -d<char> -f<list>   |   cut -c<from>-<to>",
+   "description": "Conserva solo parte de cada línea. Sin él, la salida en columnas de /proc y del registro del dispositivo no se puede canalizar.",
+   "details": "NOMBRE\n  cut - Seleccionar campos o columnas de cada línea\n\nSINOPSIS\n  cut -d<char> -f<list>   |   cut -c<from>-<to>\n\nDESCRIPCIÓN\n  Conserva solo parte de cada línea. Sin él, la salida en columnas de /proc y del registro del dispositivo no se puede canalizar.\n\nOPCIONES\n  -d C\n    Separador de campos (un tabulador por defecto).\n  -f LIST\n    Qué campos conservar: 1, 1,3 o 2-4.\n  -c A-B\n    Conservar los caracteres de A a B en lugar de campos.\n\nCOSTE PARA EL DISPOSITIVO\n  Ninguno. Enteramente del lado del navegador.\n\nVÉASE TAMBIÉN\n  grep(1), sort(1)\n\nEJEMPLOS\n  cat /proc/meminfo | cut -d\" \" -f1\n  apps | cut -f1"
+  },
+  {
+   "id": "date",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "date - Fecha y hora del navegador y del dispositivo",
+   "synopsis": "date [-u] [-s]",
+   "description": "Mostrar la fecha y la hora de este navegador y del dispositivo, y opcionalmente ajustar el reloj del dispositivo.",
+   "details": "NOMBRE\n  date - Fecha y hora del navegador y del dispositivo.\n\nSINOPSIS\n  date [-u] [-s]\n\nDESCRIPCIÓN\n  Imprime dos relojes: 'local', la hora de este navegador, y 'device', el reloj del dispositivo, seguido de '(NTP-synced)' si el dispositivo lo ha sincronizado por internet o de '(no NTP)' si no lo ha hecho. Las horas se muestran como YYYY-MM-DDTHH:MM:SS (ISO 8601) en la zona horaria de este navegador. Si el dispositivo no informa de su reloj, la segunda línea dice 'device clock not reported'.\n\nOPCIONES\n  -u\n    Muestra ambas horas en UTC (con una Z final).\n  -s\n    Ajusta el reloj del dispositivo con el de este navegador; útil cuando el dispositivo no se ha sincronizado por NTP. En los dispositivos que lo permiten; donde hay cuentas de usuario hace falta un administrador.\n\nARQUITECTURA DEL SISTEMA\n  Lee el reloj del dispositivo de GET '/api/status' (network.time y network.time_synced). Con -s envía POST '/api/time/set' con la hora del navegador en segundos. Un dispositivo cuyo reloj no se puede ajustar responde 'date: not available on this device'.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Dispositivo inalcanzable, navegador no emparejado o reloj no ajustado.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  status(1), uptime(1)\n\nEJEMPLOS AVANZADOS\n  date\n  date -u\n  date -s"
+  },
+  {
+   "id": "df",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "df - Uso del espacio en disco",
+   "synopsis": "df",
+   "description": "Mostrar el espacio total, usado y libre del almacenamiento del dispositivo.",
+   "details": "NOMBRE\n  df - Uso del espacio en disco.\n\nSINOPSIS\n  df\n\nDESCRIPCIÓN\n  Muestra el tamaño del almacenamiento del dispositivo, cuánto está usado y cuánto está libre, en una tabla con las columnas Filesystem, Size, Used, Avail, Use% y Mounted on. El almacenamiento aparece montado en /data.\n\nARQUITECTURA DEL SISTEMA\n  Lee GET '/api/status' (storage.total_bytes y storage.free_bytes); el espacio usado es el total menos el libre. Si el dispositivo no informa de un almacenamiento montado o no responde, imprime 'df: storage not mounted or unreachable'.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Estadísticas impresas.\n  1\n    Almacenamiento no montado o dispositivo inalcanzable.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  status(1), free(1)\n\nEJEMPLOS AVANZADOS\n  df"
+  },
+  {
+   "id": "diag",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "diag - Toda la tabla de diagnóstico, una clave por línea",
+   "synopsis": "diag [key-prefix]",
+   "description": "Aplana todo lo que informa /api/diag en líneas 'clave valor', con las claves anidadas unidas por un punto (por ejemplo mem.free); los valores sí/no pasan a 1/0 y las listas a valores separados por comas. Lo que aparece depende del dispositivo: normalmente memoria, CPU, red, tiempo de actividad y contadores del sistema. Es el comando más canalizable del conjunto y lo mejor que se le puede pasar a anima.",
+   "details": "NOMBRE\n  diag - Toda la tabla de diagnóstico, una clave por línea\n\nSINOPSIS\n  diag [key-prefix]\n\nDESCRIPCIÓN\n  Aplana todo lo que informa /api/diag en líneas 'clave valor', con las claves anidadas unidas por un punto (por ejemplo mem.free); los valores sí/no pasan a 1/0 y las listas a valores separados por comas. Lo que aparece depende del dispositivo: normalmente memoria, CPU, red, tiempo de actividad y contadores del sistema. Es el comando más canalizable del conjunto y lo mejor que se le puede pasar a anima.\n\nOPCIONES\n  [key-prefix]\n    Muestra solo las claves que empiezan por esto, p. ej. mem o cpu. Si ninguna clave coincide imprime 'diag: no key starts with ...'.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/diag, en lugar de una petición separada para cada parte.\n\nVÉASE TAMBIÉN\n  heap(1), cpu(1), status(1), anima(1)\n\nEJEMPLOS\n  diag\n  diag mem\n  diag | anima \"¿la memoria va bien?\"\n  diag | tee /data/diag.txt"
+  },
+  {
+   "id": "display",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.display"
+   ],
+   "title": "display - Encender o apagar el panel",
+   "synopsis": "display on | display off",
+   "description": "Conmuta la pantalla física e imprime el brillo que el dispositivo informa después.",
+   "details": "NOMBRE\n  display - Encender o apagar el panel\n\nSINOPSIS\n  display on | display off\n\nDESCRIPCIÓN\n  Conmuta la pantalla física e imprime el brillo que el dispositivo informa después.\n\nOPCIONES\n  on\n    Panel encendido.\n  off\n    Panel apagado.\n\nCOSTE PARA EL DISPOSITIVO\n  Un POST /api/display.\n\nNOTAS\n  Necesita el permiso device.display. Con un presupuesto de 120 mAh, esta es la mayor palanca que existe, y hasta ahora solo era accesible a través de Ajustes.\n\nVÉASE TAMBIÉN\n  screen(1), status(1)\n\nEJEMPLOS\n  display off\n  display on"
+  },
+  {
+   "id": "dmesg",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "dmesg - Imprimir el registro del sistema del dispositivo",
+   "synopsis": "dmesg [-l E|W|I|D|V]",
+   "description": "Imprimir los mensajes recientes del registro del sistema del dispositivo.",
+   "details": "NOMBRE\n  dmesg - Imprimir el registro del sistema del dispositivo.\n\nSINOPSIS\n  dmesg [-l E|W|I|D|V]\n\nDESCRIPCIÓN\n  Obtiene los mensajes recientes del registro del sistema del dispositivo y los imprime tal cual. Lo que contiene el registro y hasta dónde llega dependen del dispositivo.\n\nOPCIONES\n  -l NIVEL\n    Pide solo los mensajes de ese nivel o más graves: E (error), W (aviso), I (información), D (depuración), V (detallado). El filtro lo aplica el dispositivo; un dispositivo que no lo admite devuelve el registro completo.\n\nARQUITECTURA DEL SISTEMA\n  Emite GET '/api/logs' (con '?level=X' si se usa -l). Donde hay cuentas de usuario, el registro está reservado a un administrador. Mensajes de error: 'dmesg: not paired (401)', 'dmesg: failed to read logs (status N)', 'dmesg: device unreachable'.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Registros impresos.\n  1\n    Navegador no emparejado, petición rechazada o dispositivo inalcanzable.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  status(1), reboot(1)\n\nEJEMPLOS AVANZADOS\n  dmesg\n  dmesg -l W\n  dmesg | grep wifi"
+  },
+  {
+   "id": "du",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "du - Uso de disco por directorio, el mayor primero",
+   "synopsis": "du [-d N] [path]",
+   "description": "Recorre un subárbol y suma el tamaño de los archivos de cada directorio, acumulando los hijos en sus padres. La salida se ordena por tamaño, así que la respuesta a \"qué se está comiendo la tarjeta\" es la primera línea.",
+   "details": "NOMBRE\n  du - Uso de disco por directorio, el mayor primero\n\nSINOPSIS\n  du [-d N] [path]\n\nDESCRIPCIÓN\n  Recorre un subárbol y suma el tamaño de los archivos de cada directorio, acumulando los hijos en sus padres. La salida se ordena por tamaño, así que la respuesta a \"qué se está comiendo la tarjeta\" es la primera línea.\n\nOPCIONES\n  -d N\n    Descender como máximo N niveles (por defecto 2, máximo absoluto 6).\n  [path]\n    Dónde empezar; el directorio de trabajo por defecto.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/fs/list por directorio, estrictamente secuencial, y nunca más de 60 en una sola invocación. Ctrl+C lo detiene.\n\nNOTAS\n  Un listado le cuesta al dispositivo un stat() por entrada, así que el recorrido está presupuestado en lugar de ser completo: cuando se detiene, lo indica.\n\nVÉASE TAMBIÉN\n  df(1), tree(1), stat(1)\n\nEJEMPLOS\n  du\n  du -d 1 /data\n  du /data | sort -n -r | head -n 5"
+  },
+  {
+   "id": "echo",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "echo - Imprimir o escribir texto",
+   "synopsis": "echo [text] [> file]",
+   "description": "Imprimir texto en la salida estándar o redirigirlo para escribir un archivo.",
+   "details": "NOMBRE\n  echo - Imprimir y redirigir mensajes.\n\nSINOPSIS\n  echo <text>\n  echo <text> > <file>\n\nDESCRIPCIÓN\n  Imprime una cadena de texto. Si va seguida del operador de redirección '>', escribe el texto en un archivo.\n\nOPCIONES\n  <text>\n    La cadena que se va a imprimir o guardar.\n  > <file>\n    La ruta donde escribir la cadena de salida.\n\nARQUITECTURA DEL SISTEMA\n  El analizador de la línea de comandos detecta el token de redirección '>'. En tales casos, elimina las comillas externas y envía una petición POST a '/api/fs/write?path=<file>'.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Impresión o escritura completada.\n  1\n    Error de escritura del sistema de archivos.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  cat(1), open(1)\n\nEJEMPLOS AVANZADOS\n  echo Hello user\n  echo \"THEME=dark\" > /data/theme.cfg"
+  },
+  {
+   "id": "env",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "env - Mostrar las variables de entorno",
+   "synopsis": "env",
+   "description": "Listar todas las variables de entorno activas de la sesión del intérprete.",
+   "details": "NOMBRE\n  env - Mostrar las variables de entorno activas.\n\nSINOPSIS\n  env\n\nDESCRIPCIÓN\n  Muestra las variables de entorno del sistema con el formato de filas 'KEY=VALUE'.\n\nARQUITECTURA DEL SISTEMA\n  Lee y analiza las propiedades del objeto de memoria en tiempo de ejecución local 'envVars'.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  export(1)\n\nEJEMPLOS AVANZADOS\n  env"
+  },
+  {
+   "id": "export",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "export - Definir una variable de entorno",
+   "synopsis": "export [NAME=value]",
+   "description": "Definir o actualizar variables de entorno globales.",
+   "details": "NOMBRE\n  export - Definir una variable de entorno.\n\nSINOPSIS\n  export [VAR=value]\n\nDESCRIPCIÓN\n  Define una variable de entorno. Si está vacío, imprime todas las variables activas en formato 'declare -x'.\n\nOPCIONES\n  [VAR=value]\n    El par clave-valor que se va a registrar (p. ej. 'LANG=it').\n\nARQUITECTURA DEL SISTEMA\n  Guarda las claves y los valores en el mapa de memoria local 'envVars'. Los sufijos precedidos por '$' son evaluados por el analizador.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  env(1)\n\nEJEMPLOS AVANZADOS\n  export LANG=it\n  export PATH=/apps/bin:/system/bin\n  export"
+  },
+  {
+   "id": "find",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "find - Buscar archivos recursivamente",
+   "synopsis": "find [path] -name <pattern>",
+   "description": "Buscar recursivamente archivos que coincidan con un patrón bajo una ruta.",
+   "details": "NOMBRE\n  find - Buscar archivos recursivamente.\n\nSINOPSIS\n  find [path] -name <pattern>\n  find <pattern>\n\nDESCRIPCIÓN\n  Recorre el árbol de directorios a partir del directorio de destino. Coincide con los nombres usando una consulta que no distingue mayúsculas de minúsculas.\n\nOPCIONES\n  [path]\n    La carpeta de inicio (por defecto el CWD activo).\n  -name <pattern>\n    La consulta de nombre de archivo con la que coincidir.\n\nARQUITECTURA DEL SISTEMA\n  Emite peticiones HTTP asíncronas recursivas a '/api/fs/list'. Provoca un escaneo profundo en las carpetas hijas y devuelve las rutas dinámicamente.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Recorrido completado.\n  1\n    Error de escaneo del sistema de archivos.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  ls(1), grep(1)\n\nEJEMPLOS AVANZADOS\n  find .txt\n  find /data -name song.mp3"
+  },
+  {
+   "id": "free",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "free - Memoria libre",
+   "synopsis": "free",
+   "description": "Mostrar cuánta memoria libre informa el dispositivo.",
+   "details": "NOMBRE\n  free - Memoria libre.\n\nSINOPSIS\n  free\n\nDESCRIPCIÓN\n  Imprime una línea, 'free heap: <tamaño>', con la memoria libre que el dispositivo informa para su sistema. Es un solo número: para los detalles y la fragmentación usa heap(1), en los dispositivos que lo admiten. Si el dispositivo no la informa, imprime 'free: status unavailable'.\n\nARQUITECTURA DEL SISTEMA\n  Lee el campo free_heap de GET '/api/status'.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Dispositivo inalcanzable o valor no informado.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  status(1), uptime(1), heap(1)\n\nEJEMPLOS AVANZADOS\n  free"
+  },
+  {
+   "id": "gpio",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.gpio"
+   ],
+   "title": "gpio - Lee o escribe un pin",
+   "synopsis": "gpio read <pin>   |   gpio write <pin> <0|1>",
+   "description": "E/S en crudo sobre los pines, dentro del conjunto de pines que el dispositivo permite. Un pin fuera de ese conjunto es rechazado por el dispositivo con un error, mostrado tal cual. Qué pines están permitidos depende del dispositivo.",
+   "details": "NOMBRE\n  gpio - Lee o escribe un pin\n\nSINOPSIS\n  gpio read <pin>   |   gpio write <pin> <0|1>\n\nDESCRIPCIÓN\n  E/S en crudo sobre los pines, dentro del conjunto de pines que el dispositivo permite. Un pin fuera de ese conjunto es rechazado por el dispositivo con un error, mostrado tal cual. Qué pines están permitidos depende del dispositivo.\n\nOPCIONES\n  read PIN\n    Lee el nivel del pin e imprime 'pin PIN = VALOR'. 'get' hace lo mismo.\n  write PIN 0|1\n    Fija el nivel: 1 o high lo pone alto, cualquier otro valor bajo. 'set' hace lo mismo.\n\nCOSTE PARA EL DISPOSITIVO\n  Una petición a /api/gpio por llamada (GET para leer, POST para escribir). Donde hay cuentas de usuario hace falta un administrador.\n\nVÉASE TAMBIÉN\n  ir(1), display(1)\n\nEJEMPLOS\n  gpio read 1\n  gpio write 2 1"
+  },
+  {
+   "id": "grep",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "grep - Filtrar líneas por patrón",
+   "synopsis": "grep <pattern> <file>",
+   "description": "Buscar un patrón en un archivo e imprimir las líneas coincidentes con sus números.",
+   "details": "NOMBRE\n  grep - Buscar las líneas que coinciden con un patrón.\n\nSINOPSIS\n  grep <pattern> <file>\n\nDESCRIPCIÓN\n  Escanea el archivo línea por línea en busca de coincidencias exactas de subcadena (distingue mayúsculas de minúsculas).\n\nOPCIONES\n  <pattern>\n    La cadena de consulta que se va a buscar.\n  <file>\n    La ruta del archivo de destino que se va a escanear.\n\nARQUITECTURA DEL SISTEMA\n  El cliente obtiene la carga útil de destino mediante GET '/api/fs/read'. Analiza la carga útil en memoria local, divide las líneas usando una expresión regular '\\r?\\n' y aplica 'String.prototype.includes()' para aislar las coincidencias. Renderiza los resultados precedidos por sus números de línea.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Escaneo completado.\n  1\n    Fallo de lectura del archivo o excepción del analizador.\n  404\n    No se encontró el archivo especificado.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  cat(1), find(1)\n\nEJEMPLOS AVANZADOS\n  grep SSID /system/config/settings.json\n  grep ERROR /data/logs.txt"
+  },
+  {
+   "id": "head",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "head - Mostrar las primeras líneas de un archivo",
+   "synopsis": "head [-n lines] <file>",
+   "description": "Mostrar la primera parte (10 líneas por defecto) de un archivo.",
+   "details": "NOMBRE\n  head - Mostrar las primeras líneas de un archivo.\n\nSINOPSIS\n  head [-n <lines>] <file>\n\nDESCRIPCIÓN\n  Imprime el segmento inicial de un archivo (10 líneas por defecto).\n\nOPCIONES\n  -n <lines>\n    Especifica el número exacto de líneas que se imprimirán (p. ej. '-n 5').\n  <file>\n    La ruta del archivo de destino.\n\nARQUITECTURA DEL SISTEMA\n  Descarga el contenido del archivo mediante GET '/api/fs/read'. Analiza las líneas en memoria y aísla los primeros elementos mediante el troceado de arrays ('slice(0, n)').\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Error de lectura o formato de parámetro no válido.\n  404\n    Archivo de destino no encontrado.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  tail(1), cat(1)\n\nEJEMPLOS AVANZADOS\n  head logs.txt\n  head -n 5 /data/settings.json"
+  },
+  {
+   "id": "heap",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "heap - Detalle del heap, incluida la fragmentación",
+   "synopsis": "heap",
+   "description": "Imprime las reservas de heap interna, DMA y por defecto con sus bytes libres, el bloque libre más grande, el mínimo histórico visto y el porcentaje de fragmentación, más la pila libre mínima del servidor HTTP.",
+   "details": "NOMBRE\n  heap - Detalle del heap, incluida la fragmentación\n\nSINOPSIS\n  heap\n\nDESCRIPCIÓN\n  Imprime las reservas de heap interna, DMA y por defecto con sus bytes libres, el bloque libre más grande, el mínimo histórico visto y el porcentaje de fragmentación, más la pila libre mínima del servidor HTTP.\n\nOPCIONES\n  Este comando no admite opciones.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/heap.\n\nNOTAS\n  La fragmentación, no los bytes libres, es el cuello de botella documentado en este chip, y free(1) no puede mostrarla.\n\nVÉASE TAMBIÉN\n  free(1), diag(1), cpu(1), watch(1)\n\nEJEMPLOS\n  heap\n  watch -n 5 heap\n  heap | grep frag"
+  },
+  {
+   "id": "hexdump",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "hexdump - Hexadecimal y ASCII de los primeros bytes de un archivo",
+   "synopsis": "hexdump [-n bytes] [-s offset] <file>",
+   "description": "Imprime un volcado hexadecimal clásico: desplazamiento, dieciséis bytes en hexadecimal y luego los caracteres imprimibles entre barras verticales. Es la forma de mirar una captura .ir, una imagen de firmware o un bloque de guardado sin que cat lo convierta en mojibake.",
+   "details": "NOMBRE\n  hexdump - Hexadecimal y ASCII de los primeros bytes de un archivo\n\nSINOPSIS\n  hexdump [-n bytes] [-s offset] <file>\n\nDESCRIPCIÓN\n  Imprime un volcado hexadecimal clásico: desplazamiento, dieciséis bytes en hexadecimal y luego los caracteres imprimibles entre barras verticales. Es la forma de mirar una captura .ir, una imagen de firmware o un bloque de guardado sin que cat lo convierta en mojibake.\n\nOPCIONES\n  -n N\n    Cuántos bytes leer (por defecto 256, máximo 4096).\n  -s N\n    Empezar en el byte N.\n  <file>\n    El archivo que se va a leer.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/fs/read con una cabecera HTTP Range: si el dispositivo la respeta, solo viajan los bytes pedidos (256 por defecto), incluso de un archivo de 640 MB.\n\nVÉASE TAMBIÉN\n  cat(1), base64(1), wc(1)\n\nEJEMPLOS\n  hexdump /data/remote.ir\n  hexdump -n 64 -s 512 /data/image.bin"
+  },
+  {
+   "id": "history",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "history - Lista del historial de comandos",
+   "synopsis": "history",
+   "description": "Listar los comandos anteriores introducidos en la sesión actual.",
+   "details": "NOMBRE\n  history - Lista del historial de comandos.\n\nSINOPSIS\n  history\n\nDESCRIPCIÓN\n  Muestra la lista de comandos introducidos en la sesión actual del terminal.\n\nARQUITECTURA DEL SISTEMA\n  Lee del array global 'hist' almacenado en RAM. La cola está limitada a un máximo de 100 comandos.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  clear(1)\n\nEJEMPLOS AVANZADOS\n  history"
+  },
+  {
+   "id": "ir",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.ir"
+   ],
+   "title": "ir - Controlar el LED infrarrojo",
+   "synopsis": "ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status",
+   "description": "db imprime el GPIO, los protocolos que codifica esta compilación y el tamaño de la tabla TV-B-Gone, para ver qué es posible antes de enviar nada. send transmite un código decodificado, raw transmite una lista de tiempos.",
+   "details": "NOMBRE\n  ir - Controlar el LED infrarrojo\n\nSINOPSIS\n  ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status\n\nDESCRIPCIÓN\n  db imprime el GPIO, los protocolos que codifica esta compilación y el tamaño de la tabla TV-B-Gone, para ver qué es posible antes de enviar nada. send transmite un código decodificado, raw transmite una lista de tiempos.\n\nOPCIONES\n  db\n    Mostrar las capacidades (por defecto).\n  send <proto> <addr> <cmd> [rep]\n    Enviar un código.\n  raw <us,…>\n    Enviar tiempos en microsegundos en bruto.\n  tvbgone start|stop|status\n    Ejecutar el barrido TV-B-Gone.\n\nCOSTE PARA EL DISPOSITIVO\n  Una petición cada uno.\n\nNOTAS\n  Necesita el permiso device.ir. El interferidor (jammer) no se expone aquí deliberadamente: inunda la banda desde una tarea en segundo plano sin marcha en seco, así que se queda en la aplicación IR Remote, donde un botón visible puede detenerlo.\n\nVÉASE TAMBIÉN\n  display(1), link(1)\n\nEJEMPLOS\n  ir db\n  ir send nec 4 8\n  ir tvbgone status"
+  },
+  {
+   "id": "kill",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "kill - Cierra una app en primer plano",
+   "synopsis": "kill <id-app>",
+   "description": "Pide al shell que cierre la ventana de una app, liberando su RAM. Se indica por id (el que imprime ps), no por el PID sintético.",
+   "details": "NOMBRE\n  kill - Cierra una app en primer plano\n\nSINOPSIS\n  kill <id-app>\n\nDESCRIPCIÓN\n  Pide al shell que cierre la ventana de una app, liberando su RAM. Se indica por id (el que imprime ps), no por el PID sintético.\n\nOPCIONES\n  Sin opciones.\n\nCOSTE PARA EL DISPOSITIVO\n  ninguno — un mensaje al shell\n\nVÉASE TAMBIÉN\n  ps(1), apps(1)\n\nEJEMPLOS\n  ps\n  kill notes"
+  },
+  {
+   "id": "lang",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "lang - Leer o establecer el idioma de la interfaz del SO",
+   "synopsis": "lang [it|en|fr|es|de]",
+   "description": "Sin argumento imprime el idioma activo y su contador de generación. Con uno establece el idioma para todo el SO, incluida la interfaz nativa del panel.",
+   "details": "NOMBRE\n  lang - Leer o establecer el idioma de la interfaz del SO\n\nSINOPSIS\n  lang [it|en|fr|es|de]\n\nDESCRIPCIÓN\n  Sin argumento imprime el idioma activo y su contador de generación. Con uno establece el idioma para todo el SO, incluida la interfaz nativa del panel.\n\nOPCIONES\n  [code]\n    Uno de it, en, fr, es, de.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET o un POST /api/lang.\n\nVÉASE TAMBIÉN\n  status(1), theme(1)\n\nEJEMPLOS\n  lang\n  lang it"
+  },
+  {
+   "id": "link",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.link"
+   ],
+   "title": "link - Mostrar los vecinos ESP-NOW y el estado de la transferencia",
+   "synopsis": "link peers | link status",
+   "description": "peers lista los dispositivos que este puede ver por ESP-NOW, con el nombre local y el canal; status muestra si hay una transferencia en curso y en qué punto está.",
+   "details": "NOMBRE\n  link - Mostrar los vecinos ESP-NOW y el estado de la transferencia\n\nSINOPSIS\n  link peers | link status\n\nDESCRIPCIÓN\n  peers lista los dispositivos que este puede ver por ESP-NOW, con el nombre local y el canal; status muestra si hay una transferencia en curso y en qué punto está.\n\nOPCIONES\n  peers\n    Listar los vecinos (por defecto).\n  status\n    Mostrar el estado de la transferencia.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET cada uno.\n\nNOTAS\n  Necesita el permiso mesh.peer. Solo lectura a propósito: enviar un comando a otro dispositivo convierte una errata en el problema de otro, y el paso de confirmación para eso está en la aplicación Vicino.\n\nVÉASE TAMBIÉN\n  wifi(1), status(1)\n\nEJEMPLOS\n  link peers\n  link status"
+  },
+  {
+   "id": "ls",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "ls - Listar el contenido de un directorio",
+   "synopsis": "ls [path]",
+   "description": "Listar las carpetas y los archivos del directorio actual o de una ruta indicada.",
+   "details": "NOMBRE\n  ls - Listar el contenido de un directorio.\n\nSINOPSIS\n  ls [path]\n\nDESCRIPCIÓN\n  Lista las entradas de la carpeta indicada en el almacenamiento del dispositivo. Sin ruta, lista el directorio de trabajo actual (CWD).\n  Primero aparecen las carpetas (resaltadas y con una barra final '/') y después los archivos con su tamaño; cada grupo va en orden alfabético. La última línea cuenta los elementos; una carpeta vacía imprime \"(empty)\". Se muestran como máximo 200 entradas y un listado más largo lo indica.\n  En los dispositivos que ofrecen /proc, 'ls /proc' lista los nodos con información del sistema en tiempo real; se leen con cat.\n\nOPCIONES\n  [path]\n    La ruta relativa o absoluta de la carpeta que se va a listar.\n\nARQUITECTURA DEL SISTEMA\n  El listado pasa por la capa de archivos del sistema, que lo pide al dispositivo con GET /api/fs/list?path=<path>. El mismo comando funciona en todos los dispositivos.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. La carpeta existe y se imprimió su contenido.\n  1\n    La carpeta no existe, el dispositivo no está vinculado o no se puede acceder a la API de archivos.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  cd(1), find(1), pwd(1), tree(1), stat(1)\n\nEJEMPLOS AVANZADOS\n  ls               # Lista el directorio actual\n  ls /data         # Lista el contenido de la carpeta data\n  ls ../system     # Lista usando una ruta relativa al padre"
+  },
+  {
+   "id": "man",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "man - Manual de comandos en línea",
+   "synopsis": "man <command>",
+   "description": "Mostrar la página del manual de un comando del Terminal.",
+   "details": "NOMBRE\n  man - Páginas del manual en línea.\n\nSINOPSIS\n  man <command>\n\nDESCRIPCIÓN\n  Muestra la página del manual al estilo UNIX de un comando del Terminal: una línea con el nombre y la sinopsis, y después la descripción y los detalles.\n  La página procede del manual que acompaña al sistema, el mismo que muestra la app Ayuda, en el idioma configurado en el sistema (italiano, inglés, español, francés o alemán). Un comando que ese manual no cubre se busca entre las páginas propias del dispositivo, en /system/registry/manual. Sin argumento, man pregunta qué página se quiere.\n\nOPCIONES\n  <command>\n    El nombre del comando cuya página se va a mostrar.\n\nARQUITECTURA DEL SISTEMA\n  Busca primero en el manual incluido en la web OS y después lee del dispositivo el archivo /system/registry/manual/<command>.info. Si la página no está en ninguno de los dos, man imprime \"No manual entry for <command>\".\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  help(1), clear(1)\n\nEJEMPLOS AVANZADOS\n  man ls\n  man cd"
+  },
+  {
+   "id": "mkdir",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "mkdir - Crear un directorio",
+   "synopsis": "mkdir <dir>",
+   "description": "Crear una carpeta nueva en la ruta indicada, con las carpetas intermedias que falten.",
+   "details": "NOMBRE\n  mkdir - Crear un directorio.\n\nSINOPSIS\n  mkdir <dir>\n\nDESCRIPCIÓN\n  Crea la carpeta en el almacenamiento del dispositivo y, como 'mkdir -p', también las carpetas intermedias que falten en la ruta. Una carpeta que ya existe no es un error. Si lo consigue, imprime \"created <ruta>\".\n\nOPCIONES\n  <dir>\n    La ruta relativa o absoluta de la carpeta que se va a crear.\n\nARQUITECTURA DEL SISTEMA\n  Pasa por la capa de archivos del sistema, que envía POST /api/fs/mkdir?path=<dir> por cada nivel que aún no existe.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Carpeta creada o ya existente.\n  1\n    Falló la creación (p. ej. almacenamiento lleno o de solo lectura, permiso denegado, dispositivo no vinculado o API de archivos inaccesible).\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  touch(1), rm(1), ls(1)\n\nEJEMPLOS AVANZADOS\n  mkdir /data/test\n  mkdir new_notes\n  mkdir /data/projects/2026/notes   # también crea las carpetas intermedias"
+  },
+  {
+   "id": "mv",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "mv - Mover o renombrar un archivo",
+   "synopsis": "mv <source> <dest>",
+   "description": "Mover o renombrar un archivo del origen al destino.",
+   "details": "NOMBRE\n  mv - Mover o renombrar un archivo.\n\nSINOPSIS\n  mv <source> <dest>\n\nDESCRIPCIÓN\n  Mueve un archivo de la ruta de origen a la ruta de destino. Renombra el archivo si el directorio padre permanece igual.\n\nOPCIONES\n  <source>\n    El archivo de destino que se va a mover.\n  <dest>\n    La ruta de destino.\n\nARQUITECTURA DEL SISTEMA\n  Ejecuta una secuencia transaccional:\n  1. Obtiene la carga útil de origen en RAM mediante GET '/api/fs/read'.\n  2. Escribe la carga útil en el destino mediante POST '/api/fs/write'.\n  3. Si la escritura devuelve HTTP 200, envía un POST a '/api/fs/delete' dirigido al archivo de origen.\n  Esta secuencia evita la pérdida de datos durante los fallos de escritura.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Archivo movido correctamente.\n  1\n    Fallo de escritura o de borrado.\n  404\n    No se encontró el archivo de origen.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  cp(1), rm(1)\n\nEJEMPLOS AVANZADOS\n  mv old.txt new.txt\n  mv /data/temp.txt /system/config/saved.txt"
+  },
+  {
+   "id": "notify",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "notify - Publicar una notificación en el centro de notificaciones del SO",
+   "synopsis": "notify <text>",
+   "description": "Cómo un watch largo avisa de que ha terminado después de haber cambiado a otra ventana.",
+   "details": "NOMBRE\n  notify - Publicar una notificación en el centro de notificaciones del SO\n\nSINOPSIS\n  notify <text>\n\nDESCRIPCIÓN\n  Cómo un watch largo avisa de que ha terminado después de haber cambiado a otra ventana.\n\nOPCIONES\n  <text>\n    El mensaje; sin él, lee la entrada estándar.\n\nCOSTE PARA EL DISPOSITIVO\n  Ninguno en el dispositivo: pasa por el intermediario de capacidades del intérprete.\n\nNOTAS\n  Necesita el permiso system.notify.\n\nVÉASE TAMBIÉN\n  watch(1), say(1)\n\nEJEMPLOS\n  notify \"the copy is done\""
+  },
+  {
+   "id": "open",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "open - Abrir un archivo con la aplicación por defecto",
+   "synopsis": "open <file>",
+   "description": "Abrir un archivo usando la aplicación gráfica asociada.",
+   "details": "NOMBRE\n  open - Abrir un archivo con la aplicación por defecto.\n\nSINOPSIS\n  open <file>\n\nDESCRIPCIÓN\n  Abre el recurso especificado. El shell de escritorio resuelve la extensión del archivo y lanza la ventana asociada por defecto.\n\nOPCIONES\n  <file>\n    La ruta del archivo que se va a abrir.\n\nARQUITECTURA DEL SISTEMA\n  Usa llamadas 'postMessage' del iframe del navegador. El terminal envía '{ type: \"open-file\", path: file }' a la ventana padre. El intérprete analiza la extensión, lee '/system/config/file-associations.json' y abre la aplicación (p. ej. 'notepad', 'photo-viewer').\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Mensaje enviado al intérprete.\n  1\n    El anfitrión del intérprete es inalcanzable o la asociación de archivo no es válida.\n\nCONFORME A\n  Extensión propietaria de NucleoOS.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  echo(1)\n\nEJEMPLOS AVANZADOS\n  open /data/Pictures/wallpaper.png\n  open /data/document.txt"
+  },
+  {
+   "id": "ota",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "any": [
+    "ota",
+    "ota.firmware",
+    "ota.package"
+   ],
+   "title": "ota - Mostrar la ranura en ejecución, la siguiente y el estado de reversión",
+   "synopsis": "ota [status]",
+   "description": "Lo que hay que leer antes y después de una actualización: qué copia instalada del sistema (ranura) está en ejecución, en cuál caería la próxima actualización, el estado de la copia actual y si la vuelta automática a la versión anterior (reversión) está activada.",
+   "details": "NOMBRE\n  ota - Mostrar la ranura en ejecución, la siguiente y el estado de reversión\n\nSINOPSIS\n  ota [status]\n\nDESCRIPCIÓN\n  Lo que hay que leer antes y después de una actualización: qué copia instalada del sistema (ranura) está en ejecución, en cuál caería la próxima actualización, el estado de la copia actual y si la vuelta automática a la versión anterior (reversión) está activada.\n  Imprime una sola línea: running <ranura>  next <ranura>  state <estado>  rollback on|off. Un campo que el dispositivo no indica aparece como '?'.\n\nOPCIONES\n  status\n    El único argumento aceptado; también es el valor por defecto. Cualquier otro argumento se rechaza con un error.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/status.\n\nNOTAS\n  Instalar una actualización NO es posible aquí, a propósito: el dispositivo se reinicia en cuanto se escribe la actualización, así que una ruta mal escrita recuperada del historial sería una actualización irreversible a una pulsación de distancia. Las actualizaciones pasan por el procedimiento de actualización del propio sistema.\n\nVÉASE TAMBIÉN\n  status(1), reboot(1), diag(1)\n\nEJEMPLOS\n  ota"
+  },
+  {
+   "id": "ping",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "ping - Diagnóstico de latencia de red",
+   "synopsis": "ping [host]",
+   "description": "Medir el tiempo de respuesta del dispositivo o de un host web.",
+   "details": "NOMBRE\n  ping - Probar la latencia de red.\n\nSINOPSIS\n  ping [host]\n\nDESCRIPCIÓN\n  Mide el tiempo de ida y vuelta (RTT) enviando 4 peticiones HTTP HEAD una tras otra, con medio segundo de separación. Sin host mide el propio dispositivo (su ruta /api/status); con un host mide ese servidor web por HTTPS. Al final imprime cuántas respuestas llegaron y el tiempo mínimo, máximo y medio. Ctrl+C lo detiene.\n  No es un ping ICMP: las peticiones salen del navegador, así que un host que no responde por HTTPS, o que el navegador bloquea, cuenta como perdido.\n\nOPCIONES\n  [host]\n    El nombre de host o la URL que se va a medir (p. ej. 'google.com'); si falta el esquema se añade https://. Si se omite, se mide el dispositivo.\n\nARQUITECTURA DEL SISTEMA\n  Cada petición se cronometra en el navegador con 'performance.now()', desde el envío hasta la respuesta, así que el tiempo incluye todo el intercambio HTTP, no solo la red.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Se recibió al menos una respuesta.\n  1\n    Se perdieron las 4 peticiones.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  curl(1), wget(1), status(1)\n\nEJEMPLOS AVANZADOS\n  ping             # Mide el dispositivo\n  ping google.com  # Mide google.com"
+  },
+  {
+   "id": "ps",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "ps - Lista las apps como tabla de procesos",
+   "synopsis": "ps",
+   "description": "Muestra las apps instaladas y habilitadas con un estado de ejecución. En un dispositivo que ejecuta una sola app en primer plano más el shell, es lo más parecido a una lista de procesos.",
+   "details": "NOMBRE\n  ps - Lista las apps como tabla de procesos\n\nSINOPSIS\n  ps\n\nDESCRIPCIÓN\n  Muestra las apps instaladas y habilitadas con un estado de ejecución. En un dispositivo que ejecuta una sola app en primer plano más el shell, es lo más parecido a una lista de procesos.\n\nOPCIONES\n  Sin opciones. El PID mostrado es sintético y se renumera en cada listado: para actuar sobre una app usa su id con kill(1).\n\nCOSTE PARA EL DISPOSITIVO\n  una lectura de la tabla de apps, en caché 30 s\n\nVÉASE TAMBIÉN\n  kill(1), apps(1)\n\nEJEMPLOS\n  ps\n  ps | grep run"
+  },
+  {
+   "id": "pwd",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "pwd - Imprimir el directorio de trabajo",
+   "synopsis": "pwd",
+   "description": "Mostrar la ruta absoluta del directorio de trabajo actual.",
+   "details": "NOMBRE\n  pwd - Imprimir el directorio de trabajo.\n\nSINOPSIS\n  pwd\n\nDESCRIPCIÓN\n  Imprime en el terminal la ruta absoluta del CWD activo. Se ejecuta localmente sin acceder a los recursos de hardware.\n\nARQUITECTURA DEL SISTEMA\n  Lee la variable de tiempo de ejecución normalizada 'cwd' y la envía directamente al búfer de salida estándar del terminal.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. La ruta se imprimió.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  cd(1), ls(1)\n\nEJEMPLOS AVANZADOS\n  pwd"
+  },
+  {
+   "id": "reboot",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "power"
+   ],
+   "title": "reboot - Reiniciar el dispositivo",
+   "synopsis": "reboot",
+   "description": "Pedir al dispositivo que se reinicie.",
+   "details": "NOMBRE\n  reboot - Reiniciar el sistema.\n\nSINOPSIS\n  reboot\n\nDESCRIPCIÓN\n  Pide al dispositivo que se reinicie. El Terminal imprime \"rebooting device ...\" y después \"Reboot command sent.\"; la conexión se corta hasta que el dispositivo vuelve a estar encendido. Solo está disponible en los dispositivos que se pueden reiniciar desde aquí.\n\nARQUITECTURA DEL SISTEMA\n  Envía una petición POST a '/api/reboot'; después el dispositivo se reinicia por sí solo.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Comando enviado.\n  1\n    El dispositivo rechazó la petición o no se pudo acceder a él.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  dmesg(1), uptime(1), status(1)\n\nEJEMPLOS AVANZADOS\n  reboot"
+  },
+  {
+   "id": "rm",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "rm - Eliminar un archivo o directorio",
+   "synopsis": "rm <path>",
+   "description": "Eliminar permanentemente un archivo o una carpeta vacía, sin pasar por la Papelera de reciclaje.",
+   "details": "NOMBRE\n  rm - Eliminar un archivo o directorio.\n\nSINOPSIS\n  rm <path>\n\nDESCRIPCIÓN\n  Elimina permanentemente un archivo o una carpeta vacía del almacenamiento del dispositivo. El elemento no pasa por la Papelera de reciclaje y no se puede recuperar. Si lo consigue, imprime \"removed <ruta>\". La carpeta /data en sí no se puede eliminar.\n\nOPCIONES\n  <path>\n    El archivo o la carpeta vacía que se va a eliminar.\n\nARQUITECTURA DEL SISTEMA\n  Pasa por la capa de archivos del sistema, que envía POST /api/fs/delete?path=<path>. El dispositivo rechaza una carpeta que todavía contiene algo.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Elemento eliminado.\n  1\n    Falló el borrado: el elemento no existe, la carpeta no está vacía, permiso denegado, dispositivo no vinculado o API de archivos inaccesible.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  cp(1), mv(1), mkdir(1)\n\nEJEMPLOS AVANZADOS\n  rm /data/temp_log.txt\n  rm /data/empty_dir"
+  },
+  {
+   "id": "say",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.tts"
+   ],
+   "title": "say - Pronunciar texto a través del dispositivo",
+   "synopsis": "say [text]",
+   "description": "Envía texto al motor de voz, ya sea como argumento o desde una tubería. Dentro de una tubería reenvía el texto, de modo que una línea pronunciada aún se puede grabar.",
+   "details": "NOMBRE\n  say - Pronunciar texto a través del dispositivo\n\nSINOPSIS\n  say [text]\n\nDESCRIPCIÓN\n  Envía texto al motor de voz, ya sea como argumento o desde una tubería. Dentro de una tubería reenvía el texto, de modo que una línea pronunciada aún se puede grabar.\n\nOPCIONES\n  [text]\n    Qué decir; sin él, lee la entrada estándar.\n\nCOSTE PARA EL DISPOSITIVO\n  Un POST /api/tts.\n\nNOTAS\n  Necesita el permiso device.audio. Si la compilación no tiene motor de voz, lo indica en lugar de fingir que ha hablado.\n\nVÉASE TAMBIÉN\n  notify(1), anima(1), clip(1)\n\nEJEMPLOS\n  say \"the backup is finished\"\n  dmesg -l E | anima \"what is wrong?\" | say"
+  },
+  {
+   "id": "screen",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.display"
+   ],
+   "title": "screen - Guardar lo que muestra la pantalla",
+   "synopsis": "screen [-o <file>]",
+   "description": "Captura lo que muestra la pantalla del dispositivo y lo guarda como archivo en el almacenamiento del dispositivo. Ningún otro terminal tiene un sujeto que fotografiar.",
+   "details": "NOMBRE\n  screen - Guardar lo que muestra la pantalla\n\nSINOPSIS\n  screen [-o <file>]\n\nDESCRIPCIÓN\n  Captura lo que muestra la pantalla del dispositivo y lo guarda como archivo en el almacenamiento del dispositivo. Ningún otro terminal tiene un sujeto que fotografiar.\n\nOPCIONES\n  -o <file>\n    Dónde guardarlo (/data/screen.bmp por defecto).\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/screen y después la escritura del archivo en el almacenamiento del dispositivo.\n\nNOTAS\n  Solo en los dispositivos con pantalla propia (permiso device.display). Donde el dispositivo no ofrece la captura responde \"not available on this build\" (404); \"panel size unavailable\" (503) significa que la pantalla aún no está lista: enciéndela y vuelve a intentarlo.\n\nVÉASE TAMBIÉN\n  display(1), open(1)\n\nEJEMPLOS\n  screen\n  screen -o /data/shot.bmp"
+  },
+  {
+   "id": "seq",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "seq - Imprimir un rango de enteros",
+   "synopsis": "seq [first] last",
+   "description": "Imprime un entero por línea, contando hacia arriba o hacia abajo. Es el único generador que tiene una tubería.",
+   "details": "NOMBRE\n  seq - Imprimir un rango de enteros\n\nSINOPSIS\n  seq [first] last\n\nDESCRIPCIÓN\n  Imprime un entero por línea, contando hacia arriba o hacia abajo. Es el único generador que tiene una tubería.\n\nOPCIONES\n  first\n    Dónde empezar (1 por defecto).\n  last\n    Dónde parar; cuenta hacia atrás cuando es menor que first.\n\nCOSTE PARA EL DISPOSITIVO\n  Ninguno. Enteramente del lado del navegador.\n\nVÉASE TAMBIÉN\n  sort(1), uniq(1)\n\nEJEMPLOS\n  seq 5\n  seq 10 1"
+  },
+  {
+   "id": "sleep",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "sleep - Pausar la ejecución",
+   "synopsis": "sleep <seconds>",
+   "description": "Introducir un retardo temporizado expresado en segundos.",
+   "details": "NOMBRE\n  sleep - Pausar la ejecución de comandos.\n\nSINOPSIS\n  sleep <seconds>\n\nDESCRIPCIÓN\n  Introduce un retardo temporizado de ejecución. Admite formato decimal con coma flotante.\n\nOPCIONES\n  <seconds>\n    La duración de la pausa en segundos (p. ej. '1.5').\n\nARQUITECTURA DEL SISTEMA\n  Suspende la ejecución del comando usando una Promise de JavaScript que se resuelve en una devolución de llamada de 'setTimeout'.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  reboot(1)\n\nEJEMPLOS AVANZADOS\n  sleep 3\n  sleep 1.5"
+  },
+  {
+   "id": "sort",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "sort - Ordenar la entrada estándar",
+   "synopsis": "sort [-r] [-n] [-u] [-k N]",
+   "description": "Reordena las líneas que llegan de una tubería.",
+   "details": "NOMBRE\n  sort - Ordenar la entrada estándar\n\nSINOPSIS\n  sort [-r] [-n] [-u] [-k N]\n\nDESCRIPCIÓN\n  Reordena las líneas que llegan de una tubería.\n\nOPCIONES\n  -r\n    Invertir el orden.\n  -n\n    Comparar numéricamente.\n  -u\n    Descartar los duplicados adyacentes.\n  -k N\n    Ordenar por el N-ésimo campo separado por espacios en blanco.\n\nCOSTE PARA EL DISPOSITIVO\n  Ninguno. Enteramente del lado del navegador.\n\nVÉASE TAMBIÉN\n  uniq(1), cut(1), du(1)\n\nEJEMPLOS\n  du /data | sort -n -r\n  dmesg | sort -u"
+  },
+  {
+   "id": "stat",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "stat - Mostrar el tipo, el tamaño y el estado de bloqueo de una entrada",
+   "synopsis": "stat <path>",
+   "description": "Informa de qué es un único archivo o directorio, sin listar toda la carpeta en la que se encuentra.",
+   "details": "NOMBRE\n  stat - Mostrar el tipo, el tamaño y el estado de bloqueo de una entrada\n\nSINOPSIS\n  stat <path>\n\nDESCRIPCIÓN\n  Informa de qué es un único archivo o directorio, sin listar toda la carpeta en la que se encuentra. Imprime la ruta, el tipo (file o dir), el tamaño en bytes y en forma legible (\"-\" para un directorio) y si la entrada está protegida.\n\nOPCIONES\n  <path>\n    El archivo o directorio que se va a describir.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/fs/stat en los dispositivos que lo ofrecen; en los demás, un GET /api/fs/list sobre el directorio PADRE, del que stat toma la entrada.\n\nNOTAS\n  stat no muestra una hora de modificación: la línea \"modified\" indica que el dispositivo no la informa, en lugar de inventarla.\n\nVÉASE TAMBIÉN\n  ls(1), du(1), tree(1)\n\nEJEMPLOS\n  stat /data/notes.txt\n  stat /apps/terminal"
+  },
+  {
+   "id": "status",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "status - Diagnóstico global del sistema",
+   "synopsis": "status",
+   "description": "Imprimir la versión del sistema, el tiempo de actividad, la memoria libre, el almacenamiento, las apps instaladas y el estado de la red.",
+   "details": "NOMBRE\n  status - Estado de diagnóstico.\n\nSINOPSIS\n  status\n\nDESCRIPCIÓN\n  Muestra un resumen del dispositivo, un elemento por línea: nombre y versión del sistema con los segundos de actividad, memoria libre (heap), almacenamiento (tipo, espacio libre y total), número de apps instaladas y red (reloj sincronizado por NTP o no y, si existe, el nombre de la red). Los elementos que el dispositivo no informa se omiten.\n\nARQUITECTURA DEL SISTEMA\n  Un GET a '/api/status'; el comando da formato a los campos de la respuesta sin más peticiones.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Dispositivo inalcanzable.\n\nCONFORME A\n  Extensión propietaria de NucleoOS.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  uptime(1), free(1)\n\nEJEMPLOS AVANZADOS\n  status"
+  },
+  {
+   "id": "tail",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tail - Mostrar las últimas líneas de un archivo",
+   "synopsis": "tail [-n lines] <file>",
+   "description": "Mostrar la última parte (10 líneas por defecto) de un archivo.",
+   "details": "NOMBRE\n  tail - Mostrar las últimas líneas de un archivo.\n\nSINOPSIS\n  tail [-n <lines>] <file>\n\nDESCRIPCIÓN\n  Imprime el segmento final de un archivo (10 líneas por defecto).\n\nOPCIONES\n  -n <lines>\n    Especifica el número exacto de líneas que se imprimirán (p. ej. '-n 5').\n  <file>\n    La ruta del archivo de destino.\n\nARQUITECTURA DEL SISTEMA\n  Descarga el contenido del archivo mediante GET '/api/fs/read'. Analiza las líneas en memoria y aísla los últimos elementos mediante el troceado de arrays ('slice(allLines.length - n)').\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Error de lectura o formato de parámetro no válido.\n  404\n    Archivo de destino no encontrado.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  head(1), cat(1)\n\nEJEMPLOS AVANZADOS\n  tail logs.txt\n  tail -n 3 /data/net.cfg"
+  },
+  {
+   "id": "tee",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tee - Escribir la entrada estándar en un archivo y reenviarla",
+   "synopsis": "tee <file>",
+   "description": "Guarda todo lo que fluye a través de él y luego entrega el mismo texto a la siguiente etapa, que es lo que hace duradera una tubería.",
+   "details": "NOMBRE\n  tee - Escribir la entrada estándar en un archivo y reenviarla\n\nSINOPSIS\n  tee <file>\n\nDESCRIPCIÓN\n  Guarda todo lo que fluye a través de él y luego entrega el mismo texto a la siguiente etapa, que es lo que hace duradera una tubería.\n\nOPCIONES\n  <file>\n    Dónde escribir.\n\nCOSTE PARA EL DISPOSITIVO\n  Exactamente un POST /api/fs/write.\n\nVÉASE TAMBIÉN\n  cat(1), clip(1), base64(1)\n\nEJEMPLOS\n  diag | tee /data/diag.txt\n  dmesg -l E | tee /data/errors.txt | wc"
+  },
+  {
+   "id": "theme",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "theme - Cambiar el tema de color del SO",
+   "synopsis": "theme [dark|light]",
+   "description": "Mostrar o cambiar el tema gráfico del sistema (oscuro o claro).",
+   "details": "NOMBRE\n  theme - Tema gráfico del sistema.\n\nSINOPSIS\n  theme [dark|light]\n\nDESCRIPCIÓN\n  Sin argumentos, o con un valor distinto de dark y light, imprime el tema actual y la sintaxis. Con dark o light aplica el tema al Terminal de inmediato y lo guarda en los ajustes del sistema.\n\nOPCIONES\n  [dark|light]\n    El nombre del tema que se va a aplicar.\n\nARQUITECTURA DEL SISTEMA\n  Establece el atributo 'data-theme' de la página, luego lee '/system/config/settings.json', actualiza la entrada ui.theme y vuelve a escribir el archivo mediante '/api/fs/write'. Si el guardado falla, el tema queda aplicado solo en esta ventana y el comando muestra un aviso.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito, también cuando el tema se aplicó solo localmente (con un aviso).\n\nCONFORME A\n  Extensión propietaria de NucleoOS.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  status(1)\n\nEJEMPLOS AVANZADOS\n  theme            # Lee el tema actual\n  theme light      # Cambia al tema claro\n  theme dark       # Cambia al tema oscuro"
+  },
+  {
+   "id": "touch",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "touch - Crear un archivo vacío",
+   "synopsis": "touch <file>",
+   "description": "Crear un archivo vacío en la ruta especificada, si no existe.",
+   "details": "NOMBRE\n  touch - Inicializar un archivo vacío.\n\nSINOPSIS\n  touch <file>\n\nDESCRIPCIÓN\n  Crea un archivo de cero bytes; las carpetas que faltan en la ruta se crean. Si el archivo ya existe, no lo toca (el contenido y la fecha no cambian) y lo indica.\n\nOPCIONES\n  <file>\n    La ruta del archivo que se va a inicializar.\n\nARQUITECTURA DEL SISTEMA\n  Primero comprueba si el archivo existe (con '/api/fs/stat' o con el listado de la carpeta). Solo si falta envía un POST a '/api/fs/write' con el cuerpo vacío, sin sobrescribir nunca. Si la carpeta no se puede leer, informa del error y no escribe nada.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Archivo creado o ya presente.\n  1\n    Error de lectura o de escritura en el almacenamiento del dispositivo.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  mkdir(1), rm(1)\n\nEJEMPLOS AVANZADOS\n  touch /data/empty.txt"
+  },
+  {
+   "id": "tr",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tr - Traduce o elimina caracteres",
+   "synopsis": "tr <conj1> <conj2>   |   tr -d <conj>",
+   "description": "Sustituye cada carácter de conj1 por el de conj2, o los elimina con -d. Los conjuntos son literales: sin rangos ni clases, para ahorrar bytes en el dispositivo.",
+   "details": "NOMBRE\n  tr - Traduce o elimina caracteres\n\nSINOPSIS\n  tr <conj1> <conj2>   |   tr -d <conj>\n\nDESCRIPCIÓN\n  Sustituye cada carácter de conj1 por el de conj2, o los elimina con -d. Los conjuntos son literales: sin rangos ni clases, para ahorrar bytes en el dispositivo.\n\nOPCIONES\n  -d CONJUNTO\n    Elimina cada carácter del conjunto en lugar de traducirlo.\n  Si conj2 es más corto que conj1, su último carácter rellena el resto.\n\nCOSTE PARA EL DISPOSITIVO\n  ninguno\n\nVÉASE TAMBIÉN\n  cut(1), sort(1)\n\nEJEMPLOS\n  echo hola | tr aeiou _\n  cat /data/f | tr -d \\r"
+  },
+  {
+   "id": "tree",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tree - Imprimir un árbol de directorios",
+   "synopsis": "tree [-L N] [path]",
+   "description": "Imprime el subárbol bajo una ruta, con sangría de un nivel por profundidad, los directorios primero y marcados con una barra final.",
+   "details": "NOMBRE\n  tree - Imprimir un árbol de directorios\n\nSINOPSIS\n  tree [-L N] [path]\n\nDESCRIPCIÓN\n  Imprime el subárbol bajo una ruta, con sangría de un nivel por profundidad, los directorios primero y marcados con una barra final.\n\nOPCIONES\n  -L N\n    Descender como máximo N niveles (por defecto 3, máximo absoluto 6).\n  [path]\n    Dónde empezar; el directorio de trabajo por defecto.\n\nCOSTE PARA EL DISPOSITIVO\n  El mismo recorrido presupuestado que usa du: un listado por directorio, secuencial, limitado a 60 listados y 200 entradas impresas.\n\nVÉASE TAMBIÉN\n  ls(1), du(1), find(1)\n\nEJEMPLOS\n  tree\n  tree -L 1 /apps\n  tree /data | grep .txt"
+  },
+  {
+   "id": "unalias",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "unalias - Eliminar un alias",
+   "synopsis": "unalias <name>",
+   "description": "Elimina un alias y vuelve a guardar la lista.",
+   "details": "NOMBRE\n  unalias - Eliminar un alias\n\nSINOPSIS\n  unalias <name>\n\nDESCRIPCIÓN\n  Elimina un alias y vuelve a guardar la lista.\n\nOPCIONES\n  <name>\n    El alias que se va a eliminar.\n\nCOSTE PARA EL DISPOSITIVO\n  Un POST /api/fs/write.\n\nVÉASE TAMBIÉN\n  alias(1)\n\nEJEMPLOS\n  unalias ll"
+  },
+  {
+   "id": "uname",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "uname - Nombre, edición y versión del sistema",
+   "synopsis": "uname [-a]",
+   "description": "Imprimir el nombre del sistema operativo; con -a también la edición y la versión.",
+   "details": "NOMBRE\n  uname - Información del sistema.\n\nSINOPSIS\n  uname [-a]\n\nDESCRIPCIÓN\n  Sin opciones imprime el nombre del sistema operativo. Con '-a' imprime en una línea el nombre, el identificador de edición que declara el dispositivo y la versión del sistema.\n\nOPCIONES\n  -a\n    Añade la edición y la versión.\n\nARQUITECTURA DEL SISTEMA\n  Lee el nombre y la versión de '/api/status' y la edición de las capacidades del dispositivo ('/api/system/caps', o deducida de '/api/status' en los dispositivos sin esa ruta). Si el dispositivo no responde, usa los valores predeterminados (NucleoOS, 0.1.0) y omite la edición cuando no se conoce.\n\nCÓDIGOS DE SALIDA\n  0\n    Siempre: sin respuesta, el comando imprime los valores predeterminados.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  status(1), uptime(1)\n\nEJEMPLOS AVANZADOS\n  uname\n  uname -a"
+  },
+  {
+   "id": "uniq",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "uniq - Contraer las líneas adyacentes repetidas",
+   "synopsis": "uniq [-c]",
+   "description": "Convierte un muro de líneas de registro idénticas en una sola línea, opcionalmente con un recuento. Es el paso que hace que dos kilobytes de dmesg sean lo bastante pequeños para pasárselos a anima.",
+   "details": "NOMBRE\n  uniq - Contraer las líneas adyacentes repetidas\n\nSINOPSIS\n  uniq [-c]\n\nDESCRIPCIÓN\n  Convierte un muro de líneas de registro idénticas en una sola línea, opcionalmente con un recuento. Es el paso que hace que dos kilobytes de dmesg sean lo bastante pequeños para pasárselos a anima.\n\nOPCIONES\n  -c\n    Antepone a cada línea cuántas veces se repitió.\n\nCOSTE PARA EL DISPOSITIVO\n  Ninguno. Enteramente del lado del navegador.\n\nVÉASE TAMBIÉN\n  sort(1), grep(1), anima(1)\n\nEJEMPLOS\n  dmesg | sort | uniq -c | sort -n -r"
+  },
+  {
+   "id": "uptime",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "uptime - Tiempo de actividad del sistema",
+   "synopsis": "uptime",
+   "description": "Mostrar cuánto tiempo lleva encendido el dispositivo y cuánta memoria libre tiene.",
+   "details": "NOMBRE\n  uptime - Tiempo de actividad del sistema.\n\nSINOPSIS\n  uptime\n\nDESCRIPCIÓN\n  Imprime el tiempo transcurrido desde el último arranque del dispositivo, en horas, minutos y segundos, y la memoria libre (heap) que informa el dispositivo. Línea de ejemplo: up 2h 15m 4s, heap free: ...\n\nARQUITECTURA DEL SISTEMA\n  Lee los campos uptime_s y free_heap de '/api/status'.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Dispositivo inalcanzable.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  status(1), free(1)\n\nEJEMPLOS AVANZADOS\n  uptime"
+  },
+  {
+   "id": "verify",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "anima.l1"
+   ],
+   "title": "verify - Verificación de hechos fundamentada contra el conocimiento del dispositivo",
+   "synopsis": "verify <key> <asserted> [--kind fact|numeric] [-l it|en]",
+   "description": "Pregunta a ANIMA si un valor afirmado para una clave está confirmado, contradicho o es desconocido, e imprime la evidencia que usó.",
+   "details": "NOMBRE\n  verify - Verificación de hechos fundamentada contra el conocimiento del dispositivo\n\nSINOPSIS\n  verify <key> <asserted> [--kind fact|numeric] [-l it|en]\n\nDESCRIPCIÓN\n  Pregunta a ANIMA si un valor afirmado para una clave está confirmado, contradicho o es desconocido, e imprime la evidencia que usó. El veredicto y la evidencia salen en una línea, separados por un tabulador. La última palabra es el valor afirmado; todas las anteriores forman la clave.\n\nOPCIONES\n  <key>\n    Sobre qué se pregunta, p. ej. \"capital of france\".\n  <asserted>\n    El valor que se va a comprobar.\n  --kind\n    fact o numeric.\n  -l\n    Idioma de la respuesta (it o en).\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/anima/verify.\n\nNOTAS\n  Funciona en los dispositivos que tienen ANIMA integrado. En los demás, el comando lo indica como aviso y no como error: \"not available on this device\", o \"not available on this build\" cuando la ruta responde 404.\n\nVÉASE TAMBIÉN\n  anima(1), diag(1)\n\nEJEMPLOS\n  verify \"capital of france\" Lyon"
+  },
+  {
+   "id": "watch",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "watch - Reejecutar un comando en el sitio cada pocos segundos",
+   "synopsis": "watch [-n seconds] [-c count] <command>",
+   "description": "Ejecuta un comando repetidamente y redibuja su salida sobre el tick anterior en lugar de desplazar la pantalla. Es el microscopio de la fragmentación: watch -n5 heap.",
+   "details": "NOMBRE\n  watch - Reejecutar un comando en el sitio cada pocos segundos\n\nSINOPSIS\n  watch [-n seconds] [-c count] <command>\n\nDESCRIPCIÓN\n  Ejecuta un comando repetidamente y redibuja su salida sobre el tick anterior en lugar de desplazar la pantalla. Es el microscopio de la fragmentación: watch -n5 heap.\n\nOPCIONES\n  -n S\n    Segundos entre ticks (3 por defecto, nunca menos de 2).\n  -c N\n    Cuántos ticks (10 por defecto, 300 como máximo).\n\nCOSTE PARA EL DISPOSITIVO\n  Lo que cueste el comando interno, una vez por tick. Los ticks nunca se solapan, el intervalo se limita a dos segundos, y tres fallos consecutivos lo detienen. Ctrl+C lo detiene de inmediato.\n\nNOTAS\n  Rechazado dentro de una tubería, y wifi scan se niega a ejecutarse dentro de él: una operación de radio bloqueante en un bucle desconectaría el dispositivo de su propia red.\n\nVÉASE TAMBIÉN\n  heap(1), diag(1), notify(1)\n\nEJEMPLOS\n  watch -n 5 heap\n  watch -n 10 -c 60 status"
+  },
+  {
+   "id": "wc",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "wc - Recuento de palabras, líneas y bytes",
+   "synopsis": "wc <file>",
+   "description": "Imprimir el recuento de palabras, líneas y bytes de un archivo.",
+   "details": "NOMBRE\n  wc - Recuento de palabras, líneas y bytes.\n\nSINOPSIS\n  wc <file>\n\nDESCRIPCIÓN\n  Realiza un análisis de métricas del archivo de destino, imprimiendo los recuentos de líneas, palabras y bytes.\n\nOPCIONES\n  <file>\n    El archivo de destino que se va a analizar.\n\nARQUITECTURA DEL SISTEMA\n  Obtiene los datos mediante el punto de acceso de lectura del sistema de archivos. Las líneas se resuelven usando una división por '\\n', las palabras usando un filtro de expresión regular '\\s+', y los bytes usando una comprobación de tamaño 'Blob' de JavaScript.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Recuentos impresos.\n  1\n    Error de lectura del sistema de archivos.\n  404\n    Archivo no encontrado.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  cat(1), head(1), tail(1)\n\nEJEMPLOS AVANZADOS\n  wc /data/notes.txt"
+  },
+  {
+   "id": "wget",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "wget - Descargar un archivo de la web",
+   "synopsis": "wget <url> [-O outfile]",
+   "description": "Descargar un archivo desde una URL y guardarlo en el almacenamiento del dispositivo.",
+   "details": "NOMBRE\n  wget - Descargar un archivo por HTTP.\n\nSINOPSIS\n  wget <url> [-O <destination_file>]\n\nDESCRIPCIÓN\n  Descarga un recurso con una petición GET y lo escribe en el almacenamiento del dispositivo. Sin -O, el archivo toma el nombre de la última parte de la URL (sin la query string), o 'downloaded_file', y se guarda en el directorio actual. Una URL sin esquema se trata como https://.\n\nOPCIONES\n  <url>\n    La URL del archivo que se va a descargar.\n  -O <destination_file>\n    Ruta del archivo donde guardar el recurso. Un archivo existente se reemplaza.\n\nARQUITECTURA DEL SISTEMA\n  La descarga la hace el navegador, así que se aplican sus reglas CORS: un sitio que no la permite falla con 'network error or CORS blocked'. Después los datos se envían mediante POST a '/api/fs/write'; las carpetas que faltan se crean.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Descargado y escrito correctamente.\n  1\n    Error de red, respuesta HTTP fallida o error de escritura.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nVÉASE TAMBIÉN\n  curl(1), ping(1)\n\nEJEMPLOS AVANZADOS\n  wget example.com/index.html\n  wget http://example.com/file.bin -O /data/file.bin"
+  },
+  {
+   "id": "which",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "which - Indicar si un nombre es un comando interno, un alias o una aplicación",
+   "synopsis": "which <name>",
+   "description": "Responde en una línea a la pregunta \"¿es eso un comando o una aplicación?\".",
+   "details": "NOMBRE\n  which - Indicar si un nombre es un comando interno, un alias o una aplicación\n\nSINOPSIS\n  which <name>\n\nDESCRIPCIÓN\n  Responde en una línea a la pregunta \"¿es eso un comando o una aplicación?\".\n\nOPCIONES\n  <name>\n    El nombre que se va a buscar.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/apps, memoizado durante 30 s y compartido con el comando apps.\n\nVÉASE TAMBIÉN\n  apps(1), alias(1), man(1)\n\nEJEMPLOS\n  which ls\n  which notepad"
+  },
+  {
+   "id": "wifi",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "wifi.manage"
+   ],
+   "title": "wifi - Escanear, conectar, olvidar y priorizar redes",
+   "synopsis": "wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect",
+   "description": "La radio, desde un intérprete. scan lista lo que hay en el aire con señal, canal y seguridad; known lista las redes guardadas y marca la actual con un asterisco; el resto las modifican.",
+   "details": "NOMBRE\n  wifi - Escanear, conectar, olvidar y priorizar redes\n\nSINOPSIS\n  wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect\n\nDESCRIPCIÓN\n  La radio, desde un intérprete. scan lista lo que hay en el aire con señal, canal y seguridad; known lista las redes guardadas y marca la actual con un asterisco; el resto las modifican.\n\nOPCIONES\n  scan\n    Listar las redes visibles.\n  known\n    Listar las redes guardadas (por defecto).\n  join <ssid> [pass]\n    Conectar y guardar.\n  forget <ssid>\n    Eliminar una red guardada.\n  prio <ssid> <n>\n    Establecer la prioridad de conexión.\n  reconnect\n    Reconectar ahora.\n\nCOSTE PARA EL DISPOSITIVO\n  Una petición cada uno. scan es una operación de radio BLOQUEANTE, así que está limitada a una vez cada diez segundos y se rechaza dentro de watch.\n\nNOTAS\n  Necesita el permiso net.wifi. Una contraseña escrita en línea no se almacena en el historial del intérprete.\n\nVÉASE TAMBIÉN\n  status(1), ping(1), link(1)\n\nEJEMPLOS\n  wifi scan\n  wifi known\n  wifi join home-wifi secret\n  wifi scan | sort -k2 -n"
+  }
+ ]
+}

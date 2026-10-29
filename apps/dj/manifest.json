@@ -1,6 +1,7 @@
 {
   "id": "dj",
   "name": "DJ Mix",
+  "icon": "/apps/dj/icon.svg",
   "version": "0.1.3",
   "version_code": 2,
   "description": "Auto-DJ with beatmatch, harmonic mixing and live crossfades (Web Audio). [WIP: not in registry/apps.json installed yet — register when the web phase lands; gates: npm run dj:test]",

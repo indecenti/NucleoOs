@@ -101,6 +101,10 @@ function workerMain() {
   try {
     self.fetch = undefined; self.XMLHttpRequest = undefined; self.WebSocket = undefined;
     self.indexedDB = undefined; self.caches = undefined;
+    // A nested worker would get a fresh global with fetch intact, and the device's origin and cookies with it.
+    self.Worker = undefined; self.SharedWorker = undefined; self.EventSource = undefined; self.WebTransport = undefined;
+    self.BroadcastChannel = undefined; self.RTCPeerConnection = undefined;
+    try { if (self.navigator) Object.defineProperty(self.navigator, 'sendBeacon', { value: undefined }); } catch (e) {}
     self.importScripts = function () { throw new Error('importScripts is disabled in the NucleoOS sandbox'); };
   } catch (e) {}
 

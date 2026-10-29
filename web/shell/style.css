@@ -3,6 +3,9 @@
 /* Native controls and scrollbars follow the OS theme. */
 :root { color-scheme: dark; }
 html[data-theme="light"] { color-scheme: light; }
+/* `hidden` always hides: a rule giving an element display:flex would otherwise show it empty (the "Continue" game
+   button and the "Recent games" header of Start showed on devices without games). */
+[hidden] { display: none !important; }
 :root {
   --bg: #0b1220; --bg2: #101826; --panel: #18233a; --panel2: #1f2d4a;
   --accent: #4ea1ff; --text: #e8eefc; --muted: #8aa0c8; --line: #2a3a5e;
@@ -456,6 +459,16 @@ html[data-theme="light"] .sm-search:focus-within { background: rgba(0,0,0,0.07);
 .sm-sechead { display: flex; align-items: center; justify-content: space-between; gap: 8px;
   margin: 6px 0 12px; flex: none; }
 .sm-reco-head { margin-top: 20px; }
+.sm-cats { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; flex: none; }
+.sm-chip { padding: 4px 11px; border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; background: transparent;
+  color: var(--muted); font: inherit; font-size: 11.5px; cursor: pointer; transition: background .14s, color .14s; }
+.sm-chip:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+.sm-chip.on { background: var(--accent-grad); border-color: transparent; color: #fff; }
+html[data-theme="light"] .sm-chip { border-color: rgba(0,0,0,0.12); }
+html[data-theme="light"] .sm-chip:hover { background: rgba(0,0,0,0.05); }
+.sm-cathead { font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted);
+  padding: 12px 10px 4px; }
+.sm-cathead:first-child { padding-top: 2px; }
 .sm-sectitle { font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
 .sm-pill { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px;
   border: 1px solid rgba(255,255,255,0.1); border-radius: 16px;

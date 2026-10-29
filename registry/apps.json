@@ -82,21 +82,6 @@
       ]
     },
     {
-      "id": "automation-studio",
-      "version": "0.1.0",
-      "path": "/apps/automation-studio",
-      "enabled": false,
-      "autostart": false,
-      "permissions": [
-        "storage.app",
-        "system.events",
-        "system.notify",
-        "device.keyboard",
-        "device.ir",
-        "power.budget"
-      ]
-    },
-    {
       "id": "ir-remote",
       "version": "0.1.2",
       "path": "/apps/ir-remote",
@@ -106,19 +91,6 @@
         "storage.app",
         "system.events",
         "device.ir"
-      ]
-    },
-    {
-      "id": "swarm",
-      "version": "0.1.1",
-      "path": "/apps/swarm",
-      "enabled": false,
-      "autostart": false,
-      "permissions": [
-        "system.events",
-        "system.clipboard",
-        "net.ble",
-        "mesh.peer"
       ]
     },
     {

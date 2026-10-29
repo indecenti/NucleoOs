@@ -10,10 +10,11 @@
 // Edition differences live behind /api/fs and the core file layer (nucleo-fs.js), so no app is written twice.
 
 import coreFs from './nucleo-fs.js';
+import { OS_PRIVATE } from './appbroker.js';
 
 const ROOT = '/data';
-// Folders of the OS itself, never offered: the key vault, the agent, every app's private corner.
-const HIDDEN = new Set(['/data/anima', '/data/agent', '/data/apps', '/data/store-apps']);
+// Folders of the OS itself, never offered (the same list the broker refuses to store apps).
+const HIDDEN = new Set(OS_PRIVATE);
 export const OPEN_MAX_BYTES = 64 * 1024 * 1024;
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

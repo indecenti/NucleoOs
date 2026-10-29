@@ -2,13 +2,13 @@
 // Offline shell cache. Keeps the desktop usable when the device is unreachable;
 // API calls always go to the network (never cached) so live data stays fresh.
 // Bump this on every shell change that must reach already-installed clients. The reason for each
-// roll goes in docs/shell-cache-log.md — NOT here: it used to be one 10.5 KB comment on this line,
-// half the whole service worker, re-shipped to every browser on every update check.
-const CACHE = 'nucleo-shell-v161-3fe8a8c20e36';   // v161 — opt-in auto-update (cancellable countdown + Settings hand-off, see docs/shell-cache-log.md)
+// roll goes in nucleo-webos docs/shell-cache-log.md — NOT here: it used to be one 10.5 KB comment on this
+// line, half the whole service worker, re-shipped to every browser on every update check.
+const CACHE = 'nucleo-shell-v162-eaa7da8535ff';
 // Per-version cache for app assets (/apps/<id>/...). Tied to the shell version so a deploy (which
 // bumps CACHE) drops it; the shell also flushes it on apps.changed (OTA app update) via postMessage.
 const APP_CACHE = CACHE + '-apps';
-const ASSETS = ['./', 'index.html', 'style.css', 'copilot.css', 'notify.css', 'onboarding.css', 'shell.js', 'boot-fetch.js', 'copilot.js', 'anima-mode.js', 'notify.js', 'onboarding.js', 'ambient.js', 'ai.js', 'ai-keys.js', 'webllm.js', 'shortcuts.js', 'search-rank.js', 'appbroker.js', 'migrations.js', 'wm.js', 'fsindex.js', 'busy.js', 'dlgate.js', 'micgate.js', 'system-ui.js', 'nucleo-i18n.js', 'nucleo-app.js', 'nucleo-caps.js', 'caps-fallback.json', 'update-check.js', 'update-core.js', 'sha256.js', 'store-client.js', 'ai-engines.js', 'ai-ask.js', 'capabilities.js', 'local-ai-help.js', 'seq-import.js', 'i18n/core.it.json', 'i18n/core.en.json', 'i18n/core.es.json', 'i18n/core.fr.json', 'i18n/core.de.json', 'i18n/shell.it.json', 'i18n/shell.en.json', 'i18n/shell.es.json', 'i18n/shell.fr.json', 'i18n/shell.de.json', 'manifest.webmanifest', 'icon.png', 'icons.json', 'app-catalog.json'];   // NB: wallpaper.png removed — it's a 535KB JPEG-misnamed-.png never displayed (live wallpaper = /data/Pictures/wallpaper.png) that only tripped the webfs low-heap defer
+const ASSETS = ['./', 'index.html', 'boot-install.js', 'boot-splash.js', 'mobile-gate.js', 'style.css', 'copilot.css', 'notify.css', 'onboarding.css', 'shell.js', 'boot-fetch.js', 'copilot.js', 'anima-mode.js', 'notify.js', 'onboarding.js', 'ambient.js', 'ai.js', 'ai-keys.js', 'webllm.js', 'shortcuts.js', 'search-rank.js', 'appbroker.js', 'migrations.js', 'wm.js', 'fsindex.js', 'busy.js', 'dlgate.js', 'micgate.js', 'system-ui.js', 'nucleo-i18n.js', 'nucleo-app.js', 'nucleo-caps.js', 'caps-fallback.json', 'nucleo-fs.js', 'filedialog.js', 'nucleo-shell.js', 'nucleo-pair.js', 'nucleo-user.js', 'nucleo-pty.js', 'nucleo-term.js', 'nucleopad.js', 'update-check.js', 'update-core.js', 'sha256.js', 'store-client.js', 'ai-engines.js', 'ai-ask.js', 'capabilities.js', 'local-ai-help.js', 'seq-import.js', 'i18n/core.it.json', 'i18n/core.en.json', 'i18n/core.es.json', 'i18n/core.fr.json', 'i18n/core.de.json', 'i18n/shell.it.json', 'i18n/shell.en.json', 'i18n/shell.es.json', 'i18n/shell.fr.json', 'i18n/shell.de.json', 'manifest.webmanifest', 'icon.png', 'icons.json', 'app-catalog.json'];   // tests/sw-precache.test.mjs: everything the desktop imports to start is here
 
 // --- Device request gate (shared reads, exclusive writes) ----------------------
 // The firmware httpd has max_open_sockets=4 + lru_purge_enable (it deliberately RESETS
@@ -84,7 +84,7 @@ async function gatedFetch(req, exclusive) {
 // heavy whole-file read off the single-task device — closing the "install → runs offline" loop and
 // avoiding the very read-storm the bounded-range installer exists to prevent.
 // KEEP forgeModelKey byte-identical to apps/anima/www/forge/model-url-map.js (pinned by
-// tools/anima-host/forge-model-url-map.test.mjs). Returns null for non-model URLs → SW leaves them alone.
+// NucleoOs tools/anima-host/forge-model-url-map.test.mjs). Returns null for non-model URLs → SW leaves them alone.
 const MODEL_CACHE = 'anima-forge-models';
 // Durable wallpaper/image cache. Unlike the version-scoped shell CACHE (wiped on every deploy), this
 // is preserved across shell version bumps (see the activate `keep` set) — so a wallpaper the user

@@ -1,6 +1,7 @@
 {
   "id": "help",
   "name": "Help",
+  "icon": "/apps/help/icon.svg",
   "version": "0.1.2",
   "version_code": 3,
   "min_os": "0.1.0",

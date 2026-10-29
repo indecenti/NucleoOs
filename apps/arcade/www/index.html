@@ -33,6 +33,8 @@
     border-radius:9px;padding:8px 12px;font-size:13px;outline:none}
   .search:focus{border-color:var(--ac)}
 
+  /* A phone: the header's buttons and the filter go on two lines instead of off the screen. */
+  @media (max-width:560px){ header{flex-wrap:wrap;row-gap:8px} .search{width:100%;max-width:none;order:9} header .spacer{display:none} }
   main{flex:1;overflow-y:auto;padding:16px 18px 26px}
   .sect{font-size:11.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:18px 2px 10px}
   .sect:first-child{margin-top:2px}
@@ -94,6 +96,21 @@
   .game .star:hover{background:var(--line);color:var(--ink)}
   .game .star.on{color:#ffce46}
 
+  /* A game's picture: the same one the device's shelf shows (<folder>/.snaps/<file>.snp). */
+  .game .cov{width:56px;height:50px;border-radius:7px;flex:none;object-fit:contain;background:#000;image-rendering:pixelated}
+  .hero .cov{width:84px;height:76px;border-radius:10px;flex:none;object-fit:contain;background:#000;image-rendering:pixelated;position:relative}
+  .game .dev{flex:none;height:28px;border:1px solid var(--line);background:none;color:var(--dim);cursor:pointer;
+    border-radius:7px;padding:0 9px;font-size:11.5px;display:flex;align-items:center;gap:5px;transition:.12s}
+  .game .dev:hover{border-color:var(--ac);color:var(--ink)}
+  .game .dev svg{width:14px;height:14px}
+  .hbtn{display:none;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+    border-radius:9px;padding:7px 11px;font-size:12.5px;cursor:pointer;transition:.15s;white-space:nowrap}
+  .hbtn:hover{border-color:var(--ac)}
+  .hbtn[disabled]{opacity:.5;cursor:default}
+  #veil{position:fixed;inset:10px;border:2px dashed var(--ac);border-radius:18px;background:rgba(6,7,11,.82);z-index:40;
+    display:none;place-items:center;font-size:17px;font-weight:600;color:var(--ac);pointer-events:none}
+  #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);
+    border-radius:11px;padding:10px 16px;font-size:13px;z-index:60;display:none;max-width:86vw;box-shadow:0 8px 30px rgba(0,0,0,.4)}
   .warnbox{display:flex;gap:8px;align-items:flex-start;background:#1a1408;border:1px solid #6b4e12;border-radius:9px;
     padding:9px 12px;margin-bottom:10px;font-size:12px;line-height:1.5;color:#ffce46}
   .msg{color:var(--dim);font-size:14px;line-height:1.6;padding:24px 4px;max-width:560px}
@@ -126,16 +143,22 @@
       <option value="size" data-i18n="sort_size">Size</option>
       <option value="recent" data-i18n="sort_recent">Recent</option>
     </select>
+    <button class="hbtn" id="scrape" style="display:none"></button>
+    <button class="hbtn" id="addroms" style="display:inline-flex"></button>
+    <input type="file" id="pick" multiple hidden>
     <input class="search" id="search" type="text" data-i18n-attr="placeholder:filter" autocomplete="off">
   </header>
   <main id="main"><div class="spin"></div></main>
 </div>
 
+<div id="veil"></div><div id="toast"></div>
 <div id="play"><button class="exit" id="exit" title="Back to library">✕</button><iframe id="pframe" allow="autoplay; gamepad; fullscreen"></iframe></div>
 
 <script type="module">
 import I18N from '/nucleo-i18n.js';
 import fs from '/nucleo-fs.js';
+import Caps from '/nucleo-caps.js';
+import * as L from './library.js';
 const t = await I18N.init('arcade');   // init already fills [data-i18n] with the 'arcade' namespace
 
 const $ = (id) => document.getElementById(id);
@@ -152,15 +175,36 @@ const store = {
   get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
 };
-let favs = new Set(store.get('arcade.favs', []));            // "sysId/file"
-let recent = store.get('arcade.recent', []);                 // [{s,f,t,ts}] newest first
 let sortMode = store.get('arcade.sort', 'name');
-const favKey = (sysId, file) => sysId + '/' + file;
-function rememberPlay(sys, g) {
-  recent = [{ s: sys.id, f: g.file, t: g.title, ts: Date.now() }]
-    .concat(recent.filter((r) => !(r.s === sys.id && r.f === g.file))).slice(0, 12);
-  store.set('arcade.recent', recent);
+// Favourites and recently played live on the card (library.js: /data/GameShots/library.txt), shared with the device's
+// Games gallery. The browser's old shelf ("arcade.favs" / "arcade.recent") is folded in once.
+let lib = L.parseLibrary(''), libOk = false;
+const pathOf = (sys, file) => ROM_DIR + sys.id + '/' + file;
+function gameOf(path) {                       // a card path under ROM_DIR -> {sys, file}, else null
+  if (!path.startsWith(ROM_DIR)) return null;
+  const rest = path.slice(ROM_DIR.length), i = rest.indexOf('/');
+  if (i < 0 || rest.indexOf('/', i + 1) >= 0) return null;
+  const sys = sysById(rest.slice(0, i));
+  return sys ? { sys, file: rest.slice(i + 1) } : null;
 }
+async function loadLib() {
+  try { lib = L.parseLibrary(await fs.readText(L.LIBRARY) || ''); libOk = true; }
+  catch (e) { libOk = false; return; }       // unreadable: keep what is shown, never overwrite the file blind
+  if (!store.get('arcade.libmoved', false)) {
+    if (L.mergeLegacy(lib, store.get('arcade.favs', []), store.get('arcade.recent', []), ROM_DIR)) await saveLib();
+    store.set('arcade.libmoved', true);
+  }
+}
+let saving = Promise.resolve();
+function saveLib() {
+  if (!libOk) return saving;
+  saving = saving.then(() => fs.writeText(L.LIBRARY, L.formatLibrary(lib))).catch(() => {});
+  return saving;
+}
+// The device may have changed the file since (a star set there, a game played there): read, change, write.
+async function libChange(fn) { await loadLib(); fn(lib); await saveLib(); }
+const isFav = (sys, file) => lib.favs.includes(pathOf(sys, file));
+function rememberPlay(sys, g) { libChange((l) => L.notePlayed(l, pathOf(sys, g.file))); }
 
 async function jget(url) {
   try { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) return null; return await r.json(); }
@@ -209,6 +253,7 @@ const SAVE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 // ── Views ───────────────────────────────────────────────────────────────────────────────────────
 function setChrome() {
   $('back').style.display = curSys ? 'inline-flex' : 'none';
+  $('scrape').style.display = curSys && curSys.thumbs ? 'inline-flex' : 'none';
   $('sort').style.display = curSys ? 'block' : 'none';
   $('crumb').innerHTML = '';
   if (curSys) { const b = document.createElement('b'); b.textContent = curSys.name; $('crumb').appendChild(b); }
@@ -232,7 +277,7 @@ async function showSystems() {
   main.innerHTML = '<div class="spin"></div>';
   // Count every system; hide the ones that don't exist on the card at all, but keep
   // configured-but-empty ones dimmed so the user knows where to drop ROMs.
-  lastCounts = await mapLimited(SYSTEMS, 3, countSystem);
+  [lastCounts] = await Promise.all([mapLimited(SYSTEMS, 3, countSystem), loadLib()]);
   $('sub').textContent = t('games_count', { count: lastCounts.reduce((a, b) => a + (b || 0), 0) });
   renderSystems('');
 }
@@ -245,25 +290,23 @@ function renderSystems(q) {
   main.innerHTML = '';
 
   // "Continue playing": the newest recent entry whose system is still configured.
-  const last = recent.find((r) => sysById(r.s));
+  const last = lib.recent.map((r) => gameOf(r.path)).find(Boolean);
   if (last && !q) {
-    const sys = sysById(last.s);
+    const sys = last.sys, title = titleOf(last.file);
     main.appendChild(sectionTitle('continue_playing'));
     const h = document.createElement('div'); h.className = 'hero';
     h.style.setProperty('--ha', sys.accent || 'var(--ac)');
     h.innerHTML = `<div class="hp">${glyphOf(sys)}</div><div class="ht"><div class="t"></div><div class="s"></div></div><div class="go"></div>`;
-    h.querySelector('.t').textContent = last.t;
+    h.querySelector('.t').textContent = title;
     h.querySelector('.s').textContent = sys.name;
     h.querySelector('.go').textContent = '▶ ' + t('play');
-    h.onclick = () => launch(sys, { file: last.f, title: last.t });
+    h.onclick = () => launch(sys, { file: last.file, title });
     main.appendChild(h);
+    coverInto(h.querySelector('.hp'), sys, last.file, 'hero');
   }
 
   // Favorites rail — cross-system quick launch.
-  const favList = [...favs].map((k) => {
-    const i = k.indexOf('/'); const sys = sysById(k.slice(0, i));
-    return sys ? { sys, file: k.slice(i + 1) } : null;
-  }).filter(Boolean);
+  const favList = lib.favs.map(gameOf).filter(Boolean);
   if (favList.length && !q) {
     main.appendChild(sectionTitle('favorites'));
     const rail = document.createElement('div'); rail.className = 'rail';
@@ -310,10 +353,12 @@ function renderSystems(q) {
 async function showGames(sys) {
   curSys = sys; setChrome();
   main.innerHTML = '<div class="spin"></div>';
-  const [d, sv] = await Promise.all([
+  const [d, sv, sn] = await Promise.all([
     jlist(ROM_DIR + sys.id),
     jlist(ROM_DIR + sys.id + '/' + SAVE_DIR),
+    jlist(ROM_DIR + sys.id + '/.snaps'),
   ]);
+  snapSet = new Set((sn && sn.entries ? sn.entries : []).filter((e) => /\.snp$/i.test(e.name)).map((e) => e.name.slice(0, -4)));
   listErr = !d;
   const ex = new Set(sys.exts);
   // The BIOS is a support file the core loads, not a game — never list it as playable.
@@ -331,7 +376,8 @@ async function showGames(sys) {
 }
 
 function sortGames(list) {
-  const ts = new Map(recent.filter((r) => curSys && r.s === curSys.id).map((r) => [r.f, r.ts]));
+  const ts = new Map(lib.recent.map((r) => { const g = gameOf(r.path); return g && curSys && g.sys.id === curSys.id ? [g.file, r.n] : null; })
+    .filter(Boolean));
   const by = {
     name:   (a, b) => a.title.localeCompare(b.title),
     size:   (a, b) => b.size - a.size || a.title.localeCompare(b.title),
@@ -361,24 +407,177 @@ function renderGames(q) {
     el.style.setProperty('--sa', curSys.accent || 'var(--ac)');
     const b = baseOf(g.file);
     const hasSave = savedSet.has(b.toLowerCase()) || savedSet.has(shortBase(b).toLowerCase());
-    const isFav = favs.has(favKey(curSys.id, g.file));
+    const fav = isFav(curSys, g.file);
     el.innerHTML = `<div class="gi">${curSys.name[0]}</div><div class="gn"></div>
       ${hasSave ? `<span class="sv" title="${t('has_save')}">${SAVE_ICON}</span>` : ''}
+      ${playOnDevice && curSys.native ? `<button class="dev" title="${t('play_device')}">${GLYPHS.hand}<span></span></button>` : ''}
       <div class="gs">${fmtSize(g.size)}</div>
-      <button class="star${isFav ? ' on' : ''}" title="${t('fav_toggle')}" aria-label="${t('fav_toggle')}">${isFav ? '★' : '☆'}</button>`;
+      <button class="star${fav ? ' on' : ''}" title="${t('fav_toggle')}" aria-label="${t('fav_toggle')}">${fav ? '★' : '☆'}</button>`;
     el.querySelector('.gn').textContent = g.title;
     el.onclick = () => launch(curSys, g);
-    el.querySelector('.star').onclick = (ev) => {
+    const dev = el.querySelector('.dev');
+    if (dev) { dev.querySelector('span').textContent = t('play_device_short'); dev.onclick = (ev) => { ev.stopPropagation(); playOnDevice_(curSys, g); }; }
+    el.querySelector('.star').onclick = async (ev) => {
       ev.stopPropagation();
-      const k = favKey(curSys.id, g.file);
-      favs.has(k) ? favs.delete(k) : favs.add(k);
-      store.set('arcade.favs', [...favs]);
+      const sys = curSys;
+      await libChange((l) => L.toggleFav(l, pathOf(sys, g.file)));
+      if (!libOk) toast(t('lib_unsaved'));
       renderGames($('search').value);
     };
+    if (snapSet.has(g.file)) coverInto(el.querySelector('.gi'), curSys, g.file, 'row');
     box.appendChild(el);
   });
   main.appendChild(box);
   sel = 0; paintSel();
+}
+
+// ── Pictures: the card's .snaps, decoded here, one at a time as the rows come into view ─────────────────
+let snapSet = new Set();                          // files of the current console that have a .snp
+const coverCache = new Map();                     // card path -> ImageData (kept for the session)
+const coverQueue = [];
+let coverBusy = false;
+const seen = new IntersectionObserver((list) => list.forEach((e) => {
+  if (!e.isIntersecting) return;
+  seen.unobserve(e.target);
+  coverQueue.push(e.target); pumpCovers();
+}), { root: null, rootMargin: '200px' });
+function coverInto(slot, sys, file, kind) {
+  if (!slot) return;
+  slot.dataset.snp = L.snapPath(ROM_DIR + sys.id, file, 'snp');
+  slot.dataset.kind = kind;
+  const hit = coverCache.get(slot.dataset.snp);
+  // the row is put in the page after its cells are made: the picture follows on the next frame
+  if (hit) { requestAnimationFrame(() => putCover(slot, hit)); return; }
+  seen.observe(slot);
+}
+function putCover(slot, img) {
+  if (!slot.isConnected) return;
+  const c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height; c.className = 'cov';
+  c.getContext('2d').putImageData(img, 0, 0);
+  slot.replaceWith(c);
+}
+async function pumpCovers() {
+  if (coverBusy) return;
+  coverBusy = true;
+  while (coverQueue.length) {
+    const slot = coverQueue.shift(), p = slot.dataset.snp;
+    if (!slot.isConnected) continue;
+    let img = coverCache.get(p);
+    if (!img) {
+      const b = await fs.read(p).catch(() => null);
+      const d = b && await L.decodeSnp(b);
+      if (!d) continue;
+      img = new ImageData(d.rgba, d.w, d.h);
+      coverCache.set(p, img);
+    }
+    putCover(slot, img);
+  }
+  coverBusy = false;
+}
+
+// ── The scraper: pictures for the games that have none (libretro-thumbnails), written where the device reads them ──
+async function fetchSnap(sys, file, names) {
+  for (const name of L.snapCandidates(names, file)) {
+    let bmp;
+    try {
+      const r = await fetch(L.snapUrl(sys.thumbs, name));
+      if (!r.ok) continue;
+      bmp = await createImageBitmap(await r.blob());
+    } catch { continue; }
+    const f = L.fitSnap(bmp.width, bmp.height, sys.screen);
+    // an exact upscale is undone pixel for pixel, then shrunk smoothly into the box
+    const a = new OffscreenCanvas(f.pre[0], f.pre[1]), ax = a.getContext('2d');
+    ax.imageSmoothingEnabled = false; ax.drawImage(bmp, 0, 0, f.pre[0], f.pre[1]);
+    const b = new OffscreenCanvas(f.w, f.h), bx = b.getContext('2d');
+    bx.imageSmoothingEnabled = true; bx.imageSmoothingQuality = 'high'; bx.drawImage(a, 0, 0, f.w, f.h);
+    const px = bx.getImageData(0, 0, f.w, f.h);
+    const out = await L.encodeSnap(f.w, f.h, px.data);
+    const dir = ROM_DIR + sys.id;
+    await fs.write(L.snapPath(dir, file, 'snp'), out.snp);
+    await fs.write(L.snapPath(dir, file, 'pic'), out.pic);
+    coverCache.set(L.snapPath(dir, file, 'snp'), px);
+    return true;
+  }
+  return false;
+}
+let scraping = false;
+async function scrape(sys, files, quiet = false) {   // quiet: after an upload, a message only when pictures came
+  if (scraping || !sys.thumbs) return;
+  const todo = files.filter((f) => !snapSet.has(f));
+  if (!todo.length) { if (!quiet) toast(t('scrape_none')); return; }
+  scraping = true; $('scrape').disabled = true;
+  let names;
+  try { names = await L.snapIndex(sys.thumbs); }
+  catch { scraping = false; $('scrape').disabled = false; if (!quiet) toast(t('scrape_offline')); return; }
+  let done = 0, found = 0;
+  for (const f of todo) {
+    $('sub').textContent = t('scrape_progress', { done, total: todo.length });
+    try { if (await fetchSnap(sys, f, names)) { found++; snapSet.add(f); } } catch {}
+    done++;
+  }
+  scraping = false; $('scrape').disabled = false;
+  $('sub').textContent = '';
+  if (!quiet || found) toast(t('scrape_done', { found, total: todo.length }));
+  if (curSys === sys) renderGames($('search').value);
+}
+$('scrape').onclick = () => { if (curSys) scrape(curSys, curGames.map((g) => g.file)); };
+
+// ── New ROMs: dropped on the page or picked, each into its console's folder, then its picture ──────────
+async function addRoms(files) {
+  const placed = new Map(), skipped = [];
+  let i = 0;
+  for (const f of files) {
+    i++;
+    const sys = L.systemFor(f.name, SYSTEMS, curSys);
+    if (!sys) { skipped.push(f.name); continue; }
+    try {
+      await fs.write(pathOf(sys, f.name), f, {
+        onProgress: (at, total) => { $('sub').textContent = t('upload_progress', { i, n: files.length, pct: Math.round(at * 100 / (total || 1)) }); },
+      });
+      if (!placed.has(sys)) placed.set(sys, []);
+      placed.get(sys).push(f.name);
+    } catch (e) { skipped.push(f.name); }
+  }
+  $('sub').textContent = '';
+  const n = [...placed.values()].reduce((a, l) => a + l.length, 0);
+  toast(skipped.length ? t('upload_skipped', { n, skipped: skipped.length, names: skipped.slice(0, 3).join(', ') })
+                       : t('upload_done', { n }));
+  if (curSys) await showGames(curSys); else await showSystems();
+  for (const [sys, list] of placed) if (sys.thumbs) {           // their pictures, quietly, while online
+    if (curSys !== sys) { const sn = await jlist(ROM_DIR + sys.id + '/.snaps'); snapSet = new Set((sn ? sn.entries : []).map((e) => e.name.replace(/\.snp$/i, ''))); }
+    await scrape(sys, list, true);
+  }
+}
+$('pick').onchange = () => { const f = [...$('pick').files]; $('pick').value = ''; if (f.length) addRoms(f); };
+$('addroms').onclick = () => $('pick').click();
+let dragDepth = 0;
+addEventListener('dragenter', (e) => { if (playing || !e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return; dragDepth++; $('veil').style.display = 'grid'; });
+addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('veil').style.display = 'none'; } });
+addEventListener('dragover', (e) => { if (!playing) e.preventDefault(); });
+addEventListener('drop', (e) => {
+  e.preventDefault(); dragDepth = 0; $('veil').style.display = 'none';
+  if (playing || !e.dataTransfer) return;
+  const f = [...e.dataTransfer.files]; if (f.length) addRoms(f);
+});
+
+// ── Play on the device itself: its own emulator, full speed, the browser free ──────────────────────────
+// Only where the device says it can (capability games.play) and only for the consoles it emulates natively.
+let playOnDevice = false;
+async function playOnDevice_(sys, g) {
+  let ok = false;
+  try {
+    const r = await fetch('/api/play?path=' + encodeURIComponent(pathOf(sys, g.file)), { method: 'POST' });
+    const j = await r.json().catch(() => ({}));
+    ok = r.ok && j.ok !== false;
+  } catch {}
+  toast(t(ok ? 'play_device_started' : 'play_device_failed'));
+  if (ok) rememberPlay(sys, g);
+}
+let toastTimer = 0;
+function toast(msg) {
+  const el = $('toast'); el.textContent = msg; el.style.display = 'block';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.style.display = 'none'; }, 4200);
 }
 
 // ── Launch / exit ───────────────────────────────────────────────────────────────────────────────
@@ -409,6 +608,7 @@ async function exitPlayer() {
   // Re-enter the view (the run may have written a first save → badge, and bumped the recent shelf)
   // but PUT THE USER BACK where they were: filter, cursor and scroll survive the game session —
   // landing on row 1 of a 250-game shelf after playing game #200 is hostile.
+  await loadLib();
   if (curSys) {
     const q = $('search').value, keep = sel;
     await showGames(curSys);
@@ -539,8 +739,15 @@ document.addEventListener('keydown', (e) => {
 })();
 
 // Live language switch: re-apply static labels and re-render the current view.
+function labels() {
+  $('scrape').textContent = t('scrape');
+  $('addroms').textContent = '＋ ' + t('add_roms_btn');
+  $('veil').textContent = t('drop_here');
+}
+labels();
 I18N.onChange(() => {
   I18N.apply(document, 'arcade');
+  labels();
   if (curSys) renderGames($('search').value); else renderSystems($('search').value);
 });
 
@@ -548,6 +755,7 @@ I18N.onChange(() => {
   const cfg = await jget('systems.json');
   SYSTEMS = (cfg && Array.isArray(cfg.systems)) ? cfg.systems : [];
   if (!SYSTEMS.length) { main.innerHTML = `<div class="msg">${t('no_systems')}</div>`; return; }
+  try { playOnDevice = await Caps.has('games.play'); } catch {}
   showSystems();
 })();
 </script>

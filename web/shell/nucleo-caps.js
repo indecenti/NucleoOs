@@ -130,7 +130,7 @@ const Caps = {
   },
   async has(name) { return (await Caps.info()).caps.includes(name); },
   async limit(name, fallback) { const v = (await Caps.info()).limits[name]; return Number.isInteger(v) ? v : fallback; },
-  // After pairing or an OS update the answer may change: ask again.
+  // After an OS update the answer may change: the shell calls this when /api/status reports another version.
   reset() { pending = null; try { sessionStorage.removeItem(CACHE_KEY); } catch {} },
 };
 

@@ -646,7 +646,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
                 try { manifest = await sysReadJson('/apps/' + input.id + '/manifest.json'); } catch {}
                 try { const hr = await dq.read(() => fetch('/apps/' + input.id + '/', { cache: 'no-store' })); if (hr.ok) html = await hr.text(); } catch {}
                 // Inject the forge helpers (served path → dynamic import) so app-recipe stays pure.
-                const [{ distill }, prov] = [await import('/apps/anima/www/forge/learn.js'), await import('/apps/anima/www/forge/provenance.js')];
+                const [{ distill }, prov] = [await import('/apps/anima/forge/learn.js'), await import('/apps/anima/forge/provenance.js')];
                 const staged = await stageAppRecipe({ manifest, kind: (manifest && manifest.__kind) || '', html, smoke, approved: true, lang },
                   { distill, canonical: prov.canonical, sha256hex: prov.sha256hex }, { existingCards: [], stagedCards: [] });
                 if (staged && staged.staged) {

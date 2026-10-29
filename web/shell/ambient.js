@@ -14,7 +14,7 @@
 //
 // The rules are PURE exported functions returning notification DESCRIPTORS — strings are i18n
 // keys + params, resolved only at emit time — so the anti-regression tests run them in node
-// with no DOM, no i18n catalogues and no device (tools/shell-ambient.test.mjs).
+// with no DOM, no i18n catalogues and no device (tests/suite/shell-ambient.test.mjs).
 
 import I18N from './nucleo-i18n.js';
 

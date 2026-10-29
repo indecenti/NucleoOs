@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
 // Resilient boot/data fetch for the desktop shell — EXTRACTED so it is unit-testable in node with a
-// mock fetch (tools/shell-boot-fetch.test.mjs). The Cardputer serves the WHOLE OS from a SINGLE-TASK,
+// mock fetch (tests/suite/shell-boot-fetch.test.mjs). The Cardputer serves the WHOLE OS from a SINGLE-TASK,
 // 6-socket, PSRAM-less web server: when several requests land at once it answers 503 (busy / low-heap)
 // or stalls (bigger servers — the Linux handheld — can still answer 503 to a cold-boot burst). So each attempt gets a hard timeout (it must never hang the boot splash) and we RETRY
 // 503/502/504 + timeouts + network errors with growing backoff — SPACING the load so the device

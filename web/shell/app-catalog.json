@@ -26,11 +26,6 @@
    "category": "tools",
    "description": "Two-factor (2FA) verification codes — TOTP/HOTP computed in the browser (pure JS, no Web Crypto, works over http LAN and offline). Import…"
   },
-  "automation-studio": {
-   "name": "Automation Studio",
-   "category": "tools",
-   "description": "Create event-to-action rules running on a sandboxed micro-VM."
-  },
   "browser": {
    "name": "Browser",
    "category": "tools",
@@ -205,11 +200,6 @@
    "name": "Store",
    "category": "system",
    "description": "Lo store di NucleoOS, uguale su ogni dispositivo: app firmate (ECDSA P-256, SHA-256 di ogni file, catalogo con scadenza e anti-ritorno)…"
-  },
-  "swarm": {
-   "name": "Swarm",
-   "category": "connectivity",
-   "description": "Federate nearby devices over ESP-NOW: shared clipboard, peers and events."
   },
   "system-monitor": {
    "name": "System Monitor",

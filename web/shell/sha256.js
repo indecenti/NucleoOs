@@ -3,7 +3,7 @@
 // Exists because the shell is usually served over plain http on the LAN → NOT a secure context,
 // so crypto.subtle is unavailable (the same constraint that keeps the service worker inert there).
 // Streaming over the input (no padded copy of a multi-MB firmware image); ~3 MB hashes in well
-// under a second. Verified against the FIPS vectors in tools/update-core.test.mjs.
+// under a second. Verified against the FIPS vectors in tests/suite/update-core.test.mjs.
 
 const K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,

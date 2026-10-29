@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
 // System Notification Center — the web backbone of NucleoOS notifications.
 // One contract, N producers, 2 surfaces (the web here; the device is the native twin).
-// See docs/notify-protocol.md. Lazily loaded by shell.js like copilot.js.
+// See NucleoOs docs/notify-protocol.md. Lazily loaded by shell.js like copilot.js.
 //
 // Everything is event-driven: no polling, no /api per keystroke. Notifications arrive
 // either from Notify.emit(...) in-process, or from the event bus via WebSocket (topic notify.post,

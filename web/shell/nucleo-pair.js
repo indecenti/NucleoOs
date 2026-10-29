@@ -17,6 +17,8 @@
 // PIN to whoever asked and pair them, which made "open by default" a one-request
 // shell. Now it is done from the console itself or over the USB cable, and the
 // PIN is read on the console's screen (quick menu › Network) or heard aloud.
+import User, { LAST } from './nucleo-user.js';
+
 const T = {
   it: { title: 'Accoppia questo browser', body: 'Per comandare il dispositivo (file, terminale, impostazioni) questo browser deve essere accoppiato una volta.',
         speak: '🔊 Leggi il PIN sul dispositivo', speaking: 'PIN letto sul dispositivo…',
@@ -80,6 +82,45 @@ async function syncLang() {
     if (j && T[j.lang]) LANG = j.lang;
   } catch {}
 }
+// Accounts (capability users.multi, docs/multiuser.md): the device knows people, not browsers.
+const TA = {
+  it: { a_title: 'Accedi', a_body: 'Su questo dispositivo ognuno ha il suo account: entra con il tuo nome e la tua password.',
+        a_name: 'Nome', a_pw: 'Password', a_remember: 'Ricordami su questo browser', a_ok: 'Entra',
+        a_bad: 'Nome o password errati', a_disabled: "Questo account è disattivato: chiedi all'amministratore.",
+        a_active: 'Ci sono già troppe persone collegate: riprova più tardi.',
+        c_title: 'Scegli una nuova password', c_body: "L'amministratore ha reimpostato la tua password: scegline una nuova per continuare.",
+        c_old: 'Password attuale', c_new: 'Nuova password', c_again: 'Ripeti la nuova password', c_ok: 'Salva',
+        c_mismatch: 'Le due password non coincidono', c_weak: 'Password troppo debole: almeno 8 caratteri e non una delle più comuni.' },
+  en: { a_title: 'Sign in', a_body: 'Everyone has their own account on this device: sign in with your name and password.',
+        a_name: 'Name', a_pw: 'Password', a_remember: 'Remember me on this browser', a_ok: 'Sign in',
+        a_bad: 'Wrong name or password', a_disabled: 'This account is disabled: ask the administrator.',
+        a_active: 'Too many people are signed in right now: try again later.',
+        c_title: 'Choose a new password', c_body: 'The administrator reset your password: choose a new one to continue.',
+        c_old: 'Current password', c_new: 'New password', c_again: 'New password again', c_ok: 'Save',
+        c_mismatch: 'The two passwords do not match', c_weak: 'Password too weak: at least 8 characters and not a common one.' },
+  es: { a_title: 'Iniciar sesión', a_body: 'En este dispositivo cada persona tiene su cuenta: entra con tu nombre y tu contraseña.',
+        a_name: 'Nombre', a_pw: 'Contraseña', a_remember: 'Recordarme en este navegador', a_ok: 'Entrar',
+        a_bad: 'Nombre o contraseña incorrectos', a_disabled: 'Esta cuenta está desactivada: pregunta al administrador.',
+        a_active: 'Ya hay demasiadas personas conectadas: inténtalo más tarde.',
+        c_title: 'Elige una contraseña nueva', c_body: 'El administrador restableció tu contraseña: elige una nueva para continuar.',
+        c_old: 'Contraseña actual', c_new: 'Contraseña nueva', c_again: 'Repite la contraseña nueva', c_ok: 'Guardar',
+        c_mismatch: 'Las dos contraseñas no coinciden', c_weak: 'Contraseña demasiado débil: al menos 8 caracteres y no una de las más comunes.' },
+  fr: { a_title: 'Se connecter', a_body: 'Sur cet appareil, chacun a son compte : connectez-vous avec votre nom et votre mot de passe.',
+        a_name: 'Nom', a_pw: 'Mot de passe', a_remember: 'Se souvenir de moi sur ce navigateur', a_ok: 'Se connecter',
+        a_bad: 'Nom ou mot de passe incorrect', a_disabled: "Ce compte est désactivé : demandez à l'administrateur.",
+        a_active: 'Trop de personnes sont connectées en ce moment : réessayez plus tard.',
+        c_title: 'Choisissez un nouveau mot de passe', c_body: "L'administrateur a réinitialisé votre mot de passe : choisissez-en un nouveau pour continuer.",
+        c_old: 'Mot de passe actuel', c_new: 'Nouveau mot de passe', c_again: 'Répétez le nouveau mot de passe', c_ok: 'Enregistrer',
+        c_mismatch: 'Les deux mots de passe ne correspondent pas', c_weak: 'Mot de passe trop faible : au moins 8 caractères et pas un des plus courants.' },
+  de: { a_title: 'Anmelden', a_body: 'Auf diesem Gerät hat jede Person ein eigenes Konto: Melde dich mit deinem Namen und Passwort an.',
+        a_name: 'Name', a_pw: 'Passwort', a_remember: 'In diesem Browser angemeldet bleiben', a_ok: 'Anmelden',
+        a_bad: 'Name oder Passwort falsch', a_disabled: 'Dieses Konto ist deaktiviert: Frag den Administrator.',
+        a_active: 'Gerade sind zu viele Personen angemeldet: Versuche es später erneut.',
+        c_title: 'Neues Passwort wählen', c_body: 'Der Administrator hat dein Passwort zurückgesetzt: Wähle ein neues, um fortzufahren.',
+        c_old: 'Aktuelles Passwort', c_new: 'Neues Passwort', c_again: 'Neues Passwort wiederholen', c_ok: 'Speichern',
+        c_mismatch: 'Die beiden Passwörter stimmen nicht überein', c_weak: 'Passwort zu schwach: mindestens 8 Zeichen und keines der häufigsten.' },
+};
+for (const l of Object.keys(TA)) Object.assign(T[l], TA[l]);
 const t = (k) => (T[LANG] || T.it)[k] || T.it[k] || k;
 
 const CSS = `
@@ -101,7 +142,10 @@ const CSS = `
 .ncpair-row .grow{flex:1}
 .ncpair-msg{min-height:16px;margin-top:8px;font-size:12px}
 .ncpair-msg.err{color:var(--err,#e2576b)} .ncpair-msg.ok{color:var(--ok,#2fd07a)}
-.ncpair-foot{margin-top:10px;font-size:11px;color:var(--muted,#8aa0c8)}`;
+.ncpair-foot{margin-top:10px;font-size:11px;color:var(--muted,#8aa0c8)}
+.ncpair-box .ncpair-acct input{font:14px/1.4 system-ui,Segoe UI,sans-serif;letter-spacing:normal;text-align:left;padding:9px 11px;margin-bottom:8px}
+.ncpair-box .ncpair-acct input[type=checkbox]{width:auto;margin:0 6px 0 0;padding:0}
+.ncpair-rem{display:flex;align-items:center;font-size:12px;color:var(--muted,#8aa0c8)}`;
 
 let cssDone = false;
 function injectCss() {
@@ -142,7 +186,12 @@ export function pairDialog() {
         '<div class="ncpair-box" role="dialog" aria-modal="true">' +
         '<h2></h2><p></p>' +
         '<button class="ncpair-speak"></button>' +
-        '<input inputmode="numeric" autocomplete="off" maxlength="6" placeholder="······">' +
+        '<input class="ncpair-pin" inputmode="numeric" autocomplete="off" maxlength="6" placeholder="······">' +
+        '<div class="ncpair-acct" hidden><input class="ncpair-a1" autocomplete="username" list="ncpair-names">' +
+        '<input class="ncpair-a2" type="password" autocomplete="current-password">' +
+        '<input class="ncpair-a3" type="password" autocomplete="new-password">' +
+        '<label class="ncpair-rem"><input type="checkbox" class="ncpair-rm"><span></span></label>' +
+        '<datalist id="ncpair-names"></datalist></div>' +
         '<div class="ncpair-msg"></div>' +
         '<div class="ncpair-row"><button class="ncpair-cancel"></button><div class="grow"></div><button class="pri ncpair-ok"></button></div>' +
         '<div class="ncpair-foot"></div></div>';
@@ -159,6 +208,7 @@ export function pairDialog() {
       // PIN entry — the normal case once the device asks for a PIN.
       const pinMode = () => {
         q('h2').textContent = t('title'); q('p').textContent = t('body');
+        q('.ncpair-acct').hidden = true;
         q('.ncpair-speak').style.display = '';
         q('input').style.display = '';
         q('.ncpair-speak').textContent = t('speak');
@@ -198,6 +248,7 @@ export function pairDialog() {
       // so the dialog explains where to do it and then re-checks the device.
       const enableMode = () => {
         q('h2').textContent = t('on_title'); q('p').textContent = t('on_body');
+        q('.ncpair-acct').hidden = true;
         q('.ncpair-speak').style.display = 'none';
         q('input').style.display = 'none';
         q('.ncpair-foot').textContent = '';
@@ -232,8 +283,84 @@ export function pairDialog() {
         ok.focus();
       };
 
+      // Accounts: name and password instead of the PIN. Signed in as someone else than this browser's last
+      // person: their state is swapped in (nucleo-user.js) and the whole web OS reloads, so nothing of the
+      // previous person stays on screen or in memory.
+      const finish = async (user) => {
+        if (await User.switchTo(user.id)) { try { (window.top || window).location.reload(); } catch { location.reload(); } return; }
+        done(true);
+      };
+      const acctOnly = (title, body) => {
+        q('h2').textContent = title; q('p').textContent = body;
+        q('.ncpair-speak').style.display = 'none';
+        q('.ncpair-pin').style.display = 'none';
+        q('.ncpair-acct').hidden = false;
+        q('.ncpair-foot').textContent = '';
+        q('.ncpair-cancel').style.display = 'none';      // with accounts there is nothing to use without signing in
+        ok.style.display = ''; ok.disabled = false;
+        msg('');
+      };
+      const acctMode = () => {
+        acctOnly(t('a_title'), t('a_body'));
+        const [name, pw, again] = [q('.ncpair-a1'), q('.ncpair-a2'), q('.ncpair-a3')];
+        name.style.display = ''; again.style.display = 'none'; q('.ncpair-rem').style.display = '';
+        name.placeholder = t('a_name'); name.setAttribute('aria-label', t('a_name'));
+        pw.placeholder = t('a_pw'); pw.setAttribute('aria-label', t('a_pw'));
+        q('.ncpair-rem span').textContent = t('a_remember');
+        const names = (st && Array.isArray(st.users)) ? st.users : [];
+        q('#ncpair-names').replaceChildren(...names.map((u) => { const o = document.createElement('option'); o.value = u.name; return o; }));
+        let lastId = null;
+        try { lastId = localStorage.getItem(LAST); } catch {}
+        const known = names.find((u) => u.id === lastId);
+        if (known && !name.value) name.value = known.name;
+        ok.textContent = t('a_ok');
+        const submit = async () => {
+          if (!name.value.trim() || !pw.value) return;
+          ok.disabled = true; msg('');
+          const r = await User.signIn(name.value.trim(), pw.value, q('.ncpair-rm').checked);
+          if (r.ok && r.user) {
+            if (r.user.must_change) { changeMode(pw.value, r.user); return; }
+            msg(t('done'), 'ok'); setTimeout(() => finish(r.user), 300); return;
+          }
+          const e = r.error;
+          msg(e === 'locked' ? t('locked') : e === 'disabled' ? t('a_disabled') : e === 'active_limit' ? t('a_active')
+            : e === 'offline' ? t('err') : t('a_bad'), 'err');
+          ok.disabled = false; pw.value = ''; pw.focus();
+        };
+        ok.onclick = submit;
+        name.onkeydown = (e) => { if (e.key === 'Enter') pw.focus(); };
+        pw.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+        (name.value ? pw : name).focus();
+      };
+      // A password the administrator reset: changed here, before anything else answers.
+      const changeMode = (oldPw, user) => {
+        acctOnly(t('c_title'), t('c_body'));
+        const [old, nw, again] = [q('.ncpair-a1'), q('.ncpair-a2'), q('.ncpair-a3')];
+        q('.ncpair-rem').style.display = 'none';
+        old.value = oldPw || ''; old.type = 'password'; old.removeAttribute('list');
+        old.style.display = oldPw ? 'none' : '';
+        old.placeholder = t('c_old'); old.setAttribute('aria-label', t('c_old')); old.setAttribute('autocomplete', 'current-password');
+        nw.value = ''; nw.placeholder = t('c_new'); nw.setAttribute('aria-label', t('c_new')); nw.setAttribute('autocomplete', 'new-password');
+        again.value = ''; again.style.display = ''; again.placeholder = t('c_again'); again.setAttribute('aria-label', t('c_again'));
+        ok.textContent = t('c_ok');
+        const submit = async () => {
+          if (!old.value || !nw.value) return;
+          if (nw.value !== again.value) { msg(t('c_mismatch'), 'err'); return; }
+          ok.disabled = true; msg('');
+          const r = await User.changePassword(old.value, nw.value);
+          if (r.ok) { msg(t('done'), 'ok'); setTimeout(() => finish(user || (st && st.user)), 300); return; }
+          msg(r.error === 'weak_password' ? t('c_weak') : r.error === 'bad_credentials' ? t('a_bad')
+            : r.error === 'locked' ? t('locked') : t('err'), 'err');
+          ok.disabled = false;
+        };
+        ok.onclick = submit;
+        again.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+        (oldPw ? nw : old).focus();
+      };
+
       document.body.appendChild(ovl);
-      if (st && st.auth === 'open') enableMode(); else pinMode();
+      if (st && st.multi) { if (st.user && st.user.must_change) changeMode('', st.user); else acctMode(); }
+      else if (st && st.auth === 'open') enableMode(); else pinMode();
     });
   })();
   return openDialog;
@@ -243,11 +370,11 @@ export function pairDialog() {
 export async function ensurePaired() {
   const st = await pairStatus();
   if (!st) return false;
-  if (st.paired) return true;
+  if (st.paired && !(st.multi && st.user && st.user.must_change)) return true;
   return pairDialog();
 }
 
-/** fetch() that answers a `pairing_required` 401 by asking for the PIN and
+/** fetch() that answers a `pairing_required` (or, with accounts, `signin_required`) 401 by asking for the PIN and
  *  retrying ONCE. Anything else is passed through untouched — a route that fails
  *  for its own reasons must keep failing visibly. */
 export async function pairedFetch(input, init) {
@@ -255,7 +382,7 @@ export async function pairedFetch(input, init) {
   if (r.status !== 401) return r;
   let why = '';
   try { why = (await r.clone().json()).error || ''; } catch {}
-  if (why !== 'pairing_required') return r;
+  if (why !== 'pairing_required' && why !== 'signin_required') return r;
   if (!(await pairDialog())) return r;
   return fetch(input, init);
 }

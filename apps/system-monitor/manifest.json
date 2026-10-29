@@ -1,6 +1,7 @@
 {
   "id": "system-monitor",
   "name": "System Monitor",
+  "icon": "/apps/system-monitor/icon.svg",
   "version": "0.1.3",
   "version_code": 3,
   "min_os": "0.1.0",

@@ -1,6 +1,7 @@
 {
   "id": "file-commander",
   "name": "File Commander",
+  "icon": "/apps/file-commander/icon.svg",
   "version": "0.1.2",
   "version_code": 2,
   "description": "Browse, move and organize files on the SD card; the default open-with fallback.",

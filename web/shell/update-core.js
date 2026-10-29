@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
 // update-core.js — pure decision logic for the OS update check. No DOM, no timers, no direct
-// network: everything effectful is injected, so tools/update-core.test.mjs can drive every branch.
+// network: everything effectful is injected, so tests/suite/update-core.test.mjs can drive every branch.
 // Shared by the shell's passive notifier (update-check.js) and the Settings "Updates" tab.
 //
 // Architecture rule this module encodes: the BROWSER talks to GitHub, the device never does

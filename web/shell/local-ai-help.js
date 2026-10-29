@@ -8,7 +8,7 @@
 //
 // Sources (checked 2026-09-30): Ollama FAQ "How can I allow additional web origins" + "Setting environment
 // variables on Windows / macOS / Linux"; LM Studio CLI `lms server start --cors`.
-// Pure pieces (detectOS, originsFix) are host-tested in tools/shell-local-ai-help.test.mjs.
+// Pure pieces (detectOS, originsFix) are host-tested in tests/suite/shell-local-ai-help.test.mjs.
 import { copyText, ensureCss } from './capabilities.js';
 import { probeServer, forgetServers } from './ai-engines.js';
 

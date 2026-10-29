@@ -2,7 +2,7 @@
 // ai-ask.js — "ask the best AI this OS may use right now". ONE decision of WHO answers a plain text request
 // (a game coach line, a prompt rewrite, a summary, a copilot answer), shared by every surface that does not need
 // a specialised pipeline. ANIMA's own ladder (device commands, WebGPU, WASM, streaming) and the agent's tool loop
-// keep theirs; they follow the same policy (docs/anima-engines.md).
+// keep theirs; they follow the same policy (NucleoOs docs/anima-engines.md).
 //
 // It honours the three choices the user makes ONCE for the whole OS:
 //   • the mode (anima-mode.js) — Private = nothing leaves this machine: only a model on THIS computer (loopback);
@@ -15,7 +15,7 @@
 // Before this, Games and Paint each copied a key resolver with its own fixed provider order and hard-coded
 // models, never used a PC model, and called the cloud in Private mode too.
 //
-// DOM-free; every dependency can be injected (deps) — host-tested in tools/shell-ai-ask.test.mjs.
+// DOM-free; every dependency can be injected (deps) — host-tested in tests/suite/shell-ai-ask.test.mjs.
 import * as AI from './ai.js';
 import * as Engines from './ai-engines.js';
 import * as Mode from './anima-mode.js';

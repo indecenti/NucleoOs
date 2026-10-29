@@ -1,6 +1,7 @@
 {
   "id": "video-player",
   "name": "Video Player",
+  "icon": "/apps/video-player/icon.svg",
   "version": "3.1.4",
   "version_code": 6,
   "min_os": "0.1.0",

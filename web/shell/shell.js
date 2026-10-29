@@ -90,16 +90,9 @@ let Ambient = null;
 // System-UI extras (night light, lock screen, shortcuts sheet, widgets) — initialized in initOS().
 let SysUI = null;
 
-// Emoji glyphs keep the device free of icon assets (a deliberate weight trick).
-const GLYPHS = {
-  'file-commander': '🗂️', notepad: '📝', 'photo-viewer': '🖼️', 'media-player': '🎵',
-  'video-player': '🎬', 'automation-studio': '⚙️', 'ir-remote': '📡', swarm: '🛰️',
-  settings: '🔧', 'log-viewer': '📜', 'system-monitor': '🩺', calculator: '🧮', clock: '🕐',
-  calendar: '📅', dosbox: '🕹️', recorder: '🎙️', 'recycle-bin': '♻️', updates: '🔄',
-  anima: '🧠', help: '❓', browser: '🌐', spreadsheet: '📊', games: '🎮',
-};
+// An app without a usable icon shows its initial: every shipped app has an SVG in /icons.json.
 const glyph = (a) => {
-  const fb = GLYPHS[a.id] || (a.name ? a.name[0].toUpperCase() : '▦');
+  const fb = a.name ? escapeHtml(a.name[0].toUpperCase()) : '▦';
   if (a.icon) {
     let src = a.icon;
     if (!src.startsWith('data:') && !src.startsWith('http:') && !src.startsWith('https:')) {
@@ -111,13 +104,13 @@ const glyph = (a) => {
       if (src.startsWith('/data/') || src.startsWith('/system/')) src = fs.url(src);
     }
     // A missing/404 icon file (e.g. an app whose icon.svg wasn't deployed) must NOT leave a broken
-    // image — fall back to the emoji glyph in place. Resilient to any not-yet-deployed app icon.
+    // image: the initial takes its place.
     const safeFb = fb.replace(/['"\\<>&]/g, '');
     // Emitted WITHOUT src: the NucleoIcon pool (below) sets data-src -> src at most a few at a time and
     // only once the icon nears the viewport. This is the throttle that ACTUALLY runs on the real device
     // link (plain http LAN IP), where the service-worker gate is inert — so the ~26 file icons never hit
     // the single-task PSRAM-less httpd as one 26-wide GET burst at first paint. alt="" = no broken-image
-    // flash before hydration; data-fb carries the emoji fallback the pool swaps in on a 404.
+    // flash before hydration; data-fb carries the initial the pool swaps in on a 404.
     return `<img data-src="${escapeHtml(src)}" data-app="${escapeHtml(a.id)}" data-fb="${safeFb}" alt="" width="16" height="16" decoding="async" style="width:1em; height:1em; vertical-align:middle; pointer-events:none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));">`;
   }
   return fb;
@@ -209,15 +202,26 @@ const NucleoIcon = (() => {
 })();
 
 // Inline SVG icons for OS chrome (theme via currentColor). Keeping them here avoids
-// shipping icon files to the device — the same weight trick as the emoji app glyphs.
+// shipping icon files to the device.
 const ICONS = {
   wifi: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 5.6C5.5 2.6 10.5 2.6 14 5.6" stroke-linecap="round"/><path d="M4 8.1C6.4 6.1 9.6 6.1 12 8.1" stroke-linecap="round"/><path d="M6 10.6c1.2-1 2.8-1 4 0" stroke-linecap="round"/><circle cx="8" cy="13" r="0.9" fill="currentColor" stroke="none"/></svg>',
   ap: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="6" r="2"/><path d="M4.5 9.5a5 5 0 0 1 0-7M11.5 2.5a5 5 0 0 1 0 7" stroke-linecap="round"/><line x1="8" y1="8" x2="8" y2="14" stroke-linecap="round"/></svg>',
   offline: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 5.6C5.5 2.6 10.5 2.6 14 5.6" stroke-linecap="round" opacity=".45"/><line x1="3" y1="13" x2="13" y2="3" stroke-linecap="round"/></svg>',
 };
 
-// Fallback list so the desktop renders during development / offline.
-const MOCK = Object.keys(GLYPHS).map((id) => ({
+// The first Start grid: what a new person reaches for. The rest is one click away in "All apps", by category.
+const START_PINS = ['file-commander', 'settings', 'store', 'anima', 'browser', 'notepad', 'photo-viewer',
+  'media-player', 'calculator', 'calendar', 'terminal', 'help'];
+const startPinsSeed = () => START_PINS.filter((id) => byId(id));
+// "All apps" groups by the manifest's category, in this order; anything else is "other".
+const START_CATS = ['system', 'productivity', 'media', 'games', 'tools', 'connectivity', 'other'];
+let catalogCats = {};      // id -> category from app-catalog.json, for registries that do not carry it
+const appCat = (a) => { const c = a.category || catalogCats[a.id]; return START_CATS.includes(c) ? c : 'other'; };
+
+// The desktop shown when /api/apps does not answer (offline, development): the core apps, without routes.
+const MOCK = ['file-commander', 'notepad', 'photo-viewer', 'media-player', 'video-player', 'settings', 'log-viewer',
+  'system-monitor', 'calculator', 'clock', 'calendar', 'recorder', 'recycle-bin', 'updates', 'anima', 'help', 'browser',
+  'spreadsheet', 'games'].map((id) => ({
   id, name: id.replace(/(^|-)([a-z])/g, (_, s, c) => (s ? ' ' : '') + c.toUpperCase()),
   route: '', enabled: true,
 }));
@@ -248,7 +252,7 @@ const UI_STATE_PATH = '/system/config/ui-state.json';
 // same system); the shared default stays the gradient until that becomes an edition overlay.
 const GRADIENT_WALLPAPER = { type: 'gradient', gradient: 'linear-gradient(135deg, #0b1533 0%, #0f2350 50%, #16346a 100%)' };
 const DEFAULT_WALLPAPER = GRADIENT_WALLPAPER;
-const UI_DEFAULTS = { pins: [], wallpaper: DEFAULT_WALLPAPER, desktop: null, startPins: null, recent: [], recoCollapsed: false, iconSize: 'md', autoArrange: false };
+const UI_DEFAULTS = { pins: [], wallpaper: DEFAULT_WALLPAPER, desktop: null, startPins: null, recent: [], recoCollapsed: false, iconSize: 'md', autoArrange: false, seenApps: null };
 const RECENT_CAP = 12;
 
 const state = { apps: [], pins: [...UI_DEFAULTS.pins], wallpaper: UI_DEFAULTS.wallpaper,
@@ -257,7 +261,7 @@ const state = { apps: [], pins: [...UI_DEFAULTS.pins], wallpaper: UI_DEFAULTS.wa
     default_open: {
       txt: 'notepad', md: 'notepad', log: 'notepad', json: 'notepad', csv: 'spreadsheet',
       ini: 'notepad', cfg: 'notepad', yaml: 'notepad', yml: 'notepad', toml: 'notepad',
-      // NB: kept in step with registry/file-associations.json — tools/validate.mjs fails on a drift.
+      // NB: kept in step with shell/associations.json — tests/associations-seed.test.mjs fails on a drift.
       // These are only the SEED: /api/associations overrides them at boot. When the two disagreed, the
       // same photo opened in a different app depending on whether that fetch happened to succeed.
       xml: 'notepad', html: 'notepad', c: 'notepad', h: 'notepad', cpp: 'notepad',
@@ -665,7 +669,7 @@ function osKeydown(e) {
   if (ctrl && (e.key === 'w' || e.key === 'W')) { const w = WM.active(); if (w) { e.preventDefault(); WM.close(w.app.id); } return; }
   if (ctrl && e.shiftKey && (e.key === 'v' || e.key === 'V')) { e.preventDefault(); toggleClipHistory(); return; }
   // Resolve the remaining OS shortcuts through the shared pure resolver (unit-tested in
-  // tools/shortcuts.test.mjs). Document actions (Ctrl+S/Shift+S/N/O) fire even while typing and must
+  // tests/suite/shortcuts.test.mjs). Document actions (Ctrl+S/Shift+S/N/O) fire even while typing and must
   // NOT fall through to the browser; editing actions route to the app, or the desktop when idle.
   const sc = resolveShortcut(e, { hasActiveWindow: !!WM.active(), editable: isEditable(e.target) });
   if (sc.type === 'doc') { e.preventDefault(); sendToActive(sc.action); return; }
@@ -812,7 +816,7 @@ let saveTimer = null, lastSaved = '';
 // then written over B).
 let uiSaveInFlight = 0;
 function saveUiState() {
-  const body = JSON.stringify({ pins: state.pins, wallpaper: state.wallpaper, desktop: state.desktop, startPins: state.startPins, recent: state.recent, recoCollapsed: state.recoCollapsed, iconSize: state.iconSize, autoArrange: state.autoArrange, wpv: DEFAULT_WALLPAPER.type === 'console' ? 2 : undefined });   // wpv: versione del modello dello sfondo (vedi la migrazione al boot); only where that migration exists — undefined is dropped by JSON
+  const body = JSON.stringify({ pins: state.pins, wallpaper: state.wallpaper, desktop: state.desktop, startPins: state.startPins, startv: 1, recent: state.recent, recoCollapsed: state.recoCollapsed, iconSize: state.iconSize, autoArrange: state.autoArrange, seenApps: state.seenApps, wpv: DEFAULT_WALLPAPER.type === 'console' ? 2 : undefined });   // wpv: versione del modello dello sfondo (vedi la migrazione al boot); only where that migration exists — undefined is dropped by JSON
   lastSaved = body;              // remember our own write so we can ignore its echo
   if (!saveTimer) uiSaveInFlight++;
   clearTimeout(saveTimer);
@@ -822,22 +826,40 @@ function saveUiState() {
   }, 400);
 }
 
-// Build the default desktop (one shortcut per installed app) used to seed a fresh device.
-// No `label`: an app icon without one shows appName(), so it follows the UI language. Baking the name
-// in froze it in whatever language the desktop was first seeded in.
-function seedDesktop() {
-  return state.apps.map((a) => ({ uid: 'app-' + a.id, type: 'app', target: a.id }));
-}
-// Add a desktop shortcut for any installed app that doesn't have one yet (so newly
-// installed apps — e.g. ANIMA — appear on an existing desktop, not only in Start).
-// Returns the number added.
-function addMissingAppIcons() {
-  const have = new Set(state.desktop.filter((it) => it.type === 'app').map((it) => it.target));
-  let added = 0;
-  for (const a of state.apps) if (!have.has(a.id)) {
-    state.desktop.push({ uid: 'app-' + a.id, type: 'app', target: a.id }); added++;
+// A fresh desktop: the few things everyone needs first. Every other app is in Start and the Store.
+// No `label`: an app icon without one shows appName(), so it follows the UI language.
+const DESKTOP_START = ['file-commander', 'recycle-bin', 'anima', 'help'];
+// Always on the desktop, never removed from it: where deleted files go has to be findable.
+const DESKTOP_FIXED = new Set(['recycle-bin']);
+const isFixed = (item) => !!item && item.type === 'app' && DESKTOP_FIXED.has(item.target);
+function ensureFixedIcons() {
+  let added = false;
+  for (const id of DESKTOP_FIXED) {
+    if (byId(id) && !state.desktop.some((it) => it.type === 'app' && it.target === id)) {
+      state.desktop.push({ uid: 'app-' + id, type: 'app', target: id }); added = true;
+    }
   }
   return added;
+}
+function seedDesktop() {
+  return DESKTOP_START.filter((id) => byId(id)).map((id) => ({ uid: 'app-' + id, type: 'app', target: id }));
+}
+// An app installed AFTER the desktop was set up gets an icon, once. `seenApps` remembers which apps the desktop has
+// already met, so an icon the user removed stays removed. A desktop saved before `seenApps` existed starts by knowing
+// every app installed now: it keeps exactly what it shows. Returns true if the state changed.
+function addMissingAppIcons() {
+  const ids = state.apps.map((a) => a.id);
+  if (!Array.isArray(state.seenApps)) { state.seenApps = ids; return true; }
+  const seen = new Set(state.seenApps);
+  const have = new Set(state.desktop.filter((it) => it.type === 'app').map((it) => it.target));
+  let changed = false;
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id); changed = true;
+    if (!have.has(id)) state.desktop.push({ uid: 'app-' + id, type: 'app', target: id });
+  }
+  if (changed) state.seenApps = [...seen];
+  return changed;
 }
 // Another client changed the shared UI state: reload and re-render (skip our own echo).
 // NOTE: this is the ONLY path that can lift a read-only store after a bad boot. Without the delete
@@ -852,12 +874,14 @@ async function syncUiState() {
     const s = { ...UI_DEFAULTS, ...JSON.parse(body) };
     roStores.delete(UI_STATE_PATH);   // we just read the real thing: the store is trustworthy again
     state.pins = s.pins;
-    state.startPins = Array.isArray(s.startPins) ? s.startPins : state.apps.map((a) => a.id);
+    state.startPins = Array.isArray(s.startPins) ? s.startPins : startPinsSeed();
     state.recent = Array.isArray(s.recent) ? s.recent : [];
     state.recoCollapsed = !!s.recoCollapsed;
     if (s.iconSize === 'sm' || s.iconSize === 'md' || s.iconSize === 'lg') state.iconSize = s.iconSize;
     state.autoArrange = !!s.autoArrange;
     state.desktop = Array.isArray(s.desktop) ? s.desktop : seedDesktop();
+    if (Array.isArray(s.seenApps)) state.seenApps = s.seenApps;
+    ensureFixedIcons();
     // Compare by value: the wallpaper is a descriptor object now, so === would always differ and
     // needlessly re-apply. Only repaint when another client actually changed it.
     if (JSON.stringify(s.wallpaper) !== JSON.stringify(state.wallpaper)) { state.wallpaper = s.wallpaper; applyWallpaper(s.wallpaper); }
@@ -878,7 +902,7 @@ const bootLang = (() => { try { return localStorage.getItem('anima.lang') || '';
 let pairedOk = false;            // ensurePaired() really reached the device (paired, or pairing not required)
 function bootLog(...a) { try { console.info('[boot +' + (Date.now() - _bootT0) + 'ms]', ...a); } catch {} }
 
-// Resilient boot/data fetch — policy lives in ./boot-fetch.js (unit-tested in tools/shell-boot-fetch.test.mjs):
+// Resilient boot/data fetch — policy lives in ./boot-fetch.js (unit-tested in tests/suite/shell-boot-fetch.test.mjs):
 // retries 503/502/504 + timeouts + network errors with backoff so the flood-prone single-task device still
 // serves /api/apps etc.; 4xx fails fast. Wired here with the real browser deps.
 const fetchJSON = makeFetchJSON({
@@ -924,11 +948,34 @@ async function ensurePaired() {
   // unreachable after several attempts.
   try { st = await fetchJSON('/api/auth/status', { tries: 5, timeout: 4000 }); }
   catch { bootLog('auth/status unreachable after retries — booting unpaired (degraded, no /ws)'); return false; }
+  if (await accountGate(st)) return true;
   pairCanSpeak = await Caps.has('pairing.speak').catch(() => false);
   if (!pairingRequired(st) || st.paired) { bootLog('pairing: required=' + pairingRequired(st) + ' paired=' + !!st.paired); return true; }
   bootLog('pairing required → showing PIN overlay');
   await showPairing();
   return true;
+}
+// Accounts (users.multi, docs/multiuser.md): the device asks for a name and a password, not a PIN. Signed in:
+// make this browser's state that person's (a different person → the page reloads with their state). Not
+// signed in, or a password to change first: the sign-in sheet. False on a device without accounts.
+// Loaded only then: a single-user device (a Cardputer with a few sockets) pays nothing at boot.
+async function accountGate(st) {
+  if (!st || !st.multi) return false;
+  if (!st.paired || (st.user && st.user.must_change)) {
+    bootLog('accounts: sign-in'); hideBootScreen();
+    const { pairDialog } = await import('./nucleo-pair.js');
+    await pairDialog();
+    return true;
+  }
+  const { default: User } = await import('./nucleo-user.js');
+  if (await User.switchTo(st.user.id)) location.reload();
+  return true;
+}
+// The gate after a refusal (a 401 on the live socket): the account sheet or the PIN overlay.
+async function showGate() {
+  let st = null;
+  try { st = await (await fetch('/api/auth/status', { cache: 'no-store' })).json(); } catch {}
+  if (!(await accountGate(st))) await showPairing();
 }
 // showPairing is called from boot AND from onWsClosed on a 401/403 (or recheckPairing). Bind the form
 // ONCE and only swap the pending resolver: re-binding submit on the second call fired two POST /api/pair
@@ -992,10 +1039,16 @@ async function recheckPairing() {
   pairCheckAt = now;
   let st;
   try { st = await (await fetch('/api/auth/status', { cache: 'no-store' })).json(); } catch { return; }
-  pairCanSpeak = await Caps.has('pairing.speak').catch(() => false);
-  if (!pairingRequired(st) || st.paired) return;
-  bootLog('pairing lost mid-session → showing PIN overlay');
-  await showPairing();
+  if (st && st.multi) {
+    if (st.paired && !(st.user && st.user.must_change)) return;
+    bootLog('session lost mid-session → sign-in');
+    await accountGate(st);
+  } else {
+    pairCanSpeak = await Caps.has('pairing.speak').catch(() => false);
+    if (!pairingRequired(st) || st.paired) return;
+    bootLog('pairing lost mid-session → showing PIN overlay');
+    await showPairing();
+  }
   // Paired again: reattach the live socket now instead of after the backed-off timer, and reload
   // the device-held desktop state that the refused reads could not fetch.
   if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
@@ -1050,6 +1103,7 @@ async function loadBuiltinIds() {
     const cat = await fetchJSON('/app-catalog.json', { tries: 3, timeout: 4000 });
     if (!cat || typeof cat.apps !== 'object' || !cat.apps) throw new Error('no apps map');
     builtinIds = new Set(Object.keys(cat.apps));
+    catalogCats = Object.fromEntries(Object.entries(cat.apps).map(([id, v]) => [id, v && v.category]));
     return builtinIds;
   } catch (e) {
     console.warn('[shell] built-in app list unreadable → apps only it could vouch for wait:', (e && e.message) || e);
@@ -1124,7 +1178,11 @@ async function startDesktopServices() {
   await beginLoadAppPermissions();         // MUST precede the first window: `allow` is fixed at navigation
   if (!restartedOnce) startMigrations();   // not awaited: browser-only steps now, device requests after a pause
   if (!restartedOnce) {
-    ensureOnboarding().catch(() => {});    // first paired boot with no AI key → curated welcome/setup
+    // first boot: the welcome; the wizard may end by opening an app (the Store) once it is done
+    // The language picked in the first step went out before any account existed (refused where the device has
+    // accounts): saved again at the end, for the person now signed in, or Settings would show their OS in English.
+    ensureOnboarding({ openApp: (id) => { const a = byId(id); if (a) WM.open(a); },
+      onDone: () => postLangToDevice(I18N.lang) }).catch(() => {});
     await restoreSession();                // bring back the windows that were open last time
   }
   bootLog('desktop up (apps=' + state.apps.length + ') — attaching live socket /ws…');
@@ -1299,7 +1357,7 @@ async function boot() {
   bootLog('pairing ok — loading /api/apps…');
   try {
     const d = await fetchJSON('/api/apps');
-    state.apps = d.apps.filter((a) => a && a.enabled).map(sanitizeApp).filter(Boolean).map((a) => ({ ...a, glyph: glyph(a), trust: 'pending' }));
+    state.apps = d.apps.filter((a) => a && a.enabled && a.runtime !== 'service').map(sanitizeApp).filter(Boolean).map((a) => ({ ...a, glyph: glyph(a), trust: 'pending' }));
     bootLog('apps loaded:', state.apps.length);
   } catch (e) {
     bootLog('apps FAILED after retries → using mock set', e && (e.message || e));
@@ -1325,7 +1383,12 @@ async function boot() {
     needSeed = true;                       // salva subito, con wpv: 2
   }
   // Start-menu pins: saved arrangement, or seed one-per-app on a fresh device (like Windows 11).
-  state.startPins = Array.isArray(ui.startPins) ? ui.startPins.filter((id) => byId(id)) : state.apps.map((a) => a.id);
+  state.startPins = Array.isArray(ui.startPins) ? ui.startPins.filter((id) => byId(id)) : startPinsSeed();
+  // Before the curated grid every installed app was pinned: a grid nobody chose. Such a list (all apps, never
+  // changed) becomes the curated one, once; a grid the person did shape stays as it is.
+  if (!ui.startv && state.startPins.length && state.apps.every((a) => state.startPins.includes(a.id))) {
+    state.startPins = startPinsSeed(); needSeed = true;
+  }
   if (!Array.isArray(ui.startPins)) needSeed = true;
   state.recent = Array.isArray(ui.recent) ? ui.recent : [];
   state.recoCollapsed = !!ui.recoCollapsed;
@@ -1335,7 +1398,9 @@ async function boot() {
   // Desktop shortcuts: use the saved arrangement, or seed one-per-app on a fresh device.
   state.desktop = Array.isArray(ui.desktop) ? ui.desktop : seedDesktop();
   if (!Array.isArray(ui.desktop)) needSeed = true;
-  if (addMissingAppIcons()) needSeed = true;     // surface newly installed apps on the desktop
+  state.seenApps = Array.isArray(ui.seenApps) ? ui.seenApps : null;
+  if (addMissingAppIcons()) needSeed = true;     // an icon for apps installed since the last time, once
+  if (ensureFixedIcons()) needSeed = true;       // the Recycle Bin is always there
   if (await reconcileDesktopFolder()) needSeed = true;   // mirror the real /data/Desktop folder onto the desktop
   // Window changes (open/close/move/resize/min/max/snap/focus) update the taskbar AND get
   // remembered by the device, so the session is restored on the next load. Each change also
@@ -1359,7 +1424,7 @@ async function boot() {
   initGames();                             // "Continua" nella barra, pannello giochi, recenti in Start
   wireChrome();
   wireMessages();
-  wireFileDrop();                          // Drag & Drop files from the PC → Cardputer SD
+  wireFileDrop();                          // Drag & Drop files from the PC → the device's storage
   initOS();                                // OS-wide clipboard + keyboard shortcuts
   applyWallpaper(state.wallpaper);
   try { applyBrightness(localStorage.getItem('nucleo.brightness') || 100); } catch {}
@@ -1399,7 +1464,7 @@ async function refreshApps() {
     // naive rebuild dropped them for EVERY app and silently reverted allowAttr to the permissive
     // default — right after an install, which is exactly when a new, unvetted app appears.
     const prevPerms = new Map(state.apps.map((a) => [a.id, { p: a.permissions, c: a.created_by, t: a.trust }]));
-    state.apps = d.apps.filter((a) => a && a.enabled).map(sanitizeApp).filter(Boolean).map((a) => {
+    state.apps = d.apps.filter((a) => a && a.enabled && a.runtime !== 'service').map(sanitizeApp).filter(Boolean).map((a) => {
       const app = { ...a, glyph: glyph(a), trust: 'pending' };   // a NEW app waits for the registry re-read below
       const prev = prevPerms.get(a.id);
       if (prev && Array.isArray(prev.p)) app.permissions = prev.p;
@@ -1417,6 +1482,7 @@ async function refreshApps() {
     let added = false;
     for (const a of state.apps) if (!state.startPins.includes(a.id)) { state.startPins.push(a.id); added = true; }
     state.startPins = state.startPins.filter((id) => byId(id));   // drop uninstalled
+    if (addMissingAppIcons()) { added = true; renderDesktop(); }   // just installed from the Store: its icon appears
     if (added) saveUiState();
     renderStartMenu();
     renderDesktop();
@@ -1491,7 +1557,7 @@ async function onWsClosed(gen) {
   }
   if (status === 401 || status === 403) {                              // not evicted: no longer paired
     setWsBadge('offline'); hideEvictedBar();
-    showPairing().then(() => { wsBackoff = 3000; connectWS(); });
+    showGate().then(() => { wsBackoff = 3000; connectWS(); });
     return;
   }
   const clients = (diag && diag.net && typeof diag.net.clients === 'number') ? diag.net.clients : -1;
@@ -1725,10 +1791,12 @@ function wireMessages() {
   // The broker for sandboxed apps. Identity is resolved from the message SOURCE — an opaque-origin
   // frame reports origin "null", so only matching e.source against the frames we created is sound.
   const brokerHandler = appBroker = createBroker({
-    findApp: (src) => {
+    findApp: (src, e) => {
       for (const w of WM.list()) {
         const f = w.el.querySelector('iframe');
-        if (f && f.contentWindow === src) return w.app;
+        if (!f || f.contentWindow !== src) continue;
+        if (f.dataset.nb) return e && e.data && e.data.nb === f.dataset.nb ? w.app : null;
+        return e && e.origin === location.origin ? w.app : null;
       }
       return null;
     },
@@ -1829,7 +1897,7 @@ function wireMessages() {
       const title = String(d.title || (w ? appName(w.app) : '')).slice(0, 120);
       const text = String(d.text || '').slice(0, 2000);
       const p = d.kind === 'prompt'
-        ? osModal({ title, glyph: w ? glyph(w.app) : '', bodyHTML: text ? `<p>${escapeHtml(text)}</p>` : '', withInput: true, value: String(d.value || ''), okText: d.ok || undefined, cancelText: d.cancel || undefined })
+        ? osModal({ title, glyph: w ? glyph(w.app) : '', bodyHTML: text ? `<p>${escapeHtml(text)}</p>` : '', withInput: true, value: d.password ? '' : String(d.value || ''), password: !!d.password, okText: d.ok || undefined, cancelText: d.cancel || undefined })
         : osModal({ title, glyph: d.danger ? '⚠️' : (w ? glyph(w.app) : ''), bodyHTML: text ? `<p>${escapeHtml(text)}</p>` : '', okText: d.ok || undefined, cancelText: d.cancel || undefined, danger: !!d.danger, okOnly: d.kind === 'alert' });
       p.then((v) => {
         const value = d.kind === 'prompt' ? (v == null ? null : String(v)) : d.kind === 'confirm' ? (v != null && v !== false) : true;
@@ -2034,9 +2102,28 @@ function applyTheme(theme) {
   applyGlobalUI();
 }
 
+// The Start footer names the person when the device has accounts, the device otherwise.
+let deviceName = 'NucleoOS';
 function applyDeviceName(name) {
+  deviceName = name || 'NucleoOS';
   const el = document.getElementById('sm-device');
-  if (el) el.textContent = name || 'NucleoOS';
+  if (el && !el.dataset.user) el.textContent = deviceName;
+}
+// Asked when Start opens until known: the person may sign in (or the wizard create the first account) after boot.
+// A device without accounts answers once, and is not asked again.
+let startPersonDone = false;
+async function showStartPerson() {
+  if (startPersonDone) return;
+  const st = await import('./nucleo-user.js').then((m) => m.default.status()).catch(() => null);
+  const el = document.getElementById('sm-device'), acct = document.getElementById('sm-account');
+  if (!el || !acct || !st) return;                 // unreadable now: asked again on the next open
+  if (!st.multi) { if (!st.setup) startPersonDone = true; return; }   // setup pending: accounts may be turned on now
+  if (!st.user) return;                            // accounts, nobody signed in yet
+  startPersonDone = true;
+  const me = st.user;
+  el.dataset.user = acct.dataset.user = me.id;
+  el.textContent = me.name || me.id;
+  acct.title = deviceName;
 }
 // Device-owned settings (theme, name) read straight from the canonical SD file.
 // Push a WEB-initiated language change to the DEVICE: it persists to settings.json, flips the native
@@ -2115,15 +2202,18 @@ const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '
 // "Gioca sulla console" / "Gioca qui" e i recenti, una riga di copertine in Start.
 // Con un gioco in corso sulla console (/api/gamemode) il pulsante dice "In gioco".
 let RECENT_GAMES = [], _gamesAt = 0, _gaming = false, _gm = {};
-const coverUrl = (g) => g && g.img ? fs.url(g.img) + (g.imgv ? '&v=' + g.imgv : '') : '';
+const coverUrl = (g) => g && g.img ? fs.url(g.img) + (g.imgv ? '&v=' + encodeURIComponent(g.imgv) : '') : '';
 // gioco senza copertina: la sua console dall'archivio di NucleoOS (/api/sysart),
 // mostrata intera (classe "con" = contain) invece di un riquadro vuoto
 const consoleUrl = (g) => g && g.system ? '/api/sysart?id=' + encodeURIComponent(g.system) : '';
 const artHtml = (g, lazy) => {
   const u = coverUrl(g), c = u ? '' : consoleUrl(g);
-  return u ? `<img${lazy ? ' loading="lazy"' : ''} src="${u}" alt="">`
-       : c ? `<img class="con"${lazy ? ' loading="lazy"' : ''} src="${c}" alt="" onerror="this.remove()">` : '';
+  return u ? `<img${lazy ? ' loading="lazy"' : ''} src="${escapeHtml(u)}" alt="">`
+       : c ? `<img class="con"${lazy ? ' loading="lazy"' : ''} src="${escapeHtml(c)}" alt="">` : '';
 };
+// A console picture the archive does not have leaves no broken image. One listener (error does not bubble: capture),
+// not an inline onerror, which the page's Content-Security-Policy would block.
+document.addEventListener('error', (e) => { const t = e.target; if (t && t.tagName === 'IMG' && t.classList.contains('con')) t.remove(); }, true);
 async function loadRecentGames(force) {
   if (!force && Date.now() - _gamesAt < 30000) return RECENT_GAMES;
   _gamesAt = Date.now();
@@ -2349,7 +2439,7 @@ function removeToast(t) {
   setTimeout(() => t.remove(), 220);
 }
 
-// ===== Drag & Drop files from the PC → Cardputer SD =====
+// ===== Drag & Drop files from the PC → the device's storage =====
 // Video containers (mp4/mkv/…) must NOT be uploaded raw to the device: the Cardputer has no
 // ffmpeg and cannot play a .mkv — they must be converted to .nfv by the Video Studio companion (on the
 // PC). Besides, uploading a whole movie over Wi-Fi in a single POST saturates the ESP32 and causes
@@ -2541,7 +2631,7 @@ function toggleTheme() {
   const next = document.documentElement.dataset.theme !== 'light' ? 'light' : 'dark';
   applyTheme(next);
   acTile('ac-theme', next === 'dark');
-  persistTheme(next);                                  // → /system/config/settings.json on the Cardputer
+  persistTheme(next);                                  // → /system/config/settings.json on the device
   return next;
 }
 function toggleEco() {
@@ -2852,6 +2942,12 @@ function assignMissingPositions() {
 const selIcons = new Set();   // selected desktop item uids (Windows-style multi-select)
 let iconAnchor = -1;          // anchor index for Shift-range
 
+// A change of selection only: the icons stay as they are and only their highlight follows. Rebuilding the whole
+// desktop for it (as every click on it did) made every icon blink back from empty, and replaced the icon under the
+// pointer between the two clicks of a double click.
+function paintSelection() {
+  document.querySelectorAll('#desktop .icon').forEach((el) => el.classList.toggle('sel', selIcons.has(el.dataset.uid)));
+}
 function renderDesktop() {
   const d = document.getElementById('desktop');
   d.innerHTML = '';
@@ -2908,7 +3004,7 @@ function renderDesktop() {
     });
     el.addEventListener('contextmenu', (e) => {
       e.preventDefault(); e.stopPropagation();
-      if (!selIcons.has(item.uid)) { selIcons.clear(); selIcons.add(item.uid); iconAnchor = idx; renderDesktop(); }
+      if (!selIcons.has(item.uid)) { selIcons.clear(); selIcons.add(item.uid); iconAnchor = idx; paintSelection(); }
       iconMenu(e, item);
     });
     dragIcon(el, item);
@@ -2950,14 +3046,14 @@ function iconClick(e, item, idx) {
     const [a, b] = [Math.min(iconAnchor, idx), Math.max(iconAnchor, idx)];
     selIcons.clear(); for (let k = a; k <= b; k++) selIcons.add(state.desktop[k].uid);
   } else { selIcons.clear(); selIcons.add(item.uid); iconAnchor = idx; }
-  renderDesktop();
+  paintSelection();
 }
-function selectAllIcons() { state.desktop.forEach((i) => selIcons.add(i.uid)); renderDesktop(); }
+function selectAllIcons() { state.desktop.forEach((i) => selIcons.add(i.uid)); paintSelection(); }
 // Remove desktop icons. A folder-backed icon (a file or .lnk living in /data/Desktop) IS the real
 // thing on the SD, so removing it deletes that file: a .lnk (just a pointer) goes silently; a real
 // FILE asks first, since deleting it loses data. App icons / legacy entries only drop their ui-state.
 async function removeIcons(uids) {
-  const items = uids.map((u) => state.desktop.find((x) => x.uid === u)).filter(Boolean);
+  const items = uids.map((u) => state.desktop.find((x) => x.uid === u)).filter((it) => it && !isFixed(it));
   if (!items.length) return;
   const backed = (it) => it.type === 'file' && typeof it.target === 'string' && it.target.startsWith(DESKTOP_DIR + '/');
   const realFiles = items.filter((it) => backed(it) && !/\.lnk$/i.test(it.target));
@@ -2968,7 +3064,9 @@ async function removeIcons(uids) {
   const removable = new Set();
   for (const it of items) {
     if (backed(it)) {
-      try { await fs.remove(it.target); } catch (e) { if (e && e.code === 'denied') showToast(t('lnk_protected'), '⚠️', 'error'); continue; }
+      // a real file goes to the Recycle Bin (fs.trash), never straight off the device
+      try { await (/\.lnk$/i.test(it.target) ? fs.remove(it.target) : fs.trash(it.target)); }
+      catch (e) { showToast(e && e.code === 'denied' ? t('lnk_protected') : t('del_trash_failed'), '⚠️', 'error'); continue; }
     }
     removable.add(it.uid);
   }
@@ -3186,8 +3284,8 @@ function iconMenu(e, item) {
     isApp ? { label: state.pins.includes(item.target) ? t('ctx_unpin_taskbar') : t('ctx_pin_taskbar'), glyph: '📌', fn: () => togglePin(item.target) } : null,
     { label: t('ctx_rename'), glyph: '✏️', fn: () => beginRename(item.uid) },
     { label: t('ctx_properties'), glyph: 'ℹ️', fn: () => itemProperties(item) },
-    { sep: true },
-    { label: t('ctx_remove_desktop'), glyph: '🗑️', danger: true, fn: () => removeItem(item.uid) },
+    isFixed(item) ? null : { sep: true },
+    isFixed(item) ? null : { label: t('ctx_remove_desktop'), glyph: '🗑️', danger: true, fn: () => removeItem(item.uid) },
     // Solo le app venute dallo Store: quelle di sistema non hanno questa voce
     isApp && byId(item.target) && byId(item.target).store
       ? { label: t('ctx_uninstall'), glyph: '🧹', danger: true, fn: () => uninstallApp(byId(item.target)) } : null,
@@ -3332,7 +3430,7 @@ function ctxKey(e) {
 // CANCELS the older one first: its DOM was replaced but its capture-phase keydown listener lived on, so the
 // next Enter — meant for the new box — resolved the hidden one as confirmed ("reset the desktop?").
 let osModalCancel = null;
-function osModal({ title, glyph, bodyHTML = '', withInput, value, placeholder, okText, cancelText, danger, okOnly }) {
+function osModal({ title, glyph, bodyHTML = '', withInput, value, placeholder, okText, cancelText, danger, okOnly, password }) {
   if (osModalCancel) { const c = osModalCancel; osModalCancel = null; c(); }
   return new Promise((resolve) => {
     const scrim = document.getElementById('os-modal-scrim');
@@ -3341,7 +3439,7 @@ function osModal({ title, glyph, bodyHTML = '', withInput, value, placeholder, o
     box.innerHTML =
       (title ? `<h3>${glyph ? `<span class="g">${glyph}</span>` : ''}<span>${escapeHtml(title)}</span></h3>` : '') +
       bodyHTML +
-      (withInput ? `<input type="text" id="os-modal-input" autocomplete="off" spellcheck="false">` : '') +
+      (withInput ? `<input type="${password ? 'password' : 'text'}" id="os-modal-input" autocomplete="${password ? 'new-password' : 'off'}" spellcheck="false">` : '') +
       `<div class="row">` +
         (okOnly ? '' : `<button class="os-dialog-btn" data-act="cancel">${escapeHtml(cancelText || t('cancel'))}</button>`) +
         `<button class="os-dialog-btn ${danger ? 'danger' : 'primary'}" data-act="ok">${escapeHtml(okText || t('ok'))}</button>` +
@@ -3429,7 +3527,7 @@ function desktopNavKey(e) {
   if (!next) return true;                       // nothing that way — swallow so the page doesn't scroll
   selIcons.clear(); selIcons.add(next.dataset.uid);
   iconAnchor = state.desktop.findIndex((x) => x.uid === next.dataset.uid);
-  renderDesktop();
+  paintSelection();
   const f = document.querySelector(`#desktop .icon[data-uid="${CSS.escape(next.dataset.uid)}"]`); if (f) f.focus();
   return true;
 }
@@ -3462,24 +3560,51 @@ function startAppTile(a) {
   return el;
 }
 
-// All-apps list (alphabetical), shown when the user taps "Tutte le app".
+// All apps, by category (a chip shows one), alphabetical inside each, shown when the user taps "All apps".
+let startCat = '';         // '' = every category
 function renderAllApps() {
   const list = document.getElementById('sm-all');
   if (!list) return;
   list.innerHTML = '';
   const coll = new Intl.Collator(I18N.locale());   // sort by the name shown, in the UI language
-  const apps = [...state.apps].sort((a, b) => coll.compare(appName(a), appName(b)));
-  for (const a of apps) {
-    const pinned = state.startPins.includes(a.id);
-    const row = document.createElement('button');
-    row.className = 'sm-row'; row.type = 'button';
-    row.innerHTML = `<span class="g">${a.glyph}</span><span class="n">${escapeHtml(appName(a))}</span>` +
-      (pinned ? `<span class="sm-rowtag">${escapeHtml(t('start_pinned_tag'))}</span>` : '');
-    row.title = appName(a);
-    row.addEventListener('click', () => { WM.open(a); closeStart(); });
-    row.addEventListener('contextmenu', (e) => { e.preventDefault(); startAppMenu(e, a); });
-    list.appendChild(row);
+  const groups = new Map(START_CATS.map((c) => [c, []]));
+  for (const a of state.apps) groups.get(appCat(a)).push(a);
+  const present = START_CATS.filter((c) => groups.get(c).length);
+  if (startCat && !present.includes(startCat)) startCat = '';
+  // The chips are rebuilt only when the categories (or the language) change: a chip replaced under the pointer is
+  // outside Start by the time its click reaches the document, and the document closes Start on an outside click.
+  const chips = document.getElementById('sm-cats');
+  const key = [I18N.lang, ...present].join(',');
+  if (chips && chips.dataset.key !== key) {
+    chips.dataset.key = key;
+    chips.innerHTML = '';
+    for (const c of ['', ...present]) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'sm-chip'; b.dataset.cat = c;
+      b.textContent = t(c ? 'start_cat_' + c : 'start_cat_all');
+      b.addEventListener('click', () => { startCat = c; renderAllApps(); startNavReset(); });
+      chips.appendChild(b);
+    }
   }
+  if (chips) for (const b of chips.children) { const on = b.dataset.cat === startCat; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
+  for (const c of present) {
+    if (startCat && c !== startCat) continue;
+    const head = document.createElement('div');
+    head.className = 'sm-cathead'; head.textContent = t('start_cat_' + c);
+    list.appendChild(head);
+    for (const a of groups.get(c).sort((x, y) => coll.compare(appName(x), appName(y)))) list.appendChild(allAppsRow(a));
+  }
+}
+function allAppsRow(a) {
+  const pinned = state.startPins.includes(a.id);
+  const row = document.createElement('button');
+  row.className = 'sm-row'; row.type = 'button';
+  row.innerHTML = `<span class="g">${a.glyph}</span><span class="n">${escapeHtml(appName(a))}</span>` +
+    (pinned ? `<span class="sm-rowtag">${escapeHtml(t('start_pinned_tag'))}</span>` : '');
+  row.title = appName(a);
+  row.addEventListener('click', () => { WM.open(a); closeStart(); });
+  row.addEventListener('contextmenu', (e) => { e.preventDefault(); startAppMenu(e, a); });
+  return row;
 }
 
 // Recommended: the most recently opened files (Windows-11 "Consigliati"). Falls back to a
@@ -3529,8 +3654,12 @@ function relTime(ts) {
 // Right-click on a Start app: pin/unpin to Start, pin/unpin to taskbar, open.
 function startAppMenu(e, a) {
   const inStart = state.startPins.includes(a.id);
+  const onDesk = state.desktop.find((it) => it.type === 'app' && it.target === a.id);
   showCtx(e.clientX, e.clientY, [
     { label: t('open'), glyph: '📂', fn: () => { WM.open(a); closeStart(); } },
+    onDesk && isFixed(onDesk) ? null
+      : { label: onDesk ? t('ctx_remove_desktop') : t('ctx_add_desktop'), glyph: '+',
+        fn: () => (onDesk ? removeItem(onDesk.uid) : addItem({ uid: 'app-' + a.id, type: 'app', target: a.id })) },
     { label: inStart ? t('ctx_unpin') : t('ctx_pin'), glyph: '📌', fn: () => toggleStartPin(a.id) },
     { label: state.pins.includes(a.id) ? t('ctx_unpin_taskbar') : t('ctx_pin_taskbar'), glyph: '📎', fn: () => togglePin(a.id) },
     a.store ? { sep: true } : null,
@@ -3729,12 +3858,11 @@ const resultsContainer = () => document.getElementById(SEARCH.target === 'start'
 // menu already run, reachable by name. Entirely browser-side: searching them costs the PSRAM-less
 // device ZERO requests. Labels/keywords come from the catalog, so they follow the OS language.
 function sysActions() {
-  const openSettings = () => { const s = byId('settings'); if (s) WM.open(s); };
   return [
-    { id: 'settings',   glyph: '⚙️',  run: openSettings },
+    { id: 'settings',   glyph: '⚙️',  run: () => openSettings() },
     { id: 'theme',      glyph: '🌗',  run: () => toggleTheme() },
-    { id: 'wallpaper',  glyph: '🖼️',  run: openSettings },
-    { id: 'language',   glyph: '🌐',  run: openSettings },
+    { id: 'wallpaper',  glyph: '🖼️',  run: () => openSettings('personalization') },
+    { id: 'language',   glyph: '🌐',  run: () => openSettings('personalization') },
     { id: 'lock',       glyph: '🔒',  run: () => { if (SysUI) SysUI.lock(); } },
     { id: 'shortcuts',  glyph: '⌨️',  run: () => { if (SysUI) SysUI.showShortcuts(); } },
     { id: 'night',      glyph: '🌙',  run: () => toggleNight() },
@@ -3742,7 +3870,7 @@ function sysActions() {
     { id: 'clipboard',  glyph: '📋',  run: () => toggleClipHistory() },
     { id: 'notif',      glyph: '🔔',  run: () => { if (Notify) Notify.toggle(); } },
     { id: 'desktop',    glyph: '🖥️',  run: () => WM.showDesktop() },
-    { id: 'reboot',     glyph: '🔄',  run: () => rebootDevice() },
+    { id: 'reboot',     glyph: '🔄',  run: () => rebootAsked() },
   ].map((a) => ({ ...a, name: t('act_' + a.id), kw: t('act_' + a.id + '_kw') }));
 }
 
@@ -3786,7 +3914,7 @@ async function probeSearchAnswer(q) {
 }
 
 // Build the flat, ranked result list for a query: apps, then OS settings/actions, then indexed files.
-// The ranking rules themselves live in search-rank.js (pure, host-tested in tools/shell-search-rank.test.mjs).
+// The ranking rules themselves live in search-rank.js (pure, host-tested in tests/suite/shell-search-rank.test.mjs).
 function buildResults(q) {
   const apps = rankApps(state.apps, q, appName, appSearchNames).map((r) => ({ kind: 'app', ...r }));
   const actions = rankActions(sysActions(), q).map((r) => ({ kind: 'action', ...r }));
@@ -3944,19 +4072,47 @@ function onSearchKey(e, onEscape) {
   else if (e.key === 'Escape') { e.preventDefault(); onEscape(); }
 }
 
-// Reboot the Cardputer from the Start power button, with a confirm + toast (auth-gated API).
-async function rebootDevice() {
-  showCtx(document.getElementById('sm-power').getBoundingClientRect().left - 40,
-    window.innerHeight - 120, [
-    { label: t('start_power_title'), glyph: '🔄', danger: true, fn: async () => {
+// The companion apps (Windows, Android) only where the device serves them (downloads.companion): a link to a 404 elsewhere.
+Caps.has('downloads.companion').then((on) => { if (on) document.querySelectorAll('.sm-dl').forEach((a) => { a.style.display = ''; }); }).catch(() => {});
+// The Start power button: lock, sign out where there are accounts, restart where the device can (power).
+async function powerMenu() {
+  const [me, canReboot] = await Promise.all([
+    import('./nucleo-user.js').then((m) => m.default.current()).catch(() => null),
+    Caps.has('power').catch(() => false),
+  ]);
+  const r = document.getElementById('sm-power').getBoundingClientRect();
+  const items = [
+    { label: t('start_lock'), glyph: '🔒', fn: () => { closeStart(); if (SysUI) SysUI.lock(); } },
+    me && me.multi ? { label: t('start_signout'), glyph: '↩', fn: async () => {
+        const { default: User } = await import('./nucleo-user.js');
+        await User.signOut().catch(() => {}); location.reload();
+      } } : null,
+    canReboot ? { sep: true } : null,
+    canReboot ? rebootItem() : null,
+  ].filter(Boolean);
+  showCtx(r.left - 150, r.top - 12 - items.length * 38, items);
+}
+function rebootItem() {
+  return { label: t('start_power_title'), glyph: '🔄', danger: true, fn: async () => {
         showToast(t('reboot_starting'), '🔄', 'info', 6000);
         try {
           const r = await fetch('/api/reboot', { method: 'POST' });
           if (!r.ok) throw new Error(r.status);
           showToast(t('reboot_reconnect'), '⏻', 'success', 6000);
         } catch { showToast(t('reboot_fail'), '⚠️', 'error'); }
-      } },
-  ]);
+      } };
+}
+// "Restart" typed in the search: asked first, and only where the device can restart (power).
+async function rebootAsked() {
+  if (!(await Caps.has('power').catch(() => false))) { showToast(t('reboot_fail'), '⚠️', 'error'); return; }
+  if (await osConfirm({ title: t('reboot_confirm'), okText: t('start_power_title'), danger: true })) rebootItem().fn();
+}
+// Settings from Start, at a given tab (one-shot hint Settings reads on open and while open).
+function openSettings(tab) {
+  const s = byId('settings');
+  if (!s) return;
+  if (tab) try { localStorage.setItem('nucleo.settings.tab', tab); } catch {}
+  WM.open(s); closeStart();
 }
 
 // Make a non-<button> element a genuine keyboard-operable control. The tray items were <span>s with a
@@ -3987,7 +4143,7 @@ function wireChrome() {
   asButton(trayNet, toggleAc);
   asButton(trayStorage, toggleAc);
 
-  // Action Center: Theme toggle — persisted on the Cardputer SD (shared with search ▸ actions)
+  // Action Center: Theme toggle — persisted on the device (shared with search ▸ actions)
   const acTheme = document.getElementById('ac-theme');
   if (acTheme) acTheme.addEventListener('click', () => toggleTheme());
 
@@ -4039,9 +4195,12 @@ function wireChrome() {
   const backBtn = document.getElementById('sm-back-btn');
   if (backBtn) backBtn.addEventListener('click', () => showStartView('sm-home'));
   const powerBtn = document.getElementById('sm-power');
-  if (powerBtn) powerBtn.addEventListener('click', (e) => { e.stopPropagation(); rebootDevice(); });
+  if (powerBtn) powerBtn.addEventListener('click', (e) => { e.stopPropagation(); powerMenu(); });
+  const setBtn = document.getElementById('sm-settings');
+  if (setBtn) setBtn.addEventListener('click', () => openSettings());
   const acct = document.getElementById('sm-account');
-  if (acct) acct.addEventListener('click', () => { const s = byId('settings'); if (s) { WM.open(s); closeStart(); } });
+  if (acct) acct.addEventListener('click', () => openSettings(acct.dataset.user ? 'accounts' : ''));
+  showStartPerson();
   // Collapsible "Consigliati": persist on the device so the choice follows the user across clients.
   const recoToggle = document.getElementById('sm-reco-toggle');
   if (recoToggle) recoToggle.addEventListener('click', () => { state.recoCollapsed = !state.recoCollapsed; applyRecoCollapsed(); saveUiState(); });
@@ -4083,7 +4242,7 @@ function wireMarquee(desktop) {
   desktop.addEventListener('pointerdown', (e) => {
     if (e.target !== desktop || e.button !== 0) return;
     addMode = e.ctrlKey || e.metaKey;
-    if (!addMode) { selIcons.clear(); renderDesktop(); }
+    if (!addMode && selIcons.size) { selIcons.clear(); paintSelection(); }
     x0 = e.clientX; y0 = e.clientY;
     box = document.createElement('div'); box.className = 'marquee';
     desktop.appendChild(box);
@@ -4105,7 +4264,7 @@ function wireMarquee(desktop) {
     desktop.querySelectorAll('.icon.sel').forEach((el) => selIcons.add(el.dataset.uid));
     box.remove(); box = null;
     try { desktop.releasePointerCapture(e.pointerId); } catch {}
-    renderDesktop();
+    paintSelection();
   };
   desktop.addEventListener('pointerup', finish);
   desktop.addEventListener('pointercancel', finish);
@@ -4118,6 +4277,7 @@ function toggleStart() {
   if (opening) {
     closeSearch();                                   // don't leave the taskbar popover open behind Start
     resetStartView();
+    showStartPerson();
     // Focus the in-menu search after the open animation so typing immediately searches (Win11).
     const inp = document.getElementById('sm-search-input');
     if (inp) setTimeout(() => inp.focus(), 60);
@@ -4194,7 +4354,7 @@ function refreshStatus() {
   _statusTimer = setTimeout(doRefreshStatus, 400);
 }
 
-// ── Device link: one honest answer to "is the Cardputer there?" ──────────────────────────────────
+// ── Device link: one honest answer to "is the device there?" ──────────────────────────────────
 // Before, a device that dropped off Wi-Fi showed up only as a small dot turning pink ~40 s later (the
 // status poll retried 5× with 6 s timeouts), while apps failed with raw "504"/"cannot read directory".
 // Now any failure triggers ONE cheap probe (any HTTP answer, even a 503, means "reachable but busy");
@@ -4270,10 +4430,12 @@ async function doRefreshStatus() {
     const txt = t('tray_sd_free', { free: fmtSize(s.storage.free_bytes) });
     document.querySelector('#tray-storage .v').textContent = txt;
     const smStorage = document.getElementById('sm-storage');
-    if (smStorage) smStorage.textContent = `${s.storage.fs} · ${txt}`;
+    if (smStorage) smStorage.textContent = txt;
     renderNetwork(s.network);
     offerUsbInternet(s.network);             // Handheld USB-gadget internet offer; self-disables elsewhere
     renderBattery(s.battery);                // hidden when the edition reports no battery reading
+    // The device was updated under this tab (an OTA): what it can do may have changed, ask again.
+    if (s.version) Caps.info().then((c) => { if (c.version && c.version !== s.version) Caps.reset(); }).catch(() => {});
     // Push browser clock to device once if it hasn't synced with NTP yet. Runs from the post-pairing
     // status loop, so the same-origin pairing cookie rides along automatically (the route is paired-only);
     // costs zero device heap — just sets the RTC. Harmless if it 401s on a degraded/unpaired session.
