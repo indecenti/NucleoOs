@@ -28,6 +28,10 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   panel, no card read, no Cardputer), each step sliding the titles through the fixed pill with the emulators' 4 ms
   tick; when it stops (160 ms) the picture, caption, position and the Cardputer's details follow in one frame. Frames
   draw only what falls in the strip being composed; the details card is composed off screen.
+- **Quicker to open and to answer.** The card walk runs once per boot and, once an index exists, only in 5 ms slices
+  after 0.8 s without a key; the index also lists each folder's screenshots, so opening a console reads one file and
+  no folder; screenshots are no longer converted ahead (a conversion could hold the next key ~0.2 s), console photos and
+  native covers only 1.5 s after the last key; one wheel tick per frame.
 - **Remembers.** The selection lands on the system and the game played last ("last played" mark on the wheel and on
   the details card).
 - **Sounds.** Short, quiet interface sounds (Kenney "Interface Sounds", CC0) for turning the wheel, opening a system,

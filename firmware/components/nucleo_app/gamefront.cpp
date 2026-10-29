@@ -66,7 +66,7 @@ extern "C" bool         nucleo_store_app_is_native(const char *id);   // store_a
 #define PATHMAX    160
 #define FILT       16
 #define SCAN_DEPTH 5           // folders below the card's root the walk goes into
-#define RESCAN_US  (10LL * 60 * 1000000)   // the gallery opened this long after the last walk walks again
+#define SCAN_IDLE_US 800000      // the walk runs only after this long without a key (it never slows the wheel)
 
 // ── what is in the gallery ──────────────────────────────────────────────────────────────────────────
 // Native games: their play modes and a one-line blurb (shown beside the picture and on the companion).
@@ -164,6 +164,8 @@ static char    s_launch[PATHMAX + 24];     // the cartridge GF_LAUNCH asks for (
 static bool    s_restore;                  // gamefront_open() comes back on the RTC snapshot (gamefront_take_return)
 static bool    s_opened;                   // opened at least once since boot
 static uint32_t s_cover_ready;             // native games whose cover file is known to be made (bit per s_nat slot)
+static bool    s_have_index;               // an index of the card is there to list from
+static int64_t s_input_at;                 // the last key
 static int     s_H;                        // the screen's height (inside a frame d.height() is the strip's)
 
 // A console's cartridges while its titles are shown: ONE heap block sized to what it holds — names and folders packed
@@ -285,20 +287,25 @@ static int sys_of(const char *name)            // by extension; -2 = a zip, look
     return -1;
 }
 
-// The index: "GIX1 <cartridges> <hash>", then for each folder that has some "D <folder>" and one line per cartridge,
-// "<system digit> <file>". Text, so a person can read it, and read here a line at a time (no RAM).
+// The index: "GIX2 <cartridges> <hash>", then for each folder that has some "D <folder>" and one line per cartridge,
+// "<system digit> <file>", and after them "P <file>" for each screenshot in its .snaps (<rom>.pic / <rom>.snp): so
+// opening a console never lists a .snaps folder. Text, so a person can read it, and read a line at a time (no RAM).
+static FILE *idx_open(int *count, uint32_t *hash);
+static bool idx_ok(void) { FILE *f = idx_open(nullptr, nullptr); if (f) fclose(f); return f != nullptr; }
 static FILE *idx_open(int *count, uint32_t *hash)
 {
     FILE *f = fopen(INDEX, "r");
     if (!f) return nullptr;
+    setvbuf(f, nullptr, _IOFBF, 1024);             // read a line at a time from 1 KB blocks, not 128-byte ones
     char hd[48];
     unsigned c = 0, h = 0;
-    if (!fgets(hd, sizeof hd, f) || sscanf(hd, "GIX1 %u %u", &c, &h) != 2) { fclose(f); return nullptr; }
+    if (!fgets(hd, sizeof hd, f) || sscanf(hd, "GIX2 %u %u", &c, &h) != 2) { fclose(f); return nullptr; }
     if (count) *count = (int)c;
     if (hash) *hash = h;
     return f;
 }
-// The next cartridge: its system and name, in line (valid until the next call); dir keeps the current folder.
+// The next cartridge (its system) or screenshot (sys -1), its file name in line (valid until the next call); dir keeps
+// the current folder.
 static bool idx_next(FILE *f, char *line, size_t ln, char *dir, size_t dn, int *sys, const char **name)
 {
     while (fgets(line, (int)ln, f)) {
@@ -306,6 +313,7 @@ static bool idx_next(FILE *f, char *line, size_t ln, char *dir, size_t dn, int *
         while (l && (line[l - 1] == '\n' || line[l - 1] == '\r')) line[--l] = '\0';
         if (l > 2 && line[0] == 'D' && line[1] == ' ') { snprintf(dir, dn, "%s", line + 2); continue; }
         if (l > 2 && line[0] >= '0' && line[0] < '0' + NSYS && line[1] == ' ') { *sys = line[0] - '0'; *name = line + 2; return true; }
+        if (l > 2 && line[0] == 'P' && line[1] == ' ') { *sys = -1; *name = line + 2; return true; }
     }
     return false;
 }
@@ -319,6 +327,7 @@ static struct {
     int plen[SCAN_DEPTH + 1];       // the path's length at each level
     char path[PATHMAX];
     bool dir_out;                   // the current folder's "D" line is written
+    bool had[SCAN_DEPTH + 1];       // the folder at each level has cartridges (its .snaps is listed when it ends)
     FILE *out;
     int found;
     uint32_t hash;
@@ -345,10 +354,11 @@ static void scan_start(void)
     s_scan.out = fopen(INDEX ".tmp", "w");
     s_scan.dp[0] = s_scan.out ? opendir(NUCLEO_SD_MOUNT) : nullptr;
     if (!s_scan.dp[0]) { if (s_scan.out) fclose(s_scan.out); s_scan.out = nullptr; remove(INDEX ".tmp"); return; }
-    fputs("GIX1 0000000000 0000000000\n", s_scan.out);   // the real counts are written over it at the end
+    fputs("GIX2 0000000000 0000000000\n", s_scan.out);   // the real counts are written over it at the end
     snprintf(s_scan.path, sizeof s_scan.path, "%s", NUCLEO_SD_MOUNT);
     s_scan.plen[0] = (int)strlen(s_scan.path);
     s_scan.depth = 0; s_scan.found = 0; s_scan.hash = 2166136261u; s_scan.dir_out = false;
+    memset(s_scan.had, 0, sizeof s_scan.had);
     s_scan.on = true;
 }
 // Folders the walk leaves alone: the system's own, the apps', the web OS, and the gallery's caches.
@@ -381,8 +391,26 @@ static int scan_step(int64_t budget)
     const int64_t until = esp_timer_get_time() + budget;
     while (esp_timer_get_time() < until) {
         struct dirent *e = readdir(s_scan.dp[s_scan.depth]);
-        if (!e) {                                       // this folder is done: up a level
+        if (!e) {                                       // this folder is done: its screenshots, then up a level
             closedir(s_scan.dp[s_scan.depth]); s_scan.dp[s_scan.depth] = nullptr;
+            if (s_scan.had[s_scan.depth]) {
+                const int pl = s_scan.plen[s_scan.depth];
+                snprintf(s_scan.path + pl, PATHMAX - pl, "/.snaps");
+                DIR *sp = opendir(s_scan.path);
+                s_scan.path[pl] = '\0';
+                if (sp) {
+                    fprintf(s_scan.out, "D %s\n", s_scan.path);
+                    struct dirent *x;
+                    while ((x = readdir(sp)) != NULL) {
+                        const size_t xl = strlen(x->d_name);
+                        if (xl < 5 || (strcasecmp(x->d_name + xl - 4, ".pic") && strcasecmp(x->d_name + xl - 4, ".snp"))) continue;
+                        fprintf(s_scan.out, "P %s\n", x->d_name);
+                        s_scan.hash = fnv(x->d_name, s_scan.hash);
+                    }
+                    closedir(sp);
+                }
+                s_scan.had[s_scan.depth] = false;
+            }
             if (s_scan.depth == 0) break;
             s_scan.depth--;
             s_scan.path[s_scan.plen[s_scan.depth]] = '\0';
@@ -399,6 +427,7 @@ static int scan_step(int64_t budget)
                 if (sub) {                              // into it
                     s_scan.dp[++s_scan.depth] = sub;
                     s_scan.plen[s_scan.depth] = (int)strlen(s_scan.path);
+                    s_scan.had[s_scan.depth] = false;
                     s_scan.dir_out = false;
                     continue;
                 }
@@ -411,6 +440,7 @@ static int scan_step(int64_t budget)
         if (sys < 0) continue;
         if (!s_scan.dir_out) { fprintf(s_scan.out, "D %s\n", s_scan.path); s_scan.hash = fnv(s_scan.path, s_scan.hash); s_scan.dir_out = true; }
         fprintf(s_scan.out, "%d %s\n", sys, e->d_name);
+        s_scan.had[s_scan.depth] = true;
         s_scan.hash = fnv(e->d_name, s_scan.hash + (uint32_t)sys);
         s_scan.found++;
     }
@@ -418,7 +448,7 @@ static int scan_step(int64_t budget)
     if (s_scan.dp[0]) return 0;                         // more to walk
     // The walk is complete: its header, then it replaces the index if anything differs.
     fseek(s_scan.out, 0, SEEK_SET);
-    fprintf(s_scan.out, "GIX1 %010u %010u", (unsigned)s_scan.found, (unsigned)s_scan.hash);
+    fprintf(s_scan.out, "GIX2 %010u %010u", (unsigned)s_scan.found, (unsigned)s_scan.hash);
     const bool ok = fclose(s_scan.out) == 0;
     s_scan.out = nullptr;
     s_scan.on = false; s_scan.done = true; s_scan.at = esp_timer_get_time();
@@ -437,41 +467,8 @@ static int cmp_nat(const void *a, const void *b)
 
 static void shelf_free(void) { free(s_sh); s_sh = nullptr; }
 
-// Which cartridges have a picture: ONE listing of each folder's .snaps, matched by name hash. Looking each one up
-// instead would cost a full scan of that folder for every cartridge without a screenshot.
-static void snaps_scan(Shelf *sh)
-{
-    memset(sh->snap, 0, sh->n);
-    uint32_t *h = sh->n ? (uint32_t *)malloc((size_t)sh->n * 4) : nullptr;   // the names' hashes, for the listings only
-    if (!h) return;
-    for (int i = 0; i < sh->n; i++) h[i] = fnv(sh->pool + sh->off[i]);
-    for (int i = 0; i < sh->n; i++) {
-        bool seen = false;                              // each folder once
-        for (int j = 0; j < i && !seen; j++) seen = sh->dir[j] == sh->dir[i];
-        if (seen) continue;
-        char p[PATHMAX + 8];
-        snprintf(p, sizeof p, "%s/.snaps", sh->pool + sh->dir[i]);
-        DIR *dp = opendir(p);
-        if (!dp) continue;
-        struct dirent *e;
-        unsigned cnt = 0;
-        while ((e = readdir(dp)) != NULL) {
-            if ((++cnt & 63) == 0) esp_task_wdt_reset();
-            const size_t len = strlen(e->d_name);
-            if (len < 5) continue;
-            const char *ext = e->d_name + len - 4;
-            const uint8_t bit = !strcasecmp(ext, ".pic") ? SN_PIC : !strcasecmp(ext, ".snp") ? SN_SNP : 0;
-            if (!bit) continue;
-            const uint32_t k = fnvn(e->d_name, len - 4);
-            for (int j = i; j < sh->n; j++) if (sh->dir[j] == sh->dir[i] && h[j] == k) { sh->snap[j] |= bit; break; }
-        }
-        closedir(dp);
-    }
-    free(h);
-}
-
 // The open console's cartridges whose name contains `filt`, from the index, into a new shelf sized to fit.
-struct Gather { uint16_t off[MAXR], dir[MAXR]; char pool[POOL]; int n, used; };
+struct Gather { uint16_t off[MAXR], dir[MAXR]; uint32_t hash[MAXR]; uint8_t snap[MAXR]; char pool[POOL]; int n, used; };
 static bool shelf_build(const char *filt)
 {
     int count = 0;
@@ -488,6 +485,14 @@ static bool shelf_build(const char *filt)
         char last_dir[PATHMAX] = "";
         while (idx_next(f, line, sizeof line, dir, sizeof dir, &sys, &name)) {
             if ((++seen & 255) == 0) esp_task_wdt_reset();
+            if (sys < 0) {                              // a screenshot: whose, in this folder?
+                const size_t pl = strlen(name);
+                const uint8_t bit = !strcasecmp(name + pl - 4, ".pic") ? SN_PIC : SN_SNP;
+                const uint32_t k = fnvn(name, pl - 4);
+                for (int i = g->n - 1; i >= 0; i--)
+                    if (g->hash[i] == k && !strcmp(g->pool + g->dir[i], dir)) { g->snap[i] |= bit; break; }
+                continue;
+            }
             if (sys != s_group || !contains(name, filt)) continue;
             total++;
             const int nl = (int)strlen(name) + 1;
@@ -499,7 +504,8 @@ static bool shelf_build(const char *filt)
             }
             if (dir_at < 0 || g->n >= MAXR || g->used + nl > POOL) continue;
             memcpy(g->pool + g->used, name, nl);
-            g->off[g->n] = (uint16_t)g->used; g->dir[g->n] = (uint16_t)dir_at; g->n++;
+            g->off[g->n] = (uint16_t)g->used; g->dir[g->n] = (uint16_t)dir_at;
+            g->hash[g->n] = fnv(name); g->snap[g->n] = 0; g->n++;
             g->used += nl;
         }
         fclose(f);
@@ -523,13 +529,12 @@ static bool shelf_build(const char *filt)
         sh->view = sh->dir + n;
         sh->snap = (uint8_t *)(sh->view + n);
         sh->pool = (char *)(sh->snap + n);
-        for (int i = 0; i < n; i++) { sh->off[i] = g->off[ord[i]]; sh->dir[i] = g->dir[ord[i]]; }
+        for (int i = 0; i < n; i++) { sh->off[i] = g->off[ord[i]]; sh->dir[i] = g->dir[ord[i]]; sh->snap[i] = g->snap[ord[i]]; }
         memcpy(sh->pool, g->pool, g->used);
     }
     free(ord);
     free(g);
     if (!sh) return false;
-    snaps_scan(sh);
     shelf_free();
     s_sh = sh;
     return true;
@@ -682,7 +687,8 @@ static void turn(int dir)
     s_turn_t0 = dir ? now : 0; s_turn_dir = dir;
     s_settle_at = now + SETTLE_US;
     s_full = false;                                // this key moves the wheel only
-    nucleo_audio_tone(2600, 4, 12);                // the wheel's click (the emulators' own)
+    static int64_t s_tick;                         // the wheel's click (the emulators' own): one per frame at most
+    if (now - s_tick > 60000) { s_tick = now; nucleo_audio_tone(2600, 4, 12); }
 }
 static int turn_offset(int pill_h)
 {
@@ -764,23 +770,27 @@ void gamefront_open(void)
     refilter();
     if (want) select_key(want);
     // Look for cartridges: the first time this boot, when there is no index, or after a while.
-    struct stat st;
-    const bool have = stat(INDEX, &st) == 0;
-    if (!have || !s_scan.done || esp_timer_get_time() - s_scan.at > RESCAN_US) scan_start();
+    { struct stat ist; s_have_index = stat(INDEX, &ist) == 0 && idx_ok(); }
+    if (!s_scan.done) scan_start();               // once per boot: the card may have changed while it was off
 }
 
 static bool s_settle_frame;                        // the next render: what changes when the wheel stops (left column)
-static int64_t s_input_at;                         // the last key
 static bool prefetch_one(void);
 bool gamefront_step(void)
 {
-    const int r = scan_step(s_turn_t0 ? 4000 : 15000);   // a turning wheel gets the CPU first
+    // The walk: freely while there is no index yet (nothing to browse); else in 5 ms slices, only when the player has been
+    // still for a while - it never takes time from a turn, a stop or a key.
+    const int64_t t = esp_timer_get_time();
+    const bool fresh = s_scan.on && !s_have_index;
+    const int r = fresh ? scan_step(15000)
+                : (s_scan.on && !s_turn_t0 && !s_settle_at && t - s_input_at > SCAN_IDLE_US) ? scan_step(5000) : 0;
+    if (r) s_have_index = true;
     if (r == 2) { relist(); pic_forget(); }
     if (r != 0) { s_full = true; return true; }    // the walk ended: its indicator goes, the lists may have changed
     if (s_turn_t0) return true;                    // the turn's next frame (the wheel only)
     const int64_t now = esp_timer_get_time();
     if (s_settle_at && now >= s_settle_at) { s_settle_at = 0; s_settle_frame = true; return true; }   // stopped
-    if (!s_settle_at && !s_scan.on && now - s_input_at > 350000) prefetch_one();
+    if (!s_settle_at && !s_scan.on && now - s_input_at > 1500000) prefetch_one();   // well after the last key
     return false;
 }
 bool gamefront_scanning(void) { return s_scan.on; }
@@ -1027,13 +1037,14 @@ static bool snap_pic(const char *dir, const char *rom, uint8_t have)
 {
     char path[PATHMAX + 48];
     snprintf(path, sizeof path, "%s/.snaps/%s.pic", dir, rom);
-    if ((have & SN_PIC) && pic_open(path, false, 0, 0)) return true;
+    if ((have & (SN_PIC | SN_SNP)) && pic_open(path, false, 0, 0)) return true;   // also one made since the walk
     return (have & SN_SNP) && snap_make(dir, rom) && pic_open(path, false, 0, 0);
 }
 
-// Pictures made AHEAD, while the player is still: the console photos of the systems, and the screenshots of the titles
-// around the selection (nearest first), one per call, so that stopping on them reads a ready file. A cartridge's
-// screenshot is ~100-300 ms to make (inflate + write) - here, never while the wheel turns or a key was just pressed.
+// Pictures made AHEAD, well after the last key: the console photos of the systems and the covers of the native games
+// around the selection, one per call (each is made once per card). A cartridge's screenshot is not: making one takes
+// ~100-300 ms that a key pressed meanwhile would wait for - it is made when the wheel stops on it (once), or comes
+// ready from tools/fetch-rom-snaps.py.
 static bool cover_pic(int k, int bw, int bh, bool open = true);
 static bool prefetch_one(void)
 {
@@ -1061,15 +1072,6 @@ static bool prefetch_one(void)
             }
         return false;
     }
-    if (!on_roms() || !s_sh || !s_n) return false;
-    for (int dist = 1; dist <= 6 && dist < s_n; dist++)
-        for (int side = 0; side < 2; side++) {
-            const int i = ((s_sel + (side ? -dist : dist)) % s_n + s_n) % s_n;
-            uint8_t &have = s_sh->snap[s_sh->view[i]];
-            if (!(have & SN_SNP) || (have & SN_PIC)) continue;
-            have = snap_make(rom_dir(i), rom_name(i)) ? (uint8_t)(have | SN_PIC) : 0;
-            return true;
-        }
     return false;
 }
 
