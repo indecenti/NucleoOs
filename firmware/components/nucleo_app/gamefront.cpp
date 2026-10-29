@@ -778,6 +778,10 @@ void gamefront_open(void)
 }
 
 static bool prefetch_one(void);
+#define MQ_US 40000                                // the scrolling title's step (see paint_title)
+static int64_t s_mq_last;
+static bool    s_mq_long;                          // the title does not fit its line: it scrolls
+static bool    s_mq_frame;                         // the next render: the title line only
 bool gamefront_step(void)
 {
     // The walk: freely while there is no index yet (nothing to browse); else in 5 ms slices, only when the player has been
@@ -793,6 +797,7 @@ bool gamefront_step(void)
     const int64_t now = esp_timer_get_time();
     if (s_settle_at && now >= s_settle_at) { s_settle_at = 0; s_settle_frame = true; return true; }   // stopped
     if (!s_settle_at && !s_scan.on && now - s_input_at > 1500000) prefetch_one();   // well after the last key
+    if (s_mq_long && !s_settle_at && d.width() >= 300 && now - s_mq_last >= MQ_US) { s_mq_frame = true; return true; }
     return false;
 }
 bool gamefront_scanning(void) { return s_scan.on; }
@@ -1332,7 +1337,7 @@ static int wheel_icon(int i, int x, int cy, bool mid, void *)
 }
 
 // ── the screens ─────────────────────────────────────────────────────────────────────────────────────
-static const unsigned char WHEEL_BIG[SLOTS_BIG] = { 21, 23, 25, 32, 25, 23, 21 };
+static const unsigned char WHEEL_BIG[SLOTS_BIG] = { 18, 20, 22, 28, 22, 20, 18 };   // 148 rows, below the title line
 static const unsigned char WHEEL_SMALL[SLOTS_SMALL] = { 19, 21, 27, 21, 19 };
 
 // The header's right side: a pulsing "searching" dot while the card is walked.
@@ -1341,9 +1346,14 @@ static const char *header_right(void)
     return s_scan.on ? TR5("cerco...", "searching...", "buscando...", "recherche...", "suche...") : nullptr;
 }
 
-// The panel, 320x240: header with Back, search, then the picture and the title on the left and the wheel on the right.
+// The panel, 320x240: header with Back, search, the whole title on a line of its own, then the picture on the left and
+// the wheel on the right.
 #define WX 128                                     // the wheel's left edge
+#define TY (lg::HEAD + 36)                         // the title line, the panel's whole width
+#define TH 26
+#define TOP (TY + TH)                              // the picture and the wheel
 static void paint_left(void *);
+static void paint_title(void *);
 static void paint_big(void *)
 {
     const int W = d.width(), H = s_H;
@@ -1351,30 +1361,31 @@ static void paint_big(void *)
     char cnt[24]; count_text(cnt, sizeof cnt);
     int32_t cx0, cy0, cw0, ch0;
     d.getClipRect(&cx0, &cy0, &cw0, &ch0);
-    const int top = lg::HEAD + 36, bh = H - top;
-    if (cy0 < top) {                               // only the strips that hold the header and the search draw them
+    const int top = TOP, bh = H - top;
+    if (cy0 < TY) {                                // only the strips that hold the header and the search draw them
         lg::header(level_title(), header_right(), acc_of(s_level ? s_group : NATIVE), NK_BACK);
         lg::search(0, lg::HEAD, W, 36, s_filter, search_hint(), cnt, s_total > s_n ? (unsigned short)C_YELLOW : (unsigned short)MUTED, acc);
     } else nucleo_touch_add(0, 0, 96, lg::HEAD + 2, NK_BACK, 0);   // the header's Back, as lg::header registers it
-    d.fillRect(0, top, W, bh, BG);
-    if (!s_n) { lg::message(0, top, W, bh, empty_line(), empty_sub(), MUTED); return; }
+    d.fillRect(0, TY, W, H - TY, BG);
+    if (!s_n) { lg::message(0, TY, W, H - TY, empty_line(), empty_sub(), MUTED); return; }
+    paint_title(nullptr);
     paint_left(nullptr);
     const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon, s_off };
     lg::wheel(WX, top, W - WX, bh, wl);
 }
 
-// The left column below the search: the picture, the caption, the title. Also a frame of its own (lg::frame_rect at
-// x 0) when the wheel stops: only this and the position change then.
+// The left column below the title line: the picture, the caption and a line about it. Also a frame of its own
+// (lg::frame_rect at x 0) when the wheel stops: only this, the title and the position change then.
 static void paint_left(void *)
 {
-    const int H = s_H, top = lg::HEAD + 36;
+    const int H = s_H, top = TOP;
     const unsigned short acc = acc_now();
     d.fillRect(0, top, WX, H - top, BG);
-    const int tw = 118, tx = (WX - tw) / 2, ph = 102;   // the picture's place
+    const int tw = 118, tx = (WX - tw) / 2, ph = 98;    // the picture's place
     draw_pic(tx, top + 2, tw, ph, acc);
     nucleo_touch_add(tx, top + 2, tw, ph, NK_ENTER, 0);   // the picture opens the selection too
     char cap[64]; caption(cap, sizeof cap);
-    int ly = top + ph + 5;
+    int ly = top + ph + 6;
     lg::font(0);
     char fitted[64];
     int cx = tx + 2;
@@ -1386,11 +1397,47 @@ static void paint_left(void *)
         lg::fit(fitted, sizeof fitted, cap, tx + tw - cx);
         d.setTextColor(acc, BG); d.drawString(fitted, cx, ly);
     }
-    ly += 21;
-    const char *sub = subtitle();
-    lg::font(1); d.setTextColor(FG, BG);
-    const int lines = lg::wrap(title_of(s_sel), tx + 2, ly, WX - tx - 6, 19, sub ? 1 : (H - ly >= 58 ? 3 : 2));
-    if (sub) { lg::font(0); d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, WX - tx - 6); d.drawString(fitted, tx + 2, ly + lines * 19 + 1); }
+    ly += 20;
+    const char *more = subtitle();                 // a system: what it holds; a native game: what it is
+    if (!more) more = blurb();
+    if (more) { d.setTextColor(MUTED, BG); lg::wrap(more, tx + 2, ly, WX - tx - 4, 15, (H - ly) / 15); }
+}
+
+// The title line: the selection's whole name across the panel; one too long for it scrolls (a pause at its start,
+// then round at MQ_SPEED px/s), redrawn alone (lg::frame_rect, 320x26) every MQ_US while the wheel is still.
+#define MQ_HOLD  1500000
+#define MQ_SPEED 30
+#define MQ_GAP   48
+static uint32_t s_mq_key;                          // the title on the line, and since when
+static int64_t  s_mq_t0;
+static uint32_t title_key(void) { return s_n ? key_of(s_sel) ^ (uint32_t)(s_level << 24) ^ (uint32_t)((s_group + 2) << 20) : 0; }
+static void paint_title(void *)
+{
+    d.fillRect(0, TY, 320, TH, BG);
+    if (!s_n) { s_mq_long = false; return; }
+    const int64_t now = esp_timer_get_time();
+    const uint32_t key = title_key();
+    if (key != s_mq_key) { s_mq_key = key; s_mq_t0 = now; }
+    s_mq_last = now;
+    d.fillRoundRect(8, TY + 5, 4, TH - 10, 2, acc_now());
+    const char *t = title_of(s_sel);
+    lg::font(1);
+    const int x0 = 18, avail = 320 - x0 - 8, w = d.textWidth(t);
+    s_mq_long = w > avail;
+    d.setTextColor(FG, BG); d.setTextDatum(middle_left);
+    if (!s_mq_long) { d.drawString(t, x0, TY + TH / 2); d.setTextDatum(top_left); return; }
+    const int64_t per = (int64_t)(w + MQ_GAP) * 1000000 / MQ_SPEED, ph = (now - s_mq_t0) % (MQ_HOLD + per);
+    const int off = ph < MQ_HOLD ? 0 : (int)((ph - MQ_HOLD) * MQ_SPEED / 1000000);
+    int32_t cx, cy, cw, ch;
+    d.getClipRect(&cx, &cy, &cw, &ch);
+    const int y0 = TY > cy ? TY : cy, y1 = TY + TH < cy + ch ? TY + TH : cy + ch;
+    if (y1 > y0) {                                 // the line's own clip, inside the strip's
+        d.setClipRect(x0, y0, avail, y1 - y0);
+        d.drawString(t, x0 - off, TY + TH / 2);
+        d.drawString(t, x0 - off + w + MQ_GAP, TY + TH / 2);
+        d.setClipRect(cx, cy, cw, ch);
+    }
+    d.setTextDatum(top_left);
 }
 static void paint_search(void *)
 {
@@ -1401,7 +1448,7 @@ static void paint_search(void *)
 // The wheel alone, in its own rectangle (lg::frame_rect: x is relative to WX), while it turns.
 static void paint_wheel_big(void *)
 {
-    const int top = lg::HEAD + 36;
+    const int top = TOP;
     const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc_now(), C_LAST, wheel_icon, s_off };
     lg::wheel(0, top, 320 - WX, s_H - top, wl);
 }
@@ -1565,10 +1612,15 @@ void gamefront_render(void)
     s_H = d.height();
     s_full = false;
     s_off = turn_offset(big ? WHEEL_BIG[SLOTS_BIG / 2] : WHEEL_SMALL[SLOTS_SMALL / 2]);
+    const bool mq = s_mq_frame;
+    s_mq_frame = false;
     if (!full && s_n && !s_settle_frame) {         // the wheel turning: its rectangle only (the committed touch targets stay)
         nucleo_touch_clear();                      // ...the wheel's own registrations go nowhere
-        const bool ok = big ? lg::frame_rect(paint_wheel_big, nullptr, WX, lg::HEAD + 36, 320 - WX, s_H - lg::HEAD - 36, true)
-                            : lg::frame_rect(paint_wheel_small, nullptr, CX, 22, 240 - CX, s_H - 22, true);
+        bool ok = true;
+        if (big && (mq || title_key() != s_mq_key))   // the new title at once, or the scrolling one's next step
+            ok = lg::frame_rect(paint_title, nullptr, 0, TY, 320, TH, true);
+        if (ok && !mq) ok = big ? lg::frame_rect(paint_wheel_big, nullptr, WX, TOP, 320 - WX, s_H - TOP, true)
+                                : lg::frame_rect(paint_wheel_small, nullptr, CX, 22, 240 - CX, s_H - 22, true);
         if (ok) return;
         s_settle_at = 0;                           // no canvas: the whole frame instead
     }
@@ -1581,8 +1633,8 @@ void gamefront_render(void)
     const int64_t t1 = esp_timer_get_time();
     bool drawn = false;
     if (settle) {                                  // the wheel stopped: the picture, the caption, the title, the position
-        const int top = lg::HEAD + 36;
-        drawn = lg::frame_rect(paint_left, nullptr, 0, top, WX, s_H - top, true)
+        drawn = lg::frame_rect(paint_left, nullptr, 0, TOP, WX, s_H - TOP, true)
+             && lg::frame_rect(paint_title, nullptr, 0, TY, 320, TH, true)
              && lg::frame_rect(paint_search, nullptr, 0, lg::HEAD, 320, 36, true);
     }
     if (!drawn) {

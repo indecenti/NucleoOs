@@ -44,6 +44,11 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 - The native games have pictures too: their entry is the Cardputer itself (M5Stack's product photo, the one the
   NucleoOS site shows) cut out like the consoles, and 13 native games ship a default cover on the SD pack (`data/GameShots/<id>.png`: each game's own screen
   rendered on the PC from its source; a cover captured on the device still wins).
+- The selection's whole title has a line of its own across the panel, above the picture and the wheel; one too long
+  for it scrolls (a pause, then round), redrawn alone; under the picture, its caption and what it is.
+- One screensaver rule for the launcher and the Games gallery: after the time set in Settings > Display >
+  Screensaver, its style ("off" = the screen sleeps and frees its 32 KB, the others open the screensaver). The launcher
+  used to go dark after a fixed 30 s instead, before the chosen screensaver could start.
 - The left picture is narrower and the wheel wider (narrower console marks, a flatter curve): whole titles read; the
   selected one drops to the smaller font rather than being cut; a list shorter than the wheel shows each title once.
 - The screensaver speaks the five languages (its date too: it was always English), and so does the Cardputer's

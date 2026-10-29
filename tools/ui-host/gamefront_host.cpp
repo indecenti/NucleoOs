@@ -48,10 +48,12 @@ static void draw(void)
     else gamefront_render();
 }
 static void draw_large(void) { gamefront_invalidate(); gamefront_render(); }
+// A tick (200 ms of the scene's clock): what the device's loop does meanwhile - the scrolling title moves on.
+static void tick(void) { if (nucleo_app_two_screens()) gamefront_render(); }
 
 extern "C" void nucleo_register_gamefront(void)
 {
-    static const nucleo_app_def_t app = { "gamefront", "Games", "Games", "", 'G', 0xFB4D, enter, key, nullptr, draw, nullptr,
+    static const nucleo_app_def_t app = { "gamefront", "Games", "Games", "", 'G', 0xFB4D, enter, key, tick, draw, nullptr,
                                           0, nullptr, draw_large };
     nucleo_app_register(&app);
 }
