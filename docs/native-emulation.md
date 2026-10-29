@@ -650,6 +650,13 @@ frame (3.40 M cycles, fetch stalls 0.24 M), event loop 14.2 (3.33 M, 0.28 M). Wi
   of hashes); a band pushes only the span its rows changed in, rows compacted in place. Panel lines 5.8 -> 4.8 ms,
   fights 31-35 -> 33-36 frames a second.
 
+**Where drawing's cost goes (bench lever 3: lines drawn, never sent).** Street Fighter II, 60 s, same frames: nothing
+drawn 14.2 ms of CPU a frame (3.33 M cycles, 0.28 M stalled on fetch); drawn, not sent 17.1 (4.01 M, 0.69 M); drawn
+and sent 18.2 (4.26 M, 0.85 M). So ~2.4 ms are fetch stalls (the other core's drawer ~1.7, the panel's code ~0.7)
+and ~1.5 ms waits for the other core (a VRAM write while lines are queued waits for them). The run loop at -Os
+(5.7 KB instead of 9 KB, every helper beside it): slower, 19.5 ms drawn, 15.3 not (more calls, no fewer stalls).
+Not kept.
+
 **What is left, measured.** Drawing costs the CPU's core 5.6 ms a frame it never runs itself (19.8 against 14.2):
 the other core's line drawer and this core's panel pushes (LovyanGFX, in the firmware's flash) share the 16 KB
 instruction cache with the interpreter. Next: the drawer and the band push made small and contiguous (the drawer in
