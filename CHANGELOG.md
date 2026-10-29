@@ -34,7 +34,10 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   going back and starting a game, at a fraction of the system volume (muted = silent). New `nucleo_audio_sample()`.
 - **Cartridges launch from the gallery.** A Game Boy / Game Gear / Master System cartridge opens straight in its
   emulator; quitting the game comes back to the gallery on it, never to the emulator's shelf.
-- Consoles are shown by their marks, never by their written names (the user's rule, shared with the emulators).
+- Consoles are shown by their mark and their name (no makers). Their photos stand on the dark tile: the light studio
+  background is keyed out (and its fringe) once, when the picture is made; the left tile is a little smaller.
+- Pictures and marks are unpacked with the inflater's state in the shared canvas (no 11 KB block to find on the
+  launcher's heap); a picture that cannot be made is not retried while the gallery is open.
 - Native ABI level 5 = level 4 + `nucleo_app_take_open_file` (the emulators' modules need it); the gallery's texts are in the firmware in five languages
   (the `gamefront` SD text pack is gone).
 
