@@ -6,7 +6,13 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-10-29
+
 ### Changed
+- **Web OS 1.0** (the shared NucleoOS web OS): a first desktop with only File Commander, Recycle Bin, ANIMA and
+  Help; Start lists every app by category, with a Settings button and a power menu; a file deleted on the desktop
+  goes to the Recycle Bin; the setup wizard shows where apps are and the Store; Help carries its manual and the
+  Terminal's command pages in five languages, only for what this device can do; ANIMA's game forge works again.
 - **Games gallery, HyperSpin style.** The Games tile opens a two-level gallery: first the systems (native games,
   then NES, Game Boy, Game Boy Color, Master System and Game Gear, each shown when its emulator is installed and its
   folder in `/data/ROMs` has cartridges), then their titles, sorted, on a title wheel with live search, the game's
