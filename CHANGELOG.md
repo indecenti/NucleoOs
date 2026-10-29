@@ -120,6 +120,8 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   rendered on the PC from its source; a cover captured on the device still wins).
 - The selection's whole title has a line of its own across the panel, above the picture and the wheel; one too long
   for it scrolls (a pause, then round), redrawn alone; under the picture, its caption and what it is.
+- The search line shows only while there is a search (typing opens it, emptying it closes it): the wheel gets its
+  room, the position sits at the header's right; on the Cardputer alone the wheel takes the whole height.
 - One screensaver rule for the launcher and the Games gallery: after the time set in Settings > Display >
   Screensaver, its style ("off" = the screen sleeps and frees its 32 KB, the others open the screensaver). The launcher
   used to go dark after a fixed 30 s instead, before the chosen screensaver could start.

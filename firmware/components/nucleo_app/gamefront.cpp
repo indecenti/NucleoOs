@@ -1337,7 +1337,8 @@ static int wheel_icon(int i, int x, int cy, bool mid, void *)
 }
 
 // ── the screens ─────────────────────────────────────────────────────────────────────────────────────
-static const unsigned char WHEEL_BIG[SLOTS_BIG] = { 18, 20, 22, 28, 22, 20, 18 };   // 148 rows, below the title line
+static const unsigned char WHEEL_BIG[SLOTS_BIG] = { 18, 20, 22, 28, 22, 20, 18 };    // 148 rows: searching
+static const unsigned char WHEEL_TALL[SLOTS_BIG] = { 21, 23, 25, 32, 25, 23, 21 };   // 170 rows: no search line
 static const unsigned char WHEEL_SMALL[SLOTS_SMALL] = { 19, 21, 27, 21, 19 };
 
 // The header's right side: a pulsing "searching" dot while the card is walked.
@@ -1349,11 +1350,15 @@ static const char *header_right(void)
 // The panel, 320x240: header with Back, search, the whole title on a line of its own, then the picture on the left and
 // the wheel on the right.
 #define WX 128                                     // the wheel's left edge
-#define TY (lg::HEAD + 36)                         // the title line, the panel's whole width
+// The search line takes room only while there is a search: typing opens it, emptying it closes it.
+static int search_h(void) { return s_flen ? 36 : 0; }
+static const unsigned char *wheel_big(void) { return s_flen ? WHEEL_BIG : WHEEL_TALL; }
+#define TY (lg::HEAD + search_h())                 // the title line, the panel's whole width
 #define TH 26
 #define TOP (TY + TH)                              // the picture and the wheel
 static void paint_left(void *);
 static void paint_title(void *);
+static const char *head_right(const char *cnt);
 static void paint_big(void *)
 {
     const int W = d.width(), H = s_H;
@@ -1363,14 +1368,14 @@ static void paint_big(void *)
     d.getClipRect(&cx0, &cy0, &cw0, &ch0);
     const int top = TOP, bh = H - top;
     if (cy0 < TY) {                                // only the strips that hold the header and the search draw them
-        lg::header(level_title(), header_right(), acc_of(s_level ? s_group : NATIVE), NK_BACK);
-        lg::search(0, lg::HEAD, W, 36, s_filter, search_hint(), cnt, s_total > s_n ? (unsigned short)C_YELLOW : (unsigned short)MUTED, acc);
+        lg::header(level_title(), head_right(cnt), acc_of(s_level ? s_group : NATIVE), NK_BACK);
+        if (s_flen) lg::search(0, lg::HEAD, W, 36, s_filter, search_hint(), cnt, s_total > s_n ? (unsigned short)C_YELLOW : (unsigned short)MUTED, acc);
     } else nucleo_touch_add(0, 0, 96, lg::HEAD + 2, NK_BACK, 0);   // the header's Back, as lg::header registers it
     d.fillRect(0, TY, W, H - TY, BG);
     if (!s_n) { lg::message(0, TY, W, H - TY, empty_line(), empty_sub(), MUTED); return; }
     paint_title(nullptr);
     paint_left(nullptr);
-    const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon, s_off };
+    const lg::Wheel wl = { SLOTS_BIG, wheel_big(), s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon, s_off };
     lg::wheel(WX, top, W - WX, bh, wl);
 }
 
@@ -1439,6 +1444,12 @@ static void paint_title(void *)
     }
     d.setTextDatum(top_left);
 }
+static const char *head_right(const char *cnt) { return s_scan.on ? header_right() : s_flen ? nullptr : cnt; }
+static void paint_head(void *)                     // the header alone: the position moved (no search line)
+{
+    char cnt[24]; count_text(cnt, sizeof cnt);
+    lg::header(level_title(), head_right(cnt), acc_of(s_level ? s_group : NATIVE), NK_BACK);
+}
 static void paint_search(void *)
 {
     char cnt[24]; count_text(cnt, sizeof cnt);
@@ -1449,22 +1460,24 @@ static void paint_search(void *)
 static void paint_wheel_big(void *)
 {
     const int top = TOP;
-    const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc_now(), C_LAST, wheel_icon, s_off };
+    const lg::Wheel wl = { SLOTS_BIG, wheel_big(), s_n, s_sel, wheel_label, wheel_mark, nullptr, acc_now(), C_LAST, wheel_icon, s_off };
     lg::wheel(0, top, 320 - WX, s_H - top, wl);
 }
 
 // The Cardputer alone, 240x135: the picture with its caption and the whole title on the left; the search and a
 // five-title wheel on the right.
 #define CX 118
+static int small_top(void) { return s_flen || s_scan.on ? 22 : 0; }   // the search field above the wheel, when it shows
 static void paint_small(void *)
 {
     const int W = d.width(), H = s_H;
     const unsigned short acc = acc_now();
     d.fillRect(0, 0, W, H, BG);
     char cnt[24]; count_text(cnt, sizeof cnt);
-    lg::search(CX, 0, W - CX, 22, s_filter, s_scan.on ? header_right() : search_word(), nullptr, MUTED, acc);
+    const int st = small_top();
+    if (st) lg::search(CX, 0, W - CX, 22, s_filter, s_scan.on ? header_right() : search_word(), nullptr, MUTED, acc);
     if (!s_n) {
-        lg::message(0, 22, W, H - 22, empty_line(), empty_sub(), MUTED);
+        lg::message(0, st, W, H - st, empty_line(), empty_sub(), MUTED);
         return;
     }
     const int ph = 103;
@@ -1493,13 +1506,13 @@ static void paint_small(void *)
     const int nl = lg::wrap(title_of(s_sel), 3, ty, CX - 6, 9, mg != NATIVE || sub ? 1 : 2);
     if (sub) { d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, CX - 6); d.drawString(fitted, 3, ty + nl * 9); }
     const lg::Wheel wl = { SLOTS_SMALL, WHEEL_SMALL, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon, s_off };
-    lg::wheel(CX, 22, W - CX, H - 22, wl);
+    lg::wheel(CX, st, W - CX, H - st, wl);
 }
 
 static void paint_wheel_small(void *)
 {
     const lg::Wheel wl = { SLOTS_SMALL, WHEEL_SMALL, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc_now(), C_LAST, wheel_icon, s_off };
-    lg::wheel(0, 22, 240 - CX, s_H - 22, wl);
+    lg::wheel(0, small_top(), 240 - CX, s_H - small_top(), wl);
 }
 
 // The details of the selection, for the Cardputer's card: label / value pairs.
@@ -1606,21 +1619,26 @@ static void companion_cb(void *gfx)
 
 void gamefront_invalidate(void) { pic_forget(); s_full = true; }
 
+// A partial frame's painter (lg::frame_rect, a strip at a time): what it registers for touch is not wanted - the
+// committed targets of the last whole frame stay - so it is cleared before each strip, never piling up.
+static void partial(void *fn) { nucleo_touch_clear(); ((void (*)(void *))fn)(nullptr); }
+#define PART(f) partial, (void *)(f)
+
 void gamefront_render(void)
 {
     const bool big = d.width() >= 300, full = s_full;
     s_H = d.height();
     s_full = false;
-    s_off = turn_offset(big ? WHEEL_BIG[SLOTS_BIG / 2] : WHEEL_SMALL[SLOTS_SMALL / 2]);
+    s_off = turn_offset(big ? wheel_big()[SLOTS_BIG / 2] : WHEEL_SMALL[SLOTS_SMALL / 2]);
     const bool mq = s_mq_frame;
     s_mq_frame = false;
     if (!full && s_n && !s_settle_frame) {         // the wheel turning: its rectangle only (the committed touch targets stay)
         nucleo_touch_clear();                      // ...the wheel's own registrations go nowhere
         bool ok = true;
         if (big && (mq || title_key() != s_mq_key))   // the new title at once, or the scrolling one's next step
-            ok = lg::frame_rect(paint_title, nullptr, 0, TY, 320, TH, true);
-        if (ok && !mq) ok = big ? lg::frame_rect(paint_wheel_big, nullptr, WX, TOP, 320 - WX, s_H - TOP, true)
-                                : lg::frame_rect(paint_wheel_small, nullptr, CX, 22, 240 - CX, s_H - 22, true);
+            ok = lg::frame_rect(PART(paint_title), 0, TY, 320, TH, true);
+        if (ok && !mq) ok = big ? lg::frame_rect(PART(paint_wheel_big), WX, TOP, 320 - WX, s_H - TOP, true)
+                                : lg::frame_rect(PART(paint_wheel_small), CX, small_top(), 240 - CX, s_H - small_top(), true);
         if (ok) return;
         s_settle_at = 0;                           // no canvas: the whole frame instead
     }
@@ -1633,9 +1651,10 @@ void gamefront_render(void)
     const int64_t t1 = esp_timer_get_time();
     bool drawn = false;
     if (settle) {                                  // the wheel stopped: the picture, the caption, the title, the position
-        drawn = lg::frame_rect(paint_left, nullptr, 0, TOP, WX, s_H - TOP, true)
-             && lg::frame_rect(paint_title, nullptr, 0, TY, 320, TH, true)
-             && lg::frame_rect(paint_search, nullptr, 0, lg::HEAD, 320, 36, true);
+        drawn = lg::frame_rect(PART(paint_left), 0, TOP, WX, s_H - TOP, true)
+             && lg::frame_rect(PART(paint_title), 0, TY, 320, TH, true)
+             && (s_flen ? lg::frame_rect(PART(paint_search), 0, lg::HEAD, 320, 36, true)
+                        : lg::frame_rect(PART(paint_head), 0, 0, 320, lg::HEAD, true));
     }
     if (!drawn) {
         nucleo_touch_clear();
