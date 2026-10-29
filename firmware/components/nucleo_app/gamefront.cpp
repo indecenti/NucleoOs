@@ -37,6 +37,7 @@
 #include "esp_timer.h"
 #include "esp_task_wdt.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -1001,8 +1002,8 @@ bool gamefront_take_return(void)
 // read, no Cardputer. Each step slides the titles through the fixed pill (TURN_US, ease-out) with the emulators' tick.
 // When it has stopped for SETTLE_US the rest follows in one whole frame: the picture, the caption, the position and
 // the Cardputer's details - read and drawn once per stop, not once per step (as in HyperSpin).
-#define TURN_US   140000
-#define SETTLE_US 120000
+#define TURN_US   120000
+#define SETTLE_US 40000
 static int64_t s_turn_t0;
 static int     s_turn_dir;
 static int64_t s_settle_at;                        // a whole frame is due then (0 = none)
@@ -1065,6 +1066,10 @@ static void relist(void)
 }
 
 static void pic_forget(void);
+static void pc_clear(void);
+static bool cache_one(void);
+static uint32_t pic_key(int i, bool big);
+static bool pic_file_of(int i, char *path, size_t n, bool *dark);
 static void marks_free(void);
 static bool s_settle_frame;                        // the next render: what changes when the wheel stops (left column)
 void gamefront_open(void)
@@ -1119,11 +1124,12 @@ bool gamefront_step(void)
     const int r = fresh ? scan_step(15000)
                 : (s_scan.on && !s_turn_t0 && !s_settle_at && t - s_input_at > SCAN_IDLE_US) ? scan_step(5000) : 0;
     if (r) s_have_index = true;
-    if (r == 2) { relist(); pic_forget(); }
+    if (r == 2) { relist(); pic_forget(); pc_clear(); }
     if (r != 0) { s_full = true; return true; }    // the walk ended: its indicator goes, the lists may have changed
     if (s_turn_t0) return true;                    // the turn's next frame (the wheel only)
     const int64_t now = esp_timer_get_time();
     if (s_settle_at && now >= s_settle_at) { s_settle_at = 0; s_settle_frame = true; return true; }   // stopped
+    if (!s_settle_at && !s_scan.on && now - s_input_at > 250000 && cache_one()) return false;   // the neighbours' pictures
     if (!s_settle_at && !s_scan.on && now - s_input_at > 1500000) prefetch_one();   // well after the last key
     if (s_mq_long && !s_settle_at && d.width() >= 300 && now - s_mq_last >= MQ_US) { s_mq_frame = true; return true; }
     return false;
@@ -1157,6 +1163,7 @@ static int open_sel(char *launch_id, int cap)
     scan_abort();
     pic_forget();
     marks_free();
+    pc_clear();
     shelf_free();                                  // the game gets the RAM; gamefront_open() rebuilds the shelf
     extras_free();
     SFX(LAUNCH, 45);
@@ -1200,7 +1207,7 @@ int gamefront_key(int key, char ch, char *launch_id, int cap)
         if (s_flen) { s_filter[0] = '\0'; s_flen = 0; refilter(); return GF_REDRAW; }
         SFX(BACK, 35);
         if (s_level == 1 && s_ngrp > 1) { leave_group(); return GF_REDRAW; }
-        scan_abort(); shelf_free(); pic_forget(); marks_free(); extras_free();
+        scan_abort(); shelf_free(); pic_forget(); pc_clear(); marks_free(); extras_free();
         return GF_CLOSE;
     case NK_DEL:
         if (s_flen) { s_filter[--s_flen] = '\0'; refilter(); }
@@ -1229,9 +1236,10 @@ int gamefront_key(int key, char ch, char *launch_id, int cap)
 // byte order. A cover's or a console photo's source fields make it go stale on its own when the source changes; a
 // cartridge's screenshot (written beside its .snp by tools/fetch-rom-snaps.py) carries zeros there.
 struct PicHead { char magic[4]; uint16_t w, h; uint32_t src_size, src_time; };
-enum { PIC_NONE, PIC_FILE, PIC_POSTER };
+enum { PIC_NONE, PIC_FILE, PIC_POSTER, PIC_RAM };
 static struct {
     int kind;
+    int ci;                                        // PIC_RAM: its slot in the picture cache
     FILE *f;                                       // the .pic, open while it is the selection's (unbuffered)
     int w, h;
     bool dark;                                     // a screenshot / cover (dark tile) or a console photo (light card)
@@ -1314,6 +1322,108 @@ static uint16_t *scratch(size_t need, void **state = nullptr)
     return (uint16_t *)b;
 }
 static void swap_all(uint16_t *px, size_t n) { for (size_t i = 0; i < n; i++) px[i] = (uint16_t)(px[i] >> 8 | px[i] << 8); }
+
+// ── the picture cache ───────────────────────────────────────────────────────────────────────────────
+// The pictures of the titles around the selection, in RAM, so stopping on one draws it without touching the card (it
+// shares the SPI bus with the panel; a .pic is ~23 KB to read). Each is packed: per row, runs of one colour and
+// stretches of literal pixels (PackBits on RGB565): a console's screenshot shrinks 4-8x, a photo less (one that stays
+// over PC_MAX is not kept). Made while the player is still (gamefront_step), packed in the canvas (free between frames)
+// and kept in one exact-size block, only while the heap keeps PC_RESERVE free for the radio and the web server; the
+// farthest from the selection goes first. Freed when the gallery closes or a game starts.
+#define PC_N       6
+#define PC_MAX     14000
+#define PC_RESERVE 20000
+struct PCache { uint32_t key; int16_t at; uint8_t w, h, dark; uint8_t *z; };   // z: u16 row offsets[h], then the rows
+static PCache s_pc[PC_N];
+static void pc_free(int i) { free(s_pc[i].z); memset(&s_pc[i], 0, sizeof s_pc[i]); }
+static void pc_clear(void) { for (int i = 0; i < PC_N; i++) pc_free(i); }
+static int pc_find(uint32_t key) { for (int i = 0; i < PC_N; i++) if (s_pc[i].z && s_pc[i].key == key) return i; return -1; }
+// One row: [n-1] + n colours (a stretch, n <= 128), or [0x80 | n-1] + one colour (a run of n).
+static size_t pc_pack_row(const uint16_t *px, int w, uint8_t *out)
+{
+    size_t o = 0;
+    for (int i = 0; i < w; ) {
+        int run = 1;
+        while (i + run < w && run < 128 && px[i + run] == px[i]) run++;
+        if (run >= 3) { out[o++] = (uint8_t)(0x80 | (run - 1)); memcpy(out + o, &px[i], 2); o += 2; i += run; continue; }
+        int lit = 0;
+        while (i + lit < w && lit < 128) {          // up to the next run of three
+            if (i + lit + 2 < w && px[i + lit] == px[i + lit + 1] && px[i + lit] == px[i + lit + 2]) break;
+            lit++;
+        }
+        out[o++] = (uint8_t)(lit - 1); memcpy(out + o, &px[i], (size_t)lit * 2); o += (size_t)lit * 2; i += lit;
+    }
+    return o;
+}
+static void pc_unpack_row(const PCache &c, int y, uint16_t *px)
+{
+    const uint16_t *off = (const uint16_t *)c.z;
+    const uint8_t *p = c.z + off[y];
+    for (int i = 0; i < c.w; ) {
+        const uint8_t b = *p++;
+        const int n = (b & 0x7F) + 1;
+        if (b & 0x80) { uint16_t v; memcpy(&v, p, 2); p += 2; for (int k = 0; k < n && i < c.w; k++) px[i++] = v; }
+        else { memcpy(px + i, p, (size_t)n * 2); p += n * 2; i += n; }
+    }
+}
+// A .pic into the cache under `key` (at = the title's place in the list): 1 = in, 0 = no such file (yet), -1 = it
+// cannot be kept (too big for the cache, or the heap cannot spare it now).
+static int pc_load(const char *path, uint32_t key, int at, bool dark)
+{
+    if (pc_find(key) >= 0) return 1;
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    setvbuf(f, nullptr, _IONBF, 0);
+    PicHead ph;
+    if (fread(&ph, 1, sizeof ph, f) != sizeof ph || memcmp(ph.magic, "PIC1", 4) || !ph.w || !ph.h || ph.w > 160 || ph.h > 160) { fclose(f); return -1; }
+    const size_t table = (size_t)ph.h * 2;
+    uint8_t *sc = (uint8_t *)scratch(table + PC_MAX + 512);   // packed in the canvas first (free between frames)
+    if (!sc) { fclose(f); return -1; }
+    uint16_t *off = (uint16_t *)sc;
+    size_t used = table;
+    uint16_t rows[4 * 160];
+    bool ok = true;
+    for (int y = 0; y < ph.h && ok; ) {
+        const int k = ph.h - y < 4 ? ph.h - y : 4;
+        if (fread(rows, 2, (size_t)ph.w * k, f) != (size_t)ph.w * k) { ok = false; break; }
+        for (int r = 0; r < k; r++, y++) {
+            if (used + (size_t)ph.w * 2 + (size_t)ph.w / 64 + 2 > table + PC_MAX) { ok = false; break; }   // not worth it
+            off[y] = (uint16_t)used;
+            used += pc_pack_row(rows + r * ph.w, ph.w, sc + used);
+        }
+    }
+    fclose(f);
+    if (!ok) return -1;
+    // A slot: a free one, else the farthest from the selection (never the one on screen).
+    int slot = -1, far = -1;
+    for (int i = 0; i < PC_N; i++) {
+        if (!s_pc[i].z) { slot = i; break; }
+        if (s_pc[i].key == s_pic.key) continue;
+        int dist = abs(s_pc[i].at - s_sel);
+        if (s_n) dist = dist < s_n - dist ? dist : s_n - dist;
+        if (dist > far) { far = dist; slot = i; }
+    }
+    if (slot < 0) return -1;
+    if (s_pc[slot].z) pc_free(slot);
+    for (int tries = 0; tries < PC_N; tries++) {       // room for it, keeping the reserve (evicting the farthest)
+        if (heap_caps_get_free_size(MALLOC_CAP_8BIT) >= used + PC_RESERVE && heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) > used) break;
+        int ev = -1, evd = -1;
+        for (int i = 0; i < PC_N; i++) {
+            if (!s_pc[i].z || s_pc[i].key == s_pic.key) continue;
+            int dist = abs(s_pc[i].at - s_sel);
+            if (s_n) dist = dist < s_n - dist ? dist : s_n - dist;
+            if (dist > evd) { evd = dist; ev = i; }
+        }
+        if (ev < 0) return -1;
+        pc_free(ev);
+    }
+    if (heap_caps_get_free_size(MALLOC_CAP_8BIT) < used + PC_RESERVE) return -1;
+    uint8_t *z = (uint8_t *)malloc(used);
+    if (!z) return -1;
+    memcpy(z, sc, used);
+    s_pc[slot] = { key, (int16_t)at, (uint8_t)ph.w, (uint8_t)ph.h, (uint8_t)dark, z };
+    return 1;
+}
 
 // A picture with alpha (gamefront_art.h: RGB565, then 4-bit alpha two pixels a byte) blended on `bg`, in place.
 static uint16_t blend565(uint16_t fg, uint16_t bg, int a)       // a = 0..15
@@ -1407,8 +1517,37 @@ static bool snap_pic(const char *dir, const char *rom, uint8_t have)
 // ~100-300 ms that a key pressed meanwhile would wait for - it is made when the wheel stops on it (once), or comes
 // ready from tools/fetch-rom-snaps.py.
 static bool cover_pic(int k, int bw, int bh, bool open = true);
+// The cache, filled outwards from the selection (one picture per call: ~25 ms of card reading, while the player is
+// still): the selection itself (so going back to it is free), then the titles one, two, three steps away.
+static bool cache_one(void)
+{
+    if (!s_n) return false;
+    const bool big = d.width() >= 300;
+    for (int dist = 0; dist <= 2 && dist < s_n; dist++)
+        for (int side = 0; side < (dist ? 2 : 1); side++) {
+            const int i = ((s_sel + (side ? -dist : dist)) % s_n + s_n) % s_n;
+            const uint32_t key = pic_key(i, big);
+            if (pc_find(key) >= 0) continue;
+            char path[PATHMAX * 2]; bool dark;
+            if (!pic_file_of(i, path, sizeof path, &dark)) continue;
+            static uint32_t s_failed[8]; static int s_nf;   // not cacheable (too big, gone): not tried again soon
+            bool failed = false;
+            for (int k = 0; k < 8; k++) if (s_failed[k] == key) failed = true;
+            if (failed) continue;
+            const int r = pc_load(path, key, i, dark);
+            if (r == 0) continue;                  // not made yet: the stop or the make-ahead will
+            if (r < 0) { s_failed[s_nf++ & 7] = key; return true; }
+            if (i == s_sel && s_pic.key == key && s_pic.kind == PIC_FILE) {   // the one on screen: from RAM from now on
+                if (s_pic.f) { fclose(s_pic.f); s_pic.f = nullptr; }
+                s_pic.kind = PIC_RAM; s_pic.ci = pc_find(key);
+            }
+            return true;
+        }
+    return false;
+}
 static bool prefetch_one(void)
 {
+    if (cache_one()) return true;
     if (s_level == 0) {
         for (int k = 0; k < s_ngrp; k++) {
             const int g = s_grp[k];
@@ -1503,13 +1642,49 @@ static bool cover_pic(int k, int bw, int bh, bool open)
 }
 
 // The selection's picture, worked out once per selection (and per screen size): an open .pic, or a poster.
+static uint32_t pic_key(int i, bool big)
+{
+    // The theme's background in it too: a console photo is blended on it (a new theme = other pictures).
+    return (key_of(i) ^ (uint32_t)(s_level << 24) ^ (uint32_t)((s_group + 4) << 20) ^ (big ? 0x80000000u : 0)) * 31u + BG;
+}
+// Title i's picture file when it is made already (the cache reads only those; making one is the stop's job), and
+// whether it is a screenshot / cover (dark) or a console photo.
+static bool pic_file_of(int i, char *path, size_t n, bool *dark)
+{
+    if (s_level == 0) {
+        const int g = s_grp[s_ix[i]];
+        if (is_coll(g) || !(s_art_ready & GBIT(g))) return false;
+        art_path(sysg(g), path, n); *dark = false;
+        return true;
+    }
+    if (s_group == NATIVE) {
+        const int k = s_ix[i];
+        if (!s_nat_cover[k]) return false;
+        snprintf(path, n, "%s/%s_%dx%d.pic", CACHE, nucleo_app_at(s_nat[k])->id, 112, 63); *dark = true;
+        return true;
+    }
+    if (!s_sh || !(s_sh->snap[s_sh->view[i]] & SN_PIC)) return false;
+    snprintf(path, n, "%s/.snaps/%s.pic", rom_dir(i), rom_name(i)); *dark = true;
+    return true;
+}
 static void pic_prepare(bool big)
 {
     if (!s_n) { pic_forget(); return; }
-    const uint32_t key = key_of(s_sel) ^ (uint32_t)(s_level << 24) ^ (uint32_t)((s_group + 2) << 20) ^ (big ? 0x80000000u : 0);
+    const uint32_t key = pic_key(s_sel, big);
     if (s_pic.key == key) return;
     pic_forget();
     s_pic.key = key;
+    s_fav = false;                                 // a favourite? (library.txt, read once per selection)
+    if (on_roms()) { char full[PATHMAX * 2]; snprintf(full, sizeof full, "%s/%s", rom_dir(s_sel), rom_name(s_sel)); s_fav = lib_is_fav(full); }
+    const int ci = pc_find(key);
+    if (ci >= 0) {                                 // in RAM: nothing to read from the card
+        s_pic.kind = PIC_RAM; s_pic.ci = ci;
+        s_pic.w = s_pc[ci].w; s_pic.h = s_pc[ci].h; s_pic.dark = s_pc[ci].dark;
+#ifdef NUCLEO_UI_HOST
+        ESP_LOGW("gallery", "picture %d from RAM", s_sel);   // the PC gallery's check that the cache is used
+#endif
+        return;
+    }
     s_pic.kind = PIC_POSTER;
     s_pic.dark = true;
     bool file = false;
@@ -1531,8 +1706,6 @@ static void pic_prepare(bool big)
         if (!file && art_pic(sy)) { file = true; s_pic.dark = false; }
     }
     if (file) s_pic.kind = PIC_FILE;
-    s_fav = false;                                 // a favourite? (library.txt, read once per selection)
-    if (on_roms()) { char full[PATHMAX * 2]; snprintf(full, sizeof full, "%s/%s", rom_dir(s_sel), rom_name(s_sel)); s_fav = lib_is_fav(full); }
 }
 
 static uint16_t mix565(uint16_t a, uint16_t b, int t)   // t = 0 (a) .. 256 (b)
@@ -1547,6 +1720,22 @@ static uint16_t mix565(uint16_t a, uint16_t b, int t)   // t = 0 (a) .. 256 (b)
 // into it, four at a time; a poster is the item's accent deepening downwards with its icon.
 static void draw_pic(int x, int y, int w, int h, unsigned short acc)
 {
+    if (s_pic.kind == PIC_RAM && s_pc[s_pic.ci].z && s_pc[s_pic.ci].key == s_pic.key) {   // from the cache
+        const PCache &c = s_pc[s_pic.ci];
+        const int px = x + (w - c.w) / 2, py = y + (h - c.h) / 2;
+        int32_t cx, cy, cw, ch;
+        d.getClipRect(&cx, &cy, &cw, &ch);
+        const int y0 = py > cy ? py : cy, y1 = py + c.h < cy + ch ? py + c.h : cy + ch;
+        uint16_t rows[4 * 160];
+        for (int ry = y0; ry < y1; ) {
+            const int k = y1 - ry < 4 ? y1 - ry : 4;
+            for (int r = 0; r < k; r++) pc_unpack_row(c, ry - py + r, rows + r * c.w);
+            d.pushImage(px, ry, c.w, k, (const lgfx::swap565_t *)rows);
+            ry += k;
+        }
+        if (c.dark) d.drawRect(px - 1, py - 1, c.w + 2, c.h + 2, LINE);
+        return;
+    }
     if (s_pic.kind == PIC_FILE && s_pic.f) {         // on the background itself: no tile around it
         const int px = x + (w - s_pic.w) / 2, py = y + (h - s_pic.h) / 2;
         int32_t cx, cy, cw, ch;

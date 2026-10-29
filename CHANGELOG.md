@@ -120,6 +120,10 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   rendered on the PC from its source; a cover captured on the device still wins).
 - The selection's whole title has a line of its own across the panel, above the picture and the wheel; one too long
   for it scrolls (a pause, then round), redrawn alone; under the picture, its caption and what it is.
+- Games gallery, faster pictures: the ones of the titles around the selection are kept in RAM, packed (PackBits on
+  RGB565: a console screenshot 22.6 KB -> ~1.8 KB, a cover 14 KB -> ~1 KB), filled while the player is still and only
+  while the heap keeps 20 KB free (Wi-Fi stays on, no Solo boot): stopping on one draws it without reading the card,
+  which shares its bus with the panel. The wheel settles sooner (120 ms turn, 40 ms stop instead of 140 + 120).
 - Favorites and Recent in the Games gallery, shared with the web Arcade (`GameShots/library.txt`): two collections at
   the head of the systems when they hold something; `*` or a long press stars the selected cartridge; every start
   (gallery, Files, /api/play) becomes the newest Recent.

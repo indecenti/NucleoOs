@@ -56,3 +56,4 @@ store_console_roms U ENTER
 favorites ENTER
 recent D ENTER
 fav_toggle D D D D ENTER c:*
+recent_cached D ENTER tick:4 D tick:4 U
