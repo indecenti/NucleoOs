@@ -40,12 +40,14 @@ static void key(int k, char ch)
     }
 }
 extern M5GFX d;
+// Each look is a whole frame on the PC (the device repaints only the wheel's band between the frames of a turn).
 static void draw(void)
 {
+    gamefront_invalidate();
     if (nucleo_app_two_screens()) gamefront_draw_companion(&d);
     else gamefront_render();
 }
-static void draw_large(void) { gamefront_render(); }
+static void draw_large(void) { gamefront_invalidate(); gamefront_render(); }
 
 extern "C" void nucleo_register_gamefront(void)
 {

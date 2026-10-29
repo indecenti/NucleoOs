@@ -323,30 +323,47 @@ void wheel(int x, int y, int w, int h, const Wheel &wl)
     const int mid = wl.slots / 2, ww = w - 6;
     int sum = 0;
     for (int k = 0; k < wl.slots; k++) sum += wl.heights[k];
-    int wy = y + (h - sum) / 2;
-    for (int k = 0; k < wl.slots; k++) {
-        const int i = wheel_at(wl.sel, wl.n, wl.slots, k), sh = wl.heights[k], dist = abs(k - mid);
-        if (i >= 0) {
+    const int top = y + (h - sum) / 2;
+    int pill = top;
+    for (int k = 0; k < mid; k++) pill += wl.heights[k];
+    const int ph = wl.heights[mid];
+    d.fillRoundRect(x, pill + 1, ww, ph - 2, (ph - 2) / 2, wl.acc);      // the pill stays; the titles turn through it
+    // Only what falls in the strip being composed is drawn (lg::frame paints a frame a strip at a time); every slot's
+    // touch target is registered all the same.
+    int32_t cx, cy, cw, ch;
+    d.getClipRect(&cx, &cy, &cw, &ch);
+    int32_t sx, sy, sw, sh0;                       // the titles' own clip: the slots' span, inside the strip's
+    sx = x; sw = w; sy = top > cy ? top : cy; sh0 = (top + sum < cy + ch ? top + sum : cy + ch) - sy;
+    if (sh0 > 0) d.setClipRect(sx, sy, sw, sh0);
+    int wy = top;
+    for (int k = -1; k <= wl.slots; k++) {         // one slot more on each side: what slides in while it turns
+        const int sh = wl.heights[k < 0 ? 0 : k >= wl.slots ? wl.slots - 1 : k];
+        const int i = wheel_at(wl.sel, wl.n, wl.slots, k);
+        const int ry = (k < 0 ? top - sh : wy) + wl.offset;                // where this title is drawn
+        const int dist = (abs(ry + sh / 2 - (pill + ph / 2)) * 2 + (ph + sh) / 2) / (ph + sh);   // slots from the pill
+        if (i >= 0 && sh0 > 0 && ry + sh > sy && ry < sy + sh0) {
             const bool m = dist == 0;
-            const int ix = x + 12 + dist * 5;                          // the wheel's curve: far rows step in
-            if (m) d.fillRoundRect(x, wy + 1, ww, sh - 2, (sh - 2) / 2, wl.acc);
+            const int ix = x + 12 + (dist < 4 ? dist : 4) * 5;             // the wheel's curve: far rows step in
             const char *t = wl.label(i, wl.ud);
-            const int iw = wl.icon ? wl.icon(i, ix, wy + sh / 2, m, wl.ud) : 0;
+            const int iw = wl.icon ? wl.icon(i, ix, ry + sh / 2, m, wl.ud) : 0;
             const int lx = iw ? ix + iw + 6 : ix;
             char fitted[64];
             font(m ? 1 : 0);
             fit(fitted, sizeof fitted, t ? t : "", x + ww - 8 - lx);
             d.setTextDatum(middle_left);
-            d.setTextColor(m ? INK : dist == 1 ? FG : MUTED, m ? wl.acc : BG);
-            d.drawString(fitted, lx, wy + sh / 2 + (m ? 0 : 1));
+            d.setTextColor(m ? INK : dist == 1 ? FG : MUTED);
+            d.drawString(fitted, lx, ry + sh / 2 + (m ? 0 : 1));
             d.setTextDatum(top_left);
-            if (wl.mark && wl.mark(i, wl.ud)) d.fillCircle(ix - 6, wy + sh / 2, 2, m ? INK : wl.mark_col);
-            nucleo_touch_add(x, wy, ww, sh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+            if (wl.mark && wl.mark(i, wl.ud)) d.fillCircle(ix - 6, ry + sh / 2, 2, m ? INK : wl.mark_col);
         }
-        wy += sh;
+        if (k >= 0 && k < wl.slots) {
+            if (i >= 0) nucleo_touch_add(x, wy, ww, sh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+            wy += sh;
+        }
     }
+    if (sh0 > 0) d.setClipRect(cx, cy, cw, ch);    // the strip's clip back
     nucleo_touch_add_scroll(x, y, w, h, 22, NK_UP, 0, NK_DOWN, 0);      // a drag turns it, one title per 22 px
-    if (wl.n > 1) {                                                  // where am I in a long list: a thin rail
+    if (wl.n > 1 && wl.n > wl.slots) {                               // where am I in a long list: a thin rail
         int kh = h * wl.slots / wl.n; if (kh < 10) kh = 10; if (kh > h) kh = h;
         const int ky = y + (h - kh) * wl.sel / (wl.n - 1);
         d.fillRect(x + w - 3, y, 2, h, LINE);

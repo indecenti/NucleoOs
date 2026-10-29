@@ -62,8 +62,9 @@ int  row_tap(int key, char ch, int scroll, int n, int *sel);
 int  search(int x, int y, int w, int h, const char *text, const char *hint, const char *count, unsigned short ccol, unsigned short acc);
 
 // A HyperSpin-style wheel in [x, x+w) x [y, y+h): `slots` titles (odd), the selection in the middle on an acc pill,
-// its neighbours fading and stepping in with their distance; past the last title the first comes again when there
-// are more titles than slots. Slot k registers a row target NUCLEO_TOUCH_ROW + k (tap = bring it to the middle,
+// its neighbours fading and stepping in with their distance; it turns forever: past the last title the first comes
+// again (with fewer titles than slots they repeat). `offset` draws the titles that many px off their rest (a turn in
+// progress: the pill stays, the titles slide through it). Slot k registers a row target NUCLEO_TOUCH_ROW + k (tap = bring it to the middle,
 // tap the middle one = open: the app's job), and the band is a scroll area (a drag turns it: NK_UP / NK_DOWN). A
 // thin rail at the right edge says where the selection is in a long list. Fonts: Font2, the middle FreeSansBold9pt.
 struct Wheel {
@@ -77,13 +78,14 @@ struct Wheel {
     // Optional: draws something before title i (a console's mark) with its left edge at x, centred on cy, and
     // returns its width (0 = nothing); the title follows it.
     int (*icon)(int i, int x, int cy, bool mid, void *ud);
+    int offset;
 };
-// The title in wheel slot k (-1 = none).
+// The title in wheel slot k (-1 = none). Any k: a turning wheel shows one slot more on each side.
 inline int wheel_at(int sel, int n, int slots, int k)
 {
     const int i = sel + k - slots / 2;
-    if (n > slots) return ((i % n) + n) % n;
-    return i >= 0 && i < n ? i : -1;
+    if (n > 1) return ((i % n) + n) % n;
+    return i == 0 && n == 1 ? 0 : -1;
 }
 void wheel(int x, int y, int w, int h, const Wheel &wl);
 

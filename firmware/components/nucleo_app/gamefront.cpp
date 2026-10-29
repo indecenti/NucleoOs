@@ -664,16 +664,27 @@ bool gamefront_take_return(void)
 }
 
 // ── sounds ──────────────────────────────────────────────────────────────────────────────────────────
-// Short and quiet, at a fraction of the system volume (muted = silent). A held key turns the wheel faster than the
-// tick lasts: one tick per 90 ms at most, so the wheel never waits on its own sound.
+// Short and quiet, at a fraction of the system volume (muted = silent).
 #define SFX(n, v) nucleo_audio_sample(SFX_##n, (int)(sizeof SFX_##n / sizeof SFX_##n[0]), v)
-static int64_t s_tick_at;
-static void tick(void)
+
+// ── the turn ────────────────────────────────────────────────────────────────────────────────────────
+// One step of the wheel slides the titles through the fixed pill (TURN_US, ease-out). Its first frame is a whole one
+// (the picture and the caption change); the next ones recompose only the band below the search. The wheel clicks
+// once when it lands, after the frames: a held key turns it as fast as frames come and never waits on a sound.
+#define TURN_US 140000
+static int64_t s_turn_t0;
+static int     s_turn_dir;
+static bool    s_land;                             // a click is due when the wheel stops
+static bool    s_full = true;                      // the next render recomposes everything
+static int     s_off;                              // the titles' offset in this render
+static void turn(int dir) { s_turn_t0 = dir ? esp_timer_get_time() : 0; s_turn_dir = dir; s_land = true; }
+static int turn_offset(int pill_h)
 {
-    const int64_t now = esp_timer_get_time();
-    if (now - s_tick_at < 90000) return;
-    s_tick_at = now;
-    SFX(TICK, 30);
+    if (!s_turn_t0) return 0;
+    const int64_t t = esp_timer_get_time() - s_turn_t0;
+    if (t >= TURN_US) { s_turn_t0 = 0; return 0; }
+    const int rest = 256 - (int)(t * 256 / TURN_US);                         // ease-out: (1 - p)^2 of the step
+    return s_turn_dir * pill_h * rest * rest / 65536;
 }
 
 // ── open / navigate ─────────────────────────────────────────────────────────────────────────────────
@@ -753,25 +764,20 @@ void gamefront_open(void)
 
 bool gamefront_step(void)
 {
-    const int r = scan_step(15000);
+    const int r = scan_step(s_turn_t0 ? 4000 : 15000);   // a turning wheel gets the CPU first
     if (r == 2) { relist(); pic_forget(); }
-    return r != 0;                                 // the walk ended: its indicator goes, the lists may have changed
+    if (r != 0) { s_full = true; return true; }    // the walk ended: its indicator goes, the lists may have changed
+    if (s_turn_t0) return true;                    // the turn's next frame
+    if (s_land) { s_land = false; SFX(TICK, 30); }
+    return false;
 }
 bool gamefront_scanning(void) { return s_scan.on; }
 
-static void step(int by)
+static void step(int by)                           // the wheel turns forever: past the last title, the first
 {
     if (s_n <= 1) return;
-    s_sel = ((s_sel + by) % s_n + s_n) % s_n;     // a wheel: the ends meet
-    tick();
-}
-static void page(int by)
-{
-    const int was = s_sel;
-    s_sel += by;
-    if (s_sel < 0) s_sel = 0;
-    if (s_sel > s_n - 1) s_sel = s_n - 1;
-    if (s_sel != was) tick();
+    s_sel = ((s_sel + by) % s_n + s_n) % s_n;
+    turn(by == 1 || by == -1 ? by : 0);           // one step slides; a jump lands at once
 }
 
 static int open_sel(char *launch_id, int cap)
@@ -805,17 +811,18 @@ static int slots(void) { return d.width() >= 300 ? SLOTS_BIG : SLOTS_SMALL; }
 
 int gamefront_key(int key, char ch, char *launch_id, int cap)
 {
+    s_full = true;                                 // whatever the key does, the next frame is a whole one
     if (nucleo_touch_is_row(key, ch)) {            // the wheel: a tap brings a title to the middle, the middle one opens
         const int k = ch - NUCLEO_TOUCH_ROW, i = lg::wheel_at(s_sel, s_n, slots(), k);
         if (k == slots() / 2) return open_sel(launch_id, cap);
-        if (i >= 0 && i != s_sel) { s_sel = i; tick(); }
+        if (i >= 0 && i != s_sel) { s_sel = i; turn(k - slots() / 2 == 1 ? 1 : k - slots() / 2 == -1 ? -1 : 0); }
         return GF_REDRAW;
     }
     switch (key) {
     case NK_UP:    step(-1); return GF_REDRAW;
     case NK_DOWN:  step(1);  return GF_REDRAW;
-    case NK_LEFT:  page(-5); return GF_REDRAW;
-    case NK_RIGHT: page(5);  return GF_REDRAW;
+    case NK_LEFT:  step(-5); return GF_REDRAW;
+    case NK_RIGHT: step(5);  return GF_REDRAW;
     case NK_ENTER: return open_sel(launch_id, cap);
     case NK_BACK:                                  // the search first, then up a level, then out
         if (s_flen) { s_filter[0] = '\0'; s_flen = 0; refilter(); return GF_REDRAW; }
@@ -1215,10 +1222,14 @@ static void paint_big(void *)
     const int W = d.width(), H = s_H;
     const unsigned short acc = acc_now();
     char cnt[24]; count_text(cnt, sizeof cnt);
-    int y = lg::header(level_title(), header_right(), acc_of(s_level ? s_group : NATIVE), NK_BACK);
-    if (on_roms()) chip(s_group, 52, 5);
-    y = lg::search(0, y, W, 36, s_filter, search_hint(), cnt, s_total > s_n ? (unsigned short)C_YELLOW : (unsigned short)MUTED, acc);
-    const int top = y, bh = H - top;
+    int32_t cx0, cy0, cw0, ch0;
+    d.getClipRect(&cx0, &cy0, &cw0, &ch0);
+    const int top = lg::HEAD + 36, bh = H - top;
+    if (cy0 < top) {                               // only the strips that hold the header and the search draw them
+        lg::header(level_title(), header_right(), acc_of(s_level ? s_group : NATIVE), NK_BACK);
+        if (on_roms()) chip(s_group, 52, 5);
+        lg::search(0, lg::HEAD, W, 36, s_filter, search_hint(), cnt, s_total > s_n ? (unsigned short)C_YELLOW : (unsigned short)MUTED, acc);
+    } else nucleo_touch_add(0, 0, 96, lg::HEAD + 2, NK_BACK, 0);   // the header's Back, as lg::header registers it
     d.fillRect(0, top, W, bh, BG);
     if (!s_n) { lg::message(0, top, W, bh, empty_line(), empty_sub(), MUTED); return; }
     const int tx = 8, tw = WX - 16, ph = 108;
@@ -1249,7 +1260,7 @@ static void paint_big(void *)
         const int lines = lg::wrap(title_of(s_sel), tx + 2, ly, tw - 4, 19, sub ? 1 : (H - ly >= 58 ? 3 : 2));
         if (sub) { lg::font(0); d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, tw - 4); d.drawString(fitted, tx + 2, ly + lines * 19 + 1); }
     }
-    const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon };
+    const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon, s_off };
     lg::wheel(WX, top, W - WX, bh, wl);
 }
 
@@ -1296,7 +1307,7 @@ static void paint_small(void *)
         const int nl = lg::wrap(title_of(s_sel), 3, ty, CX - 6, 9, mg != NATIVE || sub ? 1 : 2);
         if (sub) { d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, CX - 6); d.drawString(fitted, 3, ty + nl * 9); }
     }
-    const lg::Wheel wl = { SLOTS_SMALL, WHEEL_SMALL, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon };
+    const lg::Wheel wl = { SLOTS_SMALL, WHEEL_SMALL, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon, s_off };
     lg::wheel(CX, 22, W - CX, H - 22, wl);
 }
 
@@ -1338,12 +1349,12 @@ static int details(Detail *out, int max)
 // The Cardputer while the gallery is on the panel: the selection's card — its whole title, what it is (system,
 // region, folder; players, source and blurb; count and maker) — the search while typing, the keys and the position.
 // The wheel and the picture stay on the panel.
-void gamefront_draw_companion(void *gfx)
+static int s_ctop, s_cch;                          // the companion's content area (asked before the frame)
+static void paint_companion(void *)
 {
-    nucleo_app_set_gfx((LovyanGFX *)gfx);
-    const int top = nucleo_app_content_top(), ch = nucleo_app_content_height(), bottom = top + ch - 13;
+    const int top = s_ctop, ch = s_cch, bottom = top + ch - 13;
     const unsigned short acc = acc_now();
-    d.fillRect(0, top, 240, ch, BG);
+    d.fillRect(0, 0, 240, 135, BG);                    // the whole screen: every row of the frame is pushed
     int y;
     if (on_roms()) {                                   // a console's titles: its mark heads the card, no name
         d.fillRect(0, top, 240, 22, BG);
@@ -1396,6 +1407,14 @@ void gamefront_draw_companion(void *gfx)
     char pos[16]; count_text(pos, sizeof pos);         // where the selection is, at the right of the keys
     d.setTextDatum(top_right); d.setTextColor(s_total > s_n ? (unsigned short)C_YELLOW : (unsigned short)MUTED, BG);
     d.drawString(s_scan.on ? header_right() : pos, 232, top + ch - 11); d.setTextDatum(top_left);
+}
+// Composed off screen like the panel and pushed in a few strips: drawn straight, its dozens of texts and fills were
+// as many transfers to the Cardputer's display on every step of the wheel.
+void gamefront_draw_companion(void *gfx)
+{
+    nucleo_app_set_gfx((LovyanGFX *)gfx);
+    s_ctop = nucleo_app_content_top(); s_cch = nucleo_app_content_height();
+    lg::frame(paint_companion, nullptr, 0, 0, true);
     nucleo_app_set_gfx(nullptr);
 }
 static void companion_cb(void *gfx)
@@ -1406,12 +1425,18 @@ static void companion_cb(void *gfx)
     g->endWrite();
 }
 
-void gamefront_invalidate(void) { pic_forget(); }
+void gamefront_invalidate(void) { pic_forget(); s_full = true; }
 
 void gamefront_render(void)
 {
-    const bool big = d.width() >= 300;
+    const bool big = d.width() >= 300, full = s_full;
     s_H = d.height();
+    s_full = false;
+    s_off = turn_offset(big ? WHEEL_BIG[SLOTS_BIG / 2] : WHEEL_SMALL[SLOTS_SMALL / 2]);
+    if (!full) {                                   // a turn's next frame: only the band under the search changes; the
+        lg::frame(big ? paint_big : paint_small, nullptr, big ? lg::HEAD + 36 : 22, 0, true);   // touch targets stay
+        return;
+    }
     if (on_roms() && !s_sh) refilter();            // the shelf left RAM (a failed allocation): read it again
     pic_prepare(big);
     nucleo_touch_clear();
