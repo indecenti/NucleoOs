@@ -684,6 +684,10 @@ Same bench, same frames (60 s of console time): Zelda DX 0 gaps (its intro at 50
 Adventure 0 and 59-61 frames a second (was 55-57), Street Fighter II 0 (was 0-4 every 10 s), Sonic on the Master
 System 0-3 (its frames reach 40 ms: the panel's bus, below).
 
-**Still slow, measured:** the Master System's 256x192 picture is scaled to 320x240 on the external panel, 153 KB a
-frame on a 40 MHz bus (30 ms): Sonic's scrolling changes every line, 35-50 frames a second. Street Fighter II's
-CPU, 14-20 ms a frame (section 9).
+**The Master System on the external panel.** Its 256x192 picture was scaled to 320x240: 153 KB a frame on the 40 MHz
+bus (30 ms), and Sonic's scrolling changes every line: 35-50 frames a second. Now 1:1 (stretch keeps the 5/4 scale),
+98 KB a frame and the changed-span pushes of the 256-px pictures; and cartridges over 64 KB are mapped from flash
+like the other consoles' (the 96 KB page pool back to the game, room for the big bands). Sonic: 52-59 frames a
+second, 0-1 gaps. A scrolling game is still bus-bound (every line changes: ~20 ms a frame on the wire).
+
+**Still slow:** Street Fighter II's CPU, 14-20 ms a frame (section 9).
