@@ -1411,8 +1411,8 @@ esp_err_t nucleo_gg_open(const char *rom_path, nucleo_gg_line_fn on_line, void *
     s->sms = (flags & CART_SMS) || ext_is(rom, ".sms");
 
     // The speaker before the pool, so its DMA channel is paid for before the pool takes what is left.
-    s->sound = nucleo_audio_pcm_open_ex(PSG_RATE, 1, EMU_AUDIO_QUEUE_FRAMES * PSG_SPF) == ESP_OK;
-    s->aclk.rate = PSG_RATE;
+    s->sound = nucleo_audio_pcm_open_ex(PSG_RATE, 1, (EMU_AUDIO_QUEUE_FRAMES + 1) * PSG_SPF) == ESP_OK;   // (as the Game Boy)
+    emu_aclock_open(&s->aclk, PSG_RATE, (EMU_AUDIO_QUEUE_FRAMES + 1) * PSG_SPF);
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
     for (int i = 0; i < PG_SLOTS; i++) s->pg_tag[i] = PG_EMPTY;
@@ -1502,10 +1502,11 @@ void nucleo_gg_run_frame(void)
         // The frame's samples by the speaker's queue (emu_aclock_size, as the Game Boy): 534 a frame was 31,997 a
         // second against 32,000, a queue that never filled. Past one frame the PSG plays on, rendered in a second
         // pass through the same buffer (the session stays inside its heap budget, see gg_session_t).
-        const int n = emu_aclock_size(&s->aclk, esp_timer_get_time(), PSG_SPF, 2 * PSG_SPF);
+        const int n = emu_aclock_size(&s->aclk, esp_timer_get_time(), PSG_SPF, 5 * PSG_SPF / 2, 2 * PSG_SPF);
         const int k = n < PSG_SPF ? n : PSG_SPF;
-        emu_aclock_write(&s->aclk, esp_timer_get_time(), n);
         emu_afilt_run(&s->afilt, s->pcm, (size_t)k, 1, 0);
+        const int64_t w0 = esp_timer_get_time();
+        emu_aclock_write(&s->aclk, w0, n);
         nucleo_audio_pcm_write(s->pcm, (size_t)k * sizeof s->pcm[0]);
         if (n > PSG_SPF) {
             s->psg_pos = 0;
@@ -1513,6 +1514,8 @@ void nucleo_gg_run_frame(void)
             emu_afilt_run(&s->afilt, s->pcm, (size_t)(n - PSG_SPF), 1, 0);
             nucleo_audio_pcm_write(s->pcm, (size_t)(n - PSG_SPF) * sizeof s->pcm[0]);
         }
+        const int64_t w1 = esp_timer_get_time();
+        emu_aclock_wrote(&s->aclk, w1, w1 - w0);
         s->us_audio += (uint32_t)(esp_timer_get_time() - t1);
     }
     s->frames++;

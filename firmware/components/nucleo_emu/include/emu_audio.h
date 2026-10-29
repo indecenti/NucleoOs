@@ -14,6 +14,7 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 typedef struct {
     int32_t x1, y1;     // DC block: previous input / output
@@ -45,46 +46,71 @@ static inline void emu_afilt_run(emu_afilt_t *f, int16_t *s, size_t n, int ch, i
     for (size_t i = 0; i < n; i++) s[i] = emu_afilt_one(&f[i % (size_t)ch], s[i], dc);
 }
 
-// The speaker's clock, as the emulator sees it: samples written against samples the DMA has played since the first
-// write (elapsed time x rate). Written below played means the queue ran dry and the DMA played silence there (a
-// click): a gap, counted, and the account restarts from what was played. The I2S clock and the timer agree within
-// ~1e-4 (a few hundred samples over minutes, against a queue of ~1,600), so a count is a real gap.
+// How much sound the speaker queues ahead of the game: three frames (~50 ms). One frame late — a busy scene, an
+// SD read — then plays on instead of dropping to silence (a click), at the cost of 50 ms of latency.
+#define EMU_AUDIO_QUEUE_FRAMES 3
+
+// The speaker's queue, as the emulator sees it. The I2S DMA runs a ring of 8 buffers that never stops: what the
+// emulator has not filled it plays as zeros (auto_clear), and those zeros take their place in the ring like sound.
+// So the level is not "written since the first write minus elapsed time": at the open, and after any gap, the ring
+// is full of zeros the next write waits behind. The anchor is the one moment the level is known: a write that had
+// to WAIT returns with the ring full (its capacity, less half a buffer still draining). From an anchor on, the level
+// is written minus played (elapsed time x rate; the I2S clock and the timer agree within ~1e-4), and below zero
+// the ring ran out of sound: a gap (a click), counted.
 typedef struct {
-    int64_t  t0;        // the first write (0 = none yet)
+    int64_t  t0;        // the anchor: when the level was last known
     int64_t  last;      // the last write
-    int64_t  written;   // samples written since t0
-    int32_t  rate;
+    int64_t  written;   // samples in the ring at t0 plus those written since
+    int32_t  rate, cap; // samples a second; the ring's size
+    bool     anchored;
     uint32_t gaps;
 } emu_aclock_t;
 
-// Before writing n samples (per channel). A write 100 ms after the last one follows a pause (the menu, a card
-// step): the queue drained on purpose, so the account starts again instead of counting it.
+// At the open, with what was asked of nucleo_audio_pcm_open_ex (its ring: 8 buffers of 240..480 frames).
+static inline void emu_aclock_open(emu_aclock_t *c, int rate, int queue_frames)
+{
+    int frame = (queue_frames + 7) / 8;
+    if (frame < 240) frame = 240;
+    if (frame > 480) frame = 480;
+    c->t0 = c->last = c->written = 0;
+    c->rate = rate; c->cap = 8 * frame; c->anchored = false; c->gaps = 0;
+}
+
+static inline int emu_aclock_level(const emu_aclock_t *c, int64_t now_us)
+{
+    if (!c->anchored) return c->cap;                    // not known yet: as full as it is at the open
+    return (int)(c->written - (now_us - c->t0) * c->rate / 1000000);
+}
+
+// Before writing n samples. A write 100 ms after the last one follows a pause (the menu, a card step): the ring
+// drained on purpose, so the account waits for the next anchor instead of counting it.
 static inline void emu_aclock_write(emu_aclock_t *c, int64_t now_us, int n)
 {
-    if (!c->t0 || now_us - c->last > 100000) { c->t0 = now_us; c->written = 0; }
+    if (now_us - c->last > 100000) c->anchored = false;
     c->last = now_us;
-    const int64_t played = (now_us - c->t0) * c->rate / 1000000;
-    if (c->written < played) { c->gaps++; c->written = played; }
+    if (c->anchored && emu_aclock_level(c, now_us) < 0) {            // the ring ran out: silence was played
+        c->gaps++;
+        c->anchored = false;                                          // (it is full of zeros again)
+    }
     c->written += n;
 }
 
-// How many samples this frame should make: the queue held at three frames (its size, EMU_AUDIO_QUEUE_FRAMES) by
-// its real level, not by a guess at how late the frame was. Below that (a slow scene, the first frames after the
-// open) the frame makes more, half the shortfall at a time, so the sound stretches instead of stopping (a scene at 50 fps still keeps ~40 ms
-// queued against the next spike; a quarter kept 14 ms, and Zelda DX's intro clicked); above (the queue fills, the
-// write would block) up to 1/16 fewer. At the balance it makes exactly `nominal`, and the console's own clock and
-// the speaker's agree. The chips render by sample count, so the change is in how long a frame's notes last, never
-// in their pitch.
-static inline int emu_aclock_size(const emu_aclock_t *c, int64_t now_us, int nominal, int max)
+// After the write: `waited_us` it blocked. A wait means the ring was full: anchor there.
+static inline void emu_aclock_wrote(emu_aclock_t *c, int64_t now_us, int64_t waited_us)
 {
-    int fill = 0;
-    if (c->t0 && now_us - c->last <= 100000) fill = (int)(c->written - (now_us - c->t0) * c->rate / 1000000);
-    int n = nominal + (3 * nominal - fill) / 2;
+    if (waited_us < 300) return;
+    c->t0 = now_us; c->written = c->cap - 120; c->anchored = true;
+}
+
+// How many samples this frame should make: the queue held near `target` samples by its real level, not by a guess
+// at how late the frame was. Below the target (a slow scene) the frame makes more, half the shortfall at a time,
+// so the sound stretches instead of stopping; above it up to 1/16 fewer, so the ring never fills and the game never
+// waits on the speaker. At the balance it makes exactly `nominal`: the console's clock and the speaker's agree. The
+// chips render by sample count, so the change is in how long a frame's notes last, never in their pitch.
+static inline int emu_aclock_size(const emu_aclock_t *c, int64_t now_us, int nominal, int target, int max)
+{
+    int n = nominal + (target - emu_aclock_level(c, now_us)) / 2;
     if (n < nominal - nominal / 16) n = nominal - nominal / 16;
     if (n > max) n = max;
     return n;
 }
-
-// How much sound the speaker queues ahead of the game: three frames (~50 ms). One frame late — a busy scene, an
-// SD read — then plays on instead of dropping to silence (a click), at the cost of 50 ms of latency.
-#define EMU_AUDIO_QUEUE_FRAMES 3

@@ -1122,6 +1122,7 @@ void nucleo_pce_run_frame(void)
         emu_aclock_write(&s->aclk, w0, n);
         nucleo_audio_pcm_write(s->pcm, (size_t)n * sizeof s->pcm[0]);
         const int64_t w1 = esp_timer_get_time();
+        emu_aclock_wrote(&s->aclk, w1, w1 - w0);
         s->last_block = w1 - w0;
         s->us_audio += (uint32_t)(w0 - t1);
     }
@@ -1260,7 +1261,7 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     s->tg16 = strstr(rom_path, "(USA") != NULL || strstr(rom_path, "(U)") != NULL;
 
     s->sound = nucleo_audio_pcm_open_ex(APU_RATE, 1, EMU_AUDIO_QUEUE_FRAMES * APU_SPF) == ESP_OK;
-    s->aclk.rate = APU_RATE;
+    emu_aclock_open(&s->aclk, APU_RATE, EMU_AUDIO_QUEUE_FRAMES * APU_SPF);
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
 #ifdef NUCLEO_HOST_TEST

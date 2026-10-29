@@ -826,8 +826,9 @@ esp_err_t nucleo_gb_open(const char *rom_path, gb_line_fn_t on_line, void *user)
     // mic pin) the game still runs, silently. Refusing to start a cartridge because audio was taken
     // would be the wrong trade on a games machine. It opens HERE, before the page cache, so its DMA
     // channel is already paid for when the greedy cache below decides how much of the heap to take.
-    s->sound = (nucleo_audio_pcm_open_ex(AUDIO_SAMPLE_RATE, 1, EMU_AUDIO_QUEUE_FRAMES * AUDIO_SAMPLES) == ESP_OK);
-    s->aclk.rate = AUDIO_SAMPLE_RATE;
+    // One frame more than the default ring: the level is held below it (emu_aclock_size), so it is margin, not latency.
+    s->sound = (nucleo_audio_pcm_open_ex(AUDIO_SAMPLE_RATE, 1, (EMU_AUDIO_QUEUE_FRAMES + 1) * AUDIO_SAMPLES) == ESP_OK);
+    emu_aclock_open(&s->aclk, AUDIO_SAMPLE_RATE, (EMU_AUDIO_QUEUE_FRAMES + 1) * AUDIO_SAMPLES);
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
     // Prefer holding the WHOLE ROM: it removes SD traffic from the hot path entirely, and the small
@@ -970,19 +971,21 @@ void nucleo_gb_run_frame(void)
     // One frame of sound, produced AFTER the frame that generated it and pushed straight out. How many samples,
     // measured on the ADV (emu_aclock_t): a fixed 548 a frame is 32,732 a second against the speaker's 32,768, so
     // the queue never filled and every late frame emptied it (Zelda DX: 71 clicks in the 10 s of its intro at
-    // 50 fps). Now the queue's real level decides (emu_aclock_size): held at two frames, a slow frame makes more and
+    // 50 fps). Now the queue's real level decides (emu_aclock_size): held at 2.5 frames, a slow frame makes more and
     // the sound stretches instead of stopping. Mono: the speaker is one, and it halves the APU's work.
     if (S->sound) {
         S->aacc += (uint32_t)(548.6328 * 65536.0);                    // 32768 Hz x 70224 / 4194304, exactly
         const int nominal = (int)(S->aacc >> 16);
         S->aacc &= 0xFFFF;
-        const int n = emu_aclock_size(&S->aclk, esp_timer_get_time(), nominal, (int)AUDIO_SAMPLES_TOTAL);
+        const int n = emu_aclock_size(&S->aclk, esp_timer_get_time(), nominal, 5 * nominal / 2, (int)AUDIO_SAMPLES_TOTAL);
         minigb_apu_audio_callback_mono(&S->apu, S->audio, (unsigned)n);
         emu_afilt_run(S->afilt, S->audio, (size_t)n, 1, 1);   // the APU's DAC has a DC offset
         const int64_t w0 = esp_timer_get_time();
         emu_aclock_write(&S->aclk, w0, n);
         nucleo_audio_pcm_write(S->audio, (size_t)n * sizeof S->audio[0]);
-        S->last_block = esp_timer_get_time() - w0;
+        const int64_t w1 = esp_timer_get_time();
+        emu_aclock_wrote(&S->aclk, w1, w1 - w0);
+        S->last_block = w1 - w0;
         S->us_audio += (uint32_t)(esp_timer_get_time() - t1);
     }
 }
