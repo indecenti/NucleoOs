@@ -29,26 +29,30 @@
 @sd data/ROMs/nes/Super%20Tilt%20Bro.nes x
 @sd Giochi/Nova%20the%20Squirrel%20(World).nes x
 @sdfile data/GameShots/stelle.png apps/fixtures/cover.png
+@sdfile data/GameShots/library.txt apps/fixtures/library.txt
 @sdfile apps/pcaemu/console.txt apps/fixtures/console.txt
 @sdfile apps/pcaemu/console-pca.gfa apps/fixtures/console-pca.gfa
 @sd data/ROMs/pca/Star%20Runner.pca x
 @sd Giochi/Bubble%20Pop.pcb x
 systems
-systems_gg D D D D D
-native ENTER
-native_cover ENTER D
-native_pick ENTER row:5
-gb D D ENTER
-gb_snap D D ENTER c:d c:e c:a
-gb_search D D ENTER c:l c:o
-gb_nomatch D D ENTER c:z c:q
-sms D D D D ENTER
-gg_anywhere D D D D D ENTER
-back D ENTER BACK
+systems_gg D D D D D D D
+native D D ENTER
+native_cover D D ENTER D
+native_pick D D ENTER row:5
+gb D D D D ENTER
+gb_snap D D D D ENTER c:d c:e c:a
+gb_search D D D D ENTER c:l c:o
+gb_nomatch D D D D ENTER c:z c:q
+sms D D D D D D ENTER
+gg_anywhere D D D D D D D ENTER
+back D D D ENTER BACK
 search c:g c:a
-last D D ENTER D D ENTER
-nes D ENTER
-long_title D D D ENTER D
-long_scroll D D D ENTER D tick:12
+last D D D D ENTER D D ENTER
+nes D D D ENTER
+long_title D D D D D ENTER D
+long_scroll D D D D D ENTER D tick:12
 store_console U
 store_console_roms U ENTER
+favorites ENTER
+recent D ENTER
+fav_toggle D D D D ENTER c:*

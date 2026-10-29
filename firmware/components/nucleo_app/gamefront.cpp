@@ -165,14 +165,17 @@ static int nsys(void) { return NB + s_nx; }
 static const System &sysg(int g) { return g < 0 ? NATIVE_SYS : g < NB ? SYS[g] : s_ext[g - NB].s; }   // NATIVE included
 static int show_order(int o) { return o < NB ? SHOW_ORDER[o] : o; }   // the store's consoles after the firmware's
 #define NATIVE (-1)            // the group of the native games
+#define FAVG   (-2)            // the collections (EmulationStation's automatic ones): the favourite cartridges...
+#define RECG   (-3)            // ...and the ones played last, both from library.txt
+static bool is_coll(int g) { return g < NATIVE; }
 #define ACC_NATIVE 0xFB4D      // the Games category's colour
 #define C_LAST 0x8FF3          // "last played"
 
 // ── state ───────────────────────────────────────────────────────────────────────────────────────────
 static int     s_level;                    // 0 = systems, 1 = the titles of s_group
 static int     s_group = NATIVE;
-static int     s_grp[1 + MAXSYS], s_ngrp;  // the systems shown (NATIVE or a system index), in order
-static int     s_grp_n[1 + MAXSYS];        // ...how many titles each has
+static int     s_grp[3 + MAXSYS], s_ngrp;  // the systems shown (a collection, NATIVE or a system index), in order
+static int     s_grp_n[3 + MAXSYS];        // ...how many titles each has
 static int16_t s_nat[NAT_MAX];             // native games (registry indices), by title
 static uint8_t s_nat_cover[NAT_MAX];       // ...which cover files GameShots has for each (CV_* bits)
 static int     s_nnat;
@@ -187,6 +190,7 @@ static bool    s_opened;                   // opened at least once since boot
 static uint32_t s_cover_ready;             // native games whose cover file is known to be made (bit per s_nat slot)
 static bool    s_have_index;               // an index of the card is there to list from
 static int64_t s_input_at;                 // the last key
+static bool    s_fav;                      // the selected cartridge is a favourite (read with its picture)
 static int     s_H;                        // the screen's height (inside a frame d.height() is the strip's)
 
 // A console's cartridges while its titles are shown: ONE heap block sized to what it holds — names and folders packed
@@ -201,18 +205,28 @@ struct Shelf {
     uint16_t *dir;             // its folder = pool + dir[i]
     uint16_t *view;            // the names the current search shows, in order
     uint8_t *snap;             // SN_* per name, from one listing of each folder's .snaps
+    uint8_t *sys;              // a collection's: each name's console (NULL: the open console's)
     char *pool;
 };
 static Shelf *s_sh;
 static const char *rom_name(int i) { return s_sh->pool + s_sh->off[s_sh->view[i]]; }
 static const char *rom_dir(int i)  { return s_sh->pool + s_sh->dir[s_sh->view[i]]; }
+static int s_group_sys(void);
+static int rom_sys(int i) { return s_sh && s_sh->sys ? s_sh->sys[s_sh->view[i]] : s_group_sys(); }
 
 // What was played last, per system, and which system: the selection lands there (one 28-byte file).
 struct Last { char magic[4]; int8_t group; uint8_t pad[3]; uint32_t key[1 + MAXSYS]; };
 static Last s_last;
 
 static bool on_roms(void) { return s_level == 1 && s_group != NATIVE; }
-static unsigned short acc_of(int group) { return group == NATIVE ? (unsigned short)ACC_NATIVE : sysg(group).col; }
+static int s_group_sys(void) { return s_group; }
+#define ACC_FAV 0xFEA0         // the favourites' gold
+#define ACC_REC 0x6D9F         // the recent ones' blue
+static unsigned short acc_of(int group)
+{
+    return group == NATIVE ? (unsigned short)ACC_NATIVE : group == FAVG ? (unsigned short)ACC_FAV
+         : group == RECG ? (unsigned short)ACC_REC : sysg(group).col;
+}
 static unsigned short acc_now(void) { return acc_of(s_level == 0 ? (s_n ? s_grp[s_ix[s_sel]] : NATIVE) : s_group); }
 
 // ── names ───────────────────────────────────────────────────────────────────────────────────────────
@@ -224,6 +238,8 @@ static const char *native_title(int reg)
 }
 static const char *group_title(int g)
 {
+    if (g == FAVG) return TR5("Preferiti", "Favorites", "Favoritos", "Favoris", "Favoriten");
+    if (g == RECG) return TR5("Recenti", "Recent", "Recientes", "Recents", "Zuletzt");
     return g == NATIVE ? TR5("Giochi nativi", "Native games", "Juegos nativos", "Jeux natifs", "Native Spiele") : sysg(g).name;
 }
 // A cartridge's title without the extension and the region / dump tags every set carries.
@@ -349,6 +365,96 @@ bool gamefront_emulator_for(const char *path, char *id, int cap)
     }
     return false;
 }
+
+// ── the game library: favourites and recent, shared with the web Arcade ──────────────────────────────
+// GameShots/library.txt, text: "F <path>" a favourite, "R <n> <path>" played (the highest n last; 30 R lines at most),
+// paths from the card's root ("/data/ROMs/gb/Tetris.gb"). Lines it does not know are kept. Rewritten whole into a
+// .tmp and renamed over it, so a cut never leaves half a file. Read a line at a time: no RAM held.
+#define LIB     GF_DIR "/library.txt"
+#define LIB_TMP GF_DIR "/library.tmp"
+#define LIB_REC 30
+static const char *sd_rel(const char *path)        // a path from the card's root
+{
+    const size_t m = strlen(NUCLEO_SD_MOUNT);
+    return !strncmp(path, NUCLEO_SD_MOUNT, m) && path[m] == '/' ? path + m : path;
+}
+static bool lib_line(char *line, char *kind, unsigned *n, const char **path)   // F / R lines; false = any other
+{
+    size_t l = strlen(line);
+    while (l && (line[l - 1] == '\n' || line[l - 1] == '\r')) line[--l] = '\0';
+    if (l > 2 && line[0] == 'F' && line[1] == ' ') { *kind = 'F'; *n = 0; *path = line + 2; return true; }
+    char *sp;
+    if (l > 4 && line[0] == 'R' && line[1] == ' ' && (sp = strchr(line + 2, ' ')) != nullptr) {
+        *kind = 'R'; *n = (unsigned)strtoul(line + 2, nullptr, 10); *path = sp + 1; return true;
+    }
+    return false;
+}
+// play = a game started (its R line becomes the newest); else the favourite is toggled. Returns whether it is a
+// favourite now.
+static bool lib_update(const char *path, bool play)
+{
+    const char *rel = sd_rel(path);
+    char line[PATHMAX + 24];
+    unsigned top[LIB_REC], maxn = 0;               // the newest R numbers of the other games, highest first
+    int ntop = 0;
+    bool fav = false;
+    FILE *f = fopen(LIB, "r");
+    if (f) {
+        char kind; unsigned n; const char *pth;
+        while (fgets(line, sizeof line, f)) {
+            if (!lib_line(line, &kind, &n, &pth)) continue;
+            if (kind == 'F') { if (!strcmp(pth, rel)) fav = true; continue; }
+            if (n > maxn) maxn = n;
+            if (!strcmp(pth, rel)) continue;
+            int at;
+            if (ntop < LIB_REC) at = ntop++;
+            else if (n <= top[LIB_REC - 1]) continue;   // older than the newest LIB_REC: not among them
+            else at = LIB_REC - 1;
+            for (; at > 0 && top[at - 1] < n; at--) top[at] = top[at - 1];
+            top[at] = n;
+        }
+    }
+    // Played: the others keep their newest LIB_REC - 1 (this one is the last). Toggled: all of them.
+    const int keep = play ? LIB_REC - 1 : LIB_REC;
+    const unsigned cutoff = ntop > keep ? top[keep - 1] : 0;
+    mkdir(GF_DIR, 0775);
+    FILE *o = fopen(LIB_TMP, "w");
+    if (!o) { if (f) fclose(f); return fav; }
+    if (f) rewind(f);
+    else fputs("# NucleoOS game library \xE2\x80\x94 the Games gallery and the web Arcade share it\n", o);
+    if (f) {
+        char kind; unsigned n; const char *pth;
+        while (fgets(line, sizeof line, f)) {
+            char keep_line[sizeof line];
+            snprintf(keep_line, sizeof keep_line, "%s", line);
+            if (lib_line(line, &kind, &n, &pth)) {
+                if (kind == 'F' && !play && !strcmp(pth, rel)) continue;              // un-favoured
+                if (kind == 'R' && (!strcmp(pth, rel) ? play : n < cutoff)) continue;  // moved to the end / too old
+            }
+            fputs(keep_line, o);
+            const size_t kl = strlen(keep_line);
+            if (kl && keep_line[kl - 1] != '\n') fputc('\n', o);
+        }
+        fclose(f);
+    }
+    if (play) fprintf(o, "R %u %s\n", maxn + 1, rel);
+    else if (!fav) fprintf(o, "F %s\n", rel);
+    const bool ok = fclose(o) == 0;
+    if (ok) { remove(LIB); rename(LIB_TMP, LIB); } else remove(LIB_TMP);
+    return play ? fav : (ok ? !fav : fav);
+}
+static bool lib_is_fav(const char *path)
+{
+    const char *rel = sd_rel(path);
+    FILE *f = fopen(LIB, "r");
+    if (!f) return false;
+    char line[PATHMAX + 24], kind; unsigned n; const char *pth;
+    bool fav = false;
+    while (!fav && fgets(line, sizeof line, f)) fav = lib_line(line, &kind, &n, &pth) && kind == 'F' && !strcmp(pth, rel);
+    fclose(f);
+    return fav;
+}
+void gamefront_library_played(const char *path) { if (path && path[0]) lib_update(path, true); }
 
 // ── the store's consoles ────────────────────────────────────────────────────────────────────────────
 static void extras_free(void) { free(s_ext); s_ext = nullptr; s_nx = 0; }
@@ -659,12 +765,97 @@ static bool shelf_build(const char *filt)
         sh->dir = sh->off + n;
         sh->view = sh->dir + n;
         sh->snap = (uint8_t *)(sh->view + n);
+        sh->sys = nullptr;
         sh->pool = (char *)(sh->snap + n);
         for (int i = 0; i < n; i++) { sh->off[i] = g->off[ord[i]]; sh->dir[i] = g->dir[ord[i]]; sh->snap[i] = g->snap[ord[i]]; }
         memcpy(sh->pool, g->pool, g->used);
     }
     free(ord);
     free(g);
+    if (!sh) return false;
+    shelf_free();
+    s_sh = sh;
+    return true;
+}
+
+// A collection's shelf: its cartridges from library.txt (favourites by title, the recent ones newest first) that are
+// still on the card and have their emulator, under the search; each with its own console.
+static int lib_sys(const char *rel, char *full, size_t fn)   // a library path's console (-1 = no emulator / gone)
+{
+    snprintf(full, fn, NUCLEO_SD_MOUNT "%s", rel);
+    const char *base = strrchr(full, '/');
+    int sys = sys_of(base ? base + 1 : full);
+    if (sys == -2) sys = zip_sys(full);
+    return sys >= 0 && find_app(sysg(sys).app) >= 0 ? sys : -1;
+}
+static int coll_count(int g)                       // how many a collection lists (on the card, with their emulator)
+{
+    FILE *f = fopen(LIB, "r");
+    if (!f) return 0;
+    char line[PATHMAX + 24], full[PATHMAX + 8], kind; unsigned n; const char *pth;
+    int c = 0;
+    while (fgets(line, sizeof line, f))
+        if (lib_line(line, &kind, &n, &pth) && kind == (g == FAVG ? 'F' : 'R') && lib_sys(pth, full, sizeof full) >= 0) {
+            struct stat st;
+            if (stat(full, &st) == 0) c++;         // still on the card
+        }
+    fclose(f);
+    return c;
+}
+static bool coll_build(const char *filt)
+{
+    struct Item { uint16_t off, dir; uint8_t sys, snap; unsigned n; };
+    const int cap = MAXR < 64 ? MAXR : 64;
+    Item *it = (Item *)malloc(sizeof(Item) * cap);
+    char *pool = (char *)malloc(POOL);
+    if (!it || !pool) { free(it); free(pool); return false; }
+    int cnt = 0, used = 0;
+    FILE *f = fopen(LIB, "r");
+    if (f) {
+        char line[PATHMAX + 24], full[PATHMAX + 8], kind; unsigned n; const char *pth;
+        while (cnt < cap && fgets(line, sizeof line, f)) {
+            if (!lib_line(line, &kind, &n, &pth) || kind != (s_group == FAVG ? 'F' : 'R')) continue;
+            const int sys = lib_sys(pth, full, sizeof full);
+            struct stat st;
+            if (sys < 0 || stat(full, &st) != 0) continue;
+            char *slash = strrchr(full, '/');
+            if (!slash || !contains(slash + 1, filt)) continue;
+            *slash = '\0';
+            const int dl = (int)strlen(full) + 1, nl = (int)strlen(slash + 1) + 1;
+            if (used + dl + nl > POOL) break;
+            Item &x = it[cnt++];
+            memcpy(pool + used, full, dl); x.dir = (uint16_t)used; used += dl;
+            memcpy(pool + used, slash + 1, nl); x.off = (uint16_t)used; used += nl;
+            x.sys = (uint8_t)sys; x.n = n; x.snap = 0;
+            char sp[PATHMAX + 48];                 // its screenshot, as the index would have said
+            snprintf(sp, sizeof sp, "%s/.snaps/%s.pic", pool + x.dir, pool + x.off);
+            if (stat(sp, &st) == 0) x.snap |= SN_PIC;
+            else { snprintf(sp, sizeof sp, "%s/.snaps/%s.snp", pool + x.dir, pool + x.off); if (stat(sp, &st) == 0) x.snap |= SN_SNP; }
+        }
+        fclose(f);
+    }
+    static const char *s_pool;
+    s_pool = pool;
+    if (cnt > 1) {
+        if (s_group == FAVG) qsort(it, cnt, sizeof(Item), [](const void *a, const void *b) {
+            return strcasecmp(s_pool + ((const Item *)a)->off, s_pool + ((const Item *)b)->off); });
+        else qsort(it, cnt, sizeof(Item), [](const void *a, const void *b) {
+            const unsigned x = ((const Item *)a)->n, y = ((const Item *)b)->n; return x < y ? 1 : x > y ? -1 : 0; });
+    }
+    Shelf *sh = (Shelf *)malloc(sizeof(Shelf) + (size_t)cnt * 8 + used);
+    if (sh) {
+        sh->n = sh->total = cnt;
+        snprintf(sh->with, sizeof sh->with, "%s", filt);
+        sh->off = (uint16_t *)(sh + 1);
+        sh->dir = sh->off + cnt;
+        sh->view = sh->dir + cnt;
+        sh->snap = (uint8_t *)(sh->view + cnt);
+        sh->sys = sh->snap + cnt;
+        sh->pool = (char *)(sh->sys + cnt);
+        for (int i = 0; i < cnt; i++) { sh->off[i] = it[i].off; sh->dir[i] = it[i].dir; sh->snap[i] = it[i].snap; sh->sys[i] = it[i].sys; }
+        memcpy(sh->pool, pool, used);
+    }
+    free(it); free(pool);
     if (!sh) return false;
     shelf_free();
     s_sh = sh;
@@ -684,7 +875,7 @@ static void refilter(void)
     } else {
         // In RAM when the shelf holds every match of a search this one narrows; else read again.
         const bool fits = s_sh && s_sh->n == s_sh->total && contains(s_filter, s_sh->with);
-        if (!fits && !shelf_build(s_filter)) { s_total = 0; s_sel = 0; return; }
+        if (!fits && !(is_coll(s_group) ? coll_build(s_filter) : shelf_build(s_filter))) { s_total = 0; s_sel = 0; return; }
         for (int i = 0; i < s_sh->n; i++)
             if (contains(s_sh->pool + s_sh->off[i], s_filter)) s_sh->view[s_n++] = (uint16_t)i;
         s_total = s_sh->n == s_sh->total ? s_n : s_sh->total;
@@ -728,6 +919,10 @@ static void systems_build(void)
     }
     if (s_nnat > 1) qsort(s_nat, s_nnat, sizeof s_nat[0], cmp_nat);
     s_ngrp = 0;
+    for (int g = FAVG; g >= RECG; g--) {           // Favorites, Recent: only when they hold something
+        const int c = coll_count(g);
+        if (c) { s_grp_n[s_ngrp] = c; s_grp[s_ngrp++] = g; }
+    }
     if (s_nnat) { s_grp_n[s_ngrp] = s_nnat; s_grp[s_ngrp++] = NATIVE; }
     int roms[MAXSYS] = { 0 };
     FILE *f = idx_open(nullptr, nullptr);
@@ -752,7 +947,7 @@ static void systems_build(void)
 // ── memory across visits ────────────────────────────────────────────────────────────────────────────
 static uint32_t key_of(int i)            // what identifies title i across reboots
 {
-    if (s_level == 0) { const int g = s_grp[s_ix[i]]; return g == NATIVE ? 1u : 2u + (uint32_t)g; }
+    if (s_level == 0) { const int g = s_grp[s_ix[i]]; return g == NATIVE ? 1u : is_coll(g) ? 0x100u + (uint32_t)-g : 2u + (uint32_t)g; }
     if (s_group == NATIVE) return fnv(nucleo_app_at(s_nat[s_ix[i]])->id);
     return fnv(rom_name(i), fnv(rom_dir(i)));
 }
@@ -772,6 +967,7 @@ static void last_save(void)
 static bool is_last(int i)
 {
     if (s_level == 0) return s_grp[s_ix[i]] == s_last.group && s_last.key[s_last.group + 1];
+    if (is_coll(s_group)) return false;
     return s_last.key[s_group + 1] && key_of(i) == s_last.key[s_group + 1];
 }
 static bool wheel_mark(int i, void *) { return is_last(i); }
@@ -842,7 +1038,7 @@ static void enter_group(int g)
     s_filter[0] = '\0'; s_flen = 0;
     s_sel = 0;
     refilter();
-    if (s_last.key[g + 1]) select_key(s_last.key[g + 1]);   // back on the game played last
+    if (!is_coll(g) && s_last.key[g + 1]) select_key(s_last.key[g + 1]);   // back on the game played last
 }
 static void leave_group(void)
 {
@@ -949,11 +1145,13 @@ static int open_sel(char *launch_id, int cap)
         snprintf(launch_id, cap, "%s", nucleo_app_at(s_nat[s_ix[s_sel]])->id);
         s_launch[0] = '\0';
     } else {
-        snprintf(launch_id, cap, "%s", sysg(s_group).app);
+        snprintf(launch_id, cap, "%s", sysg(rom_sys(s_sel)).app);
         snprintf(s_launch, sizeof s_launch, "%s/%s", rom_dir(s_sel), rom_name(s_sel));
+        gamefront_library_played(s_launch);       // the shared Recent list (the web Arcade's too)
     }
-    s_last.group = (int8_t)s_group;
-    s_last.key[s_group + 1] = key_of(s_sel);
+    const int lg_ = s_group == NATIVE ? NATIVE : on_roms() ? rom_sys(s_sel) : s_group;   // a collection's: its console
+    s_last.group = (int8_t)lg_;
+    s_last.key[lg_ + 1] = key_of(s_sel);
     last_save();
     ret_capture();
     scan_abort();
@@ -975,6 +1173,17 @@ int gamefront_key(int key, char ch, char *launch_id, int cap)
 {
     s_full = true;                                 // a whole frame next, unless the key only turns the wheel (turn())
     s_input_at = esp_timer_get_time();
+    if (on_roms() && s_n && ((key == NK_CHAR && ch == '*') || nucleo_touch_is_hold(key, ch))) {   // favourite, or not
+        char full[PATHMAX * 2];
+        snprintf(full, sizeof full, "%s/%s", rom_dir(s_sel), rom_name(s_sel));
+        s_fav = lib_update(full, false);
+        SFX(OPEN, s_fav ? 40 : 25);
+        const int sel = s_sel;
+        systems_build();                           // Favorites appears / goes on the systems' wheel
+        if (s_group == FAVG) { shelf_free(); refilter(); if (sel < s_n) s_sel = sel; }   // un-favoured: it leaves this list
+        pic_forget();
+        return GF_REDRAW;
+    }
     if (nucleo_touch_is_row(key, ch)) {            // the wheel: a tap brings a title to the middle, the middle one opens
         const int k = ch - NUCLEO_TOUCH_ROW, i = lg::wheel_at(s_sel, s_n, slots(), k);
         if (k == slots() / 2) return open_sel(launch_id, cap);
@@ -1148,6 +1357,7 @@ static bool art_make(const System &s)
 static uint16_t s_art_ready;                       // groups whose photo file is known to be made (GBIT)
 static bool art_pic(int g)
 {
+    if (is_coll(g)) return false;
     const System &s = sysg(g);
     char path[PATHMAX];
     art_path(s, path, sizeof path);
@@ -1202,7 +1412,7 @@ static bool prefetch_one(void)
     if (s_level == 0) {
         for (int k = 0; k < s_ngrp; k++) {
             const int g = s_grp[k];
-            if (s_art_ready & GBIT(g)) continue;
+            if (is_coll(g) || (s_art_ready & GBIT(g))) continue;
             char path[PATHMAX]; struct stat st;
             art_path(sysg(g), path, sizeof path);
             if (stat(path, &st) != 0 && !art_make(sysg(g))) { s_art_ready |= GBIT(g); continue; }   // could not: let be
@@ -1305,21 +1515,24 @@ static void pic_prepare(bool big)
     bool file = false;
     if (s_level == 0) {
         const int g = s_grp[s_ix[s_sel]];
-        snprintf(s_pic.poster, sizeof s_pic.poster, "%s", g == NATIVE ? "Games" : sysg(g).app);
-        if (art_pic(g)) { file = true; s_pic.dark = false; }
+        snprintf(s_pic.poster, sizeof s_pic.poster, "%s", g == NATIVE ? "Games" : g == FAVG ? "favorites" : g == RECG ? "clock" : sysg(g).app);
+        if (!is_coll(g) && art_pic(g)) { file = true; s_pic.dark = false; }
     } else if (s_group == NATIVE) {
         const int k = s_ix[s_sel];
         snprintf(s_pic.poster, sizeof s_pic.poster, "%s", nucleo_app_at(s_nat[k])->id);
         file = cover_pic(k, 112, 63);
     } else {
-        snprintf(s_pic.poster, sizeof s_pic.poster, "%s", sysg(s_group).app);
+        const int sy = rom_sys(s_sel);
+        snprintf(s_pic.poster, sizeof s_pic.poster, "%s", sysg(sy).app);
         uint8_t &have = s_sh->snap[s_sh->view[s_sel]];
         file = snap_pic(rom_dir(s_sel), rom_name(s_sel), have);
         if (file) have |= SN_PIC;                  // made now: no conversion next time
         else have = 0;                             // none, or it could not be made: not tried again this visit
-        if (!file && art_pic(s_group)) { file = true; s_pic.dark = false; }
+        if (!file && art_pic(sy)) { file = true; s_pic.dark = false; }
     }
     if (file) s_pic.kind = PIC_FILE;
+    s_fav = false;                                 // a favourite? (library.txt, read once per selection)
+    if (on_roms()) { char full[PATHMAX * 2]; snprintf(full, sizeof full, "%s/%s", rom_dir(s_sel), rom_name(s_sel)); s_fav = lib_is_fav(full); }
 }
 
 static uint16_t mix565(uint16_t a, uint16_t b, int t)   // t = 0 (a) .. 256 (b)
@@ -1448,7 +1661,7 @@ static void marks_prepare(void)
 {
     for (int k = 0; k < s_ngrp; k++) {
         const int g = s_grp[k];
-        if (s_mark[g + 1] || s_mark_failed[g + 1]) continue;
+        if (is_coll(g) || s_mark[g + 1] || s_mark_failed[g + 1]) continue;
         const Art &a = sysg(g).mark;
         const size_t need = art_bytes(a);
         void *state = nullptr;
@@ -1459,8 +1672,19 @@ static void marks_prepare(void)
     }
 }
 // The console's mark at (x, y), centred in a 20 px band, blended on `bg`; returns its width.
+// A five-pointed star (a favourite), centred at (cx, cy), outer radius r.
+static void star(int cx, int cy, int r, uint16_t col)
+{
+    static const int8_t P[10][2] = { { 0, -100 }, { 22, -31 }, { 95, -31 }, { 36, 12 }, { 59, 81 },
+                                     { 0, 38 }, { -59, 81 }, { -36, 12 }, { -95, -31 }, { -22, -31 } };
+    for (int k = 0; k < 10; k++) {
+        const int a = k, b = (k + 1) % 10;
+        d.fillTriangle(cx, cy, cx + P[a][0] * r / 100, cy + P[a][1] * r / 100, cx + P[b][0] * r / 100, cy + P[b][1] * r / 100, col);
+    }
+}
 static int chip(int g, int x, int y, uint16_t bg = BG)
 {
+    if (is_coll(g)) return 0;
     const Art &a = sysg(g).mark;
     const uint16_t *mk = s_mark[g + 1];
     if (mk) {
@@ -1538,7 +1762,8 @@ static void paint_left(void *)
     lg::font(0);
     char fitted[64];
     int cx = tx + 2;
-    if (on_roms()) cx += chip(s_group, tx + 2, ly - 2) + 6;   // a cartridge's console: its mark
+    if (on_roms()) cx += chip(rom_sys(s_sel), tx + 2, ly - 2) + 6;   // a cartridge's console: its mark
+    if (on_roms() && s_fav) star(WX - 12, ly + 7, 7, ACC_FAV);       // a favourite: the gold star
     if (is_last(s_sel) && s_level == 1) {          // the game played last says so in place of its caption
         d.fillCircle(cx + 4, ly + 8, 3, C_LAST);
         d.setTextColor(C_LAST, BG); d.drawString(last_label(), cx + 12, ly);
@@ -1634,7 +1859,7 @@ static void paint_small(void *)
     const int cw = d.textWidth(cnt) + 6;
     d.setTextDatum(top_left);
     // First row: the console's mark (a cartridge's, or the system's itself), then the caption or "last played".
-    const int g0 = s_level == 0 ? s_grp[s_ix[s_sel]] : NATIVE, mg = on_roms() ? s_group : g0;
+    const int g0 = s_level == 0 ? s_grp[s_ix[s_sel]] : NATIVE, mg = on_roms() ? rom_sys(s_sel) : g0 < 0 ? NATIVE : g0;
     int cx = 3, ry = ph + 4;
     if (mg != NATIVE) { cx = 6 + chip(mg, 2, ph + 3); ry = ph + 9; }
     if (is_last(s_sel) && s_level == 1) {
@@ -1671,7 +1896,7 @@ static int details(Detail *out, int max)
         const int k = s_ix[s_sel], g = s_grp[k];
         count_games(t, sizeof t, s_grp_n[k]);
         add(TR5("Giochi", "Games", "Juegos", "Jeux", "Spiele"), t);
-        if (s_last.group == g && s_last.key[g + 1]) add(TR5("Ultimo", "Last", "Ultimo", "Dernier", "Zuletzt"), TR5("giocato qui", "played here", "jugado aqui", "joue ici", "hier gespielt"));
+        if (!is_coll(g) && s_last.group == g && s_last.key[g + 1]) add(TR5("Ultimo", "Last", "Ultimo", "Dernier", "Zuletzt"), TR5("giocato qui", "played here", "jugado aqui", "joue ici", "hier gespielt"));
         return n;
     }
     if (s_group == NATIVE) {
@@ -1682,6 +1907,8 @@ static int details(Detail *out, int max)
         return n;
     }
     const char *file = rom_name(s_sel);
+    if (is_coll(s_group)) add(TR5("Console", "Console", "Consola", "Console", "Konsole"), sysg(rom_sys(s_sel)).name);
+    if (s_fav) add(TR5("Preferito", "Favorite", "Favorito", "Favori", "Favorit"), TR5("si", "yes", "si", "oui", "ja"));
     if (region_of(file, t, sizeof t)) add(TR5("Regione", "Region", "Region", "Region", "Region"), t);
     snprintf(t, sizeof t, "%s/", rom_dir(s_sel) + strlen(NUCLEO_SD_MOUNT));
     add(TR5("Cartella", "Folder", "Carpeta", "Dossier", "Ordner"), t);
@@ -1739,6 +1966,8 @@ static void paint_companion(void *)
     }
     d.setFont(&fonts::Font0);
     lg::comp_keys(s_level == 0 ? TR5("INVIO apri  ESC esci", "ENTER open  ESC quit", "INTRO abre  ESC sale", "ENTREE ouvre  ESC sort", "ENTER oeffnet  ESC Ende")
+                               : on_roms() ? TR5("INVIO gioca  * pref.  ESC indietro", "ENTER play  * fav  ESC back", "INTRO juega  * fav  ESC atras",
+                                                 "ENTREE joue  * fav  ESC retour", "ENTER spielt  * Fav  ESC zurueck")
                                : TR5("INVIO gioca  ESC indietro", "ENTER play  ESC back", "INTRO juega  ESC atras", "ENTREE joue  ESC retour", "ENTER spielt  ESC zurueck"));
     char pos[16]; count_text(pos, sizeof pos);         // where the selection is, at the right of the keys
     d.setTextDatum(top_right); d.setTextColor(s_total > s_n ? (unsigned short)C_YELLOW : (unsigned short)MUTED, BG);

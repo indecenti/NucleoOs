@@ -341,6 +341,13 @@ is off. The render gate requires most lines, not all.
   and quitting it — or a cartridge the core refuses — closes the app, so the full OS boots back into the gallery on
   that cartridge (an RTC snapshot, `gamefront_take_return()`). The emulators themselves are not entries of the
   native games; their own shelf is still reached from launcher search.
+- **Favorites and Recent** are shared with the web Arcade through one text file, `/sd/data/GameShots/library.txt`:
+  `F <path>` a favourite, `R <n> <path>` played (the highest n is the last; 30 `R` lines at most), paths from the
+  card's root; unknown lines are kept, and it is rewritten whole into a `.tmp` and renamed. The gallery shows the two
+  collections at the head of the systems' wheel when they hold something (cartridges still on the card whose
+  emulator is installed; Favorites by title, Recent newest first, each title with its own console), marks or unmarks
+  the selected cartridge with `*` or a long press (a gold star), and adds an `R` line whenever a cartridge starts:
+  from the gallery, Files' "open with" or `POST /api/play`.
 - **A store emulator brings its consoles with it**, as files of its package (installed to `/sd/apps/<id>/`); the
   firmware names none of them. `console.txt`: one line per console, `console <key> <ext>[,<ext>...] <RGB565 hex>
   <name>|<maker, year>` (`#` = a comment); `console-<key>.gfa`: `GFA1`, then the photo (118x80 box) and the mark

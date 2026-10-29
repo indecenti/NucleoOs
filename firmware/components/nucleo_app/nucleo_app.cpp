@@ -1016,7 +1016,7 @@ bool nucleo_app_launch_file(const char *path)
                  !strcasecmp(ext, ".log") || !strcasecmp(ext, ".csv") || !strcasecmp(ext, ".ini")) id = "notepad";
     }
     char emu[32];                                             // a cartridge: its emulator (in its Solo boot)
-    if (!id && gamefront_emulator_for(path, emu, sizeof emu)) id = emu;
+    if (!id && gamefront_emulator_for(path, emu, sizeof emu)) { id = emu; gamefront_library_played(path); }
     if (!id) return false;                                    // no native viewer for this type
     snprintf(s_open_file, sizeof s_open_file, "%s", path);     // hand the exact file to the viewer's on_enter
     launch_by_id(id);

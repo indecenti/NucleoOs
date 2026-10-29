@@ -38,6 +38,9 @@ bool gamefront_take_return(void);
 // an installed store emulator declares in its console.txt. True and its app id in `id` when that emulator is
 // installed. Reads only files and the registry (no gallery state): any task may call it (the web server's /api/play).
 bool gamefront_emulator_for(const char *path, char *id, int cap);
+// A cartridge started (from the gallery, Files, /api/play): it becomes the newest of library.txt's Recent, the list
+// the gallery's Recent collection and the web Arcade share.
+void gamefront_library_played(const char *path);
 // The Cardputer's screen while the gallery is on the panel (gamefront_render calls it; exposed for the PC gallery).
 void gamefront_draw_companion(void *gfx);
 

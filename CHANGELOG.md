@@ -120,6 +120,9 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   rendered on the PC from its source; a cover captured on the device still wins).
 - The selection's whole title has a line of its own across the panel, above the picture and the wheel; one too long
   for it scrolls (a pause, then round), redrawn alone; under the picture, its caption and what it is.
+- Favorites and Recent in the Games gallery, shared with the web Arcade (`GameShots/library.txt`): two collections at
+  the head of the systems when they hold something; `*` or a long press stars the selected cartridge; every start
+  (gallery, Files, /api/play) becomes the newest Recent.
 - "Open with" knows the cartridges: a ROM opened from Files or a notification starts in its emulator (the firmware's
   consoles, and those an installed store emulator declares), in its Solo boot. POST /api/play?path=... does the same
   for a paired client (the answer comes before the reboot).

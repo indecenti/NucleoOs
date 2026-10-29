@@ -669,6 +669,13 @@ static void ui_icon(lgfx::v1::LGFXBase *g, int cx, int cy, int r, const char *id
         IBX(cx + gp * 0.5f,      cy - ph - gp * 0.5f, pw, ph, col);            // top-right pixel (lit)
         IBX(cx - pw - gp * 0.5f, cy + gp * 0.5f,      pw, ph, col);            // bottom-left pixel (lit)
         // bottom-right stays bg = stuck/dead pixel intentionally dark
+    } else if (!strcmp(id, "favorites")) {                              // the Games gallery's Favorites: a five-pointed star
+        static const float P[10][2] = { { 0.0f, -1.0f }, { 0.22f, -0.31f }, { 0.95f, -0.31f }, { 0.36f, 0.12f }, { 0.59f, 0.81f },
+                                        { 0.0f, 0.38f }, { -0.59f, 0.81f }, { -0.36f, 0.12f }, { -0.95f, -0.31f }, { -0.22f, -0.31f } };
+        for (int k = 0; k < 10; k++) {
+            const int b2 = (k + 1) % 10;
+            ITR(cx, cy + s * 0.08f, cx + P[k][0] * s, cy + s * 0.08f + P[k][1] * s, cx + P[b2][0] * s, cy + s * 0.08f + P[b2][1] * s, col);
+        }
     } else if (r >= 10 && nucleo_store_app_icon && nucleo_store_app_icon(id)) {   // app installed from the Store: its 32x32 drawn icon
         const uint8_t *bm = nucleo_store_app_icon(id);
         float side = s * 1.7f, px = side / 32.0f, ox = cx - side * 0.5f, oy = cy - side * 0.5f;
