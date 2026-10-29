@@ -29,13 +29,14 @@
 #include "nucleo_kbd.h"
 #include "nucleo_touch.h"
 #include "nucleo_extdisp.h"   // two screens: the companion on the Cardputer
-#include "gbemu_art.h"        // the consoles' photos (public domain, deflated)
+#include "gamefront_art.h"    // the consoles' photos and marks, cut out (tools/gen-gallery-art.py)
 #include "miniz.h"            // tinfl, in the chip's ROM
 #include "gamefront_sfx.h"    // the interface sounds (tools/gen-ui-sounds.py)
 #include "esp_attr.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_task_wdt.h"
+#include "esp_log.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -119,26 +120,27 @@ static const Meta META[] = {
 
 // The consoles. Their index here is the system digit in the cartridge index (new ones go at the end); the gallery lists
 // them in SHOW_ORDER instead: by maker, then by year. Two share an emulator each, but every console is its own system.
-struct Art { const uint8_t *z; uint16_t n; uint8_t w, h; };
+struct Art { const uint8_t *z; uint16_t n; uint8_t w, h; };   // RGB565 + 4-bit alpha, deflated (gamefront_art.h)
 // A console's NAME is never written in the gallery (it is searched by, not shown): its mark is drawn instead.
 struct System {
     const char *key, *app, *name, *maker;
     unsigned short col;
-    Art art, mark;             // the photo (a 120x80 box) and the small mark (gbemu_art.h ART_*_S)
+    Art art, mark;             // the photo (a 118x80 box) and the small mark beside its name
 };
 static const System SYS[] = {
-    { "gb",  "gbemu", "Game Boy",       "Nintendo, 1989", 0x8FF3, { ART_GB_Z,  sizeof ART_GB_Z,  ART_GB_W,  ART_GB_H },
-                                                                  { ART_GB_S_Z,  sizeof ART_GB_S_Z,  ART_GB_S_W,  ART_GB_S_H } },
-    { "gbc", "gbemu", "Game Boy Color", "Nintendo, 1998", 0xC5F5, { ART_GBC_Z, sizeof ART_GBC_Z, ART_GBC_W, ART_GBC_H },
-                                                                  { ART_GBC_S_Z, sizeof ART_GBC_S_Z, ART_GBC_S_W, ART_GBC_S_H } },
-    { "gg",  "ggemu", "Game Gear",      "Sega, 1990",     0x5D7F, { ART_GG_Z,  sizeof ART_GG_Z,  ART_GG_W,  ART_GG_H },
-                                                                  { ART_GG_S_Z,  sizeof ART_GG_S_Z,  ART_GG_S_W,  ART_GG_S_H } },
-    { "sms", "ggemu", "Master System",  "Sega, 1986",     0xF96B, { ART_SMS_Z, sizeof ART_SMS_Z, ART_SMS_W, ART_SMS_H },
-                                                                  { ART_SMS_S_Z, sizeof ART_SMS_S_Z, ART_SMS_S_W, ART_SMS_S_H } },
-    { "nes", "nesemu", "NES",           "Nintendo, 1985", 0xAD55, { ART_NES_Z, sizeof ART_NES_Z, ART_NES_W, ART_NES_H },
-                                                                  { ART_NES_S_Z, sizeof ART_NES_S_Z, ART_NES_S_W, ART_NES_S_H } },
+#define GFA(k) { GFA_##k##_Z, sizeof GFA_##k##_Z, GFA_##k##_W, GFA_##k##_H }
+    { "gb",  "gbemu", "Game Boy",       "Nintendo, 1989", 0x8FF3, GFA(GB),  GFA(GB_S) },
+    { "gbc", "gbemu", "Game Boy Color", "Nintendo, 1998", 0xC5F5, GFA(GBC), GFA(GBC_S) },
+    { "gg",  "ggemu", "Game Gear",      "Sega, 1990",     0x5D7F, GFA(GG),  GFA(GG_S) },
+    { "sms", "ggemu", "Master System",  "Sega, 1986",     0xF96B, GFA(SMS), GFA(SMS_S) },
+    { "nes", "nesemu", "NES",           "Nintendo, 1985", 0xAD55, GFA(NES), GFA(NES_S) },
 };
+// The native games' entry has a picture and a mark too (a pocket computer, painted for it): a "system" of its own.
+static const System NATIVE_SYS = { "native", "", "", "", 0xFB4D, GFA(NATIVE), GFA(NATIVE_S) };
+#undef GFA
+
 #define NSYS ((int)(sizeof SYS / sizeof SYS[0]))
+static const System &sysg(int g) { return g < 0 ? NATIVE_SYS : SYS[g]; }   // a group's pictures (NATIVE included)
 static const uint8_t SHOW_ORDER[] = { 4, 0, 1, 3, 2 };   // NES, Game Boy, Game Boy Color, Master System, Game Gear
 static_assert(sizeof SHOW_ORDER == NSYS, "every console has its place in SHOW_ORDER");
 #define NATIVE (-1)            // the group of the native games
@@ -161,6 +163,7 @@ static int     s_flen;
 static char    s_launch[PATHMAX + 24];     // the cartridge GF_LAUNCH asks for ("" = an app of its own)
 static bool    s_restore;                  // gamefront_open() comes back on the RTC snapshot (gamefront_take_return)
 static bool    s_opened;                   // opened at least once since boot
+static uint32_t s_cover_ready;             // native games whose cover file is known to be made (bit per s_nat slot)
 static int     s_H;                        // the screen's height (inside a frame d.height() is the strip's)
 
 // A console's cartridges while its titles are shown: ONE heap block sized to what it holds — names and folders packed
@@ -555,7 +558,7 @@ static void refilter(void)
 }
 
 // What GameShots holds, read ONCE per opening (one listing): a missed fopen in the big /data folder costs ~0.5 s.
-enum { CV_PNG = 1, CV_JPG = 2, CV_BMP = 4 };
+enum { CV_BMP = 1, CV_PNG = 2, CV_JPG = 4 };       // in this order of preference: a cover captured on the device (bmp) wins
 static void covers_scan(void)
 {
     memset(s_nat_cover, 0, sizeof s_nat_cover);
@@ -732,6 +735,7 @@ static void pic_forget(void);
 static void marks_free(void);
 void gamefront_open(void)
 {
+    s_cover_ready = 0;
     last_load();
     systems_build();
     covers_scan();
@@ -765,13 +769,18 @@ void gamefront_open(void)
     if (!have || !s_scan.done || esp_timer_get_time() - s_scan.at > RESCAN_US) scan_start();
 }
 
+static bool s_settle_frame;                        // the next render: what changes when the wheel stops (left column)
+static int64_t s_input_at;                         // the last key
+static bool prefetch_one(void);
 bool gamefront_step(void)
 {
     const int r = scan_step(s_turn_t0 ? 4000 : 15000);   // a turning wheel gets the CPU first
     if (r == 2) { relist(); pic_forget(); }
     if (r != 0) { s_full = true; return true; }    // the walk ended: its indicator goes, the lists may have changed
     if (s_turn_t0) return true;                    // the turn's next frame (the wheel only)
-    if (s_settle_at && esp_timer_get_time() >= s_settle_at) { s_settle_at = 0; s_full = true; return true; }   // stopped
+    const int64_t now = esp_timer_get_time();
+    if (s_settle_at && now >= s_settle_at) { s_settle_at = 0; s_settle_frame = true; return true; }   // stopped
+    if (!s_settle_at && !s_scan.on && now - s_input_at > 350000) prefetch_one();
     return false;
 }
 bool gamefront_scanning(void) { return s_scan.on; }
@@ -815,6 +824,7 @@ static int slots(void) { return d.width() >= 300 ? SLOTS_BIG : SLOTS_SMALL; }
 int gamefront_key(int key, char ch, char *launch_id, int cap)
 {
     s_full = true;                                 // a whole frame next, unless the key only turns the wheel (turn())
+    s_input_at = esp_timer_get_time();
     if (nucleo_touch_is_row(key, ch)) {            // the wheel: a tap brings a title to the middle, the middle one opens
         const int k = ch - NUCLEO_TOUCH_ROW, i = lg::wheel_at(s_sel, s_n, slots(), k);
         if (k == slots() / 2) return open_sel(launch_id, cap);
@@ -946,98 +956,53 @@ static uint16_t *scratch(size_t need, void **state = nullptr)
 }
 static void swap_all(uint16_t *px, size_t n) { for (size_t i = 0; i < n; i++) px[i] = (uint16_t)(px[i] >> 8 | px[i] << 8); }
 
-// A console's photo has its light studio background baked in: it is keyed out once, when the picture is made, so
-// the console stands on the dark tile. Flood from the edges over pixels close to the corner's colour (a light part of
-// the console itself is not reached: it is not connected to the edge through background). Keyed pixels become KEY,
-// drawn transparent. `seen` is w*h bytes of scratch.
-#define KEY 0xF81F                                 // never a photo's colour: pure magenta
-static void key_background(uint16_t *px, int w, int h, uint8_t *seen, bool fringe)
+// A picture with alpha (gamefront_art.h: RGB565, then 4-bit alpha two pixels a byte) blended on `bg`, in place.
+static uint16_t blend565(uint16_t fg, uint16_t bg, int a)       // a = 0..15
 {
-    const uint16_t ref = px[0];
-    auto near = [ref](uint16_t c) {
-        const int dr = ((c >> 11) & 31) - ((ref >> 11) & 31), dg = ((c >> 5) & 63) - ((ref >> 5) & 63), db = (c & 31) - (ref & 31);
-        return abs(dr) * 2 + abs(dg) + abs(db) * 2 <= 12;
-    };
-    memset(seen, 0, (size_t)w * h);
-    for (int x = 0; x < w; x++) { if (near(px[x])) seen[x] = 1; if (near(px[(h - 1) * w + x])) seen[(h - 1) * w + x] = 1; }
-    for (int y = 0; y < h; y++) { if (near(px[y * w])) seen[y * w] = 1; if (near(px[y * w + w - 1])) seen[y * w + w - 1] = 1; }
-    for (int pass = 0; pass < 16; pass++) {       // forward then backward sweeps until nothing new is reached
-        bool more = false;
-        for (int i = 0; i < w * h; i++) {
-            const int x = i % w;
-            if (seen[i] || !near(px[i])) continue;
-            if ((x > 0 && seen[i - 1]) || (i >= w && seen[i - w])) { seen[i] = 1; more = true; }
-        }
-        for (int i = w * h - 1; i >= 0; i--) {
-            const int x = i % w;
-            if (seen[i] || !near(px[i])) continue;
-            if ((x < w - 1 && seen[i + 1]) || (i + w < w * h && seen[i + w])) { seen[i] = 1; more = true; }
-        }
-        if (!more) break;
-    }
-    // The photo's edge was blended with the light background: a fringe of light pixels would ring the console on the
-    // dark tile. Two passes take the light ones that touch the background (a photo: a 15-px mark has no pixels to spare).
-    auto light = [ref](uint16_t c) {
-        const int dr = ((c >> 11) & 31) - ((ref >> 11) & 31), dg = ((c >> 5) & 63) - ((ref >> 5) & 63), db = (c & 31) - (ref & 31);
-        return abs(dr) * 2 + abs(dg) + abs(db) * 2 <= 40;
-    };
-    for (int pass = 0; pass < (fringe ? 2 : 0); pass++) {
-        for (int i = 0; i < w * h; i++) {
-            if (seen[i] & 1 || !light(px[i])) continue;
-            const int x = i % w;
-            if ((x > 0 && seen[i - 1] & 1) || (x < w - 1 && seen[i + 1] & 1) || (i >= w && seen[i - w] & 1) || (i + w < w * h && seen[i + w] & 1))
-                seen[i] |= 2;
-        }
-        for (int i = 0; i < w * h; i++) if (seen[i] & 2) seen[i] = 1;
-    }
-    for (int i = 0; i < w * h; i++) if (seen[i]) px[i] = KEY;
+    const int r = (((fg >> 11) & 31) * a + ((bg >> 11) & 31) * (15 - a)) / 15;
+    const int g = (((fg >> 5) & 63) * a + ((bg >> 5) & 63) * (15 - a)) / 15;
+    const int b = ((fg & 31) * a + (bg & 31) * (15 - a)) / 15;
+    return (uint16_t)((r << 11) | (g << 5) | b);
 }
-// Shrink a keyed picture to dw x dh in place (rows are written behind the ones still to be read): each pixel is the
-// average of the 2x2 it comes from, keyed when most of them are.
-static void shrink(uint16_t *px, int sw, int sh, int dw, int dh)
-{
-    uint16_t row[160];
-    for (int y = 0; y < dh; y++) {
-        const int sy = y * sh / dh, sy1 = sy + 1 < sh ? sy + 1 : sy;
-        for (int x = 0; x < dw; x++) {
-            const int sx = x * sw / dw, sx1 = sx + 1 < sw ? sx + 1 : sx;
-            const uint16_t q[4] = { px[sy * sw + sx], px[sy * sw + sx1], px[sy1 * sw + sx], px[sy1 * sw + sx1] };
-            int r = 0, g = 0, b = 0, n = 0;
-            for (uint16_t c : q) if (c != KEY) { r += (c >> 11) & 31; g += (c >> 5) & 63; b += c & 31; n++; }
-            row[x] = n < 2 ? (uint16_t)KEY : (uint16_t)(((r / n) << 11) | ((g / n) << 5) | (b / n));
-        }
-        memcpy(px + (size_t)y * dw, row, (size_t)dw * 2);
-    }
-}
+static inline int alpha_at(const uint8_t *al, int i) { return i & 1 ? al[i >> 1] & 15 : al[i >> 1] >> 4; }
+static size_t art_bytes(const Art &a) { return (size_t)a.w * a.h * 2 + ((size_t)a.w * a.h + 1) / 2; }
 
-// A console's photo, from the firmware, as GameShots/.cache/sys_<key>.pic: its background keyed out and shrunk to
-// ART_SCALE/8 (the tile is a little smaller than the photo box). Made once per card.
-#define ART_SCALE 7
-static bool art_pic(const System &s)
+// A console's photo, from the firmware, blended on the theme's background, as GameShots/.cache/con_<key>_<bg>.pic:
+// made once per card and theme, then streamed like any picture (it stands straight on the background, no tile).
+static void art_path(const System &s, char *path, size_t n) { snprintf(path, n, "%s/con_%s_%04x.pic", CACHE, s.key, (unsigned)BG); }
+#define GBIT(g) (1u << ((g) + 1))                  // a group's bit (NATIVE = bit 0)
+static bool art_make(const System &s)
 {
     char path[PATHMAX];
-    snprintf(path, sizeof path, "%s/sys3_%s.pic", CACHE, s.key);
-    if (pic_open(path, true, s.art.n, ART_SCALE)) return true;
-    const size_t need = (size_t)s.art.w * s.art.h * 2;
+    art_path(s, path, sizeof path);
+    const size_t need = art_bytes(s.art), npx = (size_t)s.art.w * s.art.h;
     void *state = nullptr;
     uint16_t *px = scratch(need, &state);
     if (!px || !inflate_to(s.art.z, nullptr, s.art.n, (uint8_t *)px, need, state)) return false;
-    key_background(px, s.art.w, s.art.h, (uint8_t *)px + need, true);   // the state's room, now free (w*h <= 10 KB)
-    const int dw = s.art.w * ART_SCALE / 8, dh = s.art.h * ART_SCALE / 8;
-    shrink(px, s.art.w, s.art.h, dw, dh);
-    swap_all(px, (size_t)dw * dh);
+    const uint8_t *al = (const uint8_t *)(px + npx);
+    for (size_t i = 0; i < npx; i++) px[i] = blend565(px[i], BG, alpha_at(al, (int)i));
+    swap_all(px, npx);
     mkdir(GF_DIR, 0775); mkdir(CACHE, 0775);
-    return pic_write(path, px, dw, dh, s.art.n, ART_SCALE) && pic_open(path, true, s.art.n, ART_SCALE);
+    return pic_write(path, px, s.art.w, s.art.h, s.art.n, 1);
+}
+static uint8_t s_art_ready;                        // groups whose photo file is known to be made (GBIT)
+static bool art_pic(int g)
+{
+    const System &s = sysg(g);
+    char path[PATHMAX];
+    art_path(s, path, sizeof path);
+    if (pic_open(path, true, s.art.n, 1)) { s_art_ready |= GBIT(g); return true; }
+    if (!art_make(s)) return false;
+    s_art_ready |= GBIT(g);
+    return pic_open(path, true, s.art.n, 1);
 }
 
 // A cartridge's screenshot: <folder>/.snaps/<file>.pic, or its .snp ("SNP1", u16 w, u16 h, u32 deflated size,
 // raw-deflated RGB565 in native byte order) turned into that .pic once.
-static bool snap_pic(const char *dir, const char *rom, uint8_t have)
+static bool snap_make(const char *dir, const char *rom)
 {
     char path[PATHMAX + 48];
     snprintf(path, sizeof path, "%s/.snaps/%s.pic", dir, rom);
-    if ((have & SN_PIC) && pic_open(path, false, 0, 0)) return true;
-    if (!(have & SN_SNP)) return false;
     char snp[PATHMAX + 48];
     snprintf(snp, sizeof snp, "%s/.snaps/%s.snp", dir, rom);
     FILE *f = fopen(snp, "rb");
@@ -1052,11 +1017,60 @@ static bool snap_pic(const char *dir, const char *rom, uint8_t have)
         if (px && zn && inflate_to(nullptr, f, zn, (uint8_t *)px, (size_t)sw * sh * 2, state)) {
             swap_all(px, (size_t)sw * sh);
             fclose(f); f = nullptr;
-            ok = pic_write(path, px, sw, sh, 0, 0) && pic_open(path, false, 0, 0);
+            ok = pic_write(path, px, sw, sh, 0, 0);
         }
     }
     if (f) fclose(f);
     return ok;
+}
+static bool snap_pic(const char *dir, const char *rom, uint8_t have)
+{
+    char path[PATHMAX + 48];
+    snprintf(path, sizeof path, "%s/.snaps/%s.pic", dir, rom);
+    if ((have & SN_PIC) && pic_open(path, false, 0, 0)) return true;
+    return (have & SN_SNP) && snap_make(dir, rom) && pic_open(path, false, 0, 0);
+}
+
+// Pictures made AHEAD, while the player is still: the console photos of the systems, and the screenshots of the titles
+// around the selection (nearest first), one per call, so that stopping on them reads a ready file. A cartridge's
+// screenshot is ~100-300 ms to make (inflate + write) - here, never while the wheel turns or a key was just pressed.
+static bool cover_pic(int k, int bw, int bh, bool open = true);
+static bool prefetch_one(void)
+{
+    if (s_level == 0) {
+        for (int k = 0; k < s_ngrp; k++) {
+            const int g = s_grp[k];
+            if (s_art_ready & GBIT(g)) continue;
+            char path[PATHMAX]; struct stat st;
+            art_path(sysg(g), path, sizeof path);
+            if (stat(path, &st) != 0 && !art_make(sysg(g))) { s_art_ready |= GBIT(g); continue; }   // could not: let be
+            s_art_ready |= GBIT(g);
+            return true;
+        }
+        return false;
+    }
+    if (s_level == 1 && s_group == NATIVE) {         // the covers of the games around the selection
+        const bool big = d.width() >= 300;
+        for (int dist = 0; dist <= 4 && dist < s_n; dist++)
+            for (int side = 0; side < 2; side++) {
+                const int k = s_ix[((s_sel + (side ? -dist : dist)) % s_n + s_n) % s_n];
+                if (!s_nat_cover[k] || (s_cover_ready & (1u << k))) continue;
+                s_cover_ready |= 1u << k;          // made, or not makeable: either way not again this visit
+                cover_pic(k, big ? 128 : 112, big ? 72 : 63, false);
+                return true;
+            }
+        return false;
+    }
+    if (!on_roms() || !s_sh || !s_n) return false;
+    for (int dist = 1; dist <= 6 && dist < s_n; dist++)
+        for (int side = 0; side < 2; side++) {
+            const int i = ((s_sel + (side ? -dist : dist)) % s_n + s_n) % s_n;
+            uint8_t &have = s_sh->snap[s_sh->view[i]];
+            if (!(have & SN_SNP) || (have & SN_PIC)) continue;
+            have = snap_make(rom_dir(i), rom_name(i)) ? (uint8_t)(have | SN_PIC) : 0;
+            return true;
+        }
+    return false;
 }
 
 // The decoders read a cover through this: a file the gallery opened itself (one open for all the strips).
@@ -1072,9 +1086,9 @@ struct CoverFile : lgfx::DataWrapper {
 
 // A native game's cover (png / jpg / bmp, any size), fitted to w x h -> GameShots/.cache/<id>_<w>x<h>.pic. Decoded
 // in strips of a few rows (one small sprite, freed at once).
-static bool cover_pic(int k, int bw, int bh)
+static bool cover_pic(int k, int bw, int bh, bool open)
 {
-    static const char *const EXT[3] = { "png", "jpg", "bmp" };
+    static const char *const EXT[3] = { "bmp", "png", "jpg" };
     const char *id = nucleo_app_at(s_nat[k])->id;
     char src[96], path[PATHMAX];
     int e = 0;
@@ -1084,7 +1098,15 @@ static bool cover_pic(int k, int bw, int bh)
     struct stat st;
     if (stat(src, &st) != 0) return false;
     snprintf(path, sizeof path, "%s/%s_%dx%d.pic", CACHE, id, bw, bh);
-    if (pic_open(path, true, (uint32_t)st.st_size, (uint32_t)st.st_mtime)) return true;
+    if (open && pic_open(path, true, (uint32_t)st.st_size, (uint32_t)st.st_mtime)) return true;
+    if (!open) {                                   // made ahead: is it there already?
+        FILE *f = fopen(path, "rb");
+        PicHead ph;
+        const bool there = f && fread(&ph, 1, sizeof ph, f) == sizeof ph && !memcmp(ph.magic, "PIC1", 4)
+                           && ph.src_size == (uint32_t)st.st_size && ph.src_time == (uint32_t)st.st_mtime;
+        if (f) fclose(f);
+        if (there) return true;
+    }
     M5Canvas strip;
     strip.setPsram(false);
     strip.setColorDepth(16);
@@ -1105,9 +1127,9 @@ static bool cover_pic(int k, int bw, int bh)
         strip.fillSprite(0);
         fseek(in, 0, SEEK_SET);
         // The whole cover fitted to bw x bh, shifted up so its rows y0.. land in the strip (the rest is clipped).
-        if (e == 0)      strip.drawPng(&dw, 0, -y0, bw, bh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
-        else if (e == 1) strip.drawJpg(&dw, 0, -y0, bw, bh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
-        else             strip.drawBmp(&dw, 0, -y0, bw, bh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+        if (e == 0)      strip.drawBmp(&dw, 0, -y0, bw, bh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+        else if (e == 1) strip.drawPng(&dw, 0, -y0, bw, bh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+        else             strip.drawJpg(&dw, 0, -y0, bw, bh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
         ok = fwrite(strip.getBuffer(), 2, (size_t)bw * rn, f) == (size_t)bw * rn;
     }
     if (f) ok = fclose(f) == 0 && ok;
@@ -1115,7 +1137,7 @@ static bool cover_pic(int k, int bw, int bh)
     strip.deleteSprite();
     if (ok) { remove(path); ok = rename(tmp, path) == 0; }
     else remove(tmp);
-    return ok && pic_open(path, true, (uint32_t)st.st_size, (uint32_t)st.st_mtime);
+    return ok && (!open || pic_open(path, true, (uint32_t)st.st_size, (uint32_t)st.st_mtime));
 }
 
 // The selection's picture, worked out once per selection (and per screen size): an open .pic, or a poster.
@@ -1132,7 +1154,7 @@ static void pic_prepare(bool big)
     if (s_level == 0) {
         const int g = s_grp[s_ix[s_sel]];
         snprintf(s_pic.poster, sizeof s_pic.poster, "%s", g == NATIVE ? "Games" : SYS[g].app);
-        if (g != NATIVE && art_pic(SYS[g])) { file = true; s_pic.dark = false; }
+        if (art_pic(g)) { file = true; s_pic.dark = false; }
     } else if (s_group == NATIVE) {
         const int k = s_ix[s_sel];
         snprintf(s_pic.poster, sizeof s_pic.poster, "%s", nucleo_app_at(s_nat[k])->id);
@@ -1143,7 +1165,7 @@ static void pic_prepare(bool big)
         file = snap_pic(rom_dir(s_sel), rom_name(s_sel), have);
         if (file) have |= SN_PIC;                  // made now: no conversion next time
         else have = 0;                             // none, or it could not be made: not tried again this visit
-        if (!file && art_pic(SYS[s_group])) { file = true; s_pic.dark = false; }
+        if (!file && art_pic(s_group)) { file = true; s_pic.dark = false; }
     }
     if (file) s_pic.kind = PIC_FILE;
 }
@@ -1156,14 +1178,11 @@ static uint16_t mix565(uint16_t a, uint16_t b, int t)   // t = 0 (a) .. 256 (b)
     return (uint16_t)((r << 11) | (g << 5) | bl);
 }
 
-// The picture tile at (x, y, w, h): the .pic's rows that fall inside the strip being composed are read straight into
-// it, four at a time; a poster is the item's accent deepening downwards with its icon.
+// The picture in its place (x, y, w, h): the .pic's rows that fall inside the strip being composed are read straight
+// into it, four at a time; a poster is the item's accent deepening downwards with its icon.
 static void draw_pic(int x, int y, int w, int h, unsigned short acc)
 {
-    if (s_pic.kind == PIC_FILE && s_pic.f) {
-        const unsigned short tile = s_pic.dark ? (unsigned short)0x0841 : lg::card();
-        d.fillRoundRect(x, y, w, h, 8, tile);
-        const uint16_t key_sw = (uint16_t)(KEY >> 8 | KEY << 8), tile_sw = (uint16_t)(tile >> 8 | tile << 8);
+    if (s_pic.kind == PIC_FILE && s_pic.f) {         // on the background itself: no tile around it
         const int px = x + (w - s_pic.w) / 2, py = y + (h - s_pic.h) / 2;
         int32_t cx, cy, cw, ch;
         d.getClipRect(&cx, &cy, &cw, &ch);
@@ -1173,8 +1192,6 @@ static void draw_pic(int x, int y, int w, int h, unsigned short acc)
             for (int ry = y0; ry < y1; ) {
                 const int k = y1 - ry < 4 ? y1 - ry : 4;
                 if (fread(rows, 2, (size_t)s_pic.w * k, s_pic.f) != (size_t)s_pic.w * k) break;
-                if (!s_pic.dark)                   // a console photo: its keyed background is the tile's colour
-                    for (int i = 0; i < s_pic.w * k; i++) if (rows[i] == key_sw) rows[i] = tile_sw;
                 d.pushImage(px, ry, s_pic.w, k, (const lgfx::swap565_t *)rows);
                 ry += k;
             }
@@ -1267,52 +1284,47 @@ static const char *wheel_label(int i, void *) { return title_of(i); }
 static const char *last_label(void) { return TR5("ultimo giocato", "last played", "ultimo jugado", "dernier joue", "zuletzt gespielt"); }
 
 // ── the consoles' marks ─────────────────────────────────────────────────────────────────────────────
-// A mark is ~0.5-0.9 KB once inflated: they are kept while the gallery is open (the systems' wheel shows them all) and
-// freed when it closes or a game starts.
-static uint16_t *s_mark[NSYS];
-static bool s_mark_failed[NSYS];                  // a mark that could not be made is not retried while the gallery is open
+// A mark is ~1.2 KB once inflated (colour + alpha): they are kept while the gallery is open (the systems' wheel shows
+// them all) and freed when it closes or a game starts. Blended at draw time: on the background or on the pill.
+static uint16_t *s_mark[NSYS + 1];                 // by group + 1 (the native games' mark first)
+static bool s_mark_failed[NSYS + 1];                  // a mark that could not be made is not retried while the gallery is open
 static void marks_free(void) { for (uint16_t *&m : s_mark) { free(m); m = nullptr; } memset(s_mark_failed, 0, sizeof s_mark_failed); }
 // The marks the screen shows, made before a frame is composed (the canvas is free then: the inflater's state goes
-// there, and a frame never waits on a failed allocation). Their light background is keyed out like the photos'.
+// there, and a frame never waits on a failed allocation).
 static void marks_prepare(void)
 {
     for (int k = 0; k < s_ngrp; k++) {
         const int g = s_grp[k];
-        if (g == NATIVE || s_mark[g] || s_mark_failed[g]) continue;
-        const Art &a = SYS[g].mark;
-        const size_t need = (size_t)a.w * a.h * 2;
+        if (s_mark[g + 1] || s_mark_failed[g + 1]) continue;
+        const Art &a = sysg(g).mark;
+        const size_t need = art_bytes(a);
         void *state = nullptr;
         uint16_t *sc = scratch(need, &state);
         uint16_t *px = (uint16_t *)malloc(need);
-        if (px && sc && inflate_to(a.z, nullptr, a.n, (uint8_t *)sc, need, state)) {
-            key_background(sc, a.w, a.h, (uint8_t *)sc + need, false);
-            memcpy(px, sc, need);
-            s_mark[g] = px;
-        } else { free(px); s_mark_failed[g] = true; }
+        if (px && sc && inflate_to(a.z, nullptr, a.n, (uint8_t *)sc, need, state)) { memcpy(px, sc, need); s_mark[g + 1] = px; }
+        else { free(px); s_mark_failed[g + 1] = true; }
     }
 }
-// The console's mark on a dark chip, 20 px tall, at (x, y); returns the chip's width.
-static int chip(int g, int x, int y)
+// The console's mark at (x, y), centred in a 20 px band, blended on `bg`; returns its width.
+static int chip(int g, int x, int y, uint16_t bg = BG)
 {
-    const Art &a = SYS[g].mark;
-    const int cw = a.w + 10;
-    const uint16_t bg = mix565(BG, FG, 70);
-    d.fillRoundRect(x, y, cw, 20, 5, bg);
-    if (s_mark[g]) {                               // its keyed background is the chip's colour (a mark is ~0.5 KB)
+    const Art &a = sysg(g).mark;
+    const uint16_t *mk = s_mark[g + 1];
+    if (mk) {
+        const uint8_t *al = (const uint8_t *)(mk + a.w * a.h);
         uint16_t row[32];
         for (int r = 0; r < a.h; r++) {
-            const uint16_t *src = s_mark[g] + r * a.w;
-            for (int i = 0; i < a.w; i++) row[i] = src[i] == KEY ? bg : src[i];
-            d.pushImage(x + 5, y + (20 - a.h) / 2 + r, a.w, 1, (const lgfx::rgb565_t *)row);
+            for (int i = 0; i < a.w; i++) row[i] = blend565(mk[r * a.w + i], bg, alpha_at(al, r * a.w + i));
+            d.pushImage(x, y + (20 - a.h) / 2 + r, a.w, 1, (const lgfx::rgb565_t *)row);
         }
     }
-    return cw;
+    return a.w;
 }
-static int wheel_icon(int i, int x, int cy, bool, void *)
+static int wheel_icon(int i, int x, int cy, bool mid, void *)
 {
     if (s_level != 0) return 0;
     const int g = s_grp[s_ix[i]];
-    return g == NATIVE ? 0 : chip(g, x, cy - 10);
+    return chip(g, x, cy - 10, mid ? acc_now() : BG);
 }
 
 // ── the screens ─────────────────────────────────────────────────────────────────────────────────────
@@ -1327,6 +1339,7 @@ static const char *header_right(void)
 
 // The panel, 320x240: header with Back, search, then the picture and the title on the left and the wheel on the right.
 #define WX 168                                     // the wheel's left edge
+static void paint_left(void *);
 static void paint_big(void *)
 {
     const int W = d.width(), H = s_H;
@@ -1341,7 +1354,19 @@ static void paint_big(void *)
     } else nucleo_touch_add(0, 0, 96, lg::HEAD + 2, NK_BACK, 0);   // the header's Back, as lg::header registers it
     d.fillRect(0, top, W, bh, BG);
     if (!s_n) { lg::message(0, top, W, bh, empty_line(), empty_sub(), MUTED); return; }
-    const int tw = 136, tx = (WX - tw) / 2, ph = 102;   // the picture's tile
+    paint_left(nullptr);
+    const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon, s_off };
+    lg::wheel(WX, top, W - WX, bh, wl);
+}
+
+// The left column below the search: the picture, the caption, the title. Also a frame of its own (lg::frame_rect at
+// x 0) when the wheel stops: only this and the position change then.
+static void paint_left(void *)
+{
+    const int H = s_H, top = lg::HEAD + 36;
+    const unsigned short acc = acc_now();
+    d.fillRect(0, top, WX, H - top, BG);
+    const int tw = 136, tx = (WX - tw) / 2, ph = 102;   // the picture's place
     draw_pic(tx, top + 2, tw, ph, acc);
     nucleo_touch_add(tx, top + 2, tw, ph, NK_ENTER, 0);   // the picture opens the selection too
     char cap[64]; caption(cap, sizeof cap);
@@ -1362,8 +1387,11 @@ static void paint_big(void *)
     lg::font(1); d.setTextColor(FG, BG);
     const int lines = lg::wrap(title_of(s_sel), tx + 2, ly, WX - tx - 6, 19, sub ? 1 : (H - ly >= 58 ? 3 : 2));
     if (sub) { lg::font(0); d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, WX - tx - 6); d.drawString(fitted, tx + 2, ly + lines * 19 + 1); }
-    const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon, s_off };
-    lg::wheel(WX, top, W - WX, bh, wl);
+}
+static void paint_search(void *)
+{
+    char cnt[24]; count_text(cnt, sizeof cnt);
+    lg::search(0, lg::HEAD, 320, 36, s_filter, search_hint(), cnt, s_total > s_n ? (unsigned short)C_YELLOW : (unsigned short)MUTED, acc_now());
 }
 
 // The wheel alone, in its own rectangle (lg::frame_rect: x is relative to WX), while it turns.
@@ -1540,11 +1568,28 @@ void gamefront_render(void)
         if (ok) return;
         s_settle_at = 0;                           // no canvas: the whole frame instead
     }
+    const bool settle = s_settle_frame && !full && big && s_n;
+    s_settle_frame = false;
+    const int64_t t0 = esp_timer_get_time();
     if (on_roms() && !s_sh) refilter();            // the shelf left RAM (a failed allocation): read it again
     marks_prepare();
     pic_prepare(big);
-    nucleo_touch_clear();
-    lg::frame(big ? paint_big : paint_small, nullptr, 0, 0, true);   // exact: the pictures and the cards in true colour
-    nucleo_touch_commit();
+    const int64_t t1 = esp_timer_get_time();
+    bool drawn = false;
+    if (settle) {                                  // the wheel stopped: the picture, the caption, the title, the position
+        const int top = lg::HEAD + 36;
+        drawn = lg::frame_rect(paint_left, nullptr, 0, top, WX, s_H - top, true)
+             && lg::frame_rect(paint_search, nullptr, 0, lg::HEAD, 320, 36, true);
+    }
+    if (!drawn) {
+        nucleo_touch_clear();
+        lg::frame(big ? paint_big : paint_small, nullptr, 0, 0, true);   // exact: the pictures and the cards in true colour
+        nucleo_touch_commit();
+    }
+    const int64_t t2 = esp_timer_get_time();
     if (big) nucleo_extdisp_draw_internal(companion_cb);
+    const int64_t t3 = esp_timer_get_time();
+    if (t3 - t0 > 40000)                           // where a slow frame went (/api/logs)
+        ESP_LOGW("gallery", "%s frame: picture %d ms, panel %d ms, cardputer %d ms", settle ? "stop" : "whole",
+                 (int)((t1 - t0) / 1000), (int)((t2 - t1) / 1000), (int)((t3 - t2) / 1000));
 }
