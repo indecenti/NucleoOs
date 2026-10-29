@@ -253,7 +253,8 @@ static int gate(int argc, char **argv)
         if (g_lines != (long)FRAMES * g_h) { printf("    FAIL: expected %d lines\n", FRAMES * g_h); failures++; continue; }
         if (colourful < FRAMES / 60 / 3)          { printf("    FAIL: mostly blank pictures\n"); failures++; continue; }
         if (!s1.rom_resident && per_frame > 1.4)   { printf("    FAIL: page cache thrashes\n"); failures++; continue; }
-        if (g_pcm_writes != FRAMES)                { printf("    FAIL: audio not produced every frame\n"); failures++; continue; }
+        // at least one write a frame (two when the speaker's queue is short: emu_aclock_size)
+        if (g_pcm_writes < FRAMES)                 { printf("    FAIL: audio not produced every frame\n"); failures++; continue; }
         hm_init();
         band0 = nucleo_hm_malloc(GG_BAND); band1 = nucleo_hm_malloc(GG_BAND);
         if (nucleo_gg_open(rom, on_line, NULL) == ESP_OK) {

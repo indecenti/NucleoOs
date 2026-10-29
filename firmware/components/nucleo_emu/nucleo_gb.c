@@ -967,19 +967,16 @@ void nucleo_gb_run_frame(void)
     S->us_cpu += (uint32_t)(t1 - t0);
     S->frames++;
     S->clock++;
-    // One frame of sound, produced AFTER the frame that generated it and pushed straight out; the write blocks on
-    // the I2S DMA, which is what paces us to real speed. How many samples, measured on the ADV (emu_aclock_t):
-    // a fixed 548 a frame is 32,732 a second against the speaker's 32,768, so the queue never filled and every
-    // late frame emptied it (Zelda DX: 71 clicks in the 10 s of its intro at 50 fps). Now the speaker is the clock:
-    // the exact 548.63 a frame plus 0.3% keeps the queue full (the write blocks a little, the game runs 0.3% slow,
-    // inaudibly), and a frame that ran late by real work makes its lateness's samples too (as the NES and the PC
-    // Engine): the sound stretches instead of stopping. Mono: the speaker is one, and it halves the APU's work.
+    // One frame of sound, produced AFTER the frame that generated it and pushed straight out. How many samples,
+    // measured on the ADV (emu_aclock_t): a fixed 548 a frame is 32,732 a second against the speaker's 32,768, so
+    // the queue never filled and every late frame emptied it (Zelda DX: 71 clicks in the 10 s of its intro at
+    // 50 fps). Now the queue's real level decides (emu_aclock_size): held at two frames, a slow frame makes more and
+    // the sound stretches instead of stopping. Mono: the speaker is one, and it halves the APU's work.
     if (S->sound) {
-        S->aacc += (uint32_t)(548.6328 * 1.003 * 65536.0);
-        int n = (int)(S->aacc >> 16);
+        S->aacc += (uint32_t)(548.6328 * 65536.0);                    // 32768 Hz x 70224 / 4194304, exactly
+        const int nominal = (int)(S->aacc >> 16);
         S->aacc &= 0xFFFF;
-        if (over > 1000) n += (int)(((uint32_t)over * 2147u) >> 16);      // 32768 Hz = 2147/65536 a us
-        if (n > (int)AUDIO_SAMPLES_TOTAL) n = (int)AUDIO_SAMPLES_TOTAL;
+        const int n = emu_aclock_size(&S->aclk, esp_timer_get_time(), nominal, (int)AUDIO_SAMPLES_TOTAL);
         minigb_apu_audio_callback_mono(&S->apu, S->audio, (unsigned)n);
         emu_afilt_run(S->afilt, S->audio, (size_t)n, 1, 1);   // the APU's DAC has a DC offset
         const int64_t w0 = esp_timer_get_time();

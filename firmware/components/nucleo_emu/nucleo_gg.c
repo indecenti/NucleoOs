@@ -1499,9 +1499,20 @@ void nucleo_gg_run_frame(void)
     s->us_cpu += (uint32_t)(t1 - t0);
     psg_run(s, PSG_SPF);
     if (s->sound) {
-        emu_afilt_run(&s->afilt, s->pcm, PSG_SPF, 1, 0);
-        emu_aclock_write(&s->aclk, esp_timer_get_time(), PSG_SPF);
-        nucleo_audio_pcm_write(s->pcm, sizeof s->pcm);
+        // The frame's samples by the speaker's queue (emu_aclock_size, as the Game Boy): 534 a frame was 31,997 a
+        // second against 32,000, a queue that never filled. Past one frame the PSG plays on, rendered in a second
+        // pass through the same buffer (the session stays inside its heap budget, see gg_session_t).
+        const int n = emu_aclock_size(&s->aclk, esp_timer_get_time(), PSG_SPF, 2 * PSG_SPF);
+        const int k = n < PSG_SPF ? n : PSG_SPF;
+        emu_aclock_write(&s->aclk, esp_timer_get_time(), n);
+        emu_afilt_run(&s->afilt, s->pcm, (size_t)k, 1, 0);
+        nucleo_audio_pcm_write(s->pcm, (size_t)k * sizeof s->pcm[0]);
+        if (n > PSG_SPF) {
+            s->psg_pos = 0;
+            psg_run(s, n - PSG_SPF);
+            emu_afilt_run(&s->afilt, s->pcm, (size_t)(n - PSG_SPF), 1, 0);
+            nucleo_audio_pcm_write(s->pcm, (size_t)(n - PSG_SPF) * sizeof s->pcm[0]);
+        }
         s->us_audio += (uint32_t)(esp_timer_get_time() - t1);
     }
     s->frames++;
