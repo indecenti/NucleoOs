@@ -335,12 +335,22 @@ is off. The render gate requires most lines, not all.
   flash/cache work first. GBC cartridges are covered today by the browser Arcade.
 - **The Games gallery lists the consoles, then their cartridges** (`gamefront.cpp`): Game Boy, Game Boy Color,
   Game Gear and Master System are four systems, shown when their emulator is installed. Their cartridges are found
-  anywhere on the card by a background walk (index `/data/GameShots/.cache/roms.idx`, text: `GIX1 <n> <hash>`, then
+  anywhere on the card by a background walk (index `/data/GameShots/.cache/roms.idx`, text: `GIX2 <n> <hash> <sig>`, then
   `D <folder>` and `<system digit> <file>` lines); the emulators open a cartridge by its full path. A cartridge opens straight in its emulator: the gallery hands its path over with the "open with"
   handoff (`nucleo_app_take_open_file`, carried across the Solo reboot), the emulator plays it from `shelf_poll()`
   and quitting it — or a cartridge the core refuses — closes the app, so the full OS boots back into the gallery on
   that cartridge (an RTC snapshot, `gamefront_take_return()`). The emulators themselves are not entries of the
   native games; their own shelf is still reached from launcher search.
+- **A store emulator brings its consoles with it**, as files of its package (installed to `/sd/apps/<id>/`); the
+  firmware names none of them. `console.txt`: one line per console, `console <key> <ext>[,<ext>...] <RGB565 hex>
+  <name>|<maker, year>` (`#` = a comment); `console-<key>.gfa`: `GFA1`, then the photo (118x80 box) and the mark
+  (20x15 box), each `u8 w, u8 h, u32 size (LE)` + raw deflate of RGB565 (native order) and 4-bit alpha, the encoding of
+  `gamefront_art.h` (`tools/gen-gallery-art.py`'s `encode()`). The gallery reads them when it opens (up to 4 consoles,
+  freed when it closes; a key the firmware knows is ignored), lists each after the firmware's consoles (system digits
+  by key, stable while the set is), finds their extensions in the walk, and streams the pictures from the `.gfa`
+  (none: the app's icon stands in). The set's keys and extensions are in the index header
+  (`GIX2 <n> <hash> <sig>`): installing or removing such an emulator walks the card again. The app itself leaves the
+  native games; it opens a cartridge like the others (`nucleo_app_take_open_file`, ABI 5+).
 - **Chip-8** is the obvious next core: ~5 KB, no licence question, same app scaffolding.
 
 ## 7. The Game Gear (and the Master System it contains)

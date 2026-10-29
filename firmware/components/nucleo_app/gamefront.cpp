@@ -120,7 +120,8 @@ static const Meta META[] = {
 
 // The consoles. Their index here is the system digit in the cartridge index (new ones go at the end); the gallery lists
 // them in SHOW_ORDER instead: by maker, then by year. Two share an emulator each, but every console is its own system.
-struct Art { const uint8_t *z; uint16_t n; uint8_t w, h; };   // RGB565 + 4-bit alpha, deflated (gamefront_art.h)
+// RGB565 + 4-bit alpha, deflated: in the firmware (gamefront_art.h), or at `off` in a store app's console-<key>.gfa.
+struct Art { const uint8_t *z; uint32_t n; uint8_t w, h; uint32_t off; const char *file; };
 // A console's NAME is never written in the gallery (it is searched by, not shown): its mark is drawn instead.
 struct System {
     const char *key, *app, *name, *maker;
@@ -128,7 +129,7 @@ struct System {
     Art art, mark;             // the photo (a 118x80 box) and the small mark beside its name
 };
 static const System SYS[] = {
-#define GFA(k) { GFA_##k##_Z, sizeof GFA_##k##_Z, GFA_##k##_W, GFA_##k##_H }
+#define GFA(k) { GFA_##k##_Z, sizeof GFA_##k##_Z, GFA_##k##_W, GFA_##k##_H, 0, nullptr }
     { "gb",  "gbemu", "Game Boy",       "Nintendo, 1989", 0x8FF3, GFA(GB),  GFA(GB_S) },
     { "gbc", "gbemu", "Game Boy Color", "Nintendo, 1998", 0xC5F5, GFA(GBC), GFA(GBC_S) },
     { "gg",  "ggemu", "Game Gear",      "Sega, 1990",     0x5D7F, GFA(GG),  GFA(GG_S) },
@@ -139,10 +140,30 @@ static const System SYS[] = {
 static const System NATIVE_SYS = { "native", "", "", "", 0xFB4D, GFA(NATIVE), GFA(NATIVE_S) };
 #undef GFA
 
-#define NSYS ((int)(sizeof SYS / sizeof SYS[0]))
-static const System &sysg(int g) { return g < 0 ? NATIVE_SYS : SYS[g]; }   // a group's pictures (NATIVE included)
+#define NB ((int)(sizeof SYS / sizeof SYS[0]))      // the consoles the firmware knows
 static const uint8_t SHOW_ORDER[] = { 4, 0, 1, 3, 2 };   // NES, Game Boy, Game Boy Color, Master System, Game Gear
-static_assert(sizeof SHOW_ORDER == NSYS, "every console has its place in SHOW_ORDER");
+static_assert(sizeof SHOW_ORDER == NB, "every console has its place in SHOW_ORDER");
+
+// The consoles an emulator installed from the store brings (its files on the card, /sd/apps/<id>/): console.txt says
+// "console <key> <ext>[,<ext>...] <RGB565 hex> <name>|<maker, year>" ('#' = a comment), console-<key>.gfa holds the
+// photo and the mark ("GFA1", then w, h, u32 deflated size and the data, twice; the encoding of gamefront_art.h). They
+// follow the firmware's, sorted by key so their system digits are stable while the set is; read when the gallery
+// opens, freed when it closes. Uninstalled, the app's console goes with it.
+#define MAXX 4                                     // store consoles at most
+#define MAXSYS (NB + MAXX)
+#define XEXT 4
+struct Extra {
+    System s;
+    char key[12], app[24], name[28], maker[28], file[64];
+    char ext[XEXT][8];
+    int next;
+};
+static Extra *s_ext;                               // MAXX of them while the gallery is open
+static int    s_nx;
+static uint32_t s_xsig;                            // the store consoles' keys and extensions: part of the index's header
+static int nsys(void) { return NB + s_nx; }
+static const System &sysg(int g) { return g < 0 ? NATIVE_SYS : g < NB ? SYS[g] : s_ext[g - NB].s; }   // NATIVE included
+static int show_order(int o) { return o < NB ? SHOW_ORDER[o] : o; }   // the store's consoles after the firmware's
 #define NATIVE (-1)            // the group of the native games
 #define ACC_NATIVE 0xFB4D      // the Games category's colour
 #define C_LAST 0x8FF3          // "last played"
@@ -150,8 +171,8 @@ static_assert(sizeof SHOW_ORDER == NSYS, "every console has its place in SHOW_OR
 // ── state ───────────────────────────────────────────────────────────────────────────────────────────
 static int     s_level;                    // 0 = systems, 1 = the titles of s_group
 static int     s_group = NATIVE;
-static int     s_grp[1 + NSYS], s_ngrp;    // the systems shown (NATIVE or a SYS index), in order
-static int     s_grp_n[1 + NSYS];          // ...how many titles each has
+static int     s_grp[1 + MAXSYS], s_ngrp;  // the systems shown (NATIVE or a system index), in order
+static int     s_grp_n[1 + MAXSYS];        // ...how many titles each has
 static int16_t s_nat[NAT_MAX];             // native games (registry indices), by title
 static uint8_t s_nat_cover[NAT_MAX];       // ...which cover files GameShots has for each (CV_* bits)
 static int     s_nnat;
@@ -187,11 +208,11 @@ static const char *rom_name(int i) { return s_sh->pool + s_sh->off[s_sh->view[i]
 static const char *rom_dir(int i)  { return s_sh->pool + s_sh->dir[s_sh->view[i]]; }
 
 // What was played last, per system, and which system: the selection lands there (one 28-byte file).
-struct Last { char magic[4]; int8_t group; uint8_t pad[3]; uint32_t key[1 + NSYS]; };
+struct Last { char magic[4]; int8_t group; uint8_t pad[3]; uint32_t key[1 + MAXSYS]; };
 static Last s_last;
 
 static bool on_roms(void) { return s_level == 1 && s_group != NATIVE; }
-static unsigned short acc_of(int group) { return group == NATIVE ? (unsigned short)ACC_NATIVE : SYS[group].col; }
+static unsigned short acc_of(int group) { return group == NATIVE ? (unsigned short)ACC_NATIVE : sysg(group).col; }
 static unsigned short acc_now(void) { return acc_of(s_level == 0 ? (s_n ? s_grp[s_ix[s_sel]] : NATIVE) : s_group); }
 
 // ── names ───────────────────────────────────────────────────────────────────────────────────────────
@@ -203,7 +224,7 @@ static const char *native_title(int reg)
 }
 static const char *group_title(int g)
 {
-    return g == NATIVE ? TR5("Giochi nativi", "Native games", "Juegos nativos", "Jeux natifs", "Native Spiele") : SYS[g].name;
+    return g == NATIVE ? TR5("Giochi nativi", "Native games", "Juegos nativos", "Jeux natifs", "Native Spiele") : sysg(g).name;
 }
 // A cartridge's title without the extension and the region / dump tags every set carries.
 static void pretty(const char *file, char *out, size_t n)
@@ -284,7 +305,76 @@ static int sys_of(const char *name)            // by extension; -2 = a zip, look
     if (!strcasecmp(dot, ".sms")) return 3;
     if (!strcasecmp(dot, ".nes")) return 4;
     if (!strcasecmp(dot, ".zip")) return -2;
+    for (int x = 0; x < s_nx; x++)
+        for (int e = 0; e < s_ext[x].next; e++) if (!strcasecmp(dot, s_ext[x].ext[e])) return NB + x;
     return -1;
+}
+
+// ── the store's consoles ────────────────────────────────────────────────────────────────────────────
+static void extras_free(void) { free(s_ext); s_ext = nullptr; s_nx = 0; }
+static bool gfa_part(FILE *f, Art &a, const char *file)        // one picture of a .gfa: its size and where it is
+{
+    uint8_t h[6];
+    if (fread(h, 1, 6, f) != 6) return false;
+    a.w = h[0]; a.h = h[1];
+    a.n = (uint32_t)h[2] | (uint32_t)h[3] << 8 | (uint32_t)h[4] << 16 | (uint32_t)h[5] << 24;
+    a.off = (uint32_t)ftell(f); a.file = file; a.z = nullptr;
+    return a.w && a.h && a.n && a.n < 65536 && fseek(f, (long)a.n, SEEK_CUR) == 0;
+}
+static void extras_load(void)
+{
+    extras_free();
+    s_xsig = 0;
+    for (int i = 0, n = nucleo_app_count(); i < n; i++) {
+        const nucleo_app_def_t *a = nucleo_app_at(i);
+        if (!a->category || strcmp(a->category, "Games") || strlen(a->id) >= sizeof s_ext->app) continue;
+        char path[96];
+        snprintf(path, sizeof path, NUCLEO_SD_MOUNT "/apps/%s/console.txt", a->id);
+        FILE *f = fopen(path, "r");
+        if (!f) continue;
+        char line[120];
+        while (fgets(line, sizeof line, f)) {
+            char key[12], exts[40], hex[8], rest[72];
+            if (line[0] == '#' || sscanf(line, "console %11s %39s %7s %71[^\r\n]", key, exts, hex, rest) != 4) continue;
+            bool known = false;                    // a console the firmware knows, or one listed already, stays as it is
+            for (int g = 0; g < nsys(); g++) if (!strcmp(sysg(g).key, key)) known = true;
+            if (known || s_nx >= MAXX) continue;
+            if (!s_ext && !(s_ext = (Extra *)calloc(MAXX, sizeof(Extra)))) { fclose(f); return; }
+            Extra &x = s_ext[s_nx];
+            memset(&x, 0, sizeof x);
+            snprintf(x.key, sizeof x.key, "%s", key);
+            snprintf(x.app, sizeof x.app, "%s", a->id);
+            char *bar = strchr(rest, '|');
+            if (bar) *bar = '\0';
+            snprintf(x.name, sizeof x.name, "%s", rest);
+            snprintf(x.maker, sizeof x.maker, "%s", bar ? bar + 1 : "");
+            for (char *e = strtok(exts, ","); e && x.next < XEXT; e = strtok(nullptr, ","))
+                if (e[0] == '.' && strlen(e) < sizeof x.ext[0] && strcasecmp(e, ".zip")) snprintf(x.ext[x.next++], sizeof x.ext[0], "%s", e);
+            if (!x.next) continue;
+            x.s.key = x.key; x.s.app = x.app; x.s.name = x.name; x.s.maker = x.maker;
+            x.s.col = (unsigned short)strtoul(hex, nullptr, 16);
+            snprintf(x.file, sizeof x.file, NUCLEO_SD_MOUNT "/apps/%s/console-%s.gfa", a->id, key);
+            FILE *g = fopen(x.file, "rb");             // its pictures (none: the app's icon stands in)
+            char mg[4];
+            if (g && fread(mg, 1, 4, g) == 4 && !memcmp(mg, "GFA1", 4) && gfa_part(g, x.s.art, x.file)) {
+                if (!gfa_part(g, x.s.mark, x.file) || x.s.mark.w > 32 || x.s.mark.h > 20) memset(&x.s.mark, 0, sizeof x.s.mark);
+                if (x.s.art.w > 160) memset(&x.s.art, 0, sizeof x.s.art);
+            }
+            if (g) fclose(g);
+            s_nx++;
+        }
+        fclose(f);
+    }
+    if (s_nx > 1)                                  // by key: a console's digit does not depend on the order apps load
+        qsort(s_ext, s_nx, sizeof(Extra), [](const void *a, const void *b) { return strcmp(((const Extra *)a)->key, ((const Extra *)b)->key); });
+    for (int x = 0; x < s_nx; x++) {               // the strings moved with the entries: point at the copies
+        Extra &e = s_ext[x];
+        e.s.key = e.key; e.s.app = e.app; e.s.name = e.name; e.s.maker = e.maker;
+        if (e.s.art.file) e.s.art.file = e.file;
+        if (e.s.mark.file) e.s.mark.file = e.file;
+        s_xsig = fnv(e.key, s_xsig ? s_xsig : 2166136261u);
+        for (int k = 0; k < e.next; k++) s_xsig = fnv(e.ext[k], s_xsig);
+    }
 }
 
 // The index: "GIX2 <cartridges> <hash>", then for each folder that has some "D <folder>" and one line per cartridge,
@@ -298,8 +388,9 @@ static FILE *idx_open(int *count, uint32_t *hash)
     if (!f) return nullptr;
     setvbuf(f, nullptr, _IOFBF, 1024);             // read a line at a time from 1 KB blocks, not 128-byte ones
     char hd[48];
-    unsigned c = 0, h = 0;
-    if (!fgets(hd, sizeof hd, f) || sscanf(hd, "GIX2 %u %u", &c, &h) != 2) { fclose(f); return nullptr; }
+    unsigned c = 0, h = 0, sig = 0;
+    const int got = fgets(hd, sizeof hd, f) ? sscanf(hd, "GIX2 %u %u %x", &c, &h, &sig) : 0;
+    if (got < 2 || (got == 3 ? sig : 0) != s_xsig) { fclose(f); return nullptr; }   // made for another set of consoles
     if (count) *count = (int)c;
     if (hash) *hash = h;
     return f;
@@ -312,7 +403,7 @@ static bool idx_next(FILE *f, char *line, size_t ln, char *dir, size_t dn, int *
         size_t l = strlen(line);
         while (l && (line[l - 1] == '\n' || line[l - 1] == '\r')) line[--l] = '\0';
         if (l > 2 && line[0] == 'D' && line[1] == ' ') { snprintf(dir, dn, "%s", line + 2); continue; }
-        if (l > 2 && line[0] >= '0' && line[0] < '0' + NSYS && line[1] == ' ') { *sys = line[0] - '0'; *name = line + 2; return true; }
+        if (l > 2 && line[0] >= '0' && line[0] < '0' + nsys() && line[1] == ' ') { *sys = line[0] - '0'; *name = line + 2; return true; }
         if (l > 2 && line[0] == 'P' && line[1] == ' ') { *sys = -1; *name = line + 2; return true; }
     }
     return false;
@@ -354,10 +445,10 @@ static void scan_start(void)
     s_scan.out = fopen(INDEX ".tmp", "w");
     s_scan.dp[0] = s_scan.out ? opendir(NUCLEO_SD_MOUNT) : nullptr;
     if (!s_scan.dp[0]) { if (s_scan.out) fclose(s_scan.out); s_scan.out = nullptr; remove(INDEX ".tmp"); return; }
-    fputs("GIX2 0000000000 0000000000\n", s_scan.out);   // the real counts are written over it at the end
+    fputs("GIX2 0000000000 0000000000 00000000\n", s_scan.out);   // the real counts are written over it at the end
     snprintf(s_scan.path, sizeof s_scan.path, "%s", NUCLEO_SD_MOUNT);
     s_scan.plen[0] = (int)strlen(s_scan.path);
-    s_scan.depth = 0; s_scan.found = 0; s_scan.hash = 2166136261u; s_scan.dir_out = false;
+    s_scan.depth = 0; s_scan.found = 0; s_scan.hash = 2166136261u ^ s_xsig; s_scan.dir_out = false;
     memset(s_scan.had, 0, sizeof s_scan.had);
     s_scan.on = true;
 }
@@ -448,7 +539,7 @@ static int scan_step(int64_t budget)
     if (s_scan.dp[0]) return 0;                         // more to walk
     // The walk is complete: its header, then it replaces the index if anything differs.
     fseek(s_scan.out, 0, SEEK_SET);
-    fprintf(s_scan.out, "GIX2 %010u %010u", (unsigned)s_scan.found, (unsigned)s_scan.hash);
+    fprintf(s_scan.out, "GIX2 %010u %010u %08x", (unsigned)s_scan.found, (unsigned)s_scan.hash, (unsigned)s_xsig);
     const bool ok = fclose(s_scan.out) == 0;
     s_scan.out = nullptr;
     s_scan.on = false; s_scan.done = true; s_scan.at = esp_timer_get_time();
@@ -591,14 +682,14 @@ static void systems_build(void)
     for (int i = 0, n = nucleo_app_count(); i < n && s_nnat < NAT_MAX; i++) {
         const nucleo_app_def_t *a = nucleo_app_at(i);
         if (!a->category || strcmp(a->category, "Games")) continue;
-        bool emu = false;
-        for (const System &s : SYS) if (!strcmp(a->id, s.app)) emu = true;
+        bool emu = false;                          // an emulator is its consoles, not a game of its own
+        for (int g = 0; g < nsys(); g++) if (!strcmp(a->id, sysg(g).app)) emu = true;
         if (!emu) s_nat[s_nnat++] = (int16_t)i;
     }
     if (s_nnat > 1) qsort(s_nat, s_nnat, sizeof s_nat[0], cmp_nat);
     s_ngrp = 0;
     if (s_nnat) { s_grp_n[s_ngrp] = s_nnat; s_grp[s_ngrp++] = NATIVE; }
-    int roms[NSYS] = { 0 };
+    int roms[MAXSYS] = { 0 };
     FILE *f = idx_open(nullptr, nullptr);
     if (f) {
         char line[PATHMAX + 8], dir[PATHMAX];
@@ -607,13 +698,13 @@ static void systems_build(void)
         while (idx_next(f, line, sizeof line, dir, sizeof dir, &sys, &name)) roms[sys]++;
         fclose(f);
     }
-    for (int o = 0; o < NSYS; o++) {
-        const int g = SHOW_ORDER[o];
-        if (find_app(SYS[g].app) < 0) continue;
+    for (int o = 0; o < nsys(); o++) {
+        const int g = show_order(o);
+        if (find_app(sysg(g).app) < 0) continue;
         bool any = false;                          // any cartridge for this emulator at all?
-        for (int h = 0; h < NSYS; h++) if (!strcmp(SYS[h].app, SYS[g].app) && roms[h] > 0) any = true;
+        for (int h = 0; h < nsys(); h++) if (!strcmp(sysg(h).app, sysg(g).app) && roms[h] > 0) any = true;
         bool first = true;                         // this emulator's first console
-        for (int h = 0; h < g; h++) if (!strcmp(SYS[h].app, SYS[g].app)) first = false;
+        for (int h = 0; h < g; h++) if (!strcmp(sysg(h).app, sysg(g).app)) first = false;
         if (roms[g] > 0 || (!any && first)) { s_grp_n[s_ngrp] = roms[g]; s_grp[s_ngrp++] = g; }
     }
 }
@@ -628,13 +719,13 @@ static uint32_t key_of(int i)            // what identifies title i across reboo
 static void last_load(void)
 {
     FILE *f = fopen(LAST_FILE, "rb");
-    const bool ok = f && fread(&s_last, 1, sizeof s_last, f) == sizeof s_last && !memcmp(s_last.magic, "GFL1", 4);
+    const bool ok = f && fread(&s_last, 1, sizeof s_last, f) == sizeof s_last && !memcmp(s_last.magic, "GFL2", 4);
     if (f) fclose(f);
-    if (!ok || s_last.group < NATIVE || s_last.group >= NSYS) { memset(&s_last, 0, sizeof s_last); s_last.group = NATIVE; }
+    if (!ok || s_last.group < NATIVE || s_last.group >= nsys()) { memset(&s_last, 0, sizeof s_last); s_last.group = NATIVE; }
 }
 static void last_save(void)
 {
-    memcpy(s_last.magic, "GFL1", 4);
+    memcpy(s_last.magic, "GFL2", 4);
     FILE *f = fopen(LAST_FILE, "wb");
     if (f) { fwrite(&s_last, 1, sizeof s_last, f); fclose(f); }
 }
@@ -745,6 +836,7 @@ void gamefront_open(void)
     // Back from anything (a game, the screensaver): the whole gallery and the companion, never a leftover turn frame.
     s_full = true; s_turn_t0 = 0; s_settle_at = 0; s_settle_frame = false;
     s_cover_ready = 0;
+    extras_load();                                 // the store's consoles first: the index and the lists know them
     last_load();
     systems_build();
     covers_scan();
@@ -774,7 +866,7 @@ void gamefront_open(void)
     if (want) select_key(want);
     // Look for cartridges: the first time this boot, when there is no index, or after a while.
     { struct stat ist; s_have_index = stat(INDEX, &ist) == 0 && idx_ok(); }
-    if (!s_scan.done) scan_start();               // once per boot: the card may have changed while it was off
+    if (!s_scan.done || !s_have_index) scan_start();   // once per boot, and when the consoles changed               // once per boot: the card may have changed while it was off
 }
 
 static bool prefetch_one(void);
@@ -817,7 +909,7 @@ static int open_sel(char *launch_id, int cap)
         snprintf(launch_id, cap, "%s", nucleo_app_at(s_nat[s_ix[s_sel]])->id);
         s_launch[0] = '\0';
     } else {
-        snprintf(launch_id, cap, "%s", SYS[s_group].app);
+        snprintf(launch_id, cap, "%s", sysg(s_group).app);
         snprintf(s_launch, sizeof s_launch, "%s/%s", rom_dir(s_sel), rom_name(s_sel));
     }
     s_last.group = (int8_t)s_group;
@@ -828,6 +920,7 @@ static int open_sel(char *launch_id, int cap)
     pic_forget();
     marks_free();
     shelf_free();                                  // the game gets the RAM; gamefront_open() rebuilds the shelf
+    extras_free();
     SFX(LAUNCH, 45);
     return GF_LAUNCH;
 }
@@ -858,7 +951,7 @@ int gamefront_key(int key, char ch, char *launch_id, int cap)
         if (s_flen) { s_filter[0] = '\0'; s_flen = 0; refilter(); return GF_REDRAW; }
         SFX(BACK, 35);
         if (s_level == 1 && s_ngrp > 1) { leave_group(); return GF_REDRAW; }
-        scan_abort(); shelf_free(); pic_forget(); marks_free();
+        scan_abort(); shelf_free(); pic_forget(); marks_free(); extras_free();
         return GF_CLOSE;
     case NK_DEL:
         if (s_flen) { s_filter[--s_flen] = '\0'; refilter(); }
@@ -983,6 +1076,16 @@ static uint16_t blend565(uint16_t fg, uint16_t bg, int a)       // a = 0..15
 }
 static inline int alpha_at(const uint8_t *al, int i) { return i & 1 ? al[i >> 1] & 15 : al[i >> 1] >> 4; }
 static size_t art_bytes(const Art &a) { return (size_t)a.w * a.h * 2 + ((size_t)a.w * a.h + 1) / 2; }
+// A picture inflated into out: from the firmware, or streamed from its .gfa. False = none (or unreadable).
+static bool art_inflate(const Art &a, uint8_t *out, size_t need, void *state)
+{
+    if (!a.n || !a.w) return false;
+    if (a.z) return inflate_to(a.z, nullptr, a.n, out, need, state);
+    FILE *f = a.file ? fopen(a.file, "rb") : nullptr;
+    const bool ok = f && fseek(f, (long)a.off, SEEK_SET) == 0 && inflate_to(nullptr, f, a.n, out, need, state);
+    if (f) fclose(f);
+    return ok;
+}
 
 // A console's photo, from the firmware, blended on the theme's background, as GameShots/.cache/con_<key>_<bg>.pic:
 // made once per card and theme, then streamed like any picture (it stands straight on the background, no tile).
@@ -995,19 +1098,20 @@ static bool art_make(const System &s)
     const size_t need = art_bytes(s.art), npx = (size_t)s.art.w * s.art.h;
     void *state = nullptr;
     uint16_t *px = scratch(need, &state);
-    if (!px || !inflate_to(s.art.z, nullptr, s.art.n, (uint8_t *)px, need, state)) return false;
+    if (!px || !art_inflate(s.art, (uint8_t *)px, need, state)) return false;
     const uint8_t *al = (const uint8_t *)(px + npx);
     for (size_t i = 0; i < npx; i++) px[i] = blend565(px[i], BG, alpha_at(al, (int)i));
     swap_all(px, npx);
     mkdir(GF_DIR, 0775); mkdir(CACHE, 0775);
     return pic_write(path, px, s.art.w, s.art.h, s.art.n, 1);
 }
-static uint8_t s_art_ready;                        // groups whose photo file is known to be made (GBIT)
+static uint16_t s_art_ready;                       // groups whose photo file is known to be made (GBIT)
 static bool art_pic(int g)
 {
     const System &s = sysg(g);
     char path[PATHMAX];
     art_path(s, path, sizeof path);
+    if (!s.art.n) return false;                    // a store console without its picture: the app's icon stands in
     if (pic_open(path, true, s.art.n, 1)) { s_art_ready |= GBIT(g); return true; }
     if (!art_make(s)) return false;
     s_art_ready |= GBIT(g);
@@ -1161,14 +1265,14 @@ static void pic_prepare(bool big)
     bool file = false;
     if (s_level == 0) {
         const int g = s_grp[s_ix[s_sel]];
-        snprintf(s_pic.poster, sizeof s_pic.poster, "%s", g == NATIVE ? "Games" : SYS[g].app);
+        snprintf(s_pic.poster, sizeof s_pic.poster, "%s", g == NATIVE ? "Games" : sysg(g).app);
         if (art_pic(g)) { file = true; s_pic.dark = false; }
     } else if (s_group == NATIVE) {
         const int k = s_ix[s_sel];
         snprintf(s_pic.poster, sizeof s_pic.poster, "%s", nucleo_app_at(s_nat[k])->id);
         file = cover_pic(k, 112, 63);
     } else {
-        snprintf(s_pic.poster, sizeof s_pic.poster, "%s", SYS[s_group].app);
+        snprintf(s_pic.poster, sizeof s_pic.poster, "%s", sysg(s_group).app);
         uint8_t &have = s_sh->snap[s_sh->view[s_sel]];
         file = snap_pic(rom_dir(s_sel), rom_name(s_sel), have);
         if (file) have |= SN_PIC;                  // made now: no conversion next time
@@ -1295,8 +1399,8 @@ static const char *last_label(void) { return TR5("ultimo giocato", "last played"
 // ── the consoles' marks ─────────────────────────────────────────────────────────────────────────────
 // A mark is ~1.2 KB once inflated (colour + alpha): they are kept while the gallery is open (the systems' wheel shows
 // them all) and freed when it closes or a game starts. Blended at draw time: on the background or on the pill.
-static uint16_t *s_mark[NSYS + 1];                 // by group + 1 (the native games' mark first)
-static bool s_mark_failed[NSYS + 1];                  // a mark that could not be made is not retried while the gallery is open
+static uint16_t *s_mark[MAXSYS + 1];               // by group + 1 (the native games' mark first)
+static bool s_mark_failed[MAXSYS + 1];             // a mark that could not be made is not retried while the gallery is open
 static void marks_free(void) { for (uint16_t *&m : s_mark) { free(m); m = nullptr; } memset(s_mark_failed, 0, sizeof s_mark_failed); }
 // The marks the screen shows, made before a frame is composed (the canvas is free then: the inflater's state goes
 // there, and a frame never waits on a failed allocation).
@@ -1310,7 +1414,7 @@ static void marks_prepare(void)
         void *state = nullptr;
         uint16_t *sc = scratch(need, &state);
         uint16_t *px = (uint16_t *)malloc(need);
-        if (px && sc && inflate_to(a.z, nullptr, a.n, (uint8_t *)sc, need, state)) { memcpy(px, sc, need); s_mark[g + 1] = px; }
+        if (px && sc && art_inflate(a, (uint8_t *)sc, need, state)) { memcpy(px, sc, need); s_mark[g + 1] = px; }
         else { free(px); s_mark_failed[g + 1] = true; }
     }
 }
