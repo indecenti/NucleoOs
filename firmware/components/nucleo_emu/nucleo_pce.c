@@ -40,7 +40,6 @@ void nucleo_cowork_stop(void);
 
 // Every write and every I/O read the CPU makes is counted: an instruction loop that does neither and comes back to
 // the same state is waiting (see idle_after). The core calls the hook after each instruction.
-static uint32_t g_writes, g_io_reads;
 static void idle_after(void);
 #define PCE_AFTER_OP() do { if (m_pc.w.l < m_ppc.w.l) idle_after(); } while (0)   // only a backward jump can close a loop
 #include "../vendor/h6280/h6280_core.h"
@@ -64,6 +63,16 @@ static const char *TAG = "pce";
 #endif
 #define NWIN      (0x10000 >> PG_BITS)                 // windows over the CPU's 64 KB
 #define WPB       (0x2000 >> PG_BITS)                  // ...and in one 8 KB bank
+
+// What every memory access reads, in ONE struct (one base address in a register, as the CPU's state H6280): the
+// windows, and the write / I/O-read counters of the idle-loop detector.
+static struct {
+    const uint8_t *rd[NWIN];                         // CPU windows, a page each (NULL: the slow path)
+    uint8_t       *wr[NWIN];
+    uint32_t       writes, io_reads;
+} MEM;
+#define g_writes   MEM.writes
+#define g_io_reads MEM.io_reads
 #define PG_HINT   512
 #define PG_EMPTY  0xFFFFu
 #define KEEP      (8 * 1024)
@@ -157,8 +166,6 @@ typedef struct {
     uint32_t   bank_off[128];                        // HuCard bank -> offset in the data (the console's mirroring)
     bool       sf2;
     bool       tg16;                                 // a TurboGrafx-16 card (its pad port reads "not Japanese")
-    const uint8_t *rd[NWIN];                         // CPU windows, a page each (NULL: the slow path)
-    uint8_t   *wr[NWIN];
     int16_t    win_pg[NWIN];                           // the cache page each window shows (-1: RAM, open bus, I/O)
     int16_t    last_pg;                              // the page rom_page returned last (-1: not a cache page)
     uint16_t   rgb[512];                             // the palette in the panel's RGB565 order
@@ -212,7 +219,7 @@ static inline uint32_t pce_ccount(void)
 static const uint8_t PG_OPEN[PG_SIZE] = { [0 ... PG_SIZE - 1] = 0xFF };
 static void windows_drop(void)
 {
-    memset(PCE->rd, 0, sizeof PCE->rd); memset(PCE->wr, 0, sizeof PCE->wr);
+    memset(MEM.rd, 0, sizeof MEM.rd); memset(MEM.wr, 0, sizeof MEM.wr);
     memset(PCE->win_pg, 0xff, sizeof PCE->win_pg);
 }
 
@@ -234,7 +241,7 @@ static int pick_victim(pce_t *s, uint8_t *taken)
     if (v < 0) { v = 0; for (int i = 1; i < s->pg_n; i++) if (s->pg_age[i] < s->pg_age[v]) v = i; }
     taken[v] = 1;
     for (int k = 0; k < NWIN; k++)                     // only the windows on the page being replaced (none, usually)
-        if (s->win_pg[k] == v) { s->rd[k] = NULL; s->wr[k] = NULL; s->win_pg[k] = -1; }
+        if (s->win_pg[k] == v) { MEM.rd[k] = NULL; MEM.wr[k] = NULL; s->win_pg[k] = -1; }
     return v;
 }
 
@@ -327,8 +334,8 @@ static const uint8_t *window(int slot)
     } else if (bank != 0xFF) {
         r = PG_OPEN;
     }
-    s->rd[slot] = r;                                 // after rom_page: a miss there drops the windows on its victim
-    s->wr[slot] = w;
+    MEM.rd[slot] = r;                                 // after rom_page: a miss there drops the windows on its victim
+    MEM.wr[slot] = w;
     s->win_pg[slot] = pg;
     return r;
 }
@@ -336,22 +343,22 @@ static const uint8_t *window(int slot)
 static void pce_mpr_changed(int page)
 {
     g_writes++;
-    for (int k = 0; k < WPB; k++) { PCE->rd[page * WPB + k] = NULL; PCE->wr[page * WPB + k] = NULL; PCE->win_pg[page * WPB + k] = -1; }
+    for (int k = 0; k < WPB; k++) { MEM.rd[page * WPB + k] = NULL; MEM.wr[page * WPB + k] = NULL; PCE->win_pg[page * WPB + k] = -1; }
 }
 
 static inline uint8_t mem_read(uint16_t addr)
 {
-    const uint8_t *w = PCE->rd[addr >> PG_BITS];
+    const uint8_t *w = MEM.rd[addr >> PG_BITS];
     if (!w && !(w = window(addr >> PG_BITS))) return io_read(addr & 0x1fff);
     return w[addr & (PG_SIZE - 1)];
 }
 static inline void mem_write(uint16_t addr, uint8_t v)
 {
     g_writes++;
-    uint8_t *w = PCE->wr[addr >> PG_BITS];
+    uint8_t *w = MEM.wr[addr >> PG_BITS];
     if (w) { w[addr & (PG_SIZE - 1)] = v; return; }
     const uint8_t bank = m_mmr[addr >> 13];
-    if (bank >= 0xF8 && bank <= 0xFB) { window(addr >> PG_BITS); PCE->wr[addr >> PG_BITS][addr & (PG_SIZE - 1)] = v; return; }
+    if (bank >= 0xF8 && bank <= 0xFB) { window(addr >> PG_BITS); MEM.wr[addr >> PG_BITS][addr & (PG_SIZE - 1)] = v; return; }
     if (bank == 0xFF) { io_write(addr & 0x1fff, v); return; }
     if (bank < 0x80 && PCE->sf2 && (addr & 0x1FF0) == 0x1FF0) {           // Street Fighter II's bank register
         const uint32_t blocks = PCE->data_bytes > 0x80000 ? (PCE->data_bytes - 0x80000) / 0x80000 : 1;
@@ -367,14 +374,14 @@ static inline void check_vdc_vce_penalty(uint16_t addr);
 // through a window skips the check, every other one takes it as before.
 static uint8_t program_read8(uint16_t addr)
 {
-    const uint8_t *w = PCE->rd[addr >> PG_BITS];
+    const uint8_t *w = MEM.rd[addr >> PG_BITS];
     if (w) return w[addr & (PG_SIZE - 1)];
     check_vdc_vce_penalty(addr);
     return mem_read(addr);
 }
 static void program_write8(uint16_t addr, uint8_t v)
 {
-    uint8_t *w = PCE->wr[addr >> PG_BITS];
+    uint8_t *w = MEM.wr[addr >> PG_BITS];
     if (w) { g_writes++; w[addr & (PG_SIZE - 1)] = v; return; }
     check_vdc_vce_penalty(addr);
     mem_write(addr, v);

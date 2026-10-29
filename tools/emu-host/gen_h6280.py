@@ -109,11 +109,38 @@ typedef union { struct { uint8_t l, h, h2, h3; } b; struct { uint16_t l, h; } w;
 enum { H6280_RESET_VEC = 0xfffe, H6280_NMI_VEC = 0xfffc, H6280_TIMER_VEC = 0xfffa, H6280_IRQ1_VEC = 0xfff8,
        H6280_IRQ2_VEC = 0xfff6 };
 
-static PAIR m_ppc, m_pc, m_sp, m_zp, m_ea;
-static uint8_t m_a, m_x, m_y, m_p, m_mmr[8], m_irq_mask, m_timer_status, m_timer_ack, m_clocks_per_cycle;
-static int32_t m_timer_value, m_timer_load;
-static uint8_t m_nmi_state, m_irq_state[3], m_irq_pending, m_io_buffer, m_timer_scale = 1;
-static int m_icount;
+/* The CPU's state in ONE struct, the members under their MAME names by macro. A store module is position-independent
+ * code: every separate global costs a literal (its address, fetched through the instruction cache from flash) and a
+ * load. One struct is one base address the compiler keeps in a register, and each member a single load. */
+static struct {
+    PAIR ppc, pc, sp, zp, ea;
+    int icount;
+    int32_t timer_value, timer_load;
+    uint8_t a, x, y, p, mmr[8], irq_mask, timer_status, timer_ack, clocks_per_cycle;
+    uint8_t nmi_state, irq_state[3], irq_pending, io_buffer, timer_scale;
+} H6280 = { .timer_scale = 1 };
+#define m_ppc H6280.ppc
+#define m_pc H6280.pc
+#define m_sp H6280.sp
+#define m_zp H6280.zp
+#define m_ea H6280.ea
+#define m_icount H6280.icount
+#define m_timer_value H6280.timer_value
+#define m_timer_load H6280.timer_load
+#define m_a H6280.a
+#define m_x H6280.x
+#define m_y H6280.y
+#define m_p H6280.p
+#define m_mmr H6280.mmr
+#define m_irq_mask H6280.irq_mask
+#define m_timer_status H6280.timer_status
+#define m_timer_ack H6280.timer_ack
+#define m_clocks_per_cycle H6280.clocks_per_cycle
+#define m_nmi_state H6280.nmi_state
+#define m_irq_state H6280.irq_state
+#define m_irq_pending H6280.irq_pending
+#define m_io_buffer H6280.io_buffer
+#define m_timer_scale H6280.timer_scale
 
 /* the including file's memory, before the core */
 static uint8_t  program_read8(uint16_t addr);
