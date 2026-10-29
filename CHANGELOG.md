@@ -6,6 +6,22 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-10-30
+
+### Changed
+- **Start, closer to a desktop OS.** Below Pinned and Recommended, a "Categories" section shows one card per
+  category (four icons, its name and how many apps); a card opens All apps on that category. Right-click an app to
+  move it to another category, or back to the one the app names; the choice follows you on every browser.
+- **One category list for built-in and store apps.** The store's words (office, network, learn, security…) now
+  map to Start's categories, so a store app lands where the Store shows it instead of "Other"; the Store filters by
+  category and shows it on every card. Two new categories: Learning and Security.
+- **The power and account menus** in Start: Lock, Sign out where accounts exist, Restart only where the device can.
+
+### Fixed
+- **The language you pick sticks.** Choosing a language on a page that was already showing it (for example in
+  Italian before anything was chosen) did not reach the OS: the system and ANIMA stayed in English.
+- **ANIMA's context inspector** had no background and square corners (two undefined styles).
+
 ## [0.8.2] — 2026-10-29
 
 ### Changed

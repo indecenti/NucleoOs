@@ -1,6 +1,6 @@
 {
   "name": "nucleoos",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "NucleoOS — web-native appliance OS for the M5Stack Cardputer.",
   "type": "module",
   "private": true,
