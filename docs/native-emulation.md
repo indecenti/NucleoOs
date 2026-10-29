@@ -657,6 +657,13 @@ and ~1.5 ms waits for the other core (a VRAM write while lines are queued waits 
 (5.7 KB instead of 9 KB, every helper beside it): slower, 19.5 ms drawn, 15.3 not (more calls, no fewer stalls).
 Not kept.
 
+**Copy-on-write VRAM, measured and not kept.** Each queued line kept the view of the VRAM it was described with (8
+block pointers); a write to a block a queued line read copied it into a spare 8 KB block instead of waiting. Right
+(the same frames with the other core in step and a batch late), but Street Fighter II writes VRAM in bursts that
+span many lines, and every line described shares every block again: 8-13 copies of 8 KB a frame. Two spares: the
+waits 2.4 -> 1.7 ms, the CPU 18.1 -> 18.5. Four: waits 1.2 ms, but the 32 KB took the panel's big bands (panel lines
+4.4 -> 6.5 ms). RAM is the zero-sum constraint here.
+
 **What is left, measured.** Drawing costs the CPU's core 5.6 ms a frame it never runs itself (19.8 against 14.2):
 the other core's line drawer and this core's panel pushes (LovyanGFX, in the firmware's flash) share the 16 KB
 instruction cache with the interpreter. Next: the drawer and the band push made small and contiguous (the drawer in

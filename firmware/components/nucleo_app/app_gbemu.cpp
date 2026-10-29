@@ -836,7 +836,9 @@ static void band_push(void);
 static size_t band_room(void) { return st && st->band_cap ? st->band_cap : band_bytes(); }
 static void band_grow(void)
 {
-    const size_t w = s_big ? BIG_W : 240, want = (size_t)BAND_MAX * w * sizeof(uint16_t);
+    const size_t w = s_big ? BIG_W : 240;
+    size_t want = (size_t)BAND_MAX * w * sizeof(uint16_t);
+    if (heap_caps_get_free_size(MALLOC_CAP_DMA) < 2 * want + BAND_RESERVE) want /= 2;   // half as long: still 20 pushes, not 80
     if (want <= st->band_cap) return;
     if (heap_caps_get_free_size(MALLOC_CAP_DMA) < 2 * want + BAND_RESERVE) return;
     uint16_t *a = (uint16_t *)heap_caps_malloc(want, MALLOC_CAP_DMA);
