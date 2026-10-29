@@ -106,6 +106,9 @@ typedef struct {
     uint8_t       mapper;
     size_t        heap_bytes;
     uint32_t      frames, us_cpu, us_audio;
+    uint64_t      prof_apu;                     // cycles in the APU and the speaker (agnes_profile has the rest)
+    uint32_t      prof_frames, prof_drawn;
+    char          trace_path[96];               // "<card>/nesemu_trace.txt": the profile line on close
     uint32_t      clock;
 } nes_session_t;
 
@@ -413,6 +416,9 @@ esp_err_t nucleo_nes_open(const char *rom_path, nucleo_nes_line_fn line_cb, void
     for (int i = 0; i < PG_SLOTS; i++) s->pg_tag[i] = PG_EMPTY;
     memset(s->hint, -1, sizeof s->hint);
     save_base_init(s, rom_path);
+    const char *roms = strstr(rom_path, "/data/ROMs/");
+    if (roms) snprintf(s->trace_path, sizeof s->trace_path, "%.*s/nesemu_trace.txt", (int)(roms - rom_path), rom_path);
+    { uint64_t x, y, z; agnes_profile(&x, &y, &z); }  // a fresh count for this game
 
     s->fp = fopen(rom_path, "rb");
     if (!s->fp) { session_free(s); return ESP_ERR_NOT_FOUND; }
@@ -470,9 +476,27 @@ esp_err_t nucleo_nes_open(const char *rom_path, nucleo_nes_line_fn line_cb, void
     return ESP_OK;
 }
 
+// Where the frames' time went, once per game, appended to the emulator's trace: tenths of a millisecond per frame
+// at 240 MHz, from the CPU's cycle counter (integers only: no double helpers in a module).
+static void profile_write(nes_session_t *s)
+{
+    uint64_t cpu, ppu, line;
+    agnes_profile(&cpu, &ppu, &line);
+    if (!s->prof_frames || !s->trace_path[0] || (!cpu && !ppu)) return;
+    const uint64_t per = (uint64_t)s->prof_frames * 24000u;     // cycles per tenth of a millisecond, per frame
+    const unsigned c = (unsigned)(cpu * 10 / per), p = (unsigned)((ppu - line) * 10 / per),
+                   l = (unsigned)(line * 10 / per), a = (unsigned)(s->prof_apu * 10 / per);
+    FILE *f = fopen(s->trace_path, "a");
+    if (!f) return;
+    fprintf(f, "  nes profile: %u frames (%u drawn), ms/frame: 6502 %u.%u  ppu %u.%u  panel lines %u.%u  apu %u.%u\n",
+            (unsigned)s->prof_frames, (unsigned)s->prof_drawn, c / 10, c % 10, p / 10, p % 10, l / 10, l % 10, a / 10, a % 10);
+    fclose(f);
+}
+
 void nucleo_nes_close(void)
 {
     if (!S) return;
+    profile_write(S);
     nucleo_nes_save();
     nes_session_t *s = S;
     S = NULL;
@@ -499,12 +523,16 @@ void nucleo_nes_run_frame(void)
     agnes_next_frame(s->a);
     int64_t t1 = esp_timer_get_time();
     s->us_cpu += (uint32_t)(t1 - t0);
+    const uint32_t c0 = agnes_ccount();
     apu_render(s);
     if (s->sound) {
         emu_afilt_run(&s->afilt, s->pcm, APU_SPF, 1, 1);
         nucleo_audio_pcm_write(s->pcm, sizeof s->pcm);
         s->us_audio += (uint32_t)(esp_timer_get_time() - t1);
     }
+    s->prof_apu += (uint32_t)(agnes_ccount() - c0);
+    s->prof_frames++;
+    if (!s->a->skip_draw) s->prof_drawn++;
     s->frames++;
     s->clock++;
 }

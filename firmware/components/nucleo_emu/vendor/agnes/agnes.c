@@ -664,7 +664,16 @@ static void inc_vert_v(ppu_t *ppu);
 static void ppu_render_line(ppu_t *ppu, int y, bool rendering);
 static int cpu_step(cpu_t *cpu);   /* NUCLEO PATCH (A6) */
 
+static uint32_t agnes_ccount(void);
+static uint64_t g_prof_cpu, g_prof_ppu, g_prof_line;
+static bool run_cpu_to_(agnes_t *agnes, int dot);
 static bool run_cpu_to(agnes_t *agnes, int dot) {
+    const uint32_t c0 = agnes_ccount();
+    const bool ok = run_cpu_to_(agnes, dot);
+    g_prof_cpu += (uint32_t)(agnes_ccount() - c0);
+    return ok;
+}
+static bool run_cpu_to_(agnes_t *agnes, int dot) {
     cpu_t *cpu = &agnes->cpu;
     while (agnes->ln_dot < dot) {
         if (cpu->stall > 0) {                         // OAM DMA: the CPU only waits, a whole leg at once
@@ -690,7 +699,9 @@ bool agnes_next_frame(agnes_t *agnes) {
         ppu->scanline = sl;
         bool rendering = ppu->masks.show_background || ppu->masks.show_sprites;
         if (sl < 240) {
+            const uint32_t c0 = agnes_ccount();
             ppu_render_line(ppu, sl, rendering);
+            g_prof_ppu += (uint32_t)(agnes_ccount() - c0);     // includes the host's line (subtracted below)
         } else if (sl == 241) {
             ppu->status.in_vblank = true;
             if (ppu->ctrl.nmi_enabled) {
@@ -1678,10 +1689,28 @@ static bool ppu_sprites_line(ppu_t *ppu, int y, uint8_t *sp, int *x0, int *x1) {
 static void nt_pointers(ppu_t *ppu, const uint8_t *ntp[4]) {
     for (int i = 0; i < 4; i++) ntp[i] = ppu->nametables + mirror_address(ppu, (uint16_t)(0x2000 | (i << 10)));
 }
-/* A pattern byte's eight bits as eight bytes, the leftmost pixel first in memory (both hosts are little-endian):
- * one multiply spreads bit 7-j to the top of byte j, without carries (the copies are 9 bits apart). */
-static inline uint64_t spread8(uint8_t b) {
-    return ((uint64_t)b * 0x8040201008040201ULL >> 7) & 0x0101010101010101ULL;
+/* Four bits of a pattern byte as four bytes, the leftmost pixel first in memory (both hosts are little-endian):
+ * bit 3 -> byte 0 ... bit 0 -> byte 3. Two lookups per plane per tile; 32-bit arithmetic only. */
+static const uint32_t g_nib[16] = {
+    0x00000000, 0x01000000, 0x00010000, 0x01010000, 0x00000100, 0x01000100, 0x00010100, 0x01010100,
+    0x00000001, 0x01000001, 0x00010001, 0x01010001, 0x00000101, 0x01000101, 0x00010101, 0x01010101,
+};
+
+/* NUCLEO PATCH (A7): where a frame's time goes, in CPU cycles (the S3's cycle counter; 0 on other hosts).
+ * The host reads and clears it (agnes_profile). Not part of the console's state. */
+static uint64_t g_prof_cpu, g_prof_ppu, g_prof_line;
+static inline uint32_t agnes_ccount(void) {
+#if defined(__XTENSA__)
+    uint32_t c;
+    __asm__ volatile("rsr %0, ccount" : "=r"(c));
+    return c;
+#else
+    return 0;
+#endif
+}
+void agnes_profile(uint64_t *cpu, uint64_t *ppu, uint64_t *line) {
+    *cpu = g_prof_cpu; *ppu = g_prof_ppu; *line = g_prof_line;
+    g_prof_cpu = g_prof_ppu = g_prof_line = 0;
 }
 /* A frame the host skips: no pixels, only the sprite-0 hit (games wait on it to split the screen), from sprite
  * 0's row and the background under it. */
@@ -1765,12 +1794,16 @@ static void ppu_render_line(ppu_t *ppu, int y, bool rendering) {
                 if (v & 0x02) at >>= 2;
                 const uint16_t pa = (uint16_t)(table + (nt << 4) + fine_y);
                 const uint8_t lo = chr_read(agnes, pa), hi = chr_read(agnes, (uint16_t)(pa + 8));
-                uint64_t px = 0;
+                uint32_t pl = 0, pr = 0;                                   // the tile's left and right four pixels
                 if (lo | hi) {
-                    px = spread8(lo) | spread8(hi) << 1;                 // eight 2-bit pixels, one per byte
-                    px |= ((px | px >> 1) & 0x0101010101010101ULL) * (uint64_t)((at & 3) << 2);   // + palette, opaque only
+                    const uint32_t pb = (uint32_t)((at & 3) << 2);
+                    pl = g_nib[lo >> 4] | g_nib[hi >> 4] << 1;
+                    pr = g_nib[lo & 15] | g_nib[hi & 15] << 1;
+                    pl |= ((pl | pl >> 1) & 0x01010101u) * pb;            // + palette, opaque pixels only
+                    pr |= ((pr | pr >> 1) & 0x01010101u) * pb;
                 }
-                memcpy(dst, &px, 8);
+                memcpy(dst, &pl, 4);
+                memcpy(dst + 4, &pr, 4);
                 dst += 8;
                 if ((v & 0x1f) == 31) {                   // coarse x wraps into the next name table
                     v = (uint16_t)((v & ~0x1f) ^ 0x0400);
@@ -1799,7 +1832,11 @@ static void ppu_render_line(ppu_t *ppu, int y, bool rendering) {
             if (hit) ppu->status.sprite_zero_hit = true;
         }
     }
-    if (agnes->on_line) agnes->on_line(agnes->host, out, y);
+    if (agnes->on_line) {
+        const uint32_t c0 = agnes_ccount();
+        agnes->on_line(agnes->host, out, y);
+        g_prof_line += (uint32_t)(agnes_ccount() - c0);
+    }
 }
 
 static uint16_t mirror_address(ppu_t *ppu, uint16_t addr) {
