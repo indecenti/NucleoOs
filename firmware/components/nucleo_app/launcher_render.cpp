@@ -12,6 +12,7 @@
 #include "esp_system.h"      // esp_restart() for the Control Center's Restart shortcut
 #include "esp_timer.h"       // esp_timer_get_time() for the frame-rate-independent carousel ease
 #include "nucleo_i18n.h"     // system language (TR/it-en) for the Control Center labels
+#include "ui_glyph.h"         // the quick menu's row glyphs (also the Control Center's, further down)
 #include "nucleo_touch.h"    // the large Control Center: tap a tile / shortcut
 #include "nucleo_extdisp.h"  // the second screen's own backlight slider
 
@@ -1200,6 +1201,225 @@ template <typename T> static void grid_back_tile(T *c, int cx, int top)
     grid_label(c, TR5("Indietro", "Back", "Atras", "Retour", "Zurueck"), cx, top + 43, GRID_CELLW - 6, mix565(BG, FG, 0.80f), BG);
 }
 
+
+// ---- the quick menu (panel) ----------------------------------------------------------------------------------
+// A long press on a tile (or '*') opens a card over the grid for that app: Open, Pin to Home / Unpin, Info, and
+// Uninstall for an app the store installed (asked first). Keys: up/down move, Enter does it, Esc steps back; a tap
+// does a row at once, a tap outside closes. Info turns the card into the app's facts. ~170 B of state.
+extern "C" bool nucleo_store_app_facts(const char *id, char *version, int vn, char *kind, int kn, char *desc, int dn);
+extern "C" bool nucleo_store_app_uninstall(const char *id);
+enum { QM_OPEN, QM_PIN, QM_INFO, QM_REMOVE };
+enum { QM_ACTIONS, QM_FACTS, QM_CONFIRM };
+static int  s_qm_item = -1, s_qm_sel = 0, s_qm_mode = QM_ACTIONS, s_qm_n = 0;
+static int8_t s_qm_act[4];
+static bool s_qm_store = false;
+static char s_qm_ver[16], s_qm_kind[8], s_qm_desc[124];
+static const void *s_qm_node = nullptr;                    // the menu it was opened in (a change closes it)
+
+static const MenuNode *qm_it(void)
+{
+    if (s_qm_item < 0 || (const void *)launcher_node() != s_qm_node) { s_qm_item = -1; return nullptr; }
+    const MenuNode *it = launcher_nth_visible(s_qm_item);
+    if (!it) s_qm_item = -1;
+    return it;
+}
+bool launcher_qm_active(void) { return lr_large() && qm_it() != nullptr; }
+
+void launcher_qm_open(int item)
+{
+    s_qm_item = item; s_qm_node = (const void *)launcher_node(); s_qm_sel = 0; s_qm_mode = QM_ACTIONS; s_qm_n = 0;
+    const MenuNode *it = qm_it();
+    if (!it) return;
+    s_qm_store = it->kind == N_APP && nucleo_store_app_facts(it->id, s_qm_ver, sizeof s_qm_ver, s_qm_kind, sizeof s_qm_kind, s_qm_desc, sizeof s_qm_desc);
+    s_qm_act[s_qm_n++] = QM_OPEN;
+    if (it->kind == N_APP) s_qm_act[s_qm_n++] = QM_PIN;
+    s_qm_act[s_qm_n++] = QM_INFO;
+    if (s_qm_store) s_qm_act[s_qm_n++] = QM_REMOVE;
+}
+static void qm_close(void) { s_qm_item = -1; }
+
+// 0 = not open (the grid takes the key), 1 = done (repaint), 2 = open the app (the caller launches it).
+int launcher_qm_key(int key, char ch)
+{
+    const MenuNode *it = qm_it();
+    if (!it) return 0;
+    const bool row = nucleo_touch_is_row(key, ch);
+    const int slot = row ? ch - NUCLEO_TOUCH_ROW : -1;
+    if (nucleo_touch_is_hold(key, ch)) return 1;
+    if (s_qm_mode == QM_FACTS) { if (key == NK_BACK || key == NK_ENTER || row) s_qm_mode = QM_ACTIONS; return 1; }
+    if (s_qm_mode == QM_CONFIRM) {
+        if (key == NK_LEFT || key == NK_RIGHT || key == NK_UP || key == NK_DOWN) s_qm_sel ^= 1;
+        else if (key == NK_BACK || (key == NK_CHAR && (ch == 'n' || ch == 'N'))) { s_qm_mode = QM_ACTIONS; s_qm_sel = 0; }
+        else if (key == NK_ENTER || row || (key == NK_CHAR && (ch == 'y' || ch == 'Y' || ch == 's' || ch == 'S'))) {
+            const bool yes = row ? slot == 1 : key == NK_ENTER ? s_qm_sel == 1 : true;
+            if (yes) { char id[33]; snprintf(id, sizeof id, "%s", it->id); qm_close(); nucleo_store_app_uninstall(id); }
+            else { s_qm_mode = QM_ACTIONS; s_qm_sel = 0; }
+        }
+        return 1;
+    }
+    if (key == NK_UP)   { s_qm_sel = (s_qm_sel + s_qm_n - 1) % s_qm_n; return 1; }
+    if (key == NK_DOWN) { s_qm_sel = (s_qm_sel + 1) % s_qm_n; return 1; }
+    if (key == NK_BACK || (key == NK_CHAR && ch == '*')) { qm_close(); return 1; }
+    if (key != NK_ENTER && !(row && slot < s_qm_n)) return 1;      // the card is modal: other keys do nothing
+    switch (s_qm_act[row ? slot : s_qm_sel]) {
+        case QM_OPEN:   qm_close(); return 2;
+        case QM_PIN:    launcher_toggle_pin(it->id); qm_close(); return 1;
+        case QM_INFO:   s_qm_mode = QM_FACTS; return 1;
+        case QM_REMOVE: s_qm_mode = QM_CONFIRM; s_qm_sel = 0; return 1;
+    }
+    return 1;
+}
+
+// Word-wrapped Font2 text in a box, at most `maxl` lines (the last ends in ".." when cut). Returns the lines drawn.
+template <typename T> static int qm_wrap(T *c, const char *s, int x, int y, int w, int maxl, uint16_t col, uint16_t bg)
+{
+    c->setFont(&fonts::Font2); c->setTextSize(1); c->setTextColor(col, bg); c->setTextDatum(top_left);
+    char ln[48]; int lines = 0;
+    while (*s && lines < maxl) {
+        int n = 0, cut = 0;
+        while (s[n] && n < (int)sizeof ln - 3) {
+            ln[n] = s[n]; ln[n + 1] = 0;
+            if ((int)c->textWidth(ln) > w) break;
+            if (s[n] == ' ') cut = n;
+            n++;
+        }
+        if (!s[n]) cut = n; else if (!cut) cut = n;
+        ln[cut] = 0;
+        if (lines == maxl - 1 && s[cut]) { while (cut > 0 && (int)c->textWidth(ln) + 10 > w) ln[--cut] = 0; strcat(ln, ".."); }
+        c->drawString(ln, x, y + lines * 15);
+        s += cut; while (*s == ' ') s++;
+        lines++;
+    }
+    return lines;
+}
+
+// A trash can (no glyph for it in the set), centred at (cx, cy).
+template <typename T> static void qm_trash(T *c, int cx, int cy, uint16_t col)
+{
+    c->fillRect(cx - 6, cy - 6, 12, 2, col); c->fillRect(cx - 2, cy - 8, 4, 2, col);
+    c->drawRect(cx - 5, cy - 3, 10, 10, col); c->drawRect(cx - 4, cy - 3, 8, 10, col);
+    c->drawFastVLine(cx - 1, cy - 1, 6, col); c->drawFastVLine(cx + 2, cy - 1, 6, col);
+}
+
+static const char *qm_label(int act, const MenuNode *it)
+{
+    switch (act) {
+        case QM_OPEN: return TR5("Apri", "Open", "Abrir", "Ouvrir", "Oeffnen");
+        case QM_PIN:  return launcher_is_pinned(it->id) ? TR5("Togli da Home", "Unpin from Home", "Quitar de inicio", "Retirer de l'accueil", "Von Home loesen")
+                                                         : TR5("Fissa in Home", "Pin to Home", "Fijar en inicio", "Epingler a l'accueil", "An Home anheften");
+        case QM_INFO: return TR5("Info", "Info", "Info", "Infos", "Info");
+        default:      return TR5("Disinstalla", "Uninstall", "Desinstalar", "Desinstaller", "Entfernen");
+    }
+}
+
+// Where the card sits (band coordinates) and how tall it is for what it shows.
+static int qm_card_h(void) { return s_qm_mode == QM_ACTIONS ? 58 + s_qm_n * 34 + 6 : s_qm_mode == QM_FACTS ? 186 : 136; }
+enum { QM_W = 236 };
+
+template <typename T> static void qm_draw(T *c, int base)
+{
+    const MenuNode *it = qm_it();
+    if (!it) return;
+    const int h = qm_card_h(), x = (W - QM_W) / 2, y = base + (LIST_BAND_H - h) / 2;
+    const uint16_t card = mix565(BG, FG, 0.09f), edge = mix565(card, it->color, 0.55f);
+    c->fillRoundRect(x + 3, y + 5, QM_W, h, 14, mix565(BG, 0x0000, 0.65f));           // shadow
+    c->fillRoundRect(x, y, QM_W, h, 14, card);
+    c->drawRoundRect(x, y, QM_W, h, 14, edge);
+    c->drawFastHLine(x + 14, y + 1, QM_W - 28, mix565(card, 0xFFFF, 0.18f));           // light along the top
+    // the header: the app's badge, its whole name, where it comes from
+    grid_badge(c, x + 12, y + 10, GRID_BADGE, it->color, card);
+    const char *gid = !strcmp(it->id, LAUNCHER_RECENT_ID) ? "clock" : !strcmp(it->id, LAUNCHER_SETTINGS_SEARCH_ID) ? "wifi" : it->id;
+    ui_icon(c, x + 12 + GRID_BADGE / 2, y + 10 + GRID_BADGE / 2 - 1, (int)(GRID_BADGE / 2 * 0.68f + 0.5f), gid, it->icon, mix565(BG, FG, 0.95f), it->color);
+    char t[40];
+    c->setFont(&fonts::FreeSansBold9pt7b); c->setTextSize(1);
+    snprintf(t, sizeof t, "%s", node_label(it));
+    while (t[0] && (int)c->textWidth(t) > QM_W - 70) t[strlen(t) - 1] = 0;
+    c->setTextColor(FG, card); c->setTextDatum(top_left); c->drawString(t, x + 62, y + 11);
+    char sub[48];
+    if (s_qm_store) snprintf(sub, sizeof sub, "Store - %s%s%s", !strcmp(s_qm_kind, "native") ? "Native C" : "Web app", s_qm_ver[0] ? "  v" : "", s_qm_ver);
+    else if (it->kind == N_MENU) snprintf(sub, sizeof sub, TR5("%d app", "%d apps", "%d apps", "%d apps", "%d Apps"), node_child_count(it));
+    else snprintf(sub, sizeof sub, "%s", TR5("Integrata nel sistema", "Built into the system", "Integrada en el sistema", "Integree au systeme", "Im System integriert"));
+    c->setFont(&fonts::Font2); c->setTextColor(MUTED, card); c->drawString(sub, x + 62, y + 31);
+    c->drawFastHLine(x + 10, y + 56, QM_W - 20, mix565(card, FG, 0.12f));
+    if (s_qm_mode == QM_ACTIONS) {
+        for (int k = 0; k < s_qm_n; k++) {
+            const int ry = y + 60 + k * 34, a = s_qm_act[k];
+            const bool f = k == s_qm_sel, danger = a == QM_REMOVE;
+            const uint16_t acc = danger ? C_RED : it->color, rbg = f ? mix565(card, acc, 0.30f) : card;
+            if (f) { c->fillRoundRect(x + 6, ry, QM_W - 12, 31, 9, rbg); c->drawRoundRect(x + 6, ry, QM_W - 12, 31, 9, acc); }
+            const int gx = x + 26, gy = ry + 15;
+            c->fillCircle(gx, gy, 11, f ? acc : mix565(card, acc, 0.35f));
+            const uint16_t gi = f ? INK : FG, gb = f ? acc : mix565(card, acc, 0.35f);
+            if (a == QM_OPEN) ui_glyph(c, UG_NEXT, gx, gy, 7, gi, gb);
+            else if (a == QM_PIN) ui_glyph(c, UG_STAR, gx, gy, 7, gi, gb);
+            else if (a == QM_INFO) ui_glyph(c, UG_INFO, gx, gy, 7, gi, gb);
+            else qm_trash(c, gx, gy, gi);
+            c->setFont(&fonts::FreeSans9pt7b); c->setTextColor(danger && !f ? C_RED : FG, rbg);
+            c->setTextDatum(middle_left); c->drawString(qm_label(a, it), x + 46, gy + 1);
+        }
+    } else if (s_qm_mode == QM_FACTS) {
+        const char *k1 = TR5("Categoria", "Category", "Categoria", "Categorie", "Kategorie");
+        const char *k2 = TR5("In Home", "On Home", "En inicio", "Accueil", "Auf Home");
+        const char *k3 = TR5("Origine", "Source", "Origen", "Origine", "Herkunft");
+        char v3[32];
+        if (s_qm_store) snprintf(v3, sizeof v3, "Store %s", s_qm_ver[0] ? s_qm_ver : "");
+        else snprintf(v3, sizeof v3, "%s", TR5("Sistema", "System", "Sistema", "Systeme", "System"));
+        const char *cat = launcher_depth() > 0 ? node_label(launcher_node()) : "Home";
+        const char *rows[3][2] = { { k1, cat }, { k2, it->kind == N_APP && launcher_is_pinned(it->id) ? TR5("si", "yes", "si", "oui", "ja") : "-" }, { k3, v3 } };
+        c->setFont(&fonts::Font2);
+        for (int r = 0; r < 3; r++) {
+            const int ry = y + 64 + r * 18;
+            c->setTextDatum(top_left); c->setTextColor(MUTED, card); c->drawString(rows[r][0], x + 14, ry);
+            c->setTextDatum(top_right); c->setTextColor(FG, card); c->drawString(rows[r][1], x + QM_W - 14, ry);
+        }
+        c->drawFastHLine(x + 10, y + 120, QM_W - 20, mix565(card, FG, 0.12f));
+        const char *d = s_qm_desc[0] ? s_qm_desc
+                      : it->kind == N_MENU ? TR5("Una categoria del launcher: tocca per aprirla.", "A launcher category: tap to open it.", "Una categoria del lanzador: toca para abrirla.", "Une categorie du lanceur : touchez pour l'ouvrir.", "Eine Launcher-Kategorie: zum Oeffnen tippen.")
+                      : s_qm_store ? "" : TR5("Integrata nel sistema NucleoOS.", "Built into NucleoOS.", "Integrada en NucleoOS.", "Integree a NucleoOS.", "In NucleoOS integriert.");
+        qm_wrap(c, d, x + 14, y + 126, QM_W - 28, 3, FG, card);
+        c->setFont(&fonts::Font2); c->setTextColor(DIM, card); c->setTextDatum(bottom_center);
+        c->drawString(TR5("tocca o Esc per tornare", "tap or Esc to go back", "toca o Esc para volver", "touchez ou Esc pour revenir", "tippen oder Esc: zurueck"), x + QM_W / 2, y + h - 6);
+    } else {                                                                        // QM_CONFIRM
+        c->setFont(&fonts::FreeSans9pt7b); c->setTextColor(FG, card); c->setTextDatum(top_center);
+        c->drawString(TR5("Disinstallare?", "Uninstall?", "Desinstalar?", "Desinstaller ?", "Entfernen?"), x + QM_W / 2, y + 64);
+        const int bw = (QM_W - 36) / 2, by = y + h - 46;
+        for (int k = 0; k < 2; k++) {
+            const int bx = x + 12 + k * (bw + 12);
+            const bool f = k == s_qm_sel;
+            const uint16_t acc = k ? C_RED : mix565(card, FG, 0.35f), fill = f ? acc : mix565(card, acc, 0.25f);
+            c->fillRoundRect(bx, by + 3, bw, 36, 10, mix565(card, 0x0000, 0.5f));
+            c->fillRoundRect(bx, by, bw, 36, 10, fill);
+            c->setFont(&fonts::FreeSansBold9pt7b); c->setTextColor(f ? (k ? INK : FG) : FG, fill); c->setTextDatum(middle_center);
+            c->drawString(k ? TR5("Disinstalla", "Uninstall", "Desinstalar", "Desinstaller", "Entfernen") : "No", bx + bw / 2, by + 18);
+        }
+    }
+    c->setTextDatum(top_left); c->setFont(&fonts::Font0); c->setTextSize(1);
+}
+
+// The card's touch targets (panel coordinates), and a tap outside it closes it.
+static void qm_register_touch(void)
+{
+    const int h = qm_card_h(), x = (W - QM_W) / 2, y = LIST_TOP + (LIST_BAND_H - h) / 2;
+    if (s_qm_mode == QM_ACTIONS)
+        for (int k = 0; k < s_qm_n; k++) nucleo_touch_add(x + 6, y + 60 + k * 34, QM_W - 12, 31, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+    else if (s_qm_mode == QM_CONFIRM) {
+        const int bw = (QM_W - 36) / 2, by = y + h - 46;
+        for (int k = 0; k < 2; k++) nucleo_touch_add(x + 12 + k * (bw + 12), by, bw, 36, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+    } else nucleo_touch_add(x, y, QM_W, h, NK_BACK, 0);
+    nucleo_touch_add(x, y, QM_W, h, NK_CHAR, 0x01);         // the rest of the card: nothing (not a close)
+    nucleo_touch_add(0, 0, W, H, NK_BACK, 0);              // outside: close
+}
+
+// The item under a panel point (a long press): its visible-list index, or -1.
+int launcher_render_grid_item_at(int px, int py)
+{
+    if (!lr_large() || py < LIST_TOP || py >= LIST_TOP + LIST_BAND_H) return -1;
+    grid_fit();
+    const int row = (py - LIST_TOP + s_grid_off - GRID_TOP) / GRID_RH, col = px / GRID_CELLW;
+    const int i = row * GRID_COLS + col - grid_lead();
+    return col < GRID_COLS && i >= 0 && i < launcher_visible_count() ? i : -1;
+}
+
 template <typename T> static void draw_grid(T *c, int base)
 {
     c->fillRect(0, base, W, LIST_BAND_H, BG);
@@ -1230,7 +1450,8 @@ template <typename T> static void draw_grid(T *c, int base)
             if (i < 0) { grid_back_tile(c, cx, top); continue; }
             const MenuNode *it = launcher_nth_visible(i);
             if (!it) continue;
-            const bool focus = (i == sel);
+            const bool scrim = s_qm_item >= 0;                      // the quick menu is open: the grid steps back
+            const bool focus = (i == sel) && !scrim;
             // Keyboard focus: a tinted card with the item's colour as its rim, wholly inside the cell (a row is
             // always shown whole, so it is never cut), the badge a touch larger.
             const uint16_t under = focus ? mix565(BG, it->color, 0.18f) : BG;
@@ -1240,10 +1461,10 @@ template <typename T> static void draw_grid(T *c, int base)
                 c->drawRoundRect(x0 + 4, top + 2, GRID_CELLW - 8, GRID_RH - 4, 11, mix565(under, it->color, 0.55f));
             }
             const int s = focus ? GRID_BADGE + 2 : GRID_BADGE, bx = cx - s / 2, by = top + (focus ? 3 : 4);
-            const uint16_t badge = focus ? it->color : mix565(LINE, it->color, 0.85f);
+            const uint16_t badge = focus ? it->color : scrim ? mix565(BG, it->color, 0.28f) : mix565(LINE, it->color, 0.85f);
             grid_badge(c, bx, by, s, badge, under);
             const int r = s / 2, cy = by + r - 1;
-            uint16_t gcol = focus ? INK : mix565(BG, FG, 0.95f);
+            uint16_t gcol = focus ? INK : scrim ? mix565(BG, FG, 0.35f) : mix565(BG, FG, 0.95f);
             const char *gid = !strcmp(it->id, LAUNCHER_RECENT_ID) ? "clock"
                             : !strcmp(it->id, LAUNCHER_SETTINGS_SEARCH_ID) ? "wifi" : it->id;
             ui_icon(c, cx, cy, (int)(r * 0.68f + 0.5f), gid, it->icon, gcol, badge);
@@ -1255,7 +1476,7 @@ template <typename T> static void draw_grid(T *c, int base)
             }
             if (audio_on && ((is_stream && !strcmp(it->id, "radio")) || (!is_stream && !strcmp(it->id, "music"))))
                 draw_eq(c, cx + (int)(r * 0.6f), cy + (int)(r * 0.6f), (int)(r * 0.55f), s_eq_frame);
-            grid_label(c, node_label(it), cx, top + 43, GRID_CELLW - 6, focus ? FG : mix565(BG, FG, 0.78f), under);
+            grid_label(c, node_label(it), cx, top + 43, GRID_CELLW - 6, focus ? FG : mix565(BG, FG, scrim ? 0.30f : 0.78f), under);
         }
     }
     c->clearClipRect();
@@ -1266,6 +1487,7 @@ template <typename T> static void draw_grid(T *c, int base)
         c->fillRoundRect(W - 4, base + 5, 3, track, 1, mix565(BG, LINE, 0.7f));
         c->fillRoundRect(W - 4, ky, 3, kh, 1, mix565(FG, BG, 0.25f));
     }
+    if (s_qm_item >= 0) qm_draw(c, base);                           // the quick menu over the grid
     c->setFont(&fonts::Font0); c->setTextSize(1);
 }
 
@@ -1373,6 +1595,7 @@ template <typename T> static void draw_list(T *c, int base)
 static void grid_register_touch(void)
 {
     nucleo_touch_clear();
+    if (launcher_qm_active()) { qm_register_touch(); nucleo_touch_commit(); return; }
     const int n = launcher_visible_count(), lead = grid_lead(), first = grid_first(), cells = n + lead;
     const int rows = (cells + GRID_COLS - 1) / GRID_COLS, y0 = LIST_TOP, y1 = LIST_TOP + LIST_BAND_H;
     if (lead) nucleo_touch_add(0, 0, 64, BAR + 4, NK_BACK, 0);                             // the Back button

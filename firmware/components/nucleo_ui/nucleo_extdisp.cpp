@@ -762,6 +762,25 @@ void touch_task(void *)
         was_scroll = sc.on;
         for (int i = 0; i < n; i++) {
             if (s_cfg.diag) ESP_LOGW(TAG, "touch -> %s", ev_name(ev[i]));
+            // A hold on a large screen's row or tile (even inside a scroll area): that screen's menu for it.
+            if (solo_seen && ev[i] == EXT_EV_BACK && !g.moved && g.down) {
+                const int ty = s_last_y - s_hud_h;
+                bool row = false;
+                ext_lock();
+                for (int t = 0; t < s_tc->ntgt; t++) {
+                    const TouchCtx::Target &r = s_tc->tgt[t];
+                    if (s_last_x >= r.x && s_last_x < r.x + r.w && ty >= r.y && ty < r.y + r.h) {
+                        row = r.key == NK_CHAR && (uint8_t)r.ch >= NUCLEO_TOUCH_ROW && (uint8_t)r.ch < NUCLEO_TOUCH_ROW + 16;
+                        break;
+                    }
+                }
+                ext_unlock();
+                if (row) {
+                    s_tap_x = s_last_x; s_tap_y = ty;
+                    if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ NK_CHAR, (char)NUCLEO_TOUCH_HOLD });
+                    continue;
+                }
+            }
             if (scroll_touch && ev[i] != EXT_EV_ENTER) continue;    // a scroll's drag / hold is not an arrow or Back
             if (scroll_touch && ev[i] == EXT_EV_ENTER && g.moved) continue;
             if (ev[i] == EXT_EV_CALIBRATE) {

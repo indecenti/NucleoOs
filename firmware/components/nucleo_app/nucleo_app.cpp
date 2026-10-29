@@ -1166,6 +1166,15 @@ static void handle_launcher(int k, char ch)
         if (launcher_render_grid_view(ch == NUCLEO_TOUCH_VIEW_FWD ? 1 : -1)) s_dirty = true;
         return;
     }
+    if (cols > 1) {                              // the panel's quick menu: it takes every key while it is open
+        const int q = launcher_qm_key(k, ch);
+        if (q) { if (q == 2) launcher_open_focused(); s_dirty = true; return; }
+        int px, py, i = -1;
+        if (nucleo_touch_is_hold(k, ch) && nucleo_touch_last(&px, &py)) i = launcher_render_grid_item_at(px, py);   // a long press
+        else if (k == NK_CHAR && ch == '*') i = s;                                                                  // or '*'
+        if (i >= 0 && i < launcher_visible_count()) { launcher_set_sel(i); launcher_qm_open(i); s_dirty = true; return; }
+        if (nucleo_touch_is_hold(k, ch)) return;
+    }
     if (nucleo_touch_is_row(k, ch)) {            // the panel: a tapped tile opens straight away
         int i = launcher_render_grid_first() + (ch - NUCLEO_TOUCH_ROW);
         if (i >= 0 && i < launcher_visible_count()) { launcher_set_sel(i); launcher_open_focused(); }
