@@ -1062,7 +1062,7 @@ static PCE_HOT_FN void run_cpu(uint32_t cycles)
     g_idle.armed = false;                              // a new leg: the cycle count restarts
     g_idle.power = 1; g_idle.lam = 0;
     const uint32_t c0 = pce_ccount();
-    uint32_t p0[2];
+    uint32_t p0[2] = { 0, 0 };
     if (s_perf) perf_read(p0);
     if (m_icount > 0) execute_run();
     if (s_perf) { uint32_t p1[2]; perf_read(p1); s->perf[0] += p1[0] - p0[0]; s->perf[1] += p1[1] - p0[1]; }
