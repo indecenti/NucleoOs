@@ -85,6 +85,7 @@ static int s_btn;         // app page: the focused button (0 = Install / Update 
 static int s_lg_scroll;   // first visible row on the panel list
 static unsigned s_lg_key, s_lg_gen;   // the panel's last list layout (0 = something else) and repaint generation
 static int s_lg_sel = -1;             // ...and the row selected in it
+static int s_lg_cat = -1;             // ...or the category tile
 static int s_ch, s_ch_sel; // the store being browsed (CH_*), and the highlighted card on the choice screen
 static bool s_yes, s_busy_seen, s_refresh_pending, s_canvas_lent, s_direct_full;
 static nst_status_t s_last_status;
@@ -263,8 +264,6 @@ static const char *ago(uint32_t t)
 
 static const char *row_label(int i, void *) { return M->rows[M->vis[i]].name; }
 static const char *cat_label(int i, void *) { return CATS[i].n[lang_idx()]; }
-static const char *cat_right(int i, void *) { static char b[8]; snprintf(b, sizeof b, "%d", M->cat_count[i]); return b; }
-static unsigned short cat_color(int i, void *) { return M->cat_count[i] ? CATS[i].col : DIM; }
 
 static void set_hint(void)
 {
@@ -280,9 +279,9 @@ static void set_hint(void)
         if (stt == S_NEW)
             nucleo_app_set_hint(TR5("ok installa   esc indietro", "ok install   esc back", "ok instalar   esc atras", "ok installer   esc retour", "ok install.   esc zurueck"));
         else if (stt == S_UPDATE)
-            nucleo_app_set_hint(TR5("<> scegli  ok conferma  esc", "<> choose  ok press  esc", "<> elegir  ok pulsar  esc", "<> choisir  ok valider", "<> waehlen  ok druecken"));
+            nucleo_app_set_hint(TR5("<> scegli  ok conferma  esc indietro", "<> choose  ok press  esc back", "<> elegir  ok pulsar  esc atras", "<> choisir  ok valider  esc retour", "<> waehlen  ok druecken  esc zurueck"));
         else if (mine)
-            nucleo_app_set_hint(TR5("<> scegli  ok conferma  esc", "<> choose  ok press  esc", "<> elegir  ok pulsar  esc", "<> choisir  ok valider", "<> waehlen  ok druecken"));
+            nucleo_app_set_hint(TR5("<> scegli  ok conferma  esc indietro", "<> choose  ok press  esc back", "<> elegir  ok pulsar  esc atras", "<> choisir  ok valider  esc retour", "<> waehlen  ok druecken  esc zurueck"));
         else
             nucleo_app_set_hint(TR5("esc indietro", "esc back", "esc atras", "esc retour", "esc zurueck"));
     }
@@ -292,8 +291,8 @@ static void set_hint(void)
         nucleo_app_set_hint(TR5("ok apri   esc categorie", "ok open   esc categories", "ok abrir   esc categorias",
                                 "ok ouvrir   esc categories", "ok oeffnen   esc Kategorien"));
     else
-        nucleo_app_set_hint(TR5("tab sezione  r aggiorna  esc store", "tab section  r refresh  esc stores", "tab seccion  r recargar  esc",
-                                "tab section  r actualiser  esc", "tab Bereich  r neu laden  esc"));
+        nucleo_app_set_hint(TR5("tab sezione  r aggiorna  esc store", "tab section  r refresh  esc stores", "tab seccion  r recargar  esc atras",
+                                "tab section  r actualiser  esc retour", "tab Bereich  r neu laden  esc zurueck"));
 }
 
 static void go(int view)
@@ -612,6 +611,27 @@ static void compact_apps(int y, int h)
     d.setTextDatum(textdatum_t::top_left);
 }
 
+// Compact categories: all of them at once, a 2 x 4 grid of tiles (the panel's layout) - name and count in Font2,
+// Font0 for a name too long for it; the selected tile filled in its colour. LEFT/RIGHT/UP/DOWN walk the grid.
+static void compact_cats(int y, int h)
+{
+    const int li = lang_idx(), rows = (NCATS + 1) / 2, th = h / rows, tw = 116;
+    for (int i = 0; i < NCATS; i++) {
+        const int cx = 2 + (i % 2) * (tw + 4), cy = y + (i / 2) * th;
+        const bool f = i == s_cat_sel;
+        const unsigned short col = M->cat_count[i] ? CATS[i].col : DIM, bg = f ? col : lg::card();
+        d.fillRoundRect(cx, cy + 1, tw, th - 2, 6, bg);
+        if (!f) d.fillRoundRect(cx + 5, cy + th / 2 - 3, 6, 6, 2, col);
+        char n[8]; snprintf(n, sizeof n, "%d", M->cat_count[i]);
+        d.setFont(&fonts::Font2);
+        const int avail = tw - 26 - d.textWidth(n);
+        const lgfx::IFont *nf = d.textWidth(CATS[i].n[li]) <= avail ? (const lgfx::IFont *)&fonts::Font2 : &fonts::Font0;
+        txt_fit(nf, cx + 15, cy + th / 2 - (nf == &fonts::Font2 ? 8 : 4), avail, CATS[i].n[li], f ? INK : FG);
+        txt(&fonts::Font2, cx + tw - 6, cy + th / 2 - 8, n, f ? INK : MUTED, textdatum_t::top_right);
+    }
+    d.setTextDatum(textdatum_t::top_left);
+}
+
 static void draw_tabs_and_list(int top, int h)
 {
     static const char *const T[5][NTABS] = {
@@ -623,10 +643,7 @@ static void draw_tabs_and_list(int top, int h)
     for (int i = 0; i < NTABS; i++) names[i] = T[lang_idx()][i];
     if (s_updates) { snprintf(mine, sizeof mine, "%s %d", T[lang_idx()][TAB_MINE], s_updates); names[TAB_MINE] = mine; }
     int y = app_ui_tabs(top, names, NTABS, s_tab, CH_COL[s_ch]), lh = h - (y - top);   // the store's own colour
-    if (s_tab == TAB_CATS) {
-        app_ui_list(y, lh, NCATS, s_cat_sel, cat_label, cat_right, cat_color, nullptr);
-        return;
-    }
+    if (s_tab == TAB_CATS) { compact_cats(y, lh); return; }
     if (s_tab == TAB_MINE && s_updates) {               // one key updates them all
         char b[48];
         snprintf(b, sizeof b, TR5("%d da aggiornare  -  u: tutte", "%d to update  -  u: all", "%d por actualizar  -  u: todas",
@@ -672,19 +689,20 @@ static void draw_app(int top, int h)
     const st_app_t &a = M->app;
     int li = lang_idx(), cat = cat_index(a.category);
     uint8_t stt = state_of(a);
-    // Header: tile, name, author.
+    // Header: tile, name (bold, so a long one still fits), facts. Then three lines of description whatever else
+    // the page shows: the uses line sits under them, the buttons at the bottom.
     app_icon(a.id, a.name[li], cat, 6, top + 4, 30, BG);
-    txt_fit(&fonts::Font4, 42, top + 2, 194, a.name[li], FG);
+    txt_fit(&fonts::FreeSansBold9pt7b, 42, top + 2, 194, a.name[li], FG);
     char s[72], sz[16];
     kb(sz, sizeof sz, a.size);
     // Facts on one line: version, size, category.
     snprintf(s, sizeof s, "v%s  %s  %s", a.version, sz, CATS[cat].n[li]);
-    txt_fit(&fonts::Font0, 42, top + 27, 194, s, MUTED);
-    d.drawFastHLine(6, top + 38, 228, LINE);
+    txt_fit(&fonts::Font0, 42, top + 23, 194, s, MUTED);
+    d.drawFastHLine(6, top + 34, 228, LINE);
     bool more = false;
-    int y = wrap(6, top + 42, 228, a.desc[li], a.perms[0] ? 2 : 3, FG, s_desc_off, &more);
+    int y = wrap(6, top + 37, 222, a.desc[li], 3, FG, s_desc_off, &more);
     if (more || s_desc_off) {                            // there is more text: say which way it scrolls
-        txt(&fonts::Font0, 234, top + 42, s_desc_off ? "^" : "", DIM, textdatum_t::top_right);
+        txt(&fonts::Font0, 234, top + 37, s_desc_off ? "^" : "", DIM, textdatum_t::top_right);
         if (more) txt(&fonts::Font0, 234, y - 9, "v", DIM, textdatum_t::top_right);
     }
     if (s_note) txt_fit(&fonts::Font0, 6, y + 2, 228, s_note, C_RED);
@@ -803,11 +821,13 @@ static void lg_apps(int y, int H)
     lg_detail(LG_LW + 4, y + 2, 320 - LG_LW - 8, H - y - 6);
 }
 
-static void lg_cats(int y, int H)
+// was: the tile selected on the panel now (-1 = paint them all): only it and the new selection repaint.
+static void lg_cats(int y, int H, int was)
 {
     const int li = lang_idx(), rows = (NCATS + 1) / 2, cw = (320 - 12) / 2, ch = (H - y - 4) / rows;
     for (int i = 0; i < NCATS; i++) {
         const int cx = 4 + (i % 2) * (cw + 4), cy = y + 2 + (i / 2) * ch;
+        if (was >= 0 && i != was && i != s_cat_sel) { nucleo_touch_add(cx, cy, cw, ch - 4, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i)); continue; }
         const bool f = i == s_cat_sel;
         const unsigned short col = M->cat_count[i] ? CATS[i].col : DIM, bg = f ? col : lg::card();
         d.fillRoundRect(cx, cy, cw, ch - 4, 10, bg);
@@ -975,6 +995,9 @@ static void draw_large_view(void)
     const bool same = key == s_lg_key && nucleo_app_repaint_gen() == s_lg_gen;
     s_lg_key = key; s_lg_gen = nucleo_app_repaint_gen();
     const char *busy_txt = refreshing ? TR5("aggiorno...", "updating...", "actualizando...", "mise a jour...", "lade...") : nullptr;
+    // Unchanged bands (header, tabs, the update-all button) are drawn into a 1-pixel clip: nothing is sent to the
+    // panel, and their touch targets still register.
+    if (same) d.setClipRect(0, 0, 1, 1);
     int y;
     if (s_view == V_CAT) {
         char cnt[12]; snprintf(cnt, sizeof cnt, "%d", s_nvis);
@@ -987,12 +1010,18 @@ static void draw_large_view(void)
         if (s_updates) { snprintf(mine, sizeof mine, "%s %d", LG_TABS[li][TAB_MINE], s_updates); names[TAB_MINE] = mine; }
         y = lg::tabs(y0, names, NTABS, s_tab, CH_COL[s_ch], nullptr);
     }
-    if (!same) d.fillRect(0, y, W, H - y, BG);
-    if (s_view == V_LIST && s_tab == TAB_CATS) { lg_cats(y, H); return; }
     if (s_view == V_LIST && s_tab == TAB_MINE && s_updates) {
         char b[40]; snprintf(b, sizeof b, TR5("Aggiorna tutte (%d)", "Update all (%d)", "Actualizar todas (%d)", "Tout mettre a jour (%d)", "Alle aktualisieren (%d)"), s_updates);
+        if (!same) d.fillRect(0, y, W, 36, BG);
         lg::button(6, y + 3, W - 12, 30, b, C_YELLOW, INK, NK_CHAR, 'u');
         y += 36;
+    }
+    if (same) d.clearClipRect();
+    else d.fillRect(0, y, W, H - y, BG);
+    if (s_view == V_LIST && s_tab == TAB_CATS) {
+        lg_cats(y, H, same ? s_lg_cat : -1);
+        s_lg_cat = s_cat_sel;
+        return;
     }
     if (s_nvis) {
         lg::list_only(same ? s_lg_sel : -1, s_sel);
@@ -1006,7 +1035,8 @@ static void draw_large(void)
 {
     // A list with nothing new (the progress polls during a catalog refresh ask for a frame every 150 ms): the panel
     // already shows it, and its touch targets stand.
-    if ((s_view == V_CAT || (s_view == V_LIST && s_tab != TAB_CATS)) && s_lg_key && lg_list_key() == s_lg_key && s_lg_sel == s_sel &&
+    if ((s_view == V_CAT || s_view == V_LIST) && s_lg_key && lg_list_key() == s_lg_key &&
+        (s_view == V_LIST && s_tab == TAB_CATS ? s_lg_cat == s_cat_sel : s_lg_sel == s_sel) &&
         nucleo_app_repaint_gen() == s_lg_gen && (nucleo_store_status() != NST_BUSY || nucleo_store_op() == NST_OP_REFRESH)) return;
     nucleo_touch_clear();
     art_begin(s_view == V_CHOOSE ? s_ch_sel : s_ch);
@@ -1258,7 +1288,12 @@ static void on_key(int key, char ch)
     }
     if (s_view == V_LIST && s_tab == TAB_CATS) {
         if (key == NK_ENTER) { s_cat = s_cat_sel; s_sel = 0; go(V_CAT); return; }
-        app_ui_list_key(key, ch, &s_cat_sel, NCATS, cat_label, nullptr);
+        // The categories are a 2-column grid on both screens: LEFT / RIGHT step, UP / DOWN jump a row.
+        if (key == NK_LEFT && s_cat_sel > 0) s_cat_sel--;
+        else if (key == NK_RIGHT && s_cat_sel < NCATS - 1) s_cat_sel++;
+        else if (key == NK_UP) s_cat_sel = s_cat_sel >= 2 ? s_cat_sel - 2 : s_cat_sel;
+        else if (key == NK_DOWN) s_cat_sel = s_cat_sel + 2 < NCATS ? s_cat_sel + 2 : s_cat_sel;
+        else app_ui_list_key(key, ch, &s_cat_sel, NCATS, cat_label, nullptr);
     } else if (key == NK_ENTER) open_app();
     else app_ui_list_key(key, ch, &s_sel, s_nvis, row_label, nullptr);
     nucleo_app_request_draw();
