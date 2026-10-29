@@ -201,8 +201,14 @@ function saveLib() {
   saving = saving.then(() => fs.writeText(L.LIBRARY, L.formatLibrary(lib))).catch(() => {});
   return saving;
 }
-// The device may have changed the file since (a star set there, a game played there): read, change, write.
-async function libChange(fn) { await loadLib(); fn(lib); await saveLib(); }
+// The device may have changed the file since (a star set there, a game played there): read, change, write. One
+// change at a time: a star and a launch a moment apart both read the file before either wrote it, and the second
+// write dropped the first (the game played vanished from "Continue playing").
+let changing = Promise.resolve();
+function libChange(fn) {
+  changing = changing.then(async () => { await loadLib(); fn(lib); await saveLib(); }).catch(() => {});
+  return changing;
+}
 const isFav = (sys, file) => lib.favs.includes(pathOf(sys, file));
 function rememberPlay(sys, g) { libChange((l) => L.notePlayed(l, pathOf(sys, g.file))); }
 

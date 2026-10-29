@@ -126,16 +126,22 @@ export function createFileDialog({ t, fs = coreFs, remember, recall } = {}) {
         const f = listEl.querySelector('.fd-item.focus');
         if (f) f.scrollIntoView({ block: 'nearest' });
       }
+      // The newest navigation wins: a slow listing of a folder left meanwhile never paints over the one shown now
+      // (Open would then pick a file of the wrong folder).
+      let nav = 0;
       async function go(next) {
         if (!browsable(next)) return;
+        const mine = ++nav;
         busy = true; refreshOk();
         listEl.setAttribute('aria-busy', 'true');
         try {
           const got = await list(next);
+          if (mine !== nav || closed) return;
           got.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : a.type === 'dir' ? -1 : 1));
           entries = got; dir = next; deviceOk = true; picked.clear(); focusIdx = -1; say('');
           if (remember) remember(dirKey, dir);
         } catch {
+          if (mine !== nav || closed) return;
           if (next !== ROOT) { busy = false; return go(ROOT); }
           entries = []; deviceOk = false;
         }
