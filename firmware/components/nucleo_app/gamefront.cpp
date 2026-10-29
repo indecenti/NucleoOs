@@ -1328,12 +1328,13 @@ static void swap_all(uint16_t *px, size_t n) { for (size_t i = 0; i < n; i++) px
 // shares the SPI bus with the panel; a .pic is ~23 KB to read). Each is packed: per row, runs of one colour and
 // stretches of literal pixels (PackBits on RGB565): a console's screenshot shrinks 4-8x, a photo less (one that stays
 // over PC_MAX is not kept). Made while the player is still (gamefront_step), packed in the canvas (free between frames)
-// and kept in one exact-size block, only while the heap keeps PC_RESERVE free for the radio and the web server; the
+// and kept in one exact-size block, PC_BUDGET in all, only while the heap keeps PC_RESERVE free for the radio and the web server; the
 // farthest from the selection goes first. Freed when the gallery closes or a game starts.
 #define PC_N       6
-#define PC_MAX     14000
-#define PC_RESERVE 20000
-struct PCache { uint32_t key; int16_t at; uint8_t w, h, dark; uint8_t *z; };   // z: u16 row offsets[h], then the rows
+#define PC_MAX     8000                // one picture at most, packed
+#define PC_BUDGET  8000                // all of them (Wi-Fi up, the ADV has ~21 KB free in the gallery)
+#define PC_RESERVE 13000               // the heap never goes below this for them
+struct PCache { uint32_t key; int16_t at; uint8_t w, h, dark; uint8_t *z; uint32_t n; };   // z: u16 row offsets[h], then the rows; n bytes
 static PCache s_pc[PC_N];
 static void pc_free(int i) { free(s_pc[i].z); memset(&s_pc[i], 0, sizeof s_pc[i]); }
 static void pc_clear(void) { for (int i = 0; i < PC_N; i++) pc_free(i); }
@@ -1406,7 +1407,10 @@ static int pc_load(const char *path, uint32_t key, int at, bool dark)
     if (slot < 0) return -1;
     if (s_pc[slot].z) pc_free(slot);
     for (int tries = 0; tries < PC_N; tries++) {       // room for it, keeping the reserve (evicting the farthest)
-        if (heap_caps_get_free_size(MALLOC_CAP_8BIT) >= used + PC_RESERVE && heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) > used) break;
+        size_t held = 0;
+        for (int i = 0; i < PC_N; i++) if (s_pc[i].z) held += s_pc[i].n;
+        if (held + used <= PC_BUDGET && heap_caps_get_free_size(MALLOC_CAP_8BIT) >= used + PC_RESERVE &&
+            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) > used) break;
         int ev = -1, evd = -1;
         for (int i = 0; i < PC_N; i++) {
             if (!s_pc[i].z || s_pc[i].key == s_pic.key) continue;
@@ -1421,7 +1425,7 @@ static int pc_load(const char *path, uint32_t key, int at, bool dark)
     uint8_t *z = (uint8_t *)malloc(used);
     if (!z) return -1;
     memcpy(z, sc, used);
-    s_pc[slot] = { key, (int16_t)at, (uint8_t)ph.w, (uint8_t)ph.h, (uint8_t)dark, z };
+    s_pc[slot] = { key, (int16_t)at, (uint8_t)ph.w, (uint8_t)ph.h, (uint8_t)dark, z, (uint32_t)used };
     return 1;
 }
 
