@@ -85,6 +85,10 @@ esp_err_t nucleo_audio_pcm_write(const int16_t *pcm, size_t bytes)
     return ESP_OK;
 }
 void nucleo_audio_pcm_close(void) { nucleo_hm_free(g_dma); g_dma = NULL; }
+// the cartridge from internal flash: not on the host (the pool path is what this tests)
+const uint8_t *nucleo_rom_map(const char *p, uint32_t *sz, void (*f)(uint32_t, uint32_t, void *), void *u) { (void)p; (void)sz; (void)f; (void)u; return NULL; }
+void nucleo_rom_unmap(void) {}
+void (*emu_rom_progress)(uint32_t, uint32_t, void *);
 
 static long g_lines;
 static unsigned long g_hash;

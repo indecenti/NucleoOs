@@ -19,6 +19,7 @@
 #include "nucleo_gg.h"
 #include "nucleo_audio.h"
 #include "emu_audio.h"      // the speaker stage: low-pass and soft knee (the PSG centres itself, see psg_run)
+#include "emu_romstore.h"   // the cartridge from internal flash (ABI level 7)
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
@@ -109,6 +110,7 @@ typedef struct {
     uint32_t      pg_age[PG_SLOTS];
     uint8_t       pg_mapped[PG_SLOTS];          // rmap entries pointing here — prefer evicting 0
     int           pg_n, pg_pinned;
+    const uint8_t *rom_map;                     // the cartridge mapped from flash (nucleo_rom_map), or NULL
     uint32_t      pg_clock, frame_clock;        // age stamps; frame_clock = pg_clock when this frame began
     int8_t        hint[PG_HINT];
     uint32_t      misses, faults;               // SD refills / page (re)mappings, since the last reset
@@ -322,6 +324,16 @@ static inline int  sram_page(const gg_session_t *s, unsigned a)
 // PG_MIN pages whatever a game asks for — beyond that the write is dropped (said once in the log).
 static uint8_t *sram_alloc(gg_session_t *s, int p)
 {
+    if (s->rom_map) {                           // the cartridge is in flash: battery RAM gets a page of its own
+        uint8_t *b = s->pg_n < PG_SLOTS ? (uint8_t *)calloc(1, PG_SIZE) : NULL;
+        if (!b) return NULL;
+        s->pg_tag[s->pg_n] = PG_SRAM | (uint32_t)p;
+        s->pg[s->pg_n++] = b;
+        s->pg_pinned++;
+        s->heap_bytes += PG_SIZE;
+        s->sram[p] = b;
+        return b;
+    }
     if (s->pg_n - s->pg_pinned <= PG_MIN) {
         if (!s->sram_full_warned) { s->sram_full_warned = true; ESP_LOGW(TAG, "battery RAM: pool exhausted"); }
         return NULL;
@@ -342,6 +354,10 @@ static uint8_t gg_fault(gg_session_t *s, unsigned a)
         // The EEPROM answers at $8000 only; the rest of that 1 KB page is still ROM, so the page is
         // never mapped while the EEPROM is on and every access to it comes through here.
         if (a == 0x8000) return ee_read(s->m);
+        if (s->rom_map) {
+            const uint32_t off = s->rom_off + (rom_page(s, zp) << PG_BITS) + (a & (PG_SIZE - 1));
+            return off < s->rom_bytes ? s->rom_map[off] : 0xFF;
+        }
         int sl = page_get(s, rom_page(s, zp));
         return sl < 0 ? 0xFF : s->pg[sl][a & (PG_SIZE - 1)];
     }
@@ -350,6 +366,16 @@ static uint8_t gg_fault(gg_session_t *s, unsigned a)
         if (!p) return 0x00;                    // never written: erased RAM
         s->rmap[zp] = p;
         return p[a & (PG_SIZE - 1)];
+    }
+    if (s->rom_map) {                           // the flash: map the page in place (the last, partial one stays a fault)
+        const uint32_t off = s->rom_off + (rom_page(s, zp) << PG_BITS);
+        if (off + PG_SIZE <= s->rom_bytes) {
+            s->faults++;
+            map_clear(s, zp);
+            s->rmap[zp] = (uint8_t *)(s->rom_map + off);   // only read: writes to ROM pages never use rmap
+            return s->rmap[zp][a & (PG_SIZE - 1)];
+        }
+        return off + (a & (PG_SIZE - 1)) < s->rom_bytes ? s->rom_map[off + (a & (PG_SIZE - 1))] : 0xFF;
     }
     int sl = page_get(s, rom_page(s, zp));
     if (sl < 0) return 0xFF;
@@ -1037,6 +1063,7 @@ static void session_free(gg_session_t *s)
     if (s->sound) { s->sound = false; nucleo_audio_pcm_close(); }
     if (s->fp) fclose(s->fp);
     for (int i = 0; i < s->pg_n; i++) free(s->pg[i]);
+    if (s->rom_map) nucleo_rom_unmap();
     free(s->m);
     free(s);
 }
@@ -1419,14 +1446,23 @@ esp_err_t nucleo_gg_open(const char *rom_path, nucleo_gg_line_fn on_line, void *
     memset(s->hint, -1, sizeof s->hint);
     for (int i = 0; i < 64; i++) s->rslot[i] = -1;
     uint32_t rom_pages = (s->rom_bytes - s->rom_off + PG_SIZE - 1) / PG_SIZE;
-    for (int i = 0; i < PG_SLOTS && (uint32_t)i < rom_pages + SRAM_PAGES; i++) {
+    // Beyond 64 KB the cartridge is mapped from the internal flash (copied there once, as the other consoles): no
+    // card reads while playing, and the pool's ~96 KB stay with the game (bigger panel bands: the Master System's
+    // picture on the external panel is bus-bound). The pool then holds only battery RAM, page by page.
+    if (rom_pages > 64) {
+        uint32_t msz = 0;
+        const uint8_t *mp = nucleo_rom_map(rom, &msz, emu_rom_progress, NULL);
+        if (mp && msz == s->rom_bytes) { s->rom_map = mp; fclose(s->fp); s->fp = NULL; }
+        else if (mp) nucleo_rom_unmap();
+    }
+    for (int i = 0; !s->rom_map && i < PG_SLOTS && (uint32_t)i < rom_pages + SRAM_PAGES; i++) {
         if (heap_caps_get_free_size(MALLOC_CAP_DEFAULT) < PG_SIZE + KEEP) break;
         uint8_t *b = (uint8_t *)malloc(PG_SIZE);
         if (!b) break;
         s->pg[s->pg_n++] = b;
         s->heap_bytes += PG_SIZE;
     }
-    if (s->pg_n < PG_MIN) {
+    if (!s->rom_map && s->pg_n < PG_MIN) {
         ESP_LOGE(TAG, "only %d cartridge pages fit (need %d)", s->pg_n, PG_MIN);
         session_free(s);
         return ESP_ERR_NO_MEM;
@@ -1572,7 +1608,7 @@ void nucleo_gg_get_stats(nucleo_gb_stats_t *out)
     out->heap_bytes   = s->heap_bytes;
     out->rom_bytes    = s->rom_bytes;
     out->rom_pages    = s->pg_n - s->pg_pinned;
-    out->rom_resident = (uint32_t)out->rom_pages >= rom_pages;
+    out->rom_resident = s->rom_map != NULL || (uint32_t)out->rom_pages >= rom_pages;
     out->rom_paged    = !out->rom_resident;
     out->bank_misses  = s->misses;
     out->frames       = s->frames;
