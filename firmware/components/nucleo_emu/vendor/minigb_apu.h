@@ -125,6 +125,13 @@ void minigb_apu_audio_callback(struct minigb_apu_ctx *ctx,
 		audio_sample_t *stream);
 
 /**
+ * NucleoOS: `n` MONO samples (any count: the caller sizes each frame's sound to the speaker's clock), each the mix
+ * the speaker would fold the stereo pair to, (L + R) / 2. Half the work of the stereo callback.
+ */
+void minigb_apu_audio_callback_mono(struct minigb_apu_ctx *ctx,
+		audio_sample_t *stream, unsigned n);
+
+/**
  * Read audio register at given address "addr".
  * \param ctx Library context. Must be initialised with audio_init().
  * \param addr Address of registers to read. Must be within 0xFF10 and 0xFF3F,

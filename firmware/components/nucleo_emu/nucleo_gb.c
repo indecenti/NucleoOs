@@ -142,7 +142,7 @@ static const char *TAG = "gb";
 typedef struct {
     struct gb_s   gb;                   // ~17.2 KB — the whole console
     struct minigb_apu_ctx apu;          // Game Boy sound chip state (context-based, no globals)
-    audio_sample_t audio[AUDIO_SAMPLES_TOTAL];   // one frame of stereo samples (~2.2 KB)
+    audio_sample_t audio[AUDIO_SAMPLES_TOTAL];   // up to two frames of mono samples (~2.2 KB), see run_frame
     emu_afilt_t   afilt[2];             // the speaker stage, one per channel (emu_audio.h)
     emu_aclock_t  aclk;                 // the speaker's queue, for the trace (emu_audio.h)
     bool          sound;                // false when the speaker could not be claimed
@@ -169,6 +169,7 @@ typedef struct {
     uint8_t       skipped;
     int32_t       debt;
     int64_t       last_t0, last_block;
+    uint32_t      aacc;                 // the sound's samples a frame, 16.16 (see run_frame)
     uint32_t      us_cpu, us_audio;     // where a frame's time goes
 
     // Battery RAM — see RAM_RESIDENT. Slots are the banks held in RAM; bank_slot maps a cartridge bank
@@ -825,7 +826,7 @@ esp_err_t nucleo_gb_open(const char *rom_path, gb_line_fn_t on_line, void *user)
     // mic pin) the game still runs, silently. Refusing to start a cartridge because audio was taken
     // would be the wrong trade on a games machine. It opens HERE, before the page cache, so its DMA
     // channel is already paid for when the greedy cache below decides how much of the heap to take.
-    s->sound = (nucleo_audio_pcm_open_ex(AUDIO_SAMPLE_RATE, AUDIO_CHANNELS, EMU_AUDIO_QUEUE_FRAMES * AUDIO_SAMPLES) == ESP_OK);
+    s->sound = (nucleo_audio_pcm_open_ex(AUDIO_SAMPLE_RATE, 1, EMU_AUDIO_QUEUE_FRAMES * AUDIO_SAMPLES) == ESP_OK);
     s->aclk.rate = AUDIO_SAMPLE_RATE;
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
@@ -966,15 +967,24 @@ void nucleo_gb_run_frame(void)
     S->us_cpu += (uint32_t)(t1 - t0);
     S->frames++;
     S->clock++;
-    // One frame of sound, produced AFTER the frame that generated it and pushed straight out. The
-    // write blocks on the I2S DMA, which is also what paces us to real speed — so a dropped frame
-    // shows up as a click rather than as drift.
+    // One frame of sound, produced AFTER the frame that generated it and pushed straight out; the write blocks on
+    // the I2S DMA, which is what paces us to real speed. How many samples, measured on the ADV (emu_aclock_t):
+    // a fixed 548 a frame is 32,732 a second against the speaker's 32,768, so the queue never filled and every
+    // late frame emptied it (Zelda DX: 71 clicks in the 10 s of its intro at 50 fps). Now the speaker is the clock:
+    // the exact 548.63 a frame plus 0.3% keeps the queue full (the write blocks a little, the game runs 0.3% slow,
+    // inaudibly), and a frame that ran late by real work makes its lateness's samples too (as the NES and the PC
+    // Engine): the sound stretches instead of stopping. Mono: the speaker is one, and it halves the APU's work.
     if (S->sound) {
-        minigb_apu_audio_callback(&S->apu, S->audio);
-        emu_afilt_run(S->afilt, S->audio, AUDIO_SAMPLES_TOTAL, AUDIO_CHANNELS, 1);   // the APU's DAC has a DC offset
+        S->aacc += (uint32_t)(548.6328 * 1.003 * 65536.0);
+        int n = (int)(S->aacc >> 16);
+        S->aacc &= 0xFFFF;
+        if (over > 1000) n += (int)(((uint32_t)over * 2147u) >> 16);      // 32768 Hz = 2147/65536 a us
+        if (n > (int)AUDIO_SAMPLES_TOTAL) n = (int)AUDIO_SAMPLES_TOTAL;
+        minigb_apu_audio_callback_mono(&S->apu, S->audio, (unsigned)n);
+        emu_afilt_run(S->afilt, S->audio, (size_t)n, 1, 1);   // the APU's DAC has a DC offset
         const int64_t w0 = esp_timer_get_time();
-        emu_aclock_write(&S->aclk, w0, AUDIO_SAMPLES);
-        nucleo_audio_pcm_write(S->audio, sizeof(S->audio));
+        emu_aclock_write(&S->aclk, w0, n);
+        nucleo_audio_pcm_write(S->audio, (size_t)n * sizeof S->audio[0]);
         S->last_block = esp_timer_get_time() - w0;
         S->us_audio += (uint32_t)(esp_timer_get_time() - t1);
     }

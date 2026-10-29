@@ -63,8 +63,10 @@ largest block is 32 KB. See `docs/native-emulation.md` §6 for what it would tak
 
 ## minigb_apu.c / .h — Game Boy sound
 
-- MIT (`minigb_apu.LICENSE`), vendored verbatim. Context-based (no globals), ~2.2 KB per frame of
-  stereo samples.
+- MIT (`minigb_apu.LICENSE`). Context-based (no globals), ~2.2 KB per frame of stereo samples.
+- Changed here: the rendering loops take a sample count and a step (`struct out`), and
+  `minigb_apu_audio_callback_mono(ctx, stream, n)` renders `n` mono samples, each channel adding
+  (L gain + R gain) / 2. The context's layout (saved in save states) is unchanged.
 
 ## z80emu/ — Zilog Z80 (the Game Gear's CPU)
 

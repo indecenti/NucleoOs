@@ -17,6 +17,20 @@
 #define DMG_CLOCK_FREQ_U	((unsigned)DMG_CLOCK_FREQ)
 #define AUDIO_NSAMPLES		(AUDIO_SAMPLES_TOTAL)
 
+/* NucleoOS: the rendering loops run over `nsamp` samples of `step` values each (2 = stereo L/R, 1 = mono, where
+ * a channel adds (L gain + R gain) / 2: the fold the speaker would have made). */
+struct out { audio_sample_t *s; unsigned n, step; };
+static inline void out_add(const struct out *o, struct minigb_apu_ctx *ctx, const struct chan *c, unsigned i,
+		int32_t sample)
+{
+	if (o->step == 2) {
+		o->s[i + 0] += sample * c->on_left * ctx->vol_l;
+		o->s[i + 1] += sample * c->on_right * ctx->vol_r;
+	} else {
+		o->s[i] += (sample * (c->on_left * ctx->vol_l + c->on_right * ctx->vol_r)) >> 1;
+	}
+}
+
 #define MAX(a, b)		( a > b ? a : b )
 #define MIN(a, b)		( a <= b ? a : b )
 
@@ -120,7 +134,7 @@ static void update_sweep(struct chan *c)
 	}
 }
 
-static void update_square(struct minigb_apu_ctx *ctx, audio_sample_t *samples,
+static void update_square(struct minigb_apu_ctx *ctx, const struct out *o,
 		const bool ch2)
 {
 	struct chan *c = &ctx->chans[ch2];
@@ -130,7 +144,7 @@ static void update_square(struct minigb_apu_ctx *ctx, audio_sample_t *samples,
 
 	set_note_freq(c);
 
-	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i += 2) {
+	for (uint_fast16_t i = 0; i < o->n * o->step; i += o->step) {
 		update_len(ctx, c);
 		if (!c->enabled)
 			return;
@@ -159,8 +173,7 @@ static void update_square(struct minigb_apu_ctx *ctx, audio_sample_t *samples,
 		sample *= c->volume;
 		sample /= 4;
 
-		samples[i + 0] += sample * c->on_left * ctx->vol_l;
-		samples[i + 1] += sample * c->on_right * ctx->vol_r;
+		out_add(o, ctx, c, i, sample);
 	}
 }
 
@@ -178,7 +191,7 @@ static uint8_t wave_sample(struct minigb_apu_ctx *ctx,
 	return volume ? (sample >> (volume - 1)) : 0;
 }
 
-static void update_wave(struct minigb_apu_ctx *ctx, audio_sample_t *samples)
+static void update_wave(struct minigb_apu_ctx *ctx, const struct out *o)
 {
 	struct chan *c = &ctx->chans[2];
 
@@ -188,7 +201,7 @@ static void update_wave(struct minigb_apu_ctx *ctx, audio_sample_t *samples)
 	set_note_freq(c);
 	c->freq_inc *= 2;
 
-	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i += 2) {
+	for (uint_fast16_t i = 0; i < o->n * o->step; i += o->step) {
 		update_len(ctx, c);
 		if (!c->enabled)
 			return;
@@ -217,12 +230,11 @@ static void update_wave(struct minigb_apu_ctx *ctx, audio_sample_t *samples)
 		}
 
 		sample /= 4;
-		samples[i + 0] += sample * c->on_left * ctx->vol_l;
-		samples[i + 1] += sample * c->on_right * ctx->vol_r;
+		out_add(o, ctx, c, i, sample);
 	}
 }
 
-static void update_noise(struct minigb_apu_ctx *ctx, audio_sample_t *samples)
+static void update_noise(struct minigb_apu_ctx *ctx, const struct out *o)
 {
 	struct chan *c = &ctx->chans[3];
 
@@ -242,7 +254,7 @@ static void update_noise(struct minigb_apu_ctx *ctx, audio_sample_t *samples)
 		c->freq_inc = freq * (uint32_t)(FREQ_INC_REF / AUDIO_SAMPLE_RATE);
 	}
 
-	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i += 2) {
+	for (uint_fast16_t i = 0; i < o->n * o->step; i += o->step) {
 		update_len(ctx, c);
 		if (!c->enabled)
 			return;
@@ -279,22 +291,34 @@ static void update_noise(struct minigb_apu_ctx *ctx, audio_sample_t *samples)
 		sample *= c->volume;
 		sample /= 4;
 
-		samples[i + 0] += sample * c->on_left * ctx->vol_l;
-		samples[i + 1] += sample * c->on_right * ctx->vol_r;
+		out_add(o, ctx, c, i, sample);
 	}
 }
 
 /**
  * SDL2 style audio callback function.
  */
+static void render(struct minigb_apu_ctx *ctx, const struct out *o)
+{
+	memset(o->s, 0, o->n * o->step * sizeof(audio_sample_t));
+	update_square(ctx, o, 0);
+	update_square(ctx, o, 1);
+	update_wave(ctx, o);
+	update_noise(ctx, o);
+}
+
 void minigb_apu_audio_callback(struct minigb_apu_ctx *ctx,
 		audio_sample_t *stream)
 {
-	memset(stream, 0, AUDIO_SAMPLES_TOTAL * sizeof(audio_sample_t));
-	update_square(ctx, stream, 0);
-	update_square(ctx, stream, 1);
-	update_wave(ctx, stream);
-	update_noise(ctx, stream);
+	const struct out o = { stream, AUDIO_SAMPLES, 2 };
+	render(ctx, &o);
+}
+
+void minigb_apu_audio_callback_mono(struct minigb_apu_ctx *ctx,
+		audio_sample_t *stream, unsigned n)
+{
+	const struct out o = { stream, n, 1 };
+	render(ctx, &o);
 }
 
 static void chan_trigger(struct minigb_apu_ctx *ctx, uint_fast8_t i)
