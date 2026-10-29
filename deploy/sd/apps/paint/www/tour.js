@@ -179,7 +179,8 @@ export function startTour({ lang = 'it', force = false, modelDir = '', inShell =
     // 2) Model on SD
     let hasModel = false; let manifest = null;
     try {
-      const r = await fetch('/api/fs/read?path=' + encodeURIComponent(modelDir + '/manifest.json') + '&t=' + Date.now());
+      // App assets come from the STATIC route (like the ONNX chunks): /apps is not a device mount.
+      const r = await fetch(modelDir + '/manifest.json?t=' + Date.now());
       if (r.ok) { manifest = await r.json(); hasModel = true; }
     } catch {}
     wM.className = hasModel ? 'tour-chk ok' : 'tour-chk warn';

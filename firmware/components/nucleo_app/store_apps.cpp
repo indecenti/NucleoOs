@@ -26,10 +26,12 @@
 extern "C" {
 #include "nucleo_i18n.h"
 #include "nucleo_board.h"
+#include "store_engine.h"
 extern const char *nucleo_setup_ip(void);
 const nucleo_app_def_t *nucleo_native_load(const char *id);
 const char *nucleo_native_error(void);
 void nucleo_native_on_unload(void (*cb)(const char *id));
+void nucleo_native_forget(const char *id);
 }
 
 struct StoreApp {
@@ -209,6 +211,44 @@ extern "C" bool nucleo_store_app_is_native(const char *id)
 {
     const StoreApp *a = find(id);
     return a && !strcmp(a->kind, "native");
+}
+
+// The launcher's quick menu (a long press on a tile): a store app's facts - its channel, the version installed and
+// the catalog's description in the OS language (empty when the catalog is not on the card; the entry is read into a
+// heap block freed at once). False = not an app the store installed.
+extern "C" bool nucleo_store_app_facts(const char *id, char *version, int vn, char *kind, int kn, char *desc, int dn)
+{
+    const StoreApp *a = find(id);
+    if (!a) return false;
+    snprintf(kind, kn, "%s", a->kind);
+    version[0] = 0; desc[0] = 0;
+    char p[96], l[80];
+    snprintf(p, sizeof p, NUCLEO_SD_MOUNT "/apps/%s/.store-version", id);
+    FILE *f = fopen(p, "r");
+    while (f && fgets(l, sizeof l, f))
+        if (!strncmp(l, "version ", 8)) { snprintf(version, vn, "%s", l + 8); version[strcspn(version, "\r\n")] = 0; }
+    if (f) fclose(f);
+    st_app_t *e = (st_app_t *)malloc(sizeof(st_app_t));
+    if (e) {
+        if (st_find(NUCLEO_SD_MOUNT, !strcmp(a->kind, "native") ? ST_CH_NATIVE : ST_CH_WEB, id, e)) snprintf(desc, dn, "%s", e->desc[lang_idx()]);
+        free(e);
+    }
+    return true;
+}
+
+extern "C" void nucleo_store_apps_sync(void);   // below
+
+// The quick menu's Uninstall: what the Store does for it - a native module is unloaded first, the folder and (for a
+// web app) its registry entry go, and the launcher follows. Never touches an app the store did not install.
+extern "C" bool nucleo_store_app_uninstall(const char *id)
+{
+    if (!find(id)) return false;
+    char keep[33];
+    snprintf(keep, sizeof keep, "%s", id);                 // `id` may point into the table the sync rebuilds
+    if (nucleo_store_app_is_native(keep)) nucleo_native_forget(keep);
+    const bool ok = st_remove(NUCLEO_SD_MOUNT, keep) == ST_OK;
+    nucleo_store_apps_sync();
+    return ok;
 }
 
 // Called by the framework right before it opens a store app (in the boot that will run it: a game's Solo boot).

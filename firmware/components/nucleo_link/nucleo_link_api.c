@@ -33,6 +33,7 @@ static esp_err_t json_send(httpd_req_t *req, const char *body) {
 
 // ---- GET /api/link/peers : discovered devices + this device's link info ----
 static esp_err_t peers_get(httpd_req_t *req) {
+    NUCLEO_AUTH_GUARD(req);   // pending offers/commands, peer names + MACs: paired only
     ensure_started();
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "name", nlink_svc_name());
@@ -58,6 +59,7 @@ static esp_err_t peers_get(httpd_req_t *req) {
 
 // ---- GET /api/link/status : live transfer status ---------------------------
 static esp_err_t status_get(httpd_req_t *req) {
+    NUCLEO_AUTH_GUARD(req);   // pending offers/commands, peer names + MACs: paired only
     nlink_status_t s; nlink_svc_status(&s);
     cJSON *root = cJSON_CreateObject();
     cJSON_AddBoolToObject(root, "active", s.active);
@@ -79,6 +81,7 @@ static esp_err_t status_get(httpd_req_t *req) {
 
 // ---- GET /api/link/offer : pending incoming offer --------------------------
 static esp_err_t offer_get(httpd_req_t *req) {
+    NUCLEO_AUTH_GUARD(req);   // pending offers/commands, peer names + MACs: paired only
     char name[64] = "", from[40] = ""; uint32_t sz = 0;
     bool pending = nlink_svc_offer_pending(name, sizeof name, from, sizeof from, &sz);
     char out[160];
@@ -89,6 +92,7 @@ static esp_err_t offer_get(httpd_req_t *req) {
 
 // ---- GET /api/link/cmd : pending incoming command --------------------------
 static esp_err_t cmd_get(httpd_req_t *req) {
+    NUCLEO_AUTH_GUARD(req);   // pending offers/commands, peer names + MACs: paired only
     char cmd[160] = "", from[40] = "";
     bool pending = nlink_svc_cmd_pending(cmd, sizeof cmd, from, sizeof from);
     cJSON *root = cJSON_CreateObject();

@@ -508,11 +508,8 @@ function doCopy() {
   internalClip = { r1, c1, cells: clipCells };
   const tsvData = tsvRows.join('\r\n');
   
-  // OS Interop
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(tsvData).catch(()=>{});
-  }
-  try { window.parent.postMessage({ type: 'clipboard-write', kind: 'text', data: tsvData }, '*'); } catch {}
+  // OS Interop: the OS clipboard history (and the system clipboard where the page may use it)
+  coreOs().then((os) => os.copy(tsvData), () => {});
   
   setMsg(spT('msg_copied', { rows: r2 - r1 + 1, cols: c2 - c1 + 1 }, `Copiato (${r2 - r1 + 1}x${c2 - c1 + 1})`));
 }
@@ -1206,20 +1203,32 @@ function loadCSVData(text) {
   recalcAll(); curR = 0; curC = 0; selR2 = -1; selC2 = -1; gridWrap.scrollTop = 0;
   renderVirtual();
 }
+// The core file layer (/nucleo-fs.js), imported once: atomic saves keep the previous sheet if one fails.
+let _fs = null;
+const coreFs = () => _fs || (_fs = import('/nucleo-fs.js').then((m) => m.default, (e) => { _fs = null; throw e; }));
+// The OS around this window (dialogs, title, close, clipboard): /nucleo-shell.js, loaded once.
+// Hoisted (var/function): syncTitle can run before this line is reached.
+var _os = null;
+function coreOs() { return _os || (_os = import('/nucleo-shell.js').then((m) => m.default, (e) => { _os = null; throw e; })); }
 async function loadFromPath(path) {
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
-    if (!r.ok) { setMsg(spT('msg_cantOpen', { path }, 'Impossibile aprire ' + path)); return; }
-    loadCSVData(await r.text()); filePath = path; dirty = false; setMsg(spT('msg_opened', { path }, 'Aperto: ' + path));
-  } catch { setMsg(spT('msg_netError', null, 'Errore di rete')); }
+    const text = await (await coreFs()).readText(path);
+    if (text == null) { setMsg(spT('msg_cantOpen', { path }, 'Impossibile aprire ' + path)); return; }
+    loadCSVData(text); filePath = path; dirty = false; setMsg(spT('msg_opened', { path }, 'Aperto: ' + path));
+  } catch (e) {
+    if (e && e.code && e.code !== 'offline') setMsg(spT('msg_cantOpen', { path }, 'Impossibile aprire ' + path));
+    else setMsg(spT('msg_netError', null, 'Errore di rete'));
+  }
 }
 async function writeTo(path) {
   const sep = path.endsWith('.tsv') ? '\t' : ',';
   try {
-    const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: toCSV(sep) });
-    if (r.ok) { filePath = path; dirty = false; setMsg(spT('msg_saved', { path }, 'Salvato: ' + path)); syncTitle(); }
-    else setMsg(spT('msg_saveFailed', { status: r.status }, 'Salvataggio fallito (' + r.status + ')'));
-  } catch { setMsg(spT('msg_netError', null, 'Errore di rete')); }
+    await (await coreFs()).writeText(path, toCSV(sep));
+    filePath = path; dirty = false; setMsg(spT('msg_saved', { path }, 'Salvato: ' + path)); syncTitle();
+  } catch (e) {
+    if (!e || !e.status) { setMsg(spT('msg_netError', null, 'Errore di rete')); return; }   // no answer from the device
+    setMsg(spT('msg_saveFailed', { status: e.status }, 'Salvataggio fallito (' + e.status + ')'));
+  }
 }
 
 let dlgId = null, dlgResolve = null;
@@ -1230,7 +1239,7 @@ function fileDialog(mode, defPath, defName) {
   });
 }
 
-window.addEventListener('message', e => {
+window.addEventListener('message', async e => {
   const d = e.data || {};
   if (d.type === 'os-file-dialog-result' && d.id === dlgId) {
     const r = dlgResolve; dlgId = null; dlgResolve = null;
@@ -1242,11 +1251,11 @@ window.addEventListener('message', e => {
     else if (d.action === 'copy') doCopy(); else if (d.action === 'paste') doPaste();
     return;
   }
-  if (d.type === 'open-file' && d.path) { if (confirmOpen()) loadFromPath(d.path); return; }
+  if (d.type === 'open-file' && d.path) { if (await confirmOpen()) loadFromPath(d.path); return; }
 });
 
-function newSheet() {
-  if (dirty && !confirm(spT('confirm_new', null, 'Creare un nuovo foglio? Le modifiche andranno perse.'))) return;
+async function newSheet() {
+  if (dirty && !(await (await coreOs()).confirm(spT('confirm_new', null, 'Creare un nuovo foglio? Le modifiche andranno perse.'), { danger: true }))) return;
   cellData.clear(); undoStack.length = 0; redoStack.length = 0;
   filePath = ''; dirty = false; curR = 0; curC = 0; selR2 = -1; selC2 = -1; gridWrap.scrollTop = 0;
   renderVirtual(); setMsg(spT('msg_newSheet', null, 'Nuovo foglio'));
@@ -1258,15 +1267,15 @@ async function saveAs() {
 }
 // Opening another file replaces the sheet: ask first, like New and Exit do (asked once a file is
 // actually picked, so cancelling the dialog never prompts).
-function confirmOpen() {
-  return !dirty || confirm(spT('confirm_open', null, 'Aprire un altro file? Le modifiche non salvate andranno perse.'));
+async function confirmOpen() {
+  return !dirty || (await coreOs()).confirm(spT('confirm_open', null, 'Aprire un altro file? Le modifiche non salvate andranno perse.'), { danger: true });
 }
 async function openFile() {
-  const p = await fileDialog('open'); if (p && confirmOpen()) loadFromPath(p);
+  const p = await fileDialog('open'); if (p && await confirmOpen()) loadFromPath(p);
 }
-function exit() {
-  if (dirty && !confirm(spT('confirm_exit', null, 'Uscire senza salvare?'))) return;
-  try { window.parent.postMessage({ type: 'close-window' }, '*'); } catch {}
+async function exit() {
+  if (dirty && !(await (await coreOs()).confirm(spT('confirm_exit', null, 'Uscire senza salvare?'), { danger: true }))) return;
+  (await coreOs()).close();
 }
 function clearAll() {
   const diffs = [];
@@ -1284,7 +1293,8 @@ function setMsg(m) { $('stInfo').textContent = m; }
 function syncTitle() {
   const name = filePath ? filePath.split('/').pop() : spT('st_untitled', null, 'senza titolo');
   $('stFile').textContent = name; $('stDirty').textContent = dirty ? ' •' : '';
-  try { window.parent.postMessage({ type: 'set-window-title', title: spT('win_title', { name: name + (dirty ? ' •' : '') }, 'Spreadsheet — ' + name + (dirty ? ' •' : '')) }, '*'); } catch {}
+  const title = spT('win_title', { name: name + (dirty ? ' •' : '') }, 'Spreadsheet — ' + name + (dirty ? ' •' : ''));
+  if (window.parent !== window) coreOs().then((os) => os.setTitle(title), () => {});
 }
 
 // ===== MENU WIRING =====

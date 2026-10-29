@@ -1,8 +1,8 @@
 {
   "id": "mail",
   "name": "Mail",
-  "version": "1.0.1",
-  "version_code": 2,
+  "version": "1.0.2",
+  "version_code": 3,
   "min_os": "0.1.0",
   "platforms": ["esp32s3"],
   "description": "Send email via Gmail / Outlook / Yahoo / iCloud or any SMTP server.",

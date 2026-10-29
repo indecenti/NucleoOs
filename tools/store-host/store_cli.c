@@ -87,6 +87,16 @@ int main(int argc, char **argv)
         while (f && st_catalog_next(f, &a)) { printf("app %s %s %lu %s abi %lu\n", a.id, a.kind, (unsigned long)a.code, a.name[1], (unsigned long)a.abi); n++; }
         if (f) fclose(f);
         printf("count=%d\n", n);
+    } else if (!strcmp(cmd, "art")) {
+        FILE *f = st_art_open(sd, getenv("CHANNEL") ? getenv("CHANNEL") : ST_CH_WEB);
+        uint32_t off = 0; int size = 0;
+        if (f && st_art_find(f, arg, &off, &size)) {
+            uint16_t px = 0;
+            fseek(f, (long)off, SEEK_SET);
+            if (fread(&px, 2, 1, f) != 1) px = 0;
+            printf("art=%d px0=%04x\n", size, px);
+        } else printf("art=none\n");
+        if (f) fclose(f);
     } else if (!strcmp(cmd, "installed")) {
         bool sys = false;
         printf("installed=%lu system=%d\n", (unsigned long)st_installed(sd, arg, &sys), sys);

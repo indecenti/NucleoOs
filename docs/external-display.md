@@ -127,10 +127,19 @@ category: a Back pill, and a tap on the rest of the bar opens the Control Center
 system bar over store apps (`NAP_FLAG_NO_HUD` opts out, docs/native-apps.md). The Control Center closes with
 the X in its strip or a tap anywhere on the strip.
 
-**Launcher grid (large).** Same-size tiles, 4 per row, scrolled in pixels: the keys keep the focused tile in view
-with the smallest move, a drag moves the content (`NUCLEO_TOUCH_VIEW_*`, every queued step applied before one
-paint) and leaves the focus alone, rows cut by the edges are clipped. The focused tile sits on a lit card in its
-own colour. Inside a category the first cell is a Back tile (and the status-bar breadcrumb still works).
+**Launcher grid (large).** Same-size tiles, 4 per row, three whole rows of 70 px in the 210 px band: the keys move a
+whole row into view (nothing is ever cut at the edges; DOWN from a column with nothing below goes to a shorter last
+row's last tile), a drag moves the content in pixels (`NUCLEO_TOUCH_VIEW_*`, every queued step applied before one
+paint) and leaves the focus alone. Raised badges (shadow, a darker lip, a faint gloss); names on up to two lines,
+a long single word hyphenated at a syllable. The focused tile sits on a card in its own colour, wholly inside its
+cell. Inside a category the first cell is a Back tile (and the status-bar breadcrumb still works). The bar: a soft
+band, the clock in bold, date / network / count in Font2, a raised Back pill.
+
+**Quick menu (large).** A long press on a tile (`NUCLEO_TOUCH_HOLD`: the touch layer turns a still hold on a
+`NUCLEO_TOUCH_ROW` target of a large screen into it, even inside a scroll area) or `*` opens a card over the
+dimmed grid: Open, Pin to Home / Unpin, Info (category, on Home, source and version, the store's description), and
+Uninstall for an app the store installed (asks first, "No" focused; `nucleo_store_app_uninstall`). Keys: up/down,
+Enter, Esc steps back; a tap does a row, a tap outside closes.
 
 **Screen off.** Idle auto-off, the Control Center's screen-off and the web's `display off` all go through the
 brightness, which the mirror follows: with the LED on a GPIO (`bl`, G3 = EXT pin 1 in the reference wiring) the

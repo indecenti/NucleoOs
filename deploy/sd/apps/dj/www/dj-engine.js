@@ -14,7 +14,7 @@
 //
 // It consumes the plan objects from dj-planner.js. fx tags are realised below.
 
-import { loadNpx } from './npx.js';
+import { loadNpx, deviceFs } from './npx.js';
 
 export class DjEngine {
   constructor(ctx) {
@@ -60,19 +60,18 @@ export class DjEngine {
   }
 
   // --- load a track into a deck: decode audio + parse its .npx ---
-  async loadDeck(which, audioPath, fetchImpl = fetch) {
-    return this.setDeck(which, await this.fetchTrack(audioPath, fetchImpl));
+  async loadDeck(which, audioPath) {
+    return this.setDeck(which, await this.fetchTrack(audioPath));
   }
 
   // Decode a track WITHOUT touching any deck, so a caller can drop a load that a later click (or a mix in
   // progress) has made stale. Assigning half-way through, as loadDeck used to, let two overlapping loads
   // leave a deck with one track's audio and the other's .npx.
-  async fetchTrack(audioPath, fetchImpl = fetch) {
-    const r = await fetchImpl('/api/fs/read?path=' + encodeURIComponent(audioPath));
-    if (!r.ok) throw new Error('audio fetch ' + r.status);
-    const ab = await r.arrayBuffer();
-    const buffer = await this.ctx.decodeAudioData(ab);
-    const npx = await loadNpx(audioPath, fetchImpl);
+  async fetchTrack(audioPath) {
+    const bytes = await (await deviceFs()).read(audioPath);
+    if (!bytes) throw new Error('audio fetch not-found');
+    const buffer = await this.ctx.decodeAudioData(bytes.buffer);
+    const npx = await loadNpx(audioPath);
     return { buffer, npx, path: audioPath };
   }
 

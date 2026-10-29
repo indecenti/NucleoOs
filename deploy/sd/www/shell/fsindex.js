@@ -14,6 +14,8 @@
 // Everything here is framework-free and self-contained; the shell calls init() at boot, warm() + search()
 // from the search UI, invalidate() on fs.changed. Host-tested in tools/shell-fsindex.test.mjs.
 
+import fs from './nucleo-fs.js';
+
 const ROOTS = ['/data'];
 const MAX_DEPTH = 6;            // how deep into /data we descend
 const MAX_DIRS = 600;          // hard cap on directory reads per full crawl (bounded work per boot)
@@ -87,13 +89,10 @@ function persist() {
 }
 
 // ---- crawl ----
+// Through the core file layer: its request queue keeps the crawl from crowding the device's sockets, and it
+// never lists the temporary files of a write in progress. null = this folder could not be read.
 async function listDir(path) {
-  try {
-    const r = await fetch('/api/fs/list?path=' + encodeURIComponent(path), { cache: 'no-store' });
-    if (!r.ok) return null;
-    const d = await r.json();
-    return Array.isArray(d.entries) ? d.entries : [];
-  } catch { return null; }
+  try { return await fs.list(path); } catch { return null; }
 }
 
 async function crawl() {

@@ -67,7 +67,7 @@ NucleoOS is opened at `http://<cardputer-ip>`: not a secure origin, so `navigato
 SW's device gate (2 in flight, exclusive writes, app cache) never runs there. Page code must be device-friendly itself:
 - `web/shell/seq-import.js`: an app's own module graph fetched ONE file at a time and linked in the browser (blob URLs;
   shared modules keep their real URL). ANIMA loads the agent runtime with it — a parallel `import()` of ~12 modules lost
-  one on the 4-socket httpd and the browser kept the failure until a reload. `tools/seq-import.test.mjs`.
+  one on the 4-socket httpd and the browser kept the failure until a reload. `nucleo-webos tests/suite/seq-import.test.mjs`.
   A blob-linked module cannot resolve a root-relative `import('/x')` on the device's http origin ("Failed to resolve
   module specifier"), so seq-import makes relative AND root-relative dynamic imports absolute — the agent's run_js had
   been "Sandbox unavailable" whenever its runtime was linked. The sandbox itself loads one file at a time, with a fresh
@@ -129,7 +129,7 @@ Remote's and Nearby's commands (tool calls), and the shell broker's `ai.complete
   `mode=off` and never escalates `=ANIMA()` online. E2E: `recorder`, `dictation`, `spreadsheet-private`.
 - Kept apart on purpose: ANIMA's own ladder (device commands, WebGPU, WASM, streaming, the Groq web search), the
   agent runtime's clients (prompt caching, tiers), AI Chat's own key store, and the copilot — which applies the same
-  policy with per-step timeouts. Tests: `tools/shell-ai-ask.test.mjs`.
+  policy with per-step timeouts. Tests: `nucleo-webos tests/suite/shell-ai-ask.test.mjs`.
 
 ## Local models on the user's PC (`web/shell/ai-engines.js`)
 - Reached browser → `localhost` (never through the Cardputer); Ollama needs `OLLAMA_ORIGINS`
@@ -194,9 +194,9 @@ backlight read back, `/api/status`). `--overlay` serves the web files from the w
 the window session, ANIMA's synced conversations/workspace and the brightness are restored. `--sim` runs it on the
 simulator. `device-smoke.mjs --overlay` does the same for every app.
 
-Tests: `tools/anima-live-status.test.mjs`, `tools/anima-nlmath.test.mjs`, `tools/fsclient-root.test.mjs`, `tools/edit-replace.test.mjs`,
-`tools/agent-tool-guard.test.mjs`, `tools/shell-ai-engines.test.mjs`, `tools/anima-host/contextkit-check.mjs`,
-`tools/agent-sh.test.mjs`, `tools/ai-models.test.mjs` (rate limit vs quota), `tools/device-session.test.mjs`,
+Tests: `nucleo-webos tests/suite/anima-live-status.test.mjs`, `nucleo-webos tests/suite/anima-nlmath.test.mjs`, `nucleo-webos tests/suite/fsclient-root.test.mjs`, `nucleo-webos tests/suite/edit-replace.test.mjs`,
+`nucleo-webos tests/suite/agent-tool-guard.test.mjs`, `nucleo-webos tests/suite/shell-ai-engines.test.mjs`, `tools/anima-host/contextkit-check.mjs`,
+`nucleo-webos tests/suite/agent-sh.test.mjs`, `nucleo-webos tests/suite/ai-models.test.mjs` (rate limit vs quota), `tools/device-session.test.mjs`,
 `tools/anima-host/app-publish-check.mjs` (real lint), `tools/anima-host/app-ops-check.mjs`,
 `tools/anima-host/agent-runtime.test.mjs` (the REAL `runtime.js` on the host — `tools/lib/web-paths-loader.mjs`
 maps the device URLs — driven by a scripted model: plan reminder, read paging, budget summary incl. Anthropic).

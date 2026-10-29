@@ -239,6 +239,8 @@
   <script type="module">
     import I18N from '/nucleo-i18n.js';
     import Caps from '/nucleo-caps.js';   // what this device can do (device.ir)
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';   // the shell sets data-theme; onTheme for the wave redraw
     import { makeSkill, actionsToOpenAITools, fenceUntrusted } from '/apps/anima/anima-skill.js';   // reusable per-app scoped ANIMA skill (hardened vs prompt injection)
     const t = await I18N.init('ir-remote');
     const $ = (id) => document.getElementById(id);
@@ -258,24 +260,20 @@
     // reads the same favourites. localStorage is the offline cache + the fallback before pairing.
     const UDATA = '/data/ir/userdata.json';
     let saveTimer = 0;
-    async function sdWrite(path, body, type) {
-      try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent(path.replace(/\/[^/]+$/, '')), { method: 'POST' }); } catch {}
-      try { await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', headers: { 'Content-Type': type || 'application/json' }, body }); } catch {}
-    }
+    async function sdWrite(path, body) { try { await fs.write(path, body); } catch {} }
     // Typed read of the SD copy. A FAILED read (offline, 401, 503, corrupt JSON) is NOT "no user data": the
     // old code fell back to this browser's localStorage (often empty) and the next button press — which
     // records a "recent" — saved that over /data/ir/userdata.json. Only a 404 means "none yet".
     let sdOk = false;            // the SD copy was read (or is known not to exist): only then may it be written
     async function readUserData() {
       try {
-        const r = await fetch('/api/fs/read?path=' + encodeURIComponent(UDATA), { cache: 'no-store' });
-        if (r.status === 404) return { ok: true, data: null };
-        if (!r.ok) return { ok: false, status: r.status };
-        const txt = (await r.text()).trim();
+        const raw = await fs.readText(UDATA);
+        if (raw == null) return { ok: true, data: null };
+        const txt = raw.trim();
         if (!txt) return { ok: true, data: null };
         const j = JSON.parse(txt);
         return j && typeof j === 'object' && !Array.isArray(j) ? { ok: true, data: j } : { ok: false, status: 'corrupt' };
-      } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : 0 }; }
+      } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : (e && e.code) || 0 }; }
     }
     // The SD became readable again after a failed read: keep everything on it AND what was added here in the
     // meantime (union — nothing is lost), then let the write go ahead.
@@ -362,8 +360,6 @@
     }
 
     // ---- device API (graceful demo fallback) -------------------------------------------------
-    async function readJSON(path) { try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' }); return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; } }
-    async function loadTheme() { const s = await readJSON('/system/config/settings.json'); if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme; }
     async function postJSON(url, body) { try { const r = await fetch(url, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r.ok ? await r.json().catch(() => ({ ok: true })) : null; } catch { return null; } }
     async function irDb() { try { const r = await fetch('/api/ir/db', { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch { return null; } }
 
@@ -647,7 +643,7 @@
       const text = toIR(items);
       try { const blob = new Blob([text], { type: 'text/plain' }); const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = 'nucleo-remotes.ir'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); } catch {}
-      if (!demo) await sdWrite('/data/ir/nucleo-remotes.ir', text, 'text/plain');
+      if (!demo) await sdWrite('/data/ir/nucleo-remotes.ir', text);
       toast(t('export_done', { n: items.length }));
     }
 
@@ -775,16 +771,14 @@
       macros.unshift({ name, steps: draftSteps.slice() }); persist(); draftSteps = []; $('m_name').value = ''; renderDraftSteps(); renderMacros(); };
 
     window.addEventListener('message', (e) => {
-      if (e.data?.type === 'set-theme' && e.data.theme) { document.documentElement.dataset.theme = e.data.theme; if (curTab === 'builder') updateWave(); }
-      if (e.data?.t === 'fs.changed' && e.data.d?.path?.endsWith('settings.json')) loadTheme();
       if (e.data?.t === 'ir.sweep' && e.data.d) setProgress(e.data.d.sent, e.data.d.total, e.data.d.sent < e.data.d.total);
     });
+    os.onTheme(() => { if (curTab === 'builder') updateWave(); });
     I18N.onChange(() => { renderCats(); renderRegions(); setStatus(!demo); $('foot').textContent = t('title'); if (curTab === 'fav') renderFav(); });
 
     // ---- boot --------------------------------------------------------------------------------
     let REGIONS = ['all', 'us', 'eu', 'asia'];
     async function init() {
-      await loadTheme();
       catalog = await (await fetch('./presets.json', { cache: 'no-store' })).json().catch(() => ({ remotes: [], tvpower: [], categories: [] }));
       // The transmitter exists only where the capability list has device.ir: elsewhere the app runs as a demo,
       // says so, and sends nothing. Where it exists, /api/ir/db gives its state (ready, pin, protocols, regions).

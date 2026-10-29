@@ -33,19 +33,8 @@
   <div class="pad" id="pad"></div>
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import os from '/nucleo-shell.js';   // the OS around this window: theme (set by the shell), clipboard
     const t = await I18N.init('calculator');
-
-    // OS theme: apply the persisted choice at boot (the shell's live injection only fires on switch,
-    // and never when the calculator runs standalone).
-    async function loadTheme() {
-      try {
-        const r = await fetch('/api/fs/read?path=' + encodeURIComponent('/system/config/settings.json'), { cache: 'no-store' });
-        if (!r.ok) return;
-        const s = JSON.parse(await r.text());
-        if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
-      } catch {}
-    }
-    loadTheme();
 
     const disp = document.getElementById('disp');
     let expr = '';
@@ -103,9 +92,16 @@
     function flash() { disp.style.transition = 'background .15s'; disp.style.background = '#15325a'; setTimeout(() => { disp.style.background = ''; }, 180); }
     function copyResult() {
       const t = disp.textContent || '0';
-      try { navigator.clipboard && navigator.clipboard.writeText(t); } catch {}
-      try { if (inShell) window.parent.postMessage({ type: 'clipboard-write', kind: 'text', data: t }, '*'); } catch {}
+      os.copy(t);
       flash();
+    }
+    // The system clipboard where the page may read it, else the OS clipboard history (plain http too).
+    async function pasteClip() {
+      if (window.isSecureContext && navigator.clipboard && navigator.clipboard.readText) {
+        try { pasteNumber(await navigator.clipboard.readText()); return; } catch {}
+      }
+      const c = await os.paste().catch(() => null);
+      if (c && c.kind === 'text') pasteNumber(c.data);
     }
     function pasteNumber(text) { const m = String(text || '').match(/-?\d+\.?\d*/); if (!m) return; if (expr === ERR()) expr = ''; expr += m[0]; render(); }
 
@@ -113,7 +109,7 @@
       if (e.ctrlKey || e.metaKey) {                    // leave Ctrl combos to the OS bridge in-shell
         const k = e.key.toLowerCase();
         if (!inShell && k === 'c') { e.preventDefault(); copyResult(); }
-        else if (!inShell && k === 'v') { e.preventDefault(); try { navigator.clipboard && navigator.clipboard.readText().then(pasteNumber); } catch {} }
+        else if (!inShell && k === 'v') { e.preventDefault(); pasteClip(); }
         return;
       }
       if (e.key.length === 1 && /[\d+\-*/().]/.test(e.key)) input(e.key);
@@ -125,12 +121,11 @@
     // OS keyboard bridge: the shell routes Ctrl+C/V/A here as {type:'os-shortcut'} when focused.
     window.addEventListener('message', (e) => {
       const d = e.data; if (!d) return;
-      if (d.type === 'set-theme' && d.theme) { document.documentElement.dataset.theme = d.theme; return; }
       if (d.type !== 'os-shortcut') return;
       if (d.action === 'copy' || d.action === 'selectAll') copyResult();
       else if (d.action === 'paste') {
         if (d.clip && d.clip.kind === 'text') pasteNumber(d.clip.data);
-        else { try { navigator.clipboard && navigator.clipboard.readText().then(pasteNumber); } catch {} }
+        else pasteClip();
       }
     });
     render();

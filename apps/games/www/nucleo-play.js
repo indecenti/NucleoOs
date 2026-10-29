@@ -28,61 +28,34 @@
 // The message envelope on the wire is { t, ... }. Reserved types: hello, welcome, roster, chat,
 // bye, and 'm' (opaque game payload). Everything else is the game's business, carried inside 'm'.
 
+import fs from '/nucleo-fs.js';
+
+// The device filesystem, through the core file layer. Reads, listings, folders and removals are the core's;
+// a failed read/list is "nothing there" (as before), only a lost connection still rejects.
+const quiet = (fb) => (e) => { if (e && e.code === 'offline') throw e; return fb; };
 const FS = {
-  // Thin wrappers over the device filesystem API. The OS shell is already paired, so the session
-  // cookie rides along automatically (credentials:'same-origin').
-  async write(path, str) {
-    const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), {
-      method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/octet-stream' }, body: str,
-    });
-    return r.ok;
-  },
-  async read(path) {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { credentials: 'same-origin' });
-    if (!r.ok) return null;
-    return await r.text();
-  },
-  async list(path) {
-    const r = await fetch('/api/fs/list?path=' + encodeURIComponent(path), { credentials: 'same-origin' });
-    if (!r.ok) return [];
-    const j = await r.json().catch(() => null);
-    // The fs API returns either an array or {entries:[…]} depending on endpoint version.
-    if (!j) return [];
-    return Array.isArray(j) ? j : (j.entries || j.items || []);
-  },
+  // The mailbox and the room heartbeat write a small file several times a second while relaying: a plain write
+  // (one request: no stat, no swap). A torn mailbox file is harmless: the reader skips it and reads again next poll.
+  write: (path, str) => fs.write(path, str, { atomic: false, mkdir: false }).then(() => true, () => false),
+  read: (path) => fs.readText(path).catch(quiet(null)),
+  list: (path) => fs.list(path).catch(quiet([])),
   async readJSON(path) { const t = await FS.read(path); if (t == null) return null; try { return JSON.parse(t); } catch { return null; } },
   async writeJSON(path, obj) { return FS.write(path, JSON.stringify(obj)); },
-  async remove(path) {
-    // The firmware route is /api/fs/delete (it tries remove() then rmdir(), so it clears a file OR an
-    // EMPTY dir). It is NOT recursive — callers must delete a directory's contents before the dir.
-    try { await fetch('/api/fs/delete?path=' + encodeURIComponent(path), { method: 'POST', credentials: 'same-origin' }); } catch {}
-  },
-  async mkdir(path) {
-    try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent(path), { method: 'POST', credentials: 'same-origin' }); } catch {}
-  },
+  // Not recursive (the device clears a file OR an EMPTY dir): callers delete a directory's contents first.
+  remove: (path) => fs.remove(path).catch(() => {}),
+  // Parent-first and once per page (the core remembers what it made).
+  mkdir: (path) => fs.mkdirp(path).catch(() => {}),
 };
 
 const ROOMS_DIR = '/data/play/rooms';
 
-// Create the lobby directory tree ONCE per page, parent-first. The device mkdir is NOT recursive, so
-// mkdir'ing /data/play/rooms before /data/play exists fails with a 500 (then the list 404s) — and
-// because the lobby builds a fresh NucleoPlay on every tick, the old per-instance guard re-ran that
-// failing mkdir on every poll, spamming the single-task httpd at first launch. We list-before-mkdir
-// (so an already-present dir never emits a spurious 500) and cache the promise so every caller shares
-// one bring-up instead of each hammering the device.
+// Create the lobby directory tree ONCE per page, parent-first. The device mkdir is NOT recursive, and the
+// lobby builds a fresh NucleoPlay on every tick: the shared promise (and the core's own memory of the
+// folders it made) keeps that to one bring-up per page instead of a mkdir on every poll.
 let _roomsDirP = null;
 function ensureRoomsDir() {
   if (_roomsDirP) return _roomsDirP;
-  _roomsDirP = (async () => {
-    for (const p of ['/data/play', ROOMS_DIR]) {
-      try {
-        const r = await fetch('/api/fs/list?path=' + encodeURIComponent(p), { credentials: 'same-origin' });
-        if (r.status === 404) await FS.mkdir(p);          // missing → create just this level
-      } catch (e) { /* offline / unpaired: skip; listRooms will simply return [] */ }
-    }
-  })();
-  _roomsDirP.catch(() => { _roomsDirP = null; });          // don't cache a failure forever
+  _roomsDirP = fs.mkdirp(ROOMS_DIR).catch(() => { _roomsDirP = null; });   // offline / unpaired: listRooms returns []
   return _roomsDirP;
 }
 

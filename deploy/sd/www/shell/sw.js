@@ -4,7 +4,7 @@
 // Bump this on every shell change that must reach already-installed clients. The reason for each
 // roll goes in docs/shell-cache-log.md — NOT here: it used to be one 10.5 KB comment on this line,
 // half the whole service worker, re-shipped to every browser on every update check.
-const CACHE = 'nucleo-shell-v161-312d87d6c4a5';   // v161 — opt-in auto-update (cancellable countdown + Settings hand-off, see docs/shell-cache-log.md)
+const CACHE = 'nucleo-shell-v161-3fe8a8c20e36';   // v161 — opt-in auto-update (cancellable countdown + Settings hand-off, see docs/shell-cache-log.md)
 // Per-version cache for app assets (/apps/<id>/...). Tied to the shell version so a deploy (which
 // bumps CACHE) drops it; the shell also flushes it on apps.changed (OTA app update) via postMessage.
 const APP_CACHE = CACHE + '-apps';

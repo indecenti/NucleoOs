@@ -111,6 +111,8 @@
 import { createRunner } from './nucleo-run.js';
 import I18N from '/nucleo-i18n.js';
 import Caps from '/nucleo-caps.js';   // what this device can do: os.hw / os.anima skip what it lacks
+import fs from '/nucleo-fs.js';
+import os from '/nucleo-shell.js';   // the OS around this window (title, dialogs) — not the sandbox's `os` API
 const t = await I18N.init('code-runner');
 
 const $ = (id) => document.getElementById(id);
@@ -174,22 +176,21 @@ async function load(){
   if (!path){ setTitle(); editor.value = ''; savedText = ''; markDirty(false); maybeAutorun(); return; }
   setTitle();
   try {
-    const res = await fetch('/api/fs/read?path=' + encodeURIComponent(path));
-    if (res.ok){ editor.value = await res.text(); savedText = editor.value; markDirty(false); }
-    else { sysLine(t('read_failed', { path, status: res.status })); }
-  } catch (e){ sysLine(t('read_error', { error: e.message })); }
+    const text = await fs.readText(path);
+    if (text != null){ editor.value = text; savedText = editor.value; markDirty(false); }
+    else { sysLine(t('read_failed', { path, status: 404 })); }
+  } catch (e){ sysLine(e.code && e.code !== 'offline' ? t('read_failed', { path, status: e.code }) : t('read_error', { error: e.message })); }
   detectLang(); maybeAutorun();
 }
 async function save(){
   if (!path){
-    const name = prompt(t('prompt_save'), '/data/scratch.js');
+    const name = await os.prompt(t('prompt_save'), { value: '/data/scratch.js' });
     if (!name) return; path = name; setTitle(); rt.setCwd(cwd());
   }
   try {
-    const res = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: editor.value });
-    if (res.ok){ savedText = editor.value; markDirty(false); toast(t('saved')); }
-    else toast(t('save_failed', { status: res.status }));
-  } catch (e){ toast(t('save_error', { error: e.message })); }
+    await fs.write(path, editor.value);
+    savedText = editor.value; markDirty(false); toast(t('saved'));
+  } catch (e){ toast(e.code && e.code !== 'offline' ? t('save_failed', { status: e.code }) : t('save_error', { error: e.message })); }
 }
 function maybeAutorun(){ if (qs.get('autorun') === '1' && editor.value.trim()) setTimeout(runCode, 120); }
 
@@ -197,7 +198,7 @@ function maybeAutorun(){ if (qs.get('autorun') === '1' && editor.value.trim()) s
 function setTitle(){
   $('fname').firstChild.textContent = (path ? basename(path) : 'scratch.js') + ' ';
   $('fdir').textContent = path ? dirname(path) : t('unsaved');
-  try { window.parent.postMessage({ type: 'set-window-title', title: 'Code Runner — ' + (path ? basename(path) : t('scratch')) }, '*'); } catch {}
+  os.setTitle('Code Runner — ' + (path ? basename(path) : t('scratch')));
 }
 function markDirty(on){ dirty = on; $('dirty').hidden = !on; }
 function detectLang(){ const e = (basename(path).split('.').pop() || 'js').toLowerCase(); $('lang').textContent = e; }

@@ -13,8 +13,10 @@
 import I18N from '/nucleo-i18n.js';
 import { createSSHClient, probeBridge } from './ssh-client.js';
 import { createTerminal } from './term.js';
-import { pairDialog, pairedFetch } from '/nucleo-pair.js';
+import { pairDialog } from '/nucleo-pair.js';
+import fs from '/nucleo-fs.js';
 import Caps from '/nucleo-caps.js';   // what this device can do (pty)
+import os from '/nucleo-shell.js';    // the OS dialogs
 
 const t = await I18N.init('ssh');
 const $ = (id) => document.getElementById(id);
@@ -35,16 +37,15 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 // an empty list and the next "Save host" wrote a one-entry hosts.json over the saved list. 404 = none yet.
 async function readHosts() {
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(HOSTS_PATH), { cache: 'no-store' });
-    if (r.status === 404) return { ok: true, list: [] };
-    if (!r.ok) return { ok: false, status: r.status };
-    const s = (await r.text()).trim();
+    const raw = await fs.readText(HOSTS_PATH);
+    if (raw == null) return { ok: true, list: [] };
+    const s = raw.trim();
     if (!s) return { ok: true, list: [] };
     const j = JSON.parse(s);
     if (j && Array.isArray(j.hosts)) return { ok: true, list: j.hosts };
     if (j && typeof j === 'object' && !Array.isArray(j) && !Object.keys(j).length) return { ok: true, list: [] };   // the firmware's "{}"
     return { ok: false, status: 'corrupt' };
-  } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : 0 }; }
+  } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : e && e.code === 'denied' ? 401 : 0 }; }
 }
 const failText = (st) => st === 401 || st === 403 ? t('not_paired') : st === 'corrupt' ? t('read_corrupt') : t('read_failed');
 let readOk = false, readStatus = 0;      // saving is allowed only once the REAL list was read (or is known not to exist)
@@ -55,10 +56,14 @@ async function loadHosts() {
 }
 async function saveHosts() {
   if (!readOk) return false;                                  // never write over a list we could not read
-  // pairedFetch: a 401 `pairing_required` asks for the PIN and retries once, instead of a silent
-  // failure that read back as "saved" and lost the host on the next reload.
-  try { await pairedFetch('/api/fs/mkdir?path=' + encodeURIComponent('/data/ssh'), { method: 'POST' }); } catch {}
-  try { const r = await pairedFetch('/api/fs/write?path=' + encodeURIComponent(HOSTS_PATH), { method: 'POST', body: JSON.stringify({ hosts }) }); return r.ok; } catch { return false; }
+  // A refused write (not paired) asks for the PIN and retries once, instead of a silent failure that read
+  // back as "saved" and lost the host on the next reload.
+  const body = JSON.stringify({ hosts });
+  try { await fs.write(HOSTS_PATH, body); return true; }
+  catch (e) {
+    if (!e || e.code !== 'denied') return false;
+    try { if (!(await pairDialog())) return false; await fs.write(HOSTS_PATH, body); return true; } catch { return false; }
+  }
 }
 
 // ── bridge status ──
@@ -107,7 +112,7 @@ function renderHosts() {
   }
 }
 async function delHost(h) {
-  if (!confirm(t('confirm_delete', { name: h.name || h.host }))) return;
+  if (!(await os.confirm(t('confirm_delete', { name: h.name || h.host }), { danger: true }))) return;
   hosts = hosts.filter((x) => x.id !== h.id); if (sel && sel.id === h.id) sel = null;
   const ok = await saveHosts();
   if (!ok) await loadHosts();   // persistence refused → re-sync the view with reality

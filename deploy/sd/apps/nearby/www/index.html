@@ -80,6 +80,8 @@
 <script type="module">
 import I18N from '/nucleo-i18n.js';
 import Caps from '/nucleo-caps.js';   // what this device can do (device.link)
+import fs from '/nucleo-fs.js';
+import os from '/nucleo-shell.js';   // the OS dialogs
 import { makeSkill } from '/apps/anima/anima-skill.js';
 import { buildNearbySpec } from './nearby-skill.js';
 
@@ -162,7 +164,7 @@ async function fetchPeers() {
   if (!targetMac && peers.length) targetMac = peers[0].mac;   // the first device found is the default recipient
 }
 async function loadPeers() { await fetchPeers(); if (tab === 'peers' || tab === 'send' || tab === 'cmd') render(); }
-async function loadDir() { const r = await api('/api/fs/list?path=' + encodeURIComponent(dir)); entries = (r.entries || []).slice().sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1)); if (tab === 'send') render(); }
+async function loadDir() { entries = (await fs.list(dir).catch(() => [])).sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1)); if (tab === 'send') render(); }
 function setProto(p) { proto = p; for (const b of $('#proto').children) b.classList.toggle('on', b.dataset.p === p); }
 
 // ── renders ────────────────────────────────────────────────────────────────
@@ -242,7 +244,7 @@ function renderAnima() {
   const go = async () => {
     const v = $('#ain').value.trim(); if (!v) return; $('#ain').value = '';
     chat.push({ r: 'u', t: v }); renderAnima();
-    const r = await skill.ask(v, { transport, lang: I18N.lang, confirm: async (a, args) => confirm(t('confirm_x', { action: a, args: JSON.stringify(args) })) });
+    const r = await skill.ask(v, { transport, lang: I18N.lang, confirm: async (a, args) => os.confirm(t('confirm_x', { action: a, args: JSON.stringify(args) })) });
     chat.push({ r: 'a', t: r.reply || (r.ok ? t('done') : t('not_understood')) }); renderAnima();
   };
   $('#asend').onclick = go; $('#ain').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });

@@ -120,6 +120,7 @@
   <script type="module">
   import I18N from '/nucleo-i18n.js';
   import Caps from '/nucleo-caps.js';   // what this device can do (diag)
+  import os from '/nucleo-shell.js';    // the shell's status snapshot (it polls; we only listen)
   const t = await I18N.init('system-monitor');
   const $ = (id)=>document.getElementById(id);
   // A missing/garbled reading shows '—', never a fake '0 B' or 'NaN'.
@@ -304,8 +305,9 @@
 
   // ---- Polling: only the visible tab fetches; paused when the window is hidden ----
   // A minimized shell window is CSS-hidden, so document.hidden never fires inside the iframe; the
-  // shell posts os-visibility instead. Overview rides the shell's status.snapshot broadcast (no own
-  // /api/status fetch when embedded). RAM/CPU have no shell equivalent → polled here at 2 s.
+  // shell posts os-visibility instead. Overview rides the shell's status snapshot (os.onStatus, no own
+  // /api/status fetch when embedded; standalone keeps a fresh read, since nothing else polls there).
+  // RAM/CPU have no shell equivalent → polled here at 2 s.
   const EMBEDDED = window.top !== window.self;
   let osVisible = true, lastSnap = null;
   const json = async (u)=>{ try{ const r=await fetch(u,{cache:'no-store'}); return r.ok? await r.json() : null; }catch{ return null; } };
@@ -329,15 +331,16 @@
       if(active==='cpu'){ const c=diagOk ? await json('/api/cpu') : null; if(c) renderCpu(c); else cpuUnavailable(); }
     } finally { inFlight=false; }
   }
-  // Embedded cold boot: the shell's status.snapshot may lag (or a broadcast was missed) and
-  // Overview would sit on '—' forever. One direct fetch fallback, no retry loop.
-  if(EMBEDDED) setTimeout(async()=>{ try{ if(!lastSnap){ const s=await json('/api/status'); if(s && !lastSnap){ lastSnap=s; if(active==='overview') renderOverview(s); } } }catch{} }, 3000);
+  // Every snapshot the shell hands out. Embedded cold boot: the first one may lag (or a broadcast was
+  // missed) and Overview would sit on '—' forever — os.status() waits a moment for it, then reads once.
+  os.onStatus((s)=>{ lastSnap = s; if(active==='overview') renderOverview(s); });
+  if(EMBEDDED) os.status().then((s)=>{ if(s && !lastSnap){ lastSnap=s; if(active==='overview') renderOverview(s); } }, ()=>{});
 
   // Live event feed (shell forwards every bus event into this window).
   window.addEventListener('message',(e)=>{
     const ev=e.data; if(!ev||!ev.t) return;
     if(ev.t==='os-visibility'){ osVisible = !!(ev.d && ev.d.visible); if(osVisible) tick(true); return; }
-    if(ev.t==='status.snapshot'){ lastSnap = ev.d; if(active==='overview') renderOverview(ev.d); return; }
+    if(ev.t==='status.snapshot') return;   // os.onStatus above; not a feed line
     // Event names and payloads are device data (file names, SSIDs, app names): text, never markup.
     const line=document.createElement('div');
     const seq=document.createElement('span'); seq.className='t'; seq.textContent='#'+(ev.seq??'-');

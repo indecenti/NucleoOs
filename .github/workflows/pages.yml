@@ -115,6 +115,11 @@ jobs:
             curl -fSL --retry 3 -o sd.zip "$zip_url"
             unzip -q sd.zip -d "$d"; rm -f sd.zip
             curl -fSL --retry 3 -o "$d/sd-manifest.txt" "$man_url"
+            # The manifest's release signature (tools/fw_sign.py release, docs/release-signing.md): firmware with
+            # the check refuses the content without it, older firmware never asks for it.
+            sig_url=$(pick '-sd-manifest.sig')
+            if [ -n "$sig_url" ]; then curl -fSL --retry 3 -o "$d/sd-manifest.sig" "$sig_url"
+            else echo "::warning::$tag SD manifest is not signed yet (python tools/fw_sign.py release $tag)"; fi
             head -1 "$d/sd-manifest.txt" | grep -q "^#nucleoos-sd 1 $tag " \
               || { echo "::error::$tag manifest header does not name $tag"; exit 1; }
             grep -v '^#' "$d/sd-manifest.txt" \

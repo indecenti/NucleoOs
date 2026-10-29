@@ -186,7 +186,7 @@ export function makeFS(initialRoot) {
   async function read(p, { maxBytes = 256 * 1024 } = {}) {
     let full; try { full = resolve(p); } catch (e) { return { ok: false, error: e.message }; }
     try {
-      const r = await fetch('/api/fs/read?path=' + enc(full), { cache: 'no-store' });
+      const r = await fetch('/api/fs/read?path=' + enc(full), { cache: 'no-store' });   // nucleo-fs: allow (the agent's workspace sandbox and its error vocabulary)
       if (!r.ok) return { ok: false, error: r.status === 404 ? 'not-found' : 'http-' + r.status, path: rel(full) };
       const buf = await r.arrayBuffer();
       const bytes = buf.byteLength;

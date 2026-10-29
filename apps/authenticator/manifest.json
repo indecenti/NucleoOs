@@ -1,8 +1,8 @@
 {
   "id": "authenticator",
   "name": "Authenticator",
-  "version": "1.0.1",
-  "version_code": 1,
+  "version": "1.0.2",
+  "version_code": 2,
   "description": "Two-factor (2FA) verification codes — TOTP/HOTP computed in the browser (pure JS, no Web Crypto, works over http LAN and offline). Import an otpauth:// link or a Base32 secret; the device never computes a code.",
   "category": "tools",
   "runtime": "web",

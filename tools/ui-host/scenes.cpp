@@ -109,6 +109,26 @@ static void cc_scene(std::initializer_list<int> keys)
     for (int i = 0; i < 40 && launcher_render_control_center_animating(); i++) launcher_render_control_center();
 }
 
+static int item_index(const char *id)   // the visible-list index of an item of the current menu
+{
+    for (int i = 0; i < launcher_visible_count(); i++) if (!strcmp(launcher_nth_visible(i)->id, id)) return i;
+    return 0;
+}
+
+// A store app on the card: what the quick menu shows for one (its facts, Uninstall). The host launcher tree is the
+// static registry, so an app already in it (Weather) is the one the card says the store installed.
+extern "C" void nucleo_store_apps_sync(void);
+static void store_weather(void)
+{
+    _mkdir("sd"); _mkdir("sd/apps"); _mkdir("sd/apps/weather");
+    FILE *f = fopen("sd/apps/weather/.store-version", "wb");
+    if (f) { fputs("code 1\nversion 1.0.0\nkind native\nchannel native\nabi 3\ncategory tools\nname Meteo|Weather|Tiempo|Meteo|Wetter\n", f); fclose(f); }
+    nucleo_store_apps_sync();
+    go_category("Tools", 0);
+    launcher_set_sel(item_index("weather"));
+}
+static void store_weather_done(void) { remove("sd/apps/weather/.store-version"); _rmdir("sd/apps/weather"); nucleo_store_apps_sync(); }
+
 struct Scene { const char *name; void (*run)(void); };
 static const Scene SCENES[] = {
     { "home",        [] { launcher_reset(); draw_launcher(); } },
@@ -127,6 +147,13 @@ static const Scene SCENES[] = {
     { "cat-recent",  [] { launcher_reset(); for (const char *id : { "files", "weather", "wifi" }) launcher_note_launch(id);
                           go_category(LAUNCHER_RECENT_ID, 0); draw_launcher(); } },
     { "search-none", [] { type("zzq"); draw_launcher(); } },
+    // The panel's quick menu (a long press on a tile, or '*'): a built-in app, a store app, its Info, the confirm.
+    { "menu",         [] { go_category("Games", 2); launcher_qm_open(launcher_sel()); draw_launcher(); } },
+    { "menu-store",   [] { store_weather(); launcher_qm_open(launcher_sel()); draw_launcher(); store_weather_done(); } },
+    { "menu-info",    [] { store_weather(); launcher_qm_open(launcher_sel());
+                           launcher_qm_key(NK_DOWN, 0); launcher_qm_key(NK_DOWN, 0); launcher_qm_key(NK_ENTER, 0); draw_launcher(); store_weather_done(); } },
+    { "menu-confirm", [] { store_weather(); launcher_qm_open(launcher_sel());
+                           for (int k = 0; k < 3; k++) launcher_qm_key(NK_DOWN, 0); launcher_qm_key(NK_ENTER, 0); draw_launcher(); store_weather_done(); } },
     // The Cardputer's own panel while the home is on the external one (duplicate mode): time, date, battery,
     // network; then with a track playing.
     { "companion",       [] { launcher_render_companion(&d); } },
@@ -481,6 +508,7 @@ static const Scene *find_scene(const char *surface, const char *scene)
 }
 
 static const char *const LARGE_SCENES[] = { "home", "home-row3", "home-end", "cat-office", "cat-games", "cat-games-end", "search-set", "search-none",
+                                              "menu", "menu-store", "menu-info", "menu-confirm",
                                               "cc", "cc-xbright", "cc-volume", "cc-web", "cc-restart" };
 
 static void list_all(void)

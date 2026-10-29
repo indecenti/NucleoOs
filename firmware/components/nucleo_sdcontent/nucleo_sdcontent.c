@@ -5,6 +5,7 @@
 #include "sdc_engine.h"
 #include "nucleo_board.h"
 
+#include "fwsig.h"           // the content manifest must carry a release signature
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
 #include "esp_app_desc.h"
@@ -287,6 +288,7 @@ static void localize(void)
     case SDC_E_VERIFY:       m = L5("File corrotto", "Corrupted file", "Archivo corrupto", "Fichier corrompu", "Datei beschaedigt"); break;
     case SDC_E_WRITE:        m = L5("Scrittura SD fallita", "SD write failed", "Error al escribir la SD", "Ecriture SD impossible", "SD-Schreibfehler"); break;
     case SDC_E_NOMEM:        m = L5("RAM insufficiente", "Not enough RAM", "Sin RAM", "RAM insuffisante", "Zu wenig RAM"); break;
+    case SDC_E_SIGNATURE:    m = L5("Contenuti non firmati: riprova piu tardi", "Content not signed: retry later", "Contenido sin firmar: reintenta luego", "Contenu non signe : reessayez", "Inhalt nicht signiert: spaeter erneut"); break;
     default:                 m = L5("Download fallito", "Download failed", "Descarga fallida", "Echec", "Fehler"); break;
     }
     if (s_st.code == SDC_E_MANIFEST && s_st.http == 404) {
@@ -308,6 +310,14 @@ static void localize(void)
         snprintf(s_st.err, sizeof s_st.err, "%s: %.40s", m, d);
     else
         snprintf(s_st.err, sizeof s_st.err, "%s", m);
+}
+
+// The engine's signature hook: sd-manifest.sig signed with a release key over the manifest as downloaded.
+static bool manifest_signed(const char *tag, const char sha_hex[65], uint32_t size, const uint8_t block[128])
+{
+    fwsig_rc_t rc = fwsig_verify(block, FWSIG_DOMAIN_SD, tag, sha_hex, size);
+    if (rc != FWSIG_OK) ESP_LOGE(TAG, "SD manifest %s: %s", tag, fwsig_rc_name(rc));
+    return rc == FWSIG_OK;
 }
 
 static bool fail_here(sdc_code_t code, const char *detail)
@@ -358,7 +368,7 @@ bool nucleo_sdcontent_run(void)
     ESP_LOGW(TAG, "install v%s from %s, packs=%s, window=%u", ver3, base, s_packs, SDC_WINDOW);
 
     sdc_cfg_t cfg = { .root = NUCLEO_SD_MOUNT, .base_url = base, .ver3 = ver3, .packs = s_packs,
-                      .window = SDC_WINDOW, .retries = 3 };
+                      .window = SDC_WINDOW, .retries = 3, .verify_manifest = manifest_signed };
     sdc_io_t io = { .ctx = NULL, .get = dev_get, .progress = io_progress, .tick = io_tick };
     s_tls_err = 0;
     bool ok = sdc_engine_run(&cfg, &io, &s_st);

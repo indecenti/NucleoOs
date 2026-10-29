@@ -135,6 +135,7 @@
 
 <script type="module">
 import I18N from '/nucleo-i18n.js';
+import fs from '/nucleo-fs.js';
 const t = await I18N.init('arcade');   // init already fills [data-i18n] with the 'arcade' namespace
 
 const $ = (id) => document.getElementById(id);
@@ -143,7 +144,7 @@ let SYSTEMS = [], curSys = null, curGames = [], lastCounts = null, savedSet = ne
 let sel = 0, playing = false, listErr = false;   // sel = keyboard/gamepad cursor within the current view
 // The OS already had a ROM library here (the deploy manifest and .gitignore both name it), so the
 // app reads the EXISTING folder rather than inventing a second one at /roms.
-const ROM_DIR = 'data/ROMs/';
+const ROM_DIR = '/data/ROMs/';
 const SAVE_DIR = 'saves';       // per-system subfolder the player writes .state/.srm files into
 
 // ── Local shelf state (browser-side by design: the device only serves files) ────────────────────
@@ -169,13 +170,8 @@ async function jget(url) {
 // A folder listing that tells "not there" (404: an empty system) apart from "the device did not answer"
 // (busy / offline: null). Folding both into "empty" told the user to go and add ROMs to a card that has them.
 async function jlist(path) {
-  try {
-    const r = await fetch('/api/fs/list?path=' + encodeURIComponent(path), { cache: 'no-store' });
-    if (r.status === 404) return { entries: [] };
-    if (!r.ok) return null;
-    const d = await r.json();
-    return d && Array.isArray(d.entries) ? d : null;
-  } catch (e) { return null; }
+  try { return { entries: await fs.list(path) }; }        // the core answers [] for a folder that is not there
+  catch (e) { return null; }
 }
 
 // Count games in a system folder without downloading them — one directory listing, extension-filtered.
@@ -387,7 +383,7 @@ function renderGames(q) {
 
 // ── Launch / exit ───────────────────────────────────────────────────────────────────────────────
 function launch(sys, g) {
-  const rom = '/api/fs/read?path=' + encodeURIComponent(ROM_DIR + sys.id + '/' + g.file);
+  const rom = fs.url(ROM_DIR + sys.id + '/' + g.file);
   let url = 'player.html?core=' + encodeURIComponent(sys.core) +
             '&rom=' + encodeURIComponent(rom) + '&name=' + encodeURIComponent(g.title) +
             // the player probes this exact core on the SD to decide device-vs-CDN
@@ -397,7 +393,7 @@ function launch(sys, g) {
   // Neo Geo (and other arcade sets) will not boot without their BIOS: hand the player its URL so
   // EmulatorJS loads it alongside the game.
   if (sys.bios) {
-    const b = '/api/fs/read?path=' + encodeURIComponent(ROM_DIR + sys.id + '/' + sys.bios);
+    const b = fs.url(ROM_DIR + sys.id + '/' + sys.bios);
     url += '&bios=' + encodeURIComponent(b);
   }
   rememberPlay(sys, g);

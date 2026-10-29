@@ -31,6 +31,8 @@
   <div class="bar" id="bar"></div>
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';   // launch arguments ({ path } when opened on a file)
     const t = await I18N.init('photo-viewer');
     const DIR = '/data/Pictures';
     const img = document.getElementById('img');
@@ -39,7 +41,7 @@
     const msg = document.getElementById('msg');
     let current = '';
     let list = [], chips = [], idx = -1;
-    const src = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
+    const src = (p) => fs.url(p);
     function mark() {
       chips.forEach((c, i) => c.classList.toggle('active', i === idx));
       if (chips[idx]) chips[idx].scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -56,10 +58,8 @@
     document.getElementById('wall').onclick = () => current && window.parent.postMessage({ type: 'set-wallpaper', path: current }, '*');
     async function load() {
       let data;
-      try {
-        const r = await fetch('/api/fs/list?path=' + encodeURIComponent(DIR));
-        data = r.status === 404 ? { entries: [] } : (r.ok ? await r.json() : null);   // no folder yet = no pictures yet
-      } catch { data = null; }
+      try { data = { entries: await fs.list(DIR) }; }   // no folder yet = no pictures yet
+      catch { data = null; }
       if (!data) { if (!current) { msg.textContent = t('dir_failed', { dir: DIR }); msg.hidden = false; } return; }
       const imgs = (data.entries || []).filter(e => e.type === 'file' && /\.(png|jpe?g|gif|bmp|svg|webp)$/i.test(e.name));
       bar.innerHTML = ''; chips = []; list = imgs.map(im => DIR + '/' + im.name);
@@ -68,7 +68,7 @@
         const c = document.createElement('div'); c.className = 'chip'; c.textContent = im.name;
         c.onclick = () => show(DIR + '/' + im.name);
         bar.appendChild(c); chips.push(c);
-        if (i === 0 && !new URLSearchParams(location.search).get('path')) show(DIR + '/' + im.name);
+        if (i === 0 && !os.args().path) show(DIR + '/' + im.name);
       });
       if (current) { idx = list.indexOf(current); mark(); }
     }
@@ -85,7 +85,7 @@
       e.preventDefault();
       if (n !== idx) show(list[n]);
     });
-    const q = new URLSearchParams(location.search).get('path');
+    const q = os.args().path;
     if (q) show(q);
     load();
   </script>

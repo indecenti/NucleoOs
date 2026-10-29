@@ -1,8 +1,8 @@
 {
   "id": "updates",
   "name": "Updates",
-  "version": "1.0.1",
-  "version_code": 1,
+  "version": "1.0.2",
+  "version_code": 2,
   "description": "Update NucleoOS over the air: flash new firmware safely (auto-rollback) and check the system version. Where the device has an installer (/api/update), install release packages with dry-run, live log and rollback instead.",
   "category": "system",
   "runtime": "web",

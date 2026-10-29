@@ -201,15 +201,17 @@ function movavg(a, w) {
   return out;
 }
 
-// Fetch + parse a sidecar for an audio path served by the firmware FS API.
+// The device's disk (the core file layer), imported on first use: the decoder above also runs under node.
+let fsMod = null;
+export const deviceFs = async () => fsMod || (fsMod = (await import('/nucleo-fs.js')).default);
+
+// Read + parse a sidecar for an audio path on the device.
 // audioPath e.g. "/data/Music/track.mp3" -> reads "/data/Music/track.npx".
-export async function loadNpx(audioPath, fetchImpl = fetch) {
+export async function loadNpx(audioPath) {
   const npxPath = audioPath.replace(/\.[^./]+$/, '') + '.npx';
-  const url = '/api/fs/read?path=' + encodeURIComponent(npxPath);
-  const r = await fetchImpl(url);
-  if (!r.ok) return null;
-  const buf = await r.arrayBuffer();
-  try { return parseNpx(buf); } catch (e) { return null; }
+  let bytes; try { bytes = await (await deviceFs()).read(npxPath); } catch { return null; }
+  if (!bytes) return null;
+  try { return parseNpx(bytes.buffer); } catch (e) { return null; }
 }
 
 export { TONICS };

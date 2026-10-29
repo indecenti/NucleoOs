@@ -13,6 +13,13 @@ param([string]$DeviceHost = "nucleo-01.local", [string]$Pin = "")
 $ErrorActionPreference = 'Stop'
 $bin = Join-Path (Split-Path $PSScriptRoot -Parent) "firmware\build\nucleoos.bin"
 if (-not (Test-Path $bin)) { Write-Error "Build first: $bin not found"; exit 1 }
+# Release signature (docs/release-signing.md): the device only accepts images signed with a release key, so a
+# local build is signed here with the key on this PC (%USERPROFILE%\.nucleo\cardputer-ota-signing-key.pem).
+# Firmware older than the signature check ignores the trailing block, so the signed image installs everywhere.
+$signed = Join-Path (Split-Path $bin -Parent) "nucleoos-signed.bin"
+& python (Join-Path $PSScriptRoot "fw_sign.py") sign-bin --bin $bin --out $signed
+if ($LASTEXITCODE -ne 0) { Write-Error "Signing failed (see above): the device would refuse an unsigned image"; exit 1 }
+$bin = $signed
 $size = (Get-Item $bin).Length
 
 # Pairing: reuse one WebSession so the session cookie set by /api/pair rides along on /api/ota.

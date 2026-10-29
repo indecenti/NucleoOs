@@ -741,6 +741,8 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';
     const t = await I18N.init('help');   // core + this app's catalog for the active OS language
 
     // `lang` follows the OS language (the engine owns it). It still drives which it/en sub-object of
@@ -753,24 +755,13 @@
     let apiSpecifications = [];
 
     // Helper per leggere file JSON sul filesystem del dispositivo
-    async function readJSON(path) {
-      try {
-        const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
-        return r.ok ? JSON.parse(await r.text()) : null;
-      } catch {
-        return null;
-      }
-    }
+    const readJSON = (path) => fs.readJSON(path, null).catch(() => null);
 
     // Carica l'elenco dei manuali leggendo la directory /system/registry/manual/
     async function fetchManuals() {
       let entries = [];
       try {
-        const r = await fetch('/api/fs/list?path=' + encodeURIComponent('/system/registry/manual'));
-        if (r.ok) {
-          const j = await r.json();
-          entries = (j.entries || []).filter(e => e.name.endsWith('.info'));
-        }
+        entries = (await fs.list('/system/registry/manual')).filter(e => e.name.endsWith('.info'));
       } catch {}
 
       // Fallback statico offline per compatibilità locale o durante lo sviluppo
@@ -912,7 +903,7 @@
 
       // Gestore copia negli appunti
       document.getElementById('copy-synopsis').onclick = () => {
-        navigator.clipboard.writeText(data.synopsis);
+        os.copy(data.synopsis);
         const btnText = document.querySelector('#copy-synopsis span');
         btnText.textContent = t('copied');
         setTimeout(() => btnText.textContent = t('copy'), 1500);
@@ -923,11 +914,7 @@
       if (execBtn) {
         execBtn.onclick = () => {
           try {
-            window.parent.postMessage({
-              type: 'open-app',
-              id: 'terminal',
-              query: 'cmd=' + encodeURIComponent(manual.id)
-            }, '*');
+            os.openApp('terminal', { cmd: manual.id });
           } catch (e) {
             console.error(e);
           }
@@ -1138,7 +1125,7 @@
 
           document.getElementById('copy-res-btn').onclick = () => {
             let copyText = responseContainer.querySelector('.response-body').textContent;
-            navigator.clipboard.writeText(copyText);
+            os.copy(copyText);
             const btnSpan = document.querySelector('#copy-res-btn span');
             btnSpan.textContent = t('copied');
             setTimeout(() => btnSpan.textContent = t('copy'), 1500);
@@ -1322,7 +1309,7 @@
     // Lo spec è generato a build-time dalle route reali del firmware (tools/gen-api-spec.mjs),
     // quindi cambia SOLO a un nuovo flash/sync. Lo teniamo in localStorage con chiave = versione
     // firmware: a cache calda non leggiamo affatto il file dalla SD del Cardputer (mai pesare sul
-    // device). /api/status è throttlato lato firmware ed è il segnale d'invalidazione più economico.
+    // device). La versione arriva dallo stato che la shell già legge (os.status): nessuna richiesta nostra.
     const API_SPEC_CACHE = 'help.apispec.v1';
     async function loadApiSpec() {
       let cached = null;
@@ -1330,8 +1317,8 @@
 
       let version = null;
       try {
-        const r = await fetch('/api/status', { cache: 'no-store' });
-        if (r.ok) version = (await r.json()).version || null;
+        const st = await os.status();
+        version = (st && st.version) || null;
       } catch {}
 
       // Cache calda: stessa versione firmware → nessuna lettura SD dello spec.
@@ -1425,13 +1412,8 @@
             renderManualCard(entry);
           }
         }
-        if (d?.type === 'set-theme' && d.theme) {
-          document.documentElement.dataset.theme = d.theme;
-        }
       });
-      
-      const shellTheme = document.documentElement.dataset.theme || 'dark';
-      document.documentElement.dataset.theme = shellTheme;
+      // The theme: the shell sets data-theme on this page on load and on every change (nucleo-shell.js).
     }
 
     init();

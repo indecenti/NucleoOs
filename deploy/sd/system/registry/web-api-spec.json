@@ -1289,6 +1289,25 @@
     ]
   },
   {
+    "id": "api-input",
+    "path": "/api/input",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/input - Inietta un Tasto",
+      "description": "Mette un tasto nella coda della tastiera del dispositivo, come se fosse premuto sulla tastiera fisica: un client accoppiato può guidare la UI nativa via Wi-Fi (con GET /api/screen per vedere il risultato). Richiede l'accoppiamento.",
+      "synopsis": "POST /api/input?key=enter   |   POST /api/input?key=char&ch=a",
+      "details": "Parametri nella query:\n- key: enter | back | left | right | up | down | tab | del | char\n- ch: il carattere da digitare (solo con key=char)\nRisposta: {\"ok\":true} se il tasto è in coda; {\"ok\":false,\"err\":\"queue full\"} se la coda è piena.\n400 {\"ok\":false,\"err\":...} se key manca o non è valido, o se key=char è senza ch."
+    },
+    "en": {
+      "title": "POST /api/input - Inject a Key",
+      "description": "Queues a key press on the device keyboard as if it came from the physical keys, so a paired client can drive the native UI over Wi-Fi (pair it with GET /api/screen to see the result). Requires pairing.",
+      "synopsis": "POST /api/input?key=enter   |   POST /api/input?key=char&ch=a",
+      "details": "Query parameters:\n- key: enter | back | left | right | up | down | tab | del | char\n- ch: the character to type (only with key=char)\nResponse: {\"ok\":true} when the key is queued; {\"ok\":false,\"err\":\"queue full\"} when the queue is full.\n400 {\"ok\":false,\"err\":...} when key is missing or unknown, or key=char has no ch."
+    },
+    "params": []
+  },
+  {
     "id": "api-ir-jammer",
     "path": "/api/ir/jammer",
     "method": "POST",

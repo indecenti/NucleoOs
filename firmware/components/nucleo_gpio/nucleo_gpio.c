@@ -61,8 +61,10 @@ static esp_err_t gpio_post(httpd_req_t *req) {
     return json(req, NULL, out);
 }
 
-// GET /api/gpio?pin=N -> read a pin level (read-only, no auth — like /api/status).
+// GET /api/gpio?pin=N -> read a pin level. Paired only: the read switches the pin to INPUT, so an
+// unpaired client could otherwise release any output a paired session (or an app) is driving.
 static esp_err_t gpio_get(httpd_req_t *req) {
+    NUCLEO_AUTH_GUARD(req);
     char q[64] = { 0 }, pins[12] = { 0 };
     if (httpd_req_get_url_query_len(req) == 0 ||
         httpd_req_get_url_query_str(req, q, sizeof q) != ESP_OK ||

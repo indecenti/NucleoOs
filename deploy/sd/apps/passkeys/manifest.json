@@ -1,8 +1,8 @@
 {
   "id": "passkeys",
   "name": "Passkeys",
-  "version": "0.1.1",
-  "version_code": 2,
+  "version": "0.1.2",
+  "version_code": 3,
   "min_os": "0.1.0",
   "platforms": ["esp32s3"],
   "description": "Manage the FIDO security key from the browser: list and delete resident passkeys, set the on-device PIN, view key status and sign counters. Talks to the device over a small authenticated API — all UI runs in the browser, nothing heavy on the device.",

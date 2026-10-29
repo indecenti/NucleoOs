@@ -507,6 +507,8 @@
   <script type="module">
     import I18N from '/nucleo-i18n.js';
     import Caps from '/nucleo-caps.js';   // fs.mounts: whether /api/fs/mounts exists here
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';   // launch arguments ({ path } when opened on a file)
     const t = await I18N.init('video-player');   // loads core + this app's catalog, paints [data-i18n], live-switches
     // Re-render imperatively-built text after a live language change. The engine's apply() already
     // repaints every [data-i18n] node — but #title-sub carries a (live) file name while playing and
@@ -598,7 +600,8 @@
     let nativeAutoMuted = false; // autoplay con audio negato → <video> partito muto
     let lastError = null, hintKey = '', hintVars = null, hintSticky = false, hintTimer = 0;
 
-    const getSdUrl = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
+    const getSdUrl = (p) => fs.url(p);   // streamed by the device (Range where it can)
+    const listDir = (path) => fs.list(path);   // [] for a folder not made yet; '/' lists the mounts
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     // Keep the header subtitle correct across a live language change: a playing file shows its
@@ -626,7 +629,7 @@
         renderSourcesMenu();
       });
 
-      const q = new URLSearchParams(location.search).get('path');
+      const q = os.args().path;
       if (q) {
         // Preload the folder of the launched file into the playlist for prev/next (and its size,
         // which the no-Range streaming fallback needs).
@@ -648,9 +651,7 @@
       // to the fs convention roots.
       try {
         if (!await Caps.has('fs.mounts')) throw new Error();   // a device without the route: the convention roots
-        const res = await fetch('/api/fs/mounts');
-        if (!res.ok) throw new Error();
-        const data = await res.json();
+        const data = await fs.mounts();
         mediaAlt = typeof data.media_alt === 'string' ? data.media_alt : '';
         return (data.mounts || []).map(m => m.name);
       } catch { mediaAlt = ''; return ['system', 'data']; }
@@ -662,11 +663,7 @@
     // /media with a per-unit label (/media/MEDIA here, anything elsewhere):
     // never hardcode the label — scan depth-1.
     async function listEntries(path) {
-      try {
-        const r = await fetch('/api/fs/list?path=' + encodeURIComponent(path));
-        if (!r.ok) return null;
-        return ((await r.json()).entries) || [];
-      } catch { return null; }
+      try { return await listDir(path); } catch { return null; }
     }
 
     async function cardRoots() {
@@ -1302,10 +1299,8 @@
       playlistDir = dir;
       playlistTitleLabel.textContent = t('playlistTitle', { dir });
       try {
-        const res = await fetch('/api/fs/list?path=' + encodeURIComponent(dir));
-        // No such folder answers 404: the card is reachable, the playlist is just empty (like probeSd()).
-        if (!res.ok && res.status !== 404) throw new Error();
-        const data = res.status === 404 ? { entries: [] } : await res.json();
+        // No such folder lists as []: the card is reachable, the playlist is just empty (like probeSd()).
+        const data = { entries: await listDir(dir) };
         const base = dir.endsWith('/') ? dir : dir + '/';
         playlist = (data.entries || [])
           .filter(e => e.type === 'file' && MEDIA_RE.test(e.name))
@@ -1460,15 +1455,15 @@
       const dir = sdPath.substring(0, sdPath.lastIndexOf('/')) || '/';
       const base = sdPath.substring(sdPath.lastIndexOf('/') + 1).replace(/\.[^.]+$/, '').toLowerCase();
       try {
-        const res = await fetch('/api/fs/list?path=' + encodeURIComponent(dir));
-        if (!res.ok || token !== playToken) return;
-        const data = await res.json();
-        const subs = (data.entries || []).filter(e => e.type === 'file' && SUB_RE.test(e.name) &&
+        const entries = await listDir(dir);
+        if (token !== playToken) return;
+        const subs = entries.filter(e => e.type === 'file' && SUB_RE.test(e.name) &&
           e.name.toLowerCase().replace(/\.([a-z]{2,3})?\.?(srt|vtt|webvtt)$/i, '') === base);
         for (const s of subs) {
           try {
-            const txt = await (await fetch(getSdUrl((dir === '/' ? '' : dir) + '/' + s.name))).text();
+            const txt = await fs.readText((dir === '/' ? '' : dir) + '/' + s.name);
             if (token !== playToken) return;
+            if (txt == null) continue;
             await addSubFromText(s.name, txt);
           } catch {}
         }
@@ -1592,10 +1587,7 @@
 
       explorerList.innerHTML = '<li class="explorer-msg" data-i18n="loading">' + esc(t('loading')) + '</li>';
       try {
-        const res = await fetch('/api/fs/list?path=' + encodeURIComponent(sdCwd));
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        cachedFiles = (data.entries || []).sort((a, b) => a.type === b.type ? a.name.localeCompare(b.name, undefined, { numeric: true }) : (a.type === 'dir' ? -1 : 1));
+        cachedFiles = (await listDir(sdCwd)).sort((a, b) => a.type === b.type ? a.name.localeCompare(b.name, undefined, { numeric: true }) : (a.type === 'dir' ? -1 : 1));
         renderSdFiles();
       } catch {
         explorerList.innerHTML = '<li class="explorer-msg error" data-i18n="sdReadError">' + esc(t('sdReadError')) + '</li>';
@@ -1655,17 +1647,14 @@
     }
     async function probeSd() {
       // Every detected video source (P4 can have two), the convention folder before detection.
-      // A missing folder answers 404 on some boards: the card IS reachable, it just holds no videos.
+      // A missing folder lists as [] (404 on some boards): the card IS reachable, it just holds no videos.
       const dirs = sources.length ? sources.filter(s => s.kind === 'video').map(s => s.dir) : [DEFAULT_VIDS_DIR];
       let online = false, n = 0;
       for (const dir of dirs) {
         try {
-          const res = await fetch('/api/fs/list?path=' + encodeURIComponent(dir));
-          if (!res.ok && res.status !== 404) continue;
+          const entries = await listDir(dir);
           online = true;
-          if (res.status === 404) continue;
-          const data = await res.json();
-          n += (data.entries || []).filter(e => e.type === 'file' && MEDIA_RE.test(e.name)).length;
+          n += entries.filter(e => e.type === 'file' && MEDIA_RE.test(e.name)).length;
         } catch {}
       }
       $('sd-status-dot').classList.toggle('online', online);
