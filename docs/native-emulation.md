@@ -657,3 +657,33 @@ the hot section, its tiles through the plane table only), fewer pushes per frame
 page (Mednafen, Temper: the opcode fetch without a window lookup), block transfers split at page bounds (Temper),
 lazy N/Z (Mednafen). These come from reading six emulators (retro-go's PCE-Go, Mednafen pce_fast, Geargrafx,
 HuExpress, Temper, picopce): all GPL or unlicensed, so ideas only, no code.
+
+## 10. Sound without gaps, every console (`emu_audio.h`)
+
+The speaker is an I2S DMA ring of 8 buffers that never stops: what the emulator has not filled it plays as zeros
+(`auto_clear`), a click. Each core used to size a frame's sound by its own rule, and the trace never said when
+the ring ran dry. Measured on the ADV with the queue accounted (`emu_aclock_t`, `gaps=` in the trace):
+- **Game Boy / Color:** a fixed 548 samples a frame is 32,732 a second against the speaker's 32,768: the ring never
+  filled, and every late frame emptied it (Zelda DX: 71 gaps in the 10 s of its intro at 50 fps).
+- **Game Gear / Master System:** 534 a frame, 31,997 a second against 32,000: the same, slower.
+- **NES:** a surplus (533 a frame) and extra samples for a late frame: the ring stayed full, every write waited, and
+  the game ran at 55-57 frames a second with 15 ms of work a frame.
+
+**The level, anchored.** Written minus elapsed time misses the zeros the ring holds at the open and after a gap:
+it read an empty ring when it was full. A write that has to wait returns with the ring full, so the account
+restarts there (`emu_aclock_wrote`); from an anchor the level is written minus played, and below zero is a gap.
+
+**The frame's samples by that level** (`emu_aclock_size`): held at 2.5 frames, half the shortfall a frame, at most
+1/16 fewer when above, twice a frame at most. A slow scene makes more samples, so its notes last longer instead of
+stopping; the chips render by sample count, so the pitch never moves. The Game Boy's APU renders any count of
+mono samples (`minigb_apu_audio_callback_mono`: the speaker is one, half the work); the Game Gear's PSG plays on
+past the frame in a second pass; the NES and PC Engine size the frame as it starts. Game Boy and Game Gear open a
+four-frame ring, held below it.
+
+Same bench, same frames (60 s of console time): Zelda DX 0 gaps (its intro at 50 fps, a dip to 32), Kirby's
+Adventure 0 and 59-61 frames a second (was 55-57), Street Fighter II 0 (was 0-4 every 10 s), Sonic on the Master
+System 0-3 (its frames reach 40 ms: the panel's bus, below).
+
+**Still slow, measured:** the Master System's 256x192 picture is scaled to 320x240 on the external panel, 153 KB a
+frame on a 40 MHz bus (30 ms): Sonic's scrolling changes every line, 35-50 frames a second. Street Fighter II's
+CPU, 14-20 ms a frame (section 9).
