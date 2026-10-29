@@ -483,9 +483,11 @@ static void profile_write(nes_session_t *s)
     uint64_t cpu, ppu, line;
     agnes_profile(&cpu, &ppu, &line);
     if (!s->prof_frames || !s->trace_path[0] || (!cpu && !ppu)) return;
-    const uint64_t per = (uint64_t)s->prof_frames * 24000u;     // cycles per tenth of a millisecond, per frame
-    const unsigned c = (unsigned)(cpu * 10 / per), p = (unsigned)((ppu - line) * 10 / per),
-                   l = (unsigned)(line * 10 / per), a = (unsigned)(s->prof_apu * 10 / per);
+    // In 1024-cycle units (a shift, not a 64-bit division: libgcc's is not in the module ABI), averaged per frame,
+    // then tenths of a millisecond at 240 MHz: k * 1024 / 24000 = k * 16 / 375.
+    const uint32_t n = s->prof_frames;
+    const unsigned c = (unsigned)((uint32_t)(cpu >> 10) / n * 16 / 375), p = (unsigned)((uint32_t)((ppu - line) >> 10) / n * 16 / 375),
+                   l = (unsigned)((uint32_t)(line >> 10) / n * 16 / 375), a = (unsigned)((uint32_t)(s->prof_apu >> 10) / n * 16 / 375);
     FILE *f = fopen(s->trace_path, "a");
     if (!f) return;
     fprintf(f, "  nes profile: %u frames (%u drawn), ms/frame: 6502 %u.%u  ppu %u.%u  panel lines %u.%u  apu %u.%u\n",
