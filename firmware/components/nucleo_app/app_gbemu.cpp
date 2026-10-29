@@ -1532,6 +1532,8 @@ static void copy_progress(uint32_t done, uint32_t total, void *user)
     d.fillRoundRect(16, y + 34, 192 * pct / 100, 6, 3, ACC);
     d.endWrite();
 }
+extern "C" void (*emu_rom_progress)(uint32_t, uint32_t, void *);
+void (*emu_rom_progress)(uint32_t, uint32_t, void *) = nullptr;
 static void fail_box(const char *what)
 {
     snprintf(st->fail, sizeof st->fail, "%s", what);
@@ -1639,7 +1641,7 @@ static void play_session(const char *name)
     }
 
     esp_task_wdt_reset();
-    if (!strcmp(SYS->id, "pceemu")) nucleo_pce_set_progress(copy_progress, nullptr);
+    emu_rom_progress = copy_progress;              // a big cartridge's first copy into the flash, on screen
     esp_err_t err = SYS->open(path);
     esp_task_wdt_reset();
     if (err != ESP_OK) {

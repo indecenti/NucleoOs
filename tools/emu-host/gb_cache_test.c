@@ -22,6 +22,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include "nucleo_gb.h"
+/* The cartridge from internal flash (firmware nucleo_romstore, ABI 7): not on the host, so the cores keep their
+ * RAM / page-cache paths, which is what these tests measure. */
+const uint8_t *nucleo_rom_map(const char *p, uint32_t *s, void (*f)(uint32_t, uint32_t, void *), void *u)
+{ (void)p; (void)f; (void)u; if (s) *s = 0; return NULL; }
+void nucleo_rom_unmap(void) {}
+void (*emu_rom_progress)(uint32_t, uint32_t, void *);
 
 /* ── the device heap, as a SHAPE ────────────────────────────────────────────────────────────────────
  * nucleo_gb.c is compiled with heap_model.h force-included, so its malloc/calloc/free land here and

@@ -28,6 +28,7 @@ bool nucleo_cowork_run(void (*fn)(void *arg), void *arg);
 void nucleo_cowork_wait(void);
 void nucleo_cowork_stop(void);
 #include "emu_audio.h"
+#include "emu_romstore.h"     // the cartridge from internal flash (ABI level 7)
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
@@ -91,6 +92,7 @@ typedef struct {
     uint32_t      rom_bytes;
     uint32_t      rom_base;                     // where the PRG data starts in the file: page 0
     uint8_t      *rom_all;
+    bool          rom_mapped;           // rom_all is the cartridge mapped from flash (emu_romstore.h)
     uint8_t      *pg[PG_SLOTS];
     uint32_t      pg_tag[PG_SLOTS], pg_age[PG_SLOTS], pg_clock;
     int           pg_n;
@@ -459,7 +461,7 @@ static void session_free(nes_session_t *s)
     if (s->sound) { s->sound = false; nucleo_audio_pcm_close(); }
     if (s->fp) fclose(s->fp);
     for (int i = 0; i < s->pg_n; i++) free(s->pg[i]);
-    free(s->rom_all);
+    if (s->rom_mapped) nucleo_rom_unmap(); else free(s->rom_all);
     agnes_destroy(s->a);                          // with the mapper's RAM blocks (patch A8)
     free(s);
 }
@@ -530,6 +532,13 @@ esp_err_t nucleo_nes_open(const char *rom_path, nucleo_nes_line_fn line_cb, void
             free(s->rom_all); s->rom_all = NULL;
         }
         if (s->rom_all) { s->heap_bytes += (size_t)sz; fclose(s->fp); s->fp = NULL; }
+    }
+    // Too big for RAM: mapped from the internal flash and read like RAM (copied there the first time).
+    if (!s->rom_all) {
+        uint32_t msz = 0;
+        const uint8_t *m = nucleo_rom_map(rom_path, &msz, emu_rom_progress, NULL);
+        if (m && msz == (uint32_t)sz) { s->rom_all = (uint8_t *)m; s->rom_mapped = true; fclose(s->fp); s->fp = NULL; }
+        else if (m) nucleo_rom_unmap();
     }
     if (!s->rom_all) {
         uint32_t pages = (s->rom_bytes + PG_SIZE - 1) / PG_SIZE;

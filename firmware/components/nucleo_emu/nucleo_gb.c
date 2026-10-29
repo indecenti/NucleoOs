@@ -12,7 +12,8 @@
 #include "nucleo_gb.h"
 #include "nucleo_board.h"
 #include "nucleo_audio.h"   // raw PCM sink: the APU produces its own samples, we hand them to I2S
-#include "emu_audio.h"      // ...through the speaker stage (DC block, low-pass, soft knee)
+#include "emu_audio.h"
+#include "emu_romstore.h"     // the cartridge from internal flash (ABI level 7)      // ...through the speaker stage (DC block, low-pass, soft knee)
 #include "esp_log.h"
 #include "esp_attr.h"       // IRAM_ATTR: keep the innermost callbacks out of the flash cache
 #include "esp_heap_caps.h"
@@ -148,6 +149,7 @@ typedef struct {
     FILE         *fp;                   // open ROM on the SD card
     uint32_t      rom_bytes;
     uint8_t      *rom_all;              // whole ROM, when it fits (fast path: no SD traffic at all)
+    bool          rom_mapped;           // rom_all is the cartridge mapped from flash (emu_romstore.h)
     // Page cache, used whenever the whole ROM will not fit. See rom_read for why it is pages and
     // not banks.
     uint8_t      *pg[PG_SLOTS];         // 1 KB each, allocated as many as the heap allows
@@ -733,7 +735,8 @@ static void session_free(gb_session_t *s)
     if (s->sound) { s->sound = false; nucleo_audio_pcm_close(); }
     if (s->fp) fclose(s->fp);
     for (int i = 0; i < s->pg_n; i++) free(s->pg[i]);
-    free(s->rom_all); ram_free(s);
+    if (s->rom_mapped) nucleo_rom_unmap(); else free(s->rom_all);
+    ram_free(s);
 #if NUCLEO_GB_CGB
     free(s->gb.wram); free(s->gb.vram);
 #endif
@@ -835,6 +838,14 @@ esp_err_t nucleo_gb_open(const char *rom_path, gb_line_fn_t on_line, void *user)
             if (fread(s->rom_all, 1, s->rom_bytes, s->fp) != s->rom_bytes) { free(s->rom_all); s->rom_all = NULL; }
             else { s->heap_bytes += s->rom_bytes; fclose(s->fp); s->fp = NULL; }   // file no longer needed
         }
+    }
+    // Too big for RAM: mapped from the internal flash and read like RAM (copied there the first time), so a big
+    // cartridge (Zelda DX's overworld, Pokemon) never waits on the card and the page cache's RAM stays free.
+    if (!s->rom_all) {
+        uint32_t msz = 0;
+        const uint8_t *m = nucleo_rom_map(rom_path, &msz, emu_rom_progress, NULL);
+        if (m && msz == s->rom_bytes) { s->rom_all = (uint8_t *)m; s->rom_mapped = true; fclose(s->fp); s->fp = NULL; }
+        else if (m) nucleo_rom_unmap();
     }
     if (!s->rom_all) {
         // Take as many 4 KB pages as the heap will give, keeping a floor of headroom for the app's

@@ -37,8 +37,7 @@ bool nucleo_pce_autosave(void);
 void nucleo_pce_get_stats(nucleo_gb_stats_t *out);
 void nucleo_pce_reset_counters(void);
 void nucleo_pce_geometry(int *w, int *h);
-// Called while a big cartridge is copied into the internal flash the first time (before nucleo_pce_open returns).
-void nucleo_pce_set_progress(void (*fn)(uint32_t done, uint32_t total, void *user), void *user);
+
 
 #ifdef __cplusplus
 }

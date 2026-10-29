@@ -27,10 +27,7 @@
 bool nucleo_cowork_run(void (*fn)(void *arg), void *arg);
 void nucleo_cowork_wait(void);
 void nucleo_cowork_stop(void);
-// The cartridge from internal flash (firmware nucleo_app/nucleo_romstore.h, ABI level 7).
-const uint8_t *nucleo_rom_map(const char *path, uint32_t *size, void (*progress)(uint32_t done, uint32_t total, void *user),
-                              void *user);
-void nucleo_rom_unmap(void);
+#include "emu_romstore.h"                            // the cartridge from internal flash (ABI level 7)
 #include <stdint.h>
 #include "emu_audio.h"
 #include "esp_log.h"
@@ -196,9 +193,6 @@ typedef struct {
 } pce_t;
 
 static pce_t *PCE;
-static void (*s_progress)(uint32_t done, uint32_t total, void *user);
-static void *s_progress_user;
-void nucleo_pce_set_progress(void (*fn)(uint32_t done, uint32_t total, void *user), void *user) { s_progress = fn; s_progress_user = user; }
 static inline void lines_touch(void);           // described lines drawn first: VRAM, sprite table or palette changes
 
 static inline uint32_t pce_ccount(void)
@@ -1185,7 +1179,7 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     // No page cache, no card reads while playing, and the RAM the cache took stays with the game.
     if (!s->rom_all && !test_pages) {
         uint32_t msz = 0;
-        const uint8_t *m = nucleo_rom_map(rom_path, &msz, s_progress, s_progress_user);
+        const uint8_t *m = nucleo_rom_map(rom_path, &msz, emu_rom_progress, NULL);
         if (m && msz == (uint32_t)sz) {
             s->rom_all = (uint8_t *)m;                   // never written: the windows only read it
             s->rom_mapped = true;
