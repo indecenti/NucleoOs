@@ -626,7 +626,7 @@ function isAskable(q) {
 //   POST /api/_sim/fault  {clear:true}          remove every rule
 //   POST /api/_sim/offline {on:true|false}       drop EVERY request + the live socket (device gone)
 //   POST /api/_sim/ws-drop                       kill the live socket once (WiFi blip)
-//   GET  /api/_sim/stats                         request counters (the E2E device-load budget)
+//   GET  /api/_sim/stats                         request counters (the E2E device-load budget; lists: by folder)
 //   POST /api/_sim/apps  {add:{…}} | {clear:true}  inject extra /api/apps records (hostile-manifest tests)
 //   POST /api/_sim/publish {t:'apps.changed', d:{…}}  push one event on the live socket (e.g. "an app was installed")
 //   POST /api/_sim/sdc {status:'outdated', card, install_ms, fail, diag, absent, starting_ms}  the SD-content state
@@ -700,6 +700,8 @@ const server = createServer(async (req, res) => {
   const st = SIM.stats;
   st.total++; st.inflight++; if (st.inflight > st.peak) st.peak = st.inflight;
   st.byPath[path] = (st.byPath[path] || 0) + 1;
+  // Which folders were listed: a boot lists the Desktop (and a save's own folder), never crawls /data.
+  if (path === '/api/fs/list') { const d = url.searchParams.get('path') || '/'; st.lists = st.lists || {}; st.lists[d] = (st.lists[d] || 0) + 1; }
   res.on('close', () => { st.inflight--; });
   const fault = simFaultFor(path);
   if (fault) {
