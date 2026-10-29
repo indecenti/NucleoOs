@@ -129,6 +129,19 @@ CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 # failed check; it just won't print the source text. Net: tens of KB back from the string pool.
 CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
 
+# The same for ESP-IDF's own ESP_RETURN_ON_* / ESP_EXIT_ON_* check macros (our code does not use them): the
+# error code still comes back to the caller and every ESP_LOGE stays; only the macros' message text leaves
+# the string pool.
+CONFIG_COMPILER_OPTIMIZATION_CHECKS_SILENT=y
+
+# TLS pieces nothing here can use: static-ECDH key exchanges (no server offers them; ECDHE and plain RSA
+# stay, so do all curves, P-521 included for SSH), CRL parsing (no CRL is ever loaded) and GCM over non-AES
+# ciphers (none is enabled).
+CONFIG_MBEDTLS_KEY_EXCHANGE_ECDH_ECDSA=n
+CONFIG_MBEDTLS_KEY_EXCHANGE_ECDH_RSA=n
+CONFIG_MBEDTLS_X509_CRL_PARSE_C=n
+CONFIG_MBEDTLS_GCM_SUPPORT_NON_AES_CIPHER=n
+
 # --- Bluetooth LE via NimBLE (Security > BLE suite: scan / spam / iBeacon / HID) ---
 # NimBLE host (NOT Bluedroid): roughly half the RAM and flash — mandatory on this PSRAM-less S3.
 # The controller is BLE-only on the S3 anyway. The radio is brought up ON DEMAND by the BLE app
