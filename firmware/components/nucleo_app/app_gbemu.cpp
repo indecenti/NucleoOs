@@ -1547,9 +1547,11 @@ static void play_session(const char *name)
     trace("--- play '%s' ---", name);
     // Record what is actually RUNNING, not what we intended: "solo=1 wifi=off" is the only honest
     // answer to "is the radio really down while I play?", and the heap line proves what it bought.
+    // In a Solo boot the radio is never started (the store launches an offline emulator with NX_SOLO | NX_WIFI):
+    // the setup mode is then only the last configured one, so say "off" rather than echo it.
     trace("  solo=%d exclusive=%d wifi=%s ble=%d",
           (int)nucleo_anima_solo_active(), (int)nucleo_exclusive_active(),
-          nucleo_setup_mode() ? nucleo_setup_mode() : "off",
+          nucleo_anima_solo_active() ? "off" : nucleo_setup_mode() ? nucleo_setup_mode() : "off",
           (int)nucleo_ble_radio_present());
     trace_heap("at entry");
 

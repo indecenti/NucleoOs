@@ -56,7 +56,7 @@
      unsigned prg_rom_offset;
      unsigned chr_rom_offset;
      int prg_rom_banks_count;
-@@ -256,8 +256,41 @@
+@@ -256,8 +256,51 @@
      } mapper;
  
      mirroring_mode_t mirroring_mode;
@@ -83,9 +83,19 @@
 +     * skip_draw: this frame is not shown (the host's frame-skip), so lines only resolve the sprite-0 hit */
 +    int ln_dot;
 +    bool skip_draw;
-+    /* NUCLEO PATCH (A9): every CPU write and every read with a side effect bumps io_seq, so a loop that comes round
-+     * to the same place with the same registers and the same io_seq has provably changed nothing (idle-loop skip) */
++    /* NUCLEO PATCH (A9): the idle-loop skip's evidence. io_seq counts what leaves the CPU and RAM (every write
++     * outside work RAM, every read with a side effect); wr_addr are the work-RAM bytes written since the detector
++     * last reset (up to four: a spin loop's counter or random byte); the rest is Brent's cycle search, carried
++     * across legs (abs_dot never resets) until an interrupt or an io event resets it. Not part of a save state's
++     * meaning (a loaded state just starts the search again). */
 +    uint32_t io_seq;
++    uint32_t abs_dot;
++    uint16_t wr_addr[4];
++    uint8_t wr_n;
++    bool wr_over;
++    bool cyc_found;
++    uint16_t cyc_pc, cyc_pow, cyc_lam;
++    uint32_t cyc_regs, cyc_ram, cyc_bytes, cyc_dot, cyc_period, cyc_io;
  } agnes_t;
  
 +void agnes_rams(agnes_t *agnes, uint8_t ***chr, uint8_t ***prg);   /* NUCLEO PATCH (A8) */
@@ -98,7 +108,7 @@
  #endif /* agnes_types_h */
  //FILE_END
  //FILE_START:cpu.h
-@@ -588,8 +621,26 @@
+@@ -588,8 +631,26 @@
  
  bool agnes_restore_state(agnes_t *agnes, const agnes_state_t *state) {
      const uint8_t *gamepack_data = agnes->gamepack.data;
@@ -125,7 +135,7 @@
      agnes->cpu.agnes = agnes;
      agnes->ppu.agnes = agnes;
      switch (agnes->gamepack.mapper) {
-@@ -615,27 +666,136 @@
+@@ -615,27 +676,171 @@
      return true;
  }
  
@@ -153,25 +163,34 @@
 +    g_prof_cpu += (uint32_t)(agnes_ccount() - c0);
 +    return ok;
 +}
-+/* NUCLEO PATCH (A9): idle-loop skip. Most games finish their frame's work early and spin until the NMI: a
-+ * JMP to itself, or a loop polling RAM or $2002. Inside a leg nothing outside the CPU changes (the PPU's events,
-+ * interrupts included, happen between legs), so when a backward jump lands where the previous one did, with the
-+ * same registers and flags and no write or side-effecting read in between, the loop can only repeat until the
-+ * leg ends: the CPU is moved to the leg's end at once (its cycle count kept, for the DMA's odd/even rule). Delay
-+ * loops (a register counting) and loops that write never match, so raster timing is untouched. */
++/* NUCLEO PATCH (A9): idle-loop skip, exact. Most games finish their frame's work early and spin until the NMI:
++ * a JMP to itself, a loop polling RAM or $2002 — or, like Konami's, a loop stirring a random byte in RAM
++ * ($6F = table[($6F | frame) & 15]). Between interrupts nothing outside the CPU touches work RAM, and the PPU's
++ * events change nothing such a loop can see (a $2002 read that would clear a flag counts as an io event). So at a
++ * loop's head the machine's whole state is: the registers, the flags, and the few RAM bytes the loop writes. When
++ * that state recurs (Brent's cycle search: one saved state, compared at each loop head, re-saved at doubling
++ * distances) the loop is periodic, and whole periods are skipped at once: the CPU — random byte included — ends
++ * exactly where running them would have left it. Any io event or interrupt resets the search; a loop writing
++ * more than four RAM bytes is never skipped. Delay loops count a register down and never recur within a leg. */
 +static uint64_t g_prof_idle;
++static inline void idle_reset(agnes_t *agnes) {
++    agnes->wr_n = 0; agnes->wr_over = false;
++    agnes->cyc_found = false; agnes->cyc_pow = 1; agnes->cyc_lam = 0; agnes->cyc_pc = 0xffff;
++    agnes->cyc_io = agnes->io_seq;
++}
 +static bool run_cpu_to_(agnes_t *agnes, int dot) {
 +    cpu_t *cpu = &agnes->cpu;
-+    bool armed = false;
-+    uint16_t loop_pc = 0;
-+    uint32_t loop_regs = 0, loop_flags = 0, loop_io = 0;
 +    while (agnes->ln_dot < dot) {
 +        if (cpu->stall > 0) {                         // OAM DMA: the CPU only waits, a whole leg at once
 +            uint32_t need = (uint32_t)(dot - agnes->ln_dot + 2) / 3;
 +            uint32_t take = cpu->stall < need ? cpu->stall : need;
 +            cpu->stall -= take;
 +            agnes->ln_dot += (int)take * 3;
++            agnes->abs_dot += take * 3;
 +            continue;
++        }
++        if (cpu->interrupt != INTERRPUT_NONE) {
++            idle_reset(agnes);                        // the handler may change anything
 +        }
 +        const uint16_t pc0 = cpu->pc;
 +        int c = cpu_step(cpu);
@@ -181,23 +200,43 @@
 -        if (new_frame) {
 -            break;
 +        agnes->ln_dot += c * 3;
-+        if (cpu->pc <= pc0 && pc0 - cpu->pc < 64) {   // a short jump back: the end of a loop
-+            const uint32_t regs = (uint32_t)cpu->acc | (uint32_t)cpu->x << 8 | (uint32_t)cpu->y << 16 | (uint32_t)cpu->sp << 24;
-+            const uint32_t flags = (uint32_t)cpu->flag_carry | (uint32_t)cpu->flag_zero << 1 | (uint32_t)cpu->flag_dis_interrupt << 2
-+                                 | (uint32_t)cpu->flag_decimal << 3 | (uint32_t)cpu->flag_overflow << 4 | (uint32_t)cpu->flag_negative << 5;
-+            if (armed && cpu->pc == loop_pc && regs == loop_regs && flags == loop_flags && agnes->io_seq == loop_io
-+                && cpu->interrupt == INTERRPUT_NONE) {
++        agnes->abs_dot += (uint32_t)c * 3;
++        if (cpu->pc > pc0 || pc0 - cpu->pc >= 64) {
++            continue;                                 // not a short jump back: not a loop's head
++        }
++        if (agnes->io_seq != agnes->cyc_io || agnes->wr_over) {
++            idle_reset(agnes);
++            continue;
++        }
++        const uint32_t regs = (uint32_t)cpu->acc | (uint32_t)cpu->x << 8 | (uint32_t)cpu->y << 16 | (uint32_t)cpu->sp << 24;
++        uint32_t ram = (uint32_t)cpu->flag_carry | (uint32_t)cpu->flag_zero << 1 | (uint32_t)cpu->flag_dis_interrupt << 2
++                     | (uint32_t)cpu->flag_decimal << 3 | (uint32_t)cpu->flag_overflow << 4 | (uint32_t)cpu->flag_negative << 5;
++        uint32_t bytes = 0;                           // the written bytes, exactly: one per byte lane (four at most)
++        for (int i = 0; i < agnes->wr_n; i++) bytes |= (uint32_t)agnes->ram[agnes->wr_addr[i]] << (8 * i);
++        ram |= (uint32_t)agnes->wr_n << 8;            // ...and how many there are (a new one changes the state's shape)
++        if (agnes->cyc_found) {
++            if (cpu->pc == agnes->cyc_pc && regs == agnes->cyc_regs && ram == agnes->cyc_ram && bytes == agnes->cyc_bytes) {
 +                const int left = dot - agnes->ln_dot;
-+                if (left > 0) {
-+                    const int cyc = (left + 2) / 3;
-+                    cpu->cycles += (uint64_t)cyc;
-+                    agnes->ln_dot += cyc * 3;
-+                    g_prof_idle += (uint64_t)cyc;
++                const int skip = left > 0 ? (int)((uint32_t)left / agnes->cyc_period * agnes->cyc_period) : 0;
++                if (skip > 0) {                       // whole periods: the state after them is this one
++                    cpu->cycles += (uint64_t)(skip / 3);
++                    agnes->ln_dot += skip;
++                    agnes->abs_dot += (uint32_t)skip;
++                    g_prof_idle += (uint64_t)(skip / 3);
 +                }
-+                break;
 +            }
-+            armed = true;
-+            loop_pc = cpu->pc; loop_regs = regs; loop_flags = flags; loop_io = agnes->io_seq;
++            continue;
++        }
++        if (cpu->pc == agnes->cyc_pc && regs == agnes->cyc_regs && ram == agnes->cyc_ram && bytes == agnes->cyc_bytes) {
++            agnes->cyc_found = true;                  // the same state, cyc_lam heads later: that is the period
++            agnes->cyc_period = agnes->abs_dot - agnes->cyc_dot;
++            if (agnes->cyc_period == 0 || agnes->cyc_period % 3) agnes->cyc_found = false;
++            continue;
++        }
++        if (++agnes->cyc_lam >= agnes->cyc_pow) {     // Brent: save this state, look twice as far next time
++            agnes->cyc_pow = agnes->cyc_pow ? (agnes->cyc_pow < 1024 ? agnes->cyc_pow << 1 : 1024) : 2;
++            agnes->cyc_lam = 0;
++            agnes->cyc_pc = cpu->pc; agnes->cyc_regs = regs; agnes->cyc_ram = ram; agnes->cyc_bytes = bytes; agnes->cyc_dot = agnes->abs_dot;
          }
      }
      return true;
@@ -218,6 +257,9 @@
 +    for (int sl = 0; sl < 262; sl++) {
 +        ppu->scanline = sl;
 +        bool rendering = ppu->masks.show_background || ppu->masks.show_sprites;
++        // NUCLEO PATCH (A9): what a loop can read of the PPU without a side effect — the status flags — changes
++        // only here, between legs: a change is an io event for the idle-loop skip (a vblank wait must see it).
++        const uint8_t status0 = (uint8_t)(ppu->status.in_vblank | ppu->status.sprite_overflow << 1 | ppu->status.sprite_zero_hit << 2);
 +        if (sl < 240) {
 +            const uint32_t c0 = agnes_ccount();
 +            ppu_render_line(ppu, sl, rendering);
@@ -233,6 +275,9 @@
 +            ppu->status.in_vblank = false;
 +        }
 +        const bool fetch_line = sl < 240 || sl == 261;
++        if ((uint8_t)(ppu->status.in_vblank | ppu->status.sprite_overflow << 1 | ppu->status.sprite_zero_hit << 2) != status0) {
++            agnes->io_seq++;
++        }
 +        if (!run_cpu_to(agnes, 257)) {
 +            return false;
 +        }
@@ -273,18 +318,27 @@
      free(agnes);
  }
  
-@@ -778,7 +938,22 @@
+@@ -778,7 +983,31 @@
      cpu->stall = (cpu->cycles & 0x1) ? 514 : 513;
  }
  
 +static void cpu_write8_io(cpu_t *cpu, uint16_t addr, uint8_t val);
 +/* NUCLEO PATCH (A6): work RAM (stack, zero page, variables: most writes) inline; the rest out of line. */
 +static inline __attribute__((always_inline)) void cpu_write8_fast(cpu_t *cpu, uint16_t addr, uint8_t val) {
-+    cpu->agnes->io_seq++;                             /* NUCLEO PATCH (A9) */
++    agnes_t *agnes = cpu->agnes;
 +    if (addr < 0x2000) {
-+        cpu->agnes->ram[addr & 0x7ff] = val;
++        const uint16_t a = addr & 0x7ff;
++        agnes->ram[a] = val;
++        if (!agnes->wr_over) {                        /* NUCLEO PATCH (A9): which work-RAM bytes the loop changes */
++            int i = 0;
++            while (i < agnes->wr_n && agnes->wr_addr[i] != a) i++;
++            if (i == agnes->wr_n) {
++                if (i < 4) agnes->wr_addr[agnes->wr_n++] = a; else agnes->wr_over = true;
++            }
++        }
 +        return;
 +    }
++    agnes->io_seq++;                                  /* NUCLEO PATCH (A9) */
 +    cpu_write8_io(cpu, addr, val);
 +}
  void cpu_write8(cpu_t *cpu, uint16_t addr, uint8_t val) {
@@ -296,7 +350,7 @@
      agnes_t *agnes = cpu->agnes;
  
      if (addr < 0x2000) {
-@@ -794,17 +969,40 @@
+@@ -794,17 +1023,40 @@
              agnes->controllers[1].shift = agnes->controllers[1].state;
          }
      } else if (addr < 0x4018) { // apu and io
@@ -339,7 +393,7 @@
      uint8_t res = 0;
      if (addr >= 0x4020) { // moved to top because it's the most common case
          res = mapper_read(agnes, addr);
-@@ -813,8 +1011,9 @@
+@@ -813,8 +1065,9 @@
      } else if (addr < 0x4000) {
          res = ppu_read_register(&agnes->ppu, 0x2000 | (addr & 0x7));
      } else if (addr < 0x4016) {
@@ -350,7 +404,7 @@
          int controller = addr & 0x1; // 0: 0x4016, 1: 0x4017
          if (agnes->controllers_latch) {
              agnes->controllers[controller].shift = agnes->controllers[controller].state;
-@@ -942,6 +1141,7 @@
+@@ -942,6 +1195,7 @@
  static uint8_t ppu_read8(ppu_t *ppu, uint16_t addr);
  static void ppu_write8(ppu_t *ppu, uint16_t addr, uint8_t val);
  static uint16_t mirror_address(ppu_t *ppu, uint16_t addr);
@@ -358,7 +412,7 @@
  
  static unsigned g_palette_addr_map[32] = {
      0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-@@ -1279,6 +1479,7 @@
+@@ -1279,6 +1533,7 @@
  uint8_t ppu_read_register(ppu_t *ppu, uint16_t addr) {
      switch (addr) {
          case 0x2002: { // PPUSTATUS
@@ -366,7 +420,7 @@
              uint8_t res = 0;
              res |= ppu->last_reg_write & 0x1f;
              res |= ppu->status.sprite_overflow << 5;
-@@ -1294,6 +1495,7 @@
+@@ -1294,6 +1549,7 @@
              return ppu->oam_data[ppu->oam_address];
          }
          case 0x2007: { // PPUDATA
@@ -374,7 +428,7 @@
              uint8_t res = 0;
              if (ppu->regs.v < 0x3f00) {
                  res = ppu->ppudata_buffer;
-@@ -1393,8 +1595,8 @@
+@@ -1393,8 +1649,8 @@
  }
  
  static void set_pixel_color_ix(ppu_t *ppu, int x, int y, uint8_t color_ix) {
@@ -385,7 +439,7 @@
  }
  
  static uint8_t ppu_read8(ppu_t *ppu, uint16_t addr) {
-@@ -1404,7 +1606,7 @@
+@@ -1404,7 +1660,7 @@
          unsigned palette_ix = g_palette_addr_map[addr & 0x1f];
          res = ppu->palette[palette_ix];
      } else if (addr < 0x2000) { // $0000 - $1FFF
@@ -394,7 +448,7 @@
      } else { // $2000 - $3EFF
          uint16_t mirrored_addr = mirror_address(ppu, addr);
          res = ppu->nametables[mirrored_addr];
-@@ -1425,6 +1627,287 @@
+@@ -1425,6 +1681,287 @@
      }
  }
  
@@ -682,7 +736,7 @@
  static uint16_t mirror_address(ppu_t *ppu, uint16_t addr) {
      switch (ppu->agnes->mirroring_mode)
      {
-@@ -1773,6 +2256,174 @@
+@@ -1773,6 +2310,174 @@
      return &instructions[opc];
  }
  
@@ -857,7 +911,7 @@
  uint8_t instruction_get_size(addr_mode_t mode) {
      switch (mode) {
          case ADDR_MODE_NONE:        return 0;
-@@ -2184,12 +2835,31 @@
+@@ -2184,12 +2889,31 @@
  
  bool mapper_init(agnes_t *agnes) {
      switch (agnes->gamepack.mapper) {
@@ -893,7 +947,7 @@
  }
  
  uint8_t mapper_read(agnes_t *agnes, uint16_t addr) {
-@@ -2238,14 +2908,14 @@
+@@ -2238,14 +2962,14 @@
          if (mapper->use_chr_ram) {
              res = mapper->chr_ram[addr];
          } else {
@@ -910,7 +964,7 @@
      }
      return res;
  }
-@@ -2293,7 +2963,7 @@
+@@ -2293,7 +3017,7 @@
              unsigned bank_offset = mapper->chr_bank_offsets[bank];
              unsigned addr_offset = addr & 0xfff;
              unsigned offset = mapper->agnes->gamepack.chr_rom_offset + bank_offset + addr_offset;
@@ -919,7 +973,7 @@
          }
      } else if (addr >= 0x6000 && addr < 0x8000) {
          res = mapper->prg_ram[addr - 0x6000];
-@@ -2302,7 +2972,7 @@
+@@ -2302,7 +3026,7 @@
          unsigned bank_offset = mapper->prg_bank_offsets[bank];
          unsigned addr_offset = addr & 0x3fff;
          unsigned offset = mapper->agnes->gamepack.prg_rom_offset + bank_offset + addr_offset;
@@ -928,7 +982,7 @@
      }
      return res;
  }
-@@ -2408,7 +3078,7 @@
+@@ -2408,7 +3132,7 @@
          unsigned bank_offset = mapper->prg_bank_offsets[bank];
          unsigned addr_offset = addr & 0x3fff;
          unsigned offset = mapper->agnes->gamepack.prg_rom_offset + bank_offset + addr_offset;
@@ -937,7 +991,7 @@
      }
      return res;
  }
-@@ -2481,7 +3151,7 @@
+@@ -2481,7 +3205,7 @@
          } else {
              unsigned chr_rom_size = (mapper->agnes->gamepack.chr_rom_banks_count * 8 * 1024);
              offset = offset % chr_rom_size;
@@ -946,7 +1000,7 @@
          }
      } else if (addr >= 0x6000 && addr < 0x8000) {
          return mapper->prg_ram[addr - 0x6000];
-@@ -2490,7 +3160,7 @@
+@@ -2490,7 +3214,7 @@
          unsigned bank_offset = mapper->prg_bank_offsets[bank];
          unsigned addr_offset = addr & 0x1fff;
          unsigned offset = mapper->agnes->gamepack.prg_rom_offset + bank_offset + addr_offset;

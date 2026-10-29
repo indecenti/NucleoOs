@@ -94,7 +94,7 @@ typedef struct {
 
     nes_apu_t     apu;
     int16_t       pcm[2 * APU_SPF];             // up to two frames' worth: the sound follows the clock (apu_render)
-    int64_t       audio_t;                      // when the last frame's sound was handed to the speaker
+    int64_t       audio_t;                      // when this frame should start, on the sound's 60.1 Hz schedule
     emu_afilt_t   afilt;
     uint16_t      mix_pulse[31], mix_tnd[203];  // the NES mixer's two curves, as 16-bit levels
     bool          sound;
@@ -204,10 +204,12 @@ static uint8_t apu_read(void *host)
 // One frame of sound, n samples. The registers are those the game left during the frame (most games write them
 // once, in their NMI); the frame sequencer runs its four quarter steps across the frame, as on the console.
 //
-// n follows the WALL CLOCK, not the emulated frame: as many samples as the speaker played since the last frame
-// (533 at full speed, more when a frame ran late). A late frame therefore stretches its sound a little instead of
-// leaving the speaker a gap - the queue never runs dry, so a dip costs a touch of tempo, never a click. Pitch is
-// unchanged: the channels' timers still count CPU cycles per sample.
+// n is 533 when the console keeps its 60.1 Hz schedule. A frame that starts LATE against that schedule adds the
+// samples the speaker will have played meanwhile (32 per ms of lateness, the schedule then restarts from now):
+// the queue never runs dry, so a dip costs a touch of tempo, never a click. Measured against the schedule, not
+// against the time between frames — the latter includes the speaker's own blocking write, and sizing by it fed
+// back into itself (more samples, a longer wait, more samples) and held the console at 45 fps. Pitch is unchanged:
+// the channels' timers still count CPU cycles per sample.
 static void apu_render(nes_session_t *s, int n)
 {
     nes_apu_t *a = &s->apu;
@@ -556,13 +558,14 @@ void nucleo_nes_run_frame(void)
     s->us_cpu += (uint32_t)(t1 - t0);
     const uint32_t c0 = agnes_ccount();
     int n = APU_SPF;
-    if (s->audio_t) {                                 // the clock's samples since the last frame: 32 per ms
-        const int64_t el = t1 - s->audio_t;
-        if (el > 0 && el < 1000000) n = (int)((uint32_t)el * 4u / 125u);
-        if (n < APU_SPF) n = APU_SPF;
+    if (!s->audio_t || t0 - s->audio_t > 250000 || s->audio_t - t0 > 250000) s->audio_t = t0;   // first frame, a pause
+    const int64_t late = t0 - s->audio_t;             // how far this frame started behind the 60.1 Hz schedule
+    if (late > 1000) {                                // over a millisecond: make up the gap, restart the schedule
+        n += (int)((uint32_t)late * 4u / 125u);
         if (n > 2 * APU_SPF) n = 2 * APU_SPF;
+        s->audio_t = t0;
     }
-    s->audio_t = t1;
+    s->audio_t += 16639;
     apu_render(s, n);
     if (s->sound) {
         emu_afilt_run(&s->afilt, s->pcm, n, 1, 1);

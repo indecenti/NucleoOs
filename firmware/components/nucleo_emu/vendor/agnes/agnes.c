@@ -279,9 +279,19 @@ typedef struct agnes {
      * skip_draw: this frame is not shown (the host's frame-skip), so lines only resolve the sprite-0 hit */
     int ln_dot;
     bool skip_draw;
-    /* NUCLEO PATCH (A9): every CPU write and every read with a side effect bumps io_seq, so a loop that comes round
-     * to the same place with the same registers and the same io_seq has provably changed nothing (idle-loop skip) */
+    /* NUCLEO PATCH (A9): the idle-loop skip's evidence. io_seq counts what leaves the CPU and RAM (every write
+     * outside work RAM, every read with a side effect); wr_addr are the work-RAM bytes written since the detector
+     * last reset (up to four: a spin loop's counter or random byte); the rest is Brent's cycle search, carried
+     * across legs (abs_dot never resets) until an interrupt or an io event resets it. Not part of a save state's
+     * meaning (a loaded state just starts the search again). */
     uint32_t io_seq;
+    uint32_t abs_dot;
+    uint16_t wr_addr[4];
+    uint8_t wr_n;
+    bool wr_over;
+    bool cyc_found;
+    uint16_t cyc_pc, cyc_pow, cyc_lam;
+    uint32_t cyc_regs, cyc_ram, cyc_bytes, cyc_dot, cyc_period, cyc_io;
 } agnes_t;
 
 void agnes_rams(agnes_t *agnes, uint8_t ***chr, uint8_t ***prg);   /* NUCLEO PATCH (A8) */
@@ -685,25 +695,34 @@ static bool run_cpu_to(agnes_t *agnes, int dot) {
     g_prof_cpu += (uint32_t)(agnes_ccount() - c0);
     return ok;
 }
-/* NUCLEO PATCH (A9): idle-loop skip. Most games finish their frame's work early and spin until the NMI: a
- * JMP to itself, or a loop polling RAM or $2002. Inside a leg nothing outside the CPU changes (the PPU's events,
- * interrupts included, happen between legs), so when a backward jump lands where the previous one did, with the
- * same registers and flags and no write or side-effecting read in between, the loop can only repeat until the
- * leg ends: the CPU is moved to the leg's end at once (its cycle count kept, for the DMA's odd/even rule). Delay
- * loops (a register counting) and loops that write never match, so raster timing is untouched. */
+/* NUCLEO PATCH (A9): idle-loop skip, exact. Most games finish their frame's work early and spin until the NMI:
+ * a JMP to itself, a loop polling RAM or $2002 — or, like Konami's, a loop stirring a random byte in RAM
+ * ($6F = table[($6F | frame) & 15]). Between interrupts nothing outside the CPU touches work RAM, and the PPU's
+ * events change nothing such a loop can see (a $2002 read that would clear a flag counts as an io event). So at a
+ * loop's head the machine's whole state is: the registers, the flags, and the few RAM bytes the loop writes. When
+ * that state recurs (Brent's cycle search: one saved state, compared at each loop head, re-saved at doubling
+ * distances) the loop is periodic, and whole periods are skipped at once: the CPU — random byte included — ends
+ * exactly where running them would have left it. Any io event or interrupt resets the search; a loop writing
+ * more than four RAM bytes is never skipped. Delay loops count a register down and never recur within a leg. */
 static uint64_t g_prof_idle;
+static inline void idle_reset(agnes_t *agnes) {
+    agnes->wr_n = 0; agnes->wr_over = false;
+    agnes->cyc_found = false; agnes->cyc_pow = 1; agnes->cyc_lam = 0; agnes->cyc_pc = 0xffff;
+    agnes->cyc_io = agnes->io_seq;
+}
 static bool run_cpu_to_(agnes_t *agnes, int dot) {
     cpu_t *cpu = &agnes->cpu;
-    bool armed = false;
-    uint16_t loop_pc = 0;
-    uint32_t loop_regs = 0, loop_flags = 0, loop_io = 0;
     while (agnes->ln_dot < dot) {
         if (cpu->stall > 0) {                         // OAM DMA: the CPU only waits, a whole leg at once
             uint32_t need = (uint32_t)(dot - agnes->ln_dot + 2) / 3;
             uint32_t take = cpu->stall < need ? cpu->stall : need;
             cpu->stall -= take;
             agnes->ln_dot += (int)take * 3;
+            agnes->abs_dot += take * 3;
             continue;
+        }
+        if (cpu->interrupt != INTERRPUT_NONE) {
+            idle_reset(agnes);                        // the handler may change anything
         }
         const uint16_t pc0 = cpu->pc;
         int c = cpu_step(cpu);
@@ -711,23 +730,43 @@ static bool run_cpu_to_(agnes_t *agnes, int dot) {
             return false;
         }
         agnes->ln_dot += c * 3;
-        if (cpu->pc <= pc0 && pc0 - cpu->pc < 64) {   // a short jump back: the end of a loop
-            const uint32_t regs = (uint32_t)cpu->acc | (uint32_t)cpu->x << 8 | (uint32_t)cpu->y << 16 | (uint32_t)cpu->sp << 24;
-            const uint32_t flags = (uint32_t)cpu->flag_carry | (uint32_t)cpu->flag_zero << 1 | (uint32_t)cpu->flag_dis_interrupt << 2
-                                 | (uint32_t)cpu->flag_decimal << 3 | (uint32_t)cpu->flag_overflow << 4 | (uint32_t)cpu->flag_negative << 5;
-            if (armed && cpu->pc == loop_pc && regs == loop_regs && flags == loop_flags && agnes->io_seq == loop_io
-                && cpu->interrupt == INTERRPUT_NONE) {
+        agnes->abs_dot += (uint32_t)c * 3;
+        if (cpu->pc > pc0 || pc0 - cpu->pc >= 64) {
+            continue;                                 // not a short jump back: not a loop's head
+        }
+        if (agnes->io_seq != agnes->cyc_io || agnes->wr_over) {
+            idle_reset(agnes);
+            continue;
+        }
+        const uint32_t regs = (uint32_t)cpu->acc | (uint32_t)cpu->x << 8 | (uint32_t)cpu->y << 16 | (uint32_t)cpu->sp << 24;
+        uint32_t ram = (uint32_t)cpu->flag_carry | (uint32_t)cpu->flag_zero << 1 | (uint32_t)cpu->flag_dis_interrupt << 2
+                     | (uint32_t)cpu->flag_decimal << 3 | (uint32_t)cpu->flag_overflow << 4 | (uint32_t)cpu->flag_negative << 5;
+        uint32_t bytes = 0;                           // the written bytes, exactly: one per byte lane (four at most)
+        for (int i = 0; i < agnes->wr_n; i++) bytes |= (uint32_t)agnes->ram[agnes->wr_addr[i]] << (8 * i);
+        ram |= (uint32_t)agnes->wr_n << 8;            // ...and how many there are (a new one changes the state's shape)
+        if (agnes->cyc_found) {
+            if (cpu->pc == agnes->cyc_pc && regs == agnes->cyc_regs && ram == agnes->cyc_ram && bytes == agnes->cyc_bytes) {
                 const int left = dot - agnes->ln_dot;
-                if (left > 0) {
-                    const int cyc = (left + 2) / 3;
-                    cpu->cycles += (uint64_t)cyc;
-                    agnes->ln_dot += cyc * 3;
-                    g_prof_idle += (uint64_t)cyc;
+                const int skip = left > 0 ? (int)((uint32_t)left / agnes->cyc_period * agnes->cyc_period) : 0;
+                if (skip > 0) {                       // whole periods: the state after them is this one
+                    cpu->cycles += (uint64_t)(skip / 3);
+                    agnes->ln_dot += skip;
+                    agnes->abs_dot += (uint32_t)skip;
+                    g_prof_idle += (uint64_t)(skip / 3);
                 }
-                break;
             }
-            armed = true;
-            loop_pc = cpu->pc; loop_regs = regs; loop_flags = flags; loop_io = agnes->io_seq;
+            continue;
+        }
+        if (cpu->pc == agnes->cyc_pc && regs == agnes->cyc_regs && ram == agnes->cyc_ram && bytes == agnes->cyc_bytes) {
+            agnes->cyc_found = true;                  // the same state, cyc_lam heads later: that is the period
+            agnes->cyc_period = agnes->abs_dot - agnes->cyc_dot;
+            if (agnes->cyc_period == 0 || agnes->cyc_period % 3) agnes->cyc_found = false;
+            continue;
+        }
+        if (++agnes->cyc_lam >= agnes->cyc_pow) {     // Brent: save this state, look twice as far next time
+            agnes->cyc_pow = agnes->cyc_pow ? (agnes->cyc_pow < 1024 ? agnes->cyc_pow << 1 : 1024) : 2;
+            agnes->cyc_lam = 0;
+            agnes->cyc_pc = cpu->pc; agnes->cyc_regs = regs; agnes->cyc_ram = ram; agnes->cyc_bytes = bytes; agnes->cyc_dot = agnes->abs_dot;
         }
     }
     return true;
@@ -744,6 +783,9 @@ bool agnes_next_frame(agnes_t *agnes) {
     for (int sl = 0; sl < 262; sl++) {
         ppu->scanline = sl;
         bool rendering = ppu->masks.show_background || ppu->masks.show_sprites;
+        // NUCLEO PATCH (A9): what a loop can read of the PPU without a side effect — the status flags — changes
+        // only here, between legs: a change is an io event for the idle-loop skip (a vblank wait must see it).
+        const uint8_t status0 = (uint8_t)(ppu->status.in_vblank | ppu->status.sprite_overflow << 1 | ppu->status.sprite_zero_hit << 2);
         if (sl < 240) {
             const uint32_t c0 = agnes_ccount();
             ppu_render_line(ppu, sl, rendering);
@@ -759,6 +801,9 @@ bool agnes_next_frame(agnes_t *agnes) {
             ppu->status.in_vblank = false;
         }
         const bool fetch_line = sl < 240 || sl == 261;
+        if ((uint8_t)(ppu->status.in_vblank | ppu->status.sprite_overflow << 1 | ppu->status.sprite_zero_hit << 2) != status0) {
+            agnes->io_seq++;
+        }
         if (!run_cpu_to(agnes, 257)) {
             return false;
         }
@@ -941,11 +986,20 @@ void cpu_set_dma_stall(cpu_t *cpu) {
 static void cpu_write8_io(cpu_t *cpu, uint16_t addr, uint8_t val);
 /* NUCLEO PATCH (A6): work RAM (stack, zero page, variables: most writes) inline; the rest out of line. */
 static inline __attribute__((always_inline)) void cpu_write8_fast(cpu_t *cpu, uint16_t addr, uint8_t val) {
-    cpu->agnes->io_seq++;                             /* NUCLEO PATCH (A9) */
+    agnes_t *agnes = cpu->agnes;
     if (addr < 0x2000) {
-        cpu->agnes->ram[addr & 0x7ff] = val;
+        const uint16_t a = addr & 0x7ff;
+        agnes->ram[a] = val;
+        if (!agnes->wr_over) {                        /* NUCLEO PATCH (A9): which work-RAM bytes the loop changes */
+            int i = 0;
+            while (i < agnes->wr_n && agnes->wr_addr[i] != a) i++;
+            if (i == agnes->wr_n) {
+                if (i < 4) agnes->wr_addr[agnes->wr_n++] = a; else agnes->wr_over = true;
+            }
+        }
         return;
     }
+    agnes->io_seq++;                                  /* NUCLEO PATCH (A9) */
     cpu_write8_io(cpu, addr, val);
 }
 void cpu_write8(cpu_t *cpu, uint16_t addr, uint8_t val) {
