@@ -98,6 +98,8 @@ typedef struct {
     uint16_t      mix_pulse[31], mix_tnd[203];  // the NES mixer's two curves, as 16-bit levels
     bool          sound;
     bool          frameskip;
+    int64_t       due;                          // frame-skip: when this frame should start (0 = not yet known)
+    uint8_t       skipped;                      // ...unseen frames in a row
 
     bool          battery;                      // the header says the PRG RAM keeps a save
     uint32_t      sav_sum;                      // checksum of what is on the card (autosave on change)
@@ -382,7 +384,7 @@ static void session_free(nes_session_t *s)
     if (s->fp) fclose(s->fp);
     for (int i = 0; i < s->pg_n; i++) free(s->pg[i]);
     free(s->rom_all);
-    free(s->a);
+    agnes_destroy(s->a);                          // with the mapper's RAM blocks (patch A8)
     free(s);
 }
 
@@ -430,6 +432,16 @@ esp_err_t nucleo_nes_open(const char *rom_path, nucleo_nes_line_fn line_cb, void
     s->rom_bytes = (uint32_t)sz;
     s->battery = (hdr[6] >> 1) & 1;
 
+    // The mapper's RAM blocks next, while the heap still has them: 8 KB of CHR RAM when the cartridge has no CHR
+    // ROM, 8 KB of PRG RAM for MMC1 / MMC3 (patch A8; agnes_load_ines_data keeps what is already there).
+    a->gamepack.mapper = (unsigned char)mapper;
+    {
+        uint8_t **chr, **prg;
+        agnes_rams(a, &chr, &prg);
+        if (chr && hdr[5] == 0 && !(*chr = (uint8_t *)calloc(1, 8192))) { session_free(s); return ESP_ERR_NO_MEM; }
+        if (prg && !(*prg = (uint8_t *)calloc(1, 8192))) { session_free(s); return ESP_ERR_NO_MEM; }
+    }
+
     // Sound before the cache, so its DMA buffers are paid for first.
     s->sound = nucleo_audio_pcm_open_ex(APU_RATE, 1, EMU_AUDIO_QUEUE_FRAMES * APU_SPF) == ESP_OK;
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
@@ -460,6 +472,8 @@ esp_err_t nucleo_nes_open(const char *rom_path, nucleo_nes_line_fn line_cb, void
     // agnes reads only the header through `data` (patch A1); the size it checks against is the file's.
     if (!agnes_load_ines_data(a, hdr, (size_t)sz)) { session_free(s); return ESP_ERR_NOT_SUPPORTED; }
     if (a->gamepack.prg_rom_offset != s->rom_base) { session_free(s); return ESP_ERR_NOT_SUPPORTED; }
+    { uint8_t **chr, **prg; agnes_rams(a, &chr, &prg);
+      s->heap_bytes += (chr && *chr ? 8192 : 0) + (prg && *prg ? 8192 : 0); }
 
     const agnes_color_t *pc = agnes_palette();
     for (int i = 0; i < 64; i++) {
@@ -521,7 +535,15 @@ void nucleo_nes_run_frame(void)
     nes_session_t *s = S;
     if (!s) return;
     int64_t t0 = esp_timer_get_time();
-    s->a->skip_draw = s->frameskip && (s->clock & 1);
+    bool skip = false;
+    if (s->frameskip) {
+        const int64_t now = esp_timer_get_time();
+        if (!s->due || now - s->due > 100000) s->due = now;          // the first frame, or far behind: start over
+        skip = now - s->due > 2000 && s->skipped < 3;                // more than 2 ms late: catch up unseen
+        s->skipped = skip ? (uint8_t)(s->skipped + 1) : 0;
+        s->due += 16639;                                              // 60.0988 Hz
+    }
+    s->a->skip_draw = skip;
     agnes_next_frame(s->a);
     int64_t t1 = esp_timer_get_time();
     s->us_cpu += (uint32_t)(t1 - t0);
@@ -548,13 +570,22 @@ void nucleo_nes_set_buttons(uint8_t m)
 }
 
 const char *nucleo_nes_title(void) { return S ? S->title : ""; }
-// Every other frame unseen (the front-end's relief lever): agnes then resolves only the sprite-0 hit per line,
-// and the host gets no lines for it.
-void nucleo_nes_set_frameskip(bool on) { if (S) S->frameskip = on; }
+// The front-end's relief lever. On, a frame is drawn only when the console is on time: a frame that starts late
+// (the previous ones overran, a busy panel, a page from the card) is run unseen — agnes then resolves only the
+// sprite-0 hit per line and the panel gets nothing — so the console itself stays at 60 frames a second and the
+// sound never runs dry. Never more than three unseen in a row: the picture keeps moving at 15 fps at worst.
+// Off, every frame is drawn.
+void nucleo_nes_set_frameskip(bool on) { if (S) { S->frameskip = on; S->due = 0; S->skipped = 0; } }
 void nucleo_nes_geometry(int *w, int *h) { *w = NUCLEO_NES_W; *h = NUCLEO_NES_H; }
 
-// ── save states: "NNS1", the console (agnes_t), the APU ────────────────────────────────────────────────
-#define STATE_MAGIC 0x31534E4Eu
+// ── save states: "NNS2", the console (agnes_t), the APU, then the mapper's CHR / PRG RAM if it has them ──
+#define STATE_MAGIC 0x32534E4Eu
+static long state_bytes(void)
+{
+    uint8_t **chr, **prg;
+    agnes_rams(S->a, &chr, &prg);
+    return (long)(4 + sizeof(agnes_t) + sizeof(nes_apu_t)) + (chr && *chr ? 8192 : 0) + (prg && *prg ? 8192 : 0);
+}
 static void state_path(char *out, size_t n, int slot) { snprintf(out, n, "%s.st%d", S->save_base, slot < 0 ? 0 : slot > 9 ? 9 : slot); }
 
 bool nucleo_nes_state_exists(int slot)
@@ -562,7 +593,7 @@ bool nucleo_nes_state_exists(int slot)
     if (!S) return false;
     char p[320]; state_path(p, sizeof p, slot);
     struct stat sb;
-    return stat(p, &sb) == 0 && sb.st_size == (long)(4 + sizeof(agnes_t) + sizeof(nes_apu_t));
+    return stat(p, &sb) == 0 && sb.st_size == state_bytes();
 }
 
 esp_err_t nucleo_nes_state_save(int slot)
@@ -574,6 +605,10 @@ esp_err_t nucleo_nes_state_save(int slot)
     uint32_t magic = STATE_MAGIC;
     bool ok = fwrite(&magic, 1, 4, f) == 4 && fwrite(S->a, 1, sizeof(agnes_t), f) == sizeof(agnes_t)
            && fwrite(&S->apu, 1, sizeof S->apu, f) == sizeof S->apu;
+    uint8_t **chr, **prg;
+    agnes_rams(S->a, &chr, &prg);
+    if (ok && chr && *chr) ok = fwrite(*chr, 1, 8192, f) == 8192;
+    if (ok && prg && *prg) ok = fwrite(*prg, 1, 8192, f) == 8192;
     ok = fclose(f) == 0 && ok;
     if (!ok) { remove(p); return ESP_FAIL; }
     return ESP_OK;
@@ -593,10 +628,19 @@ esp_err_t nucleo_nes_state_load(int slot)
     void (*ol)(void *, const uint16_t *, int) = a->on_line;
     void (*aw)(void *, uint16_t, uint8_t) = a->apu_write;
     uint8_t (*ar)(void *) = a->apu_read;
+    uint8_t **chr, **prg, *chr_p = NULL, *prg_p = NULL;         // this session's RAM blocks, not the file's pointers
+    agnes_rams(a, &chr, &prg);
+    if (chr) chr_p = *chr;
+    if (prg) prg_p = *prg;
     uint32_t magic = 0;
     bool ok = fread(&magic, 1, 4, f) == 4 && magic == STATE_MAGIC
            && fread(a, 1, sizeof(agnes_t), f) == sizeof(agnes_t)
            && fread(&S->apu, 1, sizeof S->apu, f) == sizeof S->apu;
+    agnes_rams(a, &chr, &prg);
+    if (chr) *chr = chr_p;
+    if (prg) *prg = prg_p;
+    if (ok && chr_p) ok = fread(chr_p, 1, 8192, f) == 8192;
+    if (ok && prg_p) ok = fread(prg_p, 1, 8192, f) == 8192;
     fclose(f);
     a->rom_read = rr; a->on_line = ol; a->apu_write = aw; a->apu_read = ar; a->host = S;
     a->rom_page = rom_page;

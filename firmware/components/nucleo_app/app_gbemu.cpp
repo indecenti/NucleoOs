@@ -981,6 +981,9 @@ static void marquee(int x, int y, int w, int h, const char *t,
 // so with half the lines arriving the picture only reaches y~67 and the bottom half of the screen
 // simply stops updating — the "split down the middle" the player saw. Frame-skip has no such problem:
 // a skipped frame calls the scanline callback zero times, so nothing half-draws. It is the only lever.
+// The NES's frame-skip draws whenever the console is on time and skips only to catch up (nucleo_nes.c); the
+// other cores skip every other frame.
+static bool skip_adaptive(void) { return SYS && !strcmp(SYS->id, "nesemu"); }
 static void set_relief(int level)
 {
     if (level < 0) level = 0;
@@ -1015,7 +1018,7 @@ static void hud_draw(void)
     d.setCursor(PILL_R + 4, 14); d.printf("b%2d.%d", st->ms_blit / 10, st->ms_blit % 10);
     d.setCursor(PILL_R + 4, 25); d.printf("a%2d.%d", st->ms_aud  / 10, st->ms_aud  % 10);
     d.setTextColor(st->relief ? AMB : DIM, BG);
-    d.setCursor(PILL_R + 4, 36); d.print(st->relief == 1 ? "30fps" : "  --");
+    d.setCursor(PILL_R + 4, 36); d.print(st->relief == 1 ? (skip_adaptive() ? " auto" : "30fps") : "  --");
 }
 
 // Everything in the pillars that is NOT the per-second HUD: palette name, the keys that are not
@@ -1224,7 +1227,7 @@ static const char *menu_label(int i, char *buf, size_t n)
                                  SYS->palettes ? PAL_NAME[s_pal] : TR5("della cartuccia", "cartridge", "del cartucho", "de cartouche", "der Patrone"));
                         return buf;
         case MI_PIC:    snprintf(buf, n, "%s: %s", TR5("Immagine", "Picture", "Imagen", "Image", "Bild"),
-                                 st->relief == 1 ? "30 fps" : TR5("Piena", "Full", "Completa", "Complete", "Vollst."));
+                                 st->relief == 1 ? (skip_adaptive() ? "Auto" : "30 fps") : TR5("Piena", "Full", "Completa", "Complete", "Vollst."));
                         return buf;
         default:        return TR5("Esci dal gioco", "Quit game", "Salir juego", "Quitter jeu", "Spiel beenden");
     }
@@ -1668,7 +1671,10 @@ static void play_session(const char *name)
     st->us_blit = 0; st->ms_cpu = st->ms_blit = st->ms_aud = 0;
     st->slow_secs = 0;
     st->tw_n = 0; st->tw_fps_sum = st->tw_cpu_sum = st->tw_blit_sum = st->tw_aud_sum = 0; st->tw_miss = 0;
-    set_relief(0);                       // every cartridge starts at the full picture and earns relief
+    // Every cartridge starts at the full picture and earns relief — except where relief is adaptive (the NES): it
+    // skips a frame only when the console is late, so it costs nothing when the game keeps up and it is what keeps
+    // the sound from running dry when it does not. On from the start there.
+    set_relief(skip_adaptive() ? 1 : 0);
     SYS->reset_counters();
     st->fps_frames = 0; st->fps = 0; st->fps_t0 = esp_timer_get_time();
     st->play_t0 = st->fps_t0; st->fps_hn = 0;

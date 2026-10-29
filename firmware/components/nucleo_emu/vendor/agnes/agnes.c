@@ -176,7 +176,7 @@ typedef struct mapper0 {
 
     unsigned prg_bank_offsets[2];
     bool use_chr_ram;
-    uint8_t chr_ram[8 * 1024];
+    uint8_t *chr_ram;   /* NUCLEO PATCH (A8): allocated by mapper_init only when the cartridge has it (agnes_ram) */
 } mapper0_t;
 
 typedef struct mapper1 {
@@ -192,15 +192,15 @@ typedef struct mapper1 {
     unsigned chr_bank_offsets[2];
     unsigned prg_bank_offsets[2];
     bool use_chr_ram;
-    uint8_t chr_ram[8 * 1024];
-    uint8_t prg_ram[8 * 1024];
+    uint8_t *chr_ram;   /* NUCLEO PATCH (A8): allocated by mapper_init only when the cartridge has it (agnes_ram) */
+    uint8_t *prg_ram;
 } mapper1_t;
 
 typedef struct mapper2 {
     struct agnes *agnes;
 
     unsigned prg_bank_offsets[2];
-    uint8_t chr_ram[8 * 1024];
+    uint8_t *chr_ram;   /* NUCLEO PATCH (A8): allocated by mapper_init only when the cartridge has it (agnes_ram) */
 } mapper2_t;
 
 typedef struct mapper4 {
@@ -215,9 +215,9 @@ typedef struct mapper4 {
     uint8_t counter_reload;
     unsigned chr_bank_offsets[8];
     unsigned prg_bank_offsets[4];
-    uint8_t prg_ram[8 * 1024];
+    uint8_t *prg_ram;   /* NUCLEO PATCH (A8): allocated by mapper_init only when the cartridge has it (agnes_ram) */
     bool use_chr_ram;
-    uint8_t chr_ram[8 * 1024];
+    uint8_t *chr_ram;
 } mapper4_t;
 
 /********************************* GAMEPACK **********************************/
@@ -280,6 +280,8 @@ typedef struct agnes {
     int ln_dot;
     bool skip_draw;
 } agnes_t;
+
+void agnes_rams(agnes_t *agnes, uint8_t ***chr, uint8_t ***prg);   /* NUCLEO PATCH (A8) */
 
 #define agnes_drop_windows(agn) do { memset((agn)->prg_win, 0, sizeof (agn)->prg_win); \
                                      memset((agn)->chr_win, 0, sizeof (agn)->chr_win); } while (0)
@@ -623,7 +625,14 @@ bool agnes_restore_state(agnes_t *agnes, const agnes_state_t *state) {
     void *host = agnes->host;
     const uint16_t *rgb = agnes->rgb;
     const uint8_t *(*rp)(void *, uint32_t) = agnes->rom_page;
+    uint8_t **chr, **prg, *chr_p = NULL, *prg_p = NULL;
+    agnes_rams(agnes, &chr, &prg);
+    if (chr) chr_p = *chr;
+    if (prg) prg_p = *prg;
     memmove(agnes, state, sizeof(agnes_t));
+    agnes_rams(agnes, &chr, &prg);
+    if (chr) *chr = chr_p;
+    if (prg) *prg = prg_p;
     agnes->gamepack.data = gamepack_data;
     agnes->rom_read = rr; agnes->on_line = ol; agnes->apu_write = aw; agnes->apu_read = ar; agnes->host = host;
     agnes->rom_page = rp;
@@ -745,6 +754,11 @@ bool agnes_next_frame(agnes_t *agnes) {
 const agnes_color_t *agnes_palette(void) { return g_colors; }
 
 void agnes_destroy(agnes_t *agnes) {
+    if (!agnes) return;
+    uint8_t **chr, **prg;                             /* NUCLEO PATCH (A8) */
+    agnes_rams(agnes, &chr, &prg);
+    if (chr) free(*chr);
+    if (prg) free(*prg);
     free(agnes);
 }
 
@@ -887,7 +901,21 @@ void cpu_set_dma_stall(cpu_t *cpu) {
     cpu->stall = (cpu->cycles & 0x1) ? 514 : 513;
 }
 
+static void cpu_write8_io(cpu_t *cpu, uint16_t addr, uint8_t val);
+/* NUCLEO PATCH (A6): work RAM (stack, zero page, variables: most writes) inline; the rest out of line. */
+static inline __attribute__((always_inline)) void cpu_write8_fast(cpu_t *cpu, uint16_t addr, uint8_t val) {
+    if (addr < 0x2000) {
+        cpu->agnes->ram[addr & 0x7ff] = val;
+        return;
+    }
+    cpu_write8_io(cpu, addr, val);
+}
 void cpu_write8(cpu_t *cpu, uint16_t addr, uint8_t val) {
+    cpu_write8_fast(cpu, addr, val);
+}
+#define cpu_write8(cpu, addr, val) cpu_write8_fast((cpu), (addr), (val))
+
+static void cpu_write8_io(cpu_t *cpu, uint16_t addr, uint8_t val) {
     agnes_t *agnes = cpu->agnes;
 
     if (addr < 0x2000) {
@@ -2766,11 +2794,30 @@ static int take_branch(cpu_t *cpu, uint16_t addr) {
 
 bool mapper_init(agnes_t *agnes) {
     switch (agnes->gamepack.mapper) {
-        case 0: mapper0_init(&agnes->mapper.m0, agnes); return true;
-        case 1: mapper1_init(&agnes->mapper.m1, agnes); return true;
-        case 2: mapper2_init(&agnes->mapper.m2, agnes); return true;
-        case 4: mapper4_init(&agnes->mapper.m4, agnes); return true;
+        case 0: mapper0_init(&agnes->mapper.m0, agnes); break;
+        case 1: mapper1_init(&agnes->mapper.m1, agnes); break;
+        case 2: mapper2_init(&agnes->mapper.m2, agnes); break;
+        case 4: mapper4_init(&agnes->mapper.m4, agnes); break;
         default: return false;
+    }
+    /* NUCLEO PATCH (A8): 8 KB of CHR RAM only for a cartridge without CHR ROM, 8 KB of PRG RAM only for MMC1/MMC3;
+     * a CHR-ROM game no longer carries an unused 8 KB, and the console is no longer one 24 KB block. */
+    uint8_t **chr, **prg;
+    agnes_rams(agnes, &chr, &prg);
+    bool need_chr = agnes->gamepack.chr_rom_banks_count == 0;
+    if (chr && need_chr && !*chr) *chr = (uint8_t *)calloc(1, 8 * 1024);
+    if (prg && !*prg) *prg = (uint8_t *)calloc(1, 8 * 1024);
+    return (!chr || !need_chr || *chr) && (!prg || *prg);
+}
+
+/* Where the mapper keeps its RAM pointers (NULL: this mapper has none of that kind). */
+void agnes_rams(agnes_t *agnes, uint8_t ***chr, uint8_t ***prg) {
+    *chr = NULL; *prg = NULL;
+    switch (agnes->gamepack.mapper) {
+        case 0: *chr = &agnes->mapper.m0.chr_ram; break;
+        case 1: *chr = &agnes->mapper.m1.chr_ram; *prg = &agnes->mapper.m1.prg_ram; break;
+        case 2: *chr = &agnes->mapper.m2.chr_ram; break;
+        case 4: *chr = &agnes->mapper.m4.chr_ram; *prg = &agnes->mapper.m4.prg_ram; break;
     }
 }
 
