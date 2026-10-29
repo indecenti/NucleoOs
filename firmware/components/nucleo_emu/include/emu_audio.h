@@ -68,9 +68,10 @@ static inline void emu_aclock_write(emu_aclock_t *c, int64_t now_us, int n)
     c->written += n;
 }
 
-// How many samples this frame should make: the queue held at two frames by its real level, not by a guess at
-// how late the frame was. Below two frames (a slow scene, the first frames after the open) the frame makes more,
-// a quarter of the shortfall at a time, so the sound stretches instead of stopping; above (the queue fills, the
+// How many samples this frame should make: the queue held at three frames (its size, EMU_AUDIO_QUEUE_FRAMES) by
+// its real level, not by a guess at how late the frame was. Below that (a slow scene, the first frames after the
+// open) the frame makes more, half the shortfall at a time, so the sound stretches instead of stopping (a scene at 50 fps still keeps ~40 ms
+// queued against the next spike; a quarter kept 14 ms, and Zelda DX's intro clicked); above (the queue fills, the
 // write would block) up to 1/16 fewer. At the balance it makes exactly `nominal`, and the console's own clock and
 // the speaker's agree. The chips render by sample count, so the change is in how long a frame's notes last, never
 // in their pitch.
@@ -78,7 +79,7 @@ static inline int emu_aclock_size(const emu_aclock_t *c, int64_t now_us, int nom
 {
     int fill = 0;
     if (c->t0 && now_us - c->last <= 100000) fill = (int)(c->written - (now_us - c->t0) * c->rate / 1000000);
-    int n = nominal + (2 * nominal - fill) / 4;
+    int n = nominal + (3 * nominal - fill) / 2;
     if (n < nominal - nominal / 16) n = nominal - nominal / 16;
     if (n > max) n = max;
     return n;
