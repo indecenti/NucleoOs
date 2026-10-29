@@ -10,10 +10,11 @@
 //                agnes keeps direct pointers to them (patch A5) and reads the cartridge without calling us
 //   speed        agnes draws a scanline at a time (patch A4), not a dot at a time
 //   two cores    the 6502 runs on the app's core; each visible line is described there (what the CPU can read of it
-//                - the sprite-0 hit, the overflow - resolved at once) and drawn, with the panel's work, on the other
-//                core (nucleo_cowork), eight lines per hand-over. Before anything a queued line still reads can
-//                change - a VRAM write, a cartridge page replaced - or the SD card is used (the panel shares its
-//                bus), the CPU waits for the other core.
+//                - the sprite-0 hit, the overflow - resolved at once) and its pixels are computed on the other core
+//                (nucleo_cowork), eight lines per hand-over, then sent to the screen from the app's core. The other
+//                core only computes: no bus, no driver, no file (the panel shares the SD card's bus, and the first
+//                version that pushed the panel from there tripped the task watchdog on the device). Before anything
+//                a queued line still reads can change - a VRAM write, a cartridge page replaced - the CPU waits.
 //   battery RAM  the MMC1 / MMC3 8 KB PRG RAM, "<root>/Saves/nes/<rom name>.sav", byte-compatible with other
 //                emulators' saves
 //   sound        our APU: agnes has none. Two pulses, triangle, noise and the DMC's direct output level, with
@@ -103,19 +104,19 @@ typedef struct {
     uint16_t      pal[64];                      // the NES palette, RGB565 in the panel's byte order
 
     // Lines for the other core: two batches, one being filled while the other is drawn (patch A10).
-    struct { agnes_line_t line[8]; int n; } batch[2];
+    struct { agnes_line_t line[8]; uint16_t px[8][NUCLEO_NES_W]; int n; } batch[2];
     int           bi;                           // the batch being filled
+    int           pending;                      // the batch whose pixels the other core computes (-1 = none)
     agnes_line_t  stage;                        // the line being described (a page miss meanwhile may flush)
-    uint16_t      wline[NUCLEO_NES_W];          // the other core's drawn line
 
     nes_apu_t     apu;
     int16_t       pcm[2 * APU_SPF];             // up to two frames' worth: the sound follows the clock (apu_render)
-    int64_t       audio_t;                      // when this frame should start, on the sound's 60.1 Hz schedule
+    int64_t       last_t0, last_block;          // the last frame's start and its wait on the speaker
+    int32_t       debt;                         // work beyond the 60.1 Hz budget, us (frame-skip pays it back)
     emu_afilt_t   afilt;
     uint16_t      mix_pulse[31], mix_tnd[203];  // the NES mixer's two curves, as 16-bit levels
     bool          sound;
     bool          frameskip;
-    int64_t       due;                          // frame-skip: when this frame should start (0 = not yet known)
     uint8_t       skipped;                      // ...unseen frames in a row
 
     bool          battery;                      // the header says the PRG RAM keeps a save
@@ -274,31 +275,43 @@ static void mixer_init(nes_session_t *s)
 }
 
 // ── lines on the other core ─────────────────────────────────────────────────────────────────────────
+// The other core's job: pixels only (agnes_line_draw reads the descriptions and writes the batch's buffer).
 static void line_job(void *arg)
 {
     nes_session_t *s = S;
     const int b = (int)(intptr_t)arg;
-    for (int i = 0; i < s->batch[b].n; i++) {
-        agnes_line_draw(&s->batch[b].line[i], s->wline);
-        if (s->on_line) s->on_line(s->wline, s->batch[b].line[i].y, s->user);
-    }
+    for (int i = 0; i < s->batch[b].n; i++) agnes_line_draw(&s->batch[b].line[i], s->batch[b].px[i]);
 }
-// Hand the filled batch over (or draw it here when there is no second core) and start the other one: run() first
-// waits for the previous job, which was the other batch, so it is free to fill again.
+// A computed batch to the screen, from this core, in order; then it is free to fill again.
+static void lines_emit(nes_session_t *s, int b)
+{
+    for (int i = 0; i < s->batch[b].n; i++)
+        if (s->on_line) s->on_line(s->batch[b].px[i], s->batch[b].line[i].y, s->user);
+    s->batch[b].n = 0;
+}
+// Hand the filled batch over and switch to the other one. run() first waits for the previous job — the other
+// batch — so that one is computed: it goes to the screen now, and is free to fill. Without a second core the batch
+// is computed and sent here.
 static void lines_flush(nes_session_t *s)
 {
     const int b = s->bi;
     if (!s->batch[b].n) return;
-    if (!nucleo_cowork_run(line_job, (void *)(intptr_t)b)) line_job((void *)(intptr_t)b);
+    if (!nucleo_cowork_run(line_job, (void *)(intptr_t)b)) {
+        line_job((void *)(intptr_t)b);
+        lines_emit(s, b);
+        return;
+    }
+    if (s->pending >= 0) lines_emit(s, s->pending);
+    s->pending = b;
     s->bi = b ^ 1;
-    s->batch[s->bi].n = 0;
 }
-// Everything handed over is drawn: before VRAM changes, a cartridge page is replaced, the SD card is used, or the
-// frame is handed back to the front-end.
+// Everything handed over is computed and on the screen: before VRAM changes, a cartridge page is replaced, a state
+// is saved or loaded, or the frame goes back to the front-end.
 static void lines_settle(nes_session_t *s)
 {
     lines_flush(s);
     nucleo_cowork_wait();
+    if (s->pending >= 0) { lines_emit(s, s->pending); s->pending = -1; }
 }
 // A line is described into a stage of its own and joins the batch only once complete: describing it may read a
 // cartridge page, and a miss there flushes the batch.
@@ -478,6 +491,7 @@ esp_err_t nucleo_nes_open(const char *rom_path, nucleo_nes_line_fn line_cb, void
     s->a = a; s->heap_bytes = sizeof *s + sizeof *a;
     s->on_line = line_cb; s->user = user; s->mapper = (uint8_t)mapper;
     s->cur_tag = PG_EMPTY;
+    s->pending = -1;
     for (int i = 0; i < PG_SLOTS; i++) s->pg_tag[i] = PG_EMPTY;
     memset(s->hint, -1, sizeof s->hint);
     save_base_init(s, rom_path);
@@ -602,13 +616,23 @@ void nucleo_nes_run_frame(void)
     nes_session_t *s = S;
     if (!s) return;
     int64_t t0 = esp_timer_get_time();
+    // How far behind the console is, from WORK only: the time since the last frame began, minus what that frame
+    // spent waiting on the speaker (a full queue is the pace, not a cost). Measuring lateness on the clock instead
+    // let that wait push every frame "late": most frames went unseen and the sound took extra samples it then had
+    // to wait for, holding the console at 56-58 fps.
+    int over = 0;                                     // this cycle's overrun past one frame, us
+    if (s->last_t0) {
+        const int64_t cycle = t0 - s->last_t0 - s->last_block;
+        if (cycle > 0 && cycle < 250000) over = (int)cycle - 16639;
+    }
+    s->last_t0 = t0;
+    s->debt += over;
+    if (s->debt < -4000) s->debt = -4000;             // a little credit, not a bank
+    if (s->debt > 100000) s->debt = 0;                // a pause (menu, card): start over
     bool skip = false;
     if (s->frameskip) {
-        const int64_t now = esp_timer_get_time();
-        if (!s->due || now - s->due > 100000) s->due = now;          // the first frame, or far behind: start over
-        skip = now - s->due > 2000 && s->skipped < 3;                // more than 2 ms late: catch up unseen
+        skip = s->debt > 0 && s->skipped < 3;         // behind: catch up unseen, three at most in a row
         s->skipped = skip ? (uint8_t)(s->skipped + 1) : 0;
-        s->due += 16639;                                              // 60.0988 Hz
     }
     s->a->skip_draw = skip;
     agnes_next_frame(s->a);
@@ -616,20 +640,18 @@ void nucleo_nes_run_frame(void)
     int64_t t1 = esp_timer_get_time();
     s->us_cpu += (uint32_t)(t1 - t0);
     const uint32_t c0 = agnes_ccount();
-    int n = APU_SPF;
-    if (!s->audio_t || t0 - s->audio_t > 250000 || s->audio_t - t0 > 250000) s->audio_t = t0;   // first frame, a pause
-    const int64_t late = t0 - s->audio_t;             // how far this frame started behind the 60.1 Hz schedule
-    if (late > 1000) {                                // over a millisecond: make up the gap, restart the schedule
-        n += (int)((uint32_t)late * 4u / 125u);
-        if (n > 2 * APU_SPF) n = 2 * APU_SPF;
-        s->audio_t = t0;
-    }
-    s->audio_t += 16639;
+    int n = APU_SPF;                                  // a cycle that overran by real work: its samples too
+    if (over > 1000) n += (int)((uint32_t)over * 4u / 125u);
+    if (n > 2 * APU_SPF) n = 2 * APU_SPF;
     apu_render(s, n);
+    s->last_block = 0;
     if (s->sound) {
         emu_afilt_run(&s->afilt, s->pcm, n, 1, 1);
+        const int64_t w0 = esp_timer_get_time();
         nucleo_audio_pcm_write(s->pcm, (size_t)n * sizeof s->pcm[0]);
-        s->us_audio += (uint32_t)(esp_timer_get_time() - t1);
+        const int64_t w1 = esp_timer_get_time();
+        s->last_block = w1 - w0;                      // waiting for room in the queue: the pace
+        s->us_audio += (uint32_t)(w0 - t1);
     }
     s->prof_apu += (uint32_t)(agnes_ccount() - c0);
     s->prof_frames++;
@@ -648,12 +670,12 @@ void nucleo_nes_set_buttons(uint8_t m)
 }
 
 const char *nucleo_nes_title(void) { return S ? S->title : ""; }
-// The front-end's relief lever. On, a frame is drawn only when the console is on time: a frame that starts late
-// (the previous ones overran, a busy panel, a page from the card) is run unseen — agnes then resolves only the
+// The front-end's relief lever. On, a frame is drawn only when the console is not behind: while the work of the
+// last frames exceeds the 60.1 Hz budget (a busy panel, a page from the card) frames are run unseen — agnes then resolves only the
 // sprite-0 hit per line and the panel gets nothing — so the console itself stays at 60 frames a second and the
 // sound never runs dry. Never more than three unseen in a row: the picture keeps moving at 15 fps at worst.
 // Off, every frame is drawn.
-void nucleo_nes_set_frameskip(bool on) { if (S) { S->frameskip = on; S->due = 0; S->skipped = 0; } }
+void nucleo_nes_set_frameskip(bool on) { if (S) { S->frameskip = on; S->debt = 0; S->skipped = 0; } }
 void nucleo_nes_geometry(int *w, int *h) { *w = NUCLEO_NES_W; *h = NUCLEO_NES_H; }
 
 // ── save states: "NNS2", the console (agnes_t), the APU, then the mapper's CHR / PRG RAM if it has them ──
