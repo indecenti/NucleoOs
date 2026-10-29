@@ -1,5 +1,5 @@
 # NucleoOS native app ABI, level 5 = level 4 + what the emulators need to be opened on one cartridge from the
-# Games gallery (the "open with" handoff) and the two-screen kit's search line and title wheel. Same rules as v1.txt.
+# Games gallery (the "open with" handoff). Same rules as v1.txt.
 THEME_BG
 THEME_DIM
 THEME_FG
@@ -259,6 +259,6 @@ time
 tinfl_decompress
 vTaskDelay
 vfprintf
-_ZN2lg6searchEiiiiPKcS1_S1_tt                                # lg::search(int, int, int, int, char const*, char const*, char const*, unsigned short, unsigned short)
-_ZN2lg5wheelEiiiiRKNS_5WheelE                                # lg::wheel(int, int, int, int, lg::Wheel const&)
+nucleo_extdisp_hud_overlay
+nucleo_audio_pcm_open_ex
 nucleo_app_take_open_file

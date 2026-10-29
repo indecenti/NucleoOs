@@ -1,4 +1,9 @@
 // nucleo_gb — see include/nucleo_gb.h for why a Game Boy fits on this board at all.
+// Compiled twice: as itself around Peanut-GB (the Game Boy), and by nucleo_gbc.c with NUCLEO_GB_CGB=1
+// around Walnut-CGB (the Game Boy Color, nucleo_gbc.h).
+#ifndef NUCLEO_GB_CGB
+#define NUCLEO_GB_CGB 0
+#endif
 //
 // This file is the HOST half of Peanut-GB: the core asks for cartridge bytes, hands back finished
 // scanlines, and reports errors; everything about where a ROM lives and how it reaches the panel is
@@ -7,6 +12,7 @@
 #include "nucleo_gb.h"
 #include "nucleo_board.h"
 #include "nucleo_audio.h"   // raw PCM sink: the APU produces its own samples, we hand them to I2S
+#include "emu_audio.h"      // ...through the speaker stage (DC block, low-pass, soft knee)
 #include "esp_log.h"
 #include "esp_attr.h"       // IRAM_ATTR: keep the innermost callbacks out of the flash cache
 #include "esp_heap_caps.h"
@@ -22,6 +28,17 @@
 #define IRAM_ATTR
 #endif
 
+#if NUCLEO_GB_CGB
+// Walnut-CGB (vendor/README.md) for the Game Boy Color: this file compiled a second time by nucleo_gbc.c,
+// which renames every global. Colour is the point, so the 12-colour path and full CGB support are on, and
+// the palette comes out in the panel's byte order (patch W2): the scanline needs one lookup per pixel.
+#define ENABLE_LCD   1
+#define ENABLE_SOUND 1
+#define WALNUT_GB_HIGH_LCD_ACCURACY 1
+#define WALNUT_GB_12_COLOUR 1
+#define WALNUT_FULL_GBC_SUPPORT 1
+#define WALNUT_GB_RGB565_BIGENDIAN 1
+#else
 // Peanut-GB build switches — set BEFORE the include, they are compile-time for the whole core.
 #define ENABLE_LCD   1
 #define ENABLE_SOUND 1     // Peanut-GB ships no APU: it calls audio_read/audio_write, which we route
@@ -37,6 +54,7 @@
 // four-shade screen and our scanline callback masks the tag straight off again — so it is an extra OR
 // per pixel, 23,000 a frame, plus masking through the sprite path, for information nobody reads.
 #define PEANUT_GB_12_COLOUR 0
+#endif
 
 #ifndef MINIGB_APU_AUDIO_FORMAT_S16SYS
 # define MINIGB_APU_AUDIO_FORMAT_S16SYS 1   // 16-bit signed: exactly what the I2S sink takes
@@ -47,7 +65,13 @@
 // included, and defined against the live session (S) below.
 static uint8_t audio_read(const uint16_t addr);
 static void    audio_write(const uint16_t addr, const uint8_t val);
+#if NUCLEO_GB_CGB
+#include "../vendor/walnut_cgb.h"
+typedef nucleo_gb_line16_fn gb_line_fn_t;    // the colour line: RGB565, panel byte order
+#else
 #include "../vendor/peanut_gb.h"
+typedef nucleo_gb_line_fn gb_line_fn_t;      // the DMG line: shades 0..3
+#endif
 
 static const char *TAG = "gb";
 
@@ -118,6 +142,7 @@ typedef struct {
     struct gb_s   gb;                   // ~17.2 KB — the whole console
     struct minigb_apu_ctx apu;          // Game Boy sound chip state (context-based, no globals)
     audio_sample_t audio[AUDIO_SAMPLES_TOTAL];   // one frame of stereo samples (~2.2 KB)
+    emu_afilt_t   afilt[2];             // the speaker stage, one per channel (emu_audio.h)
     bool          sound;                // false when the speaker could not be claimed
 
     FILE         *fp;                   // open ROM on the SD card
@@ -162,8 +187,11 @@ typedef struct {
     bool          sav_is_new;           // no save in the Saves folder yet: write one at once (see open)
     char          title[17];
 
-    nucleo_gb_line_fn on_line;
+    gb_line_fn_t      on_line;
     void             *user;
+#if NUCLEO_GB_CGB
+    uint16_t          line16[NUCLEO_GB_W];  // the colour scanline handed to on_line
+#endif
 
     size_t        heap_bytes;
     uint32_t      frames;
@@ -248,6 +276,28 @@ static IRAM_ATTR void audio_write(const uint16_t addr, const uint8_t val)
 }
 
 static int ram_bank_in(gb_session_t *s, int bank);
+#if NUCLEO_GB_CGB
+// Walnut also fetches 16- and 32-bit operands and DMA words from the cartridge. They go through the reader
+// the core holds right now (the header-correcting one during gb_init, the cached one after), byte by byte:
+// the cache is in 1 KB pages, so a word may straddle two of them.
+static IRAM_ATTR uint16_t rom_read16(struct gb_s *gb, const uint_fast32_t addr)
+{
+    gb_session_t *s = (gb_session_t *)gb->direct.priv;
+    if (s && s->rom_all && addr + 1 < s->rom_bytes) return (uint16_t)(s->rom_all[addr] | s->rom_all[addr + 1] << 8);
+    // The dual-fetch loop reads every opcode pair through here: inside the page the last read hit (the usual
+    // case by far) it is two loads, as rom_read's own fast path.
+    if (s && !s->rom_all && (uint32_t)(addr >> PG_BITS) == s->cur_tag && (addr & (PG_SIZE - 1)) != PG_SIZE - 1) {
+        const uint8_t *b = s->cur_buf + (addr & (PG_SIZE - 1));
+        return (uint16_t)(b[0] | b[1] << 8);
+    }
+    return (uint16_t)(gb->gb_rom_read(gb, addr) | gb->gb_rom_read(gb, addr + 1) << 8);
+}
+static IRAM_ATTR uint32_t rom_read32(struct gb_s *gb, const uint_fast32_t addr)
+{
+    return (uint32_t)rom_read16(gb, addr) | (uint32_t)rom_read16(gb, addr + 2) << 16;
+}
+#endif
+
 static IRAM_ATTR uint8_t cart_ram_read(struct gb_s *gb, const uint_fast32_t addr)
 {
     gb_session_t *s = (gb_session_t *)gb->direct.priv;
@@ -372,7 +422,16 @@ static void rtc_seed(gb_session_t *s)
 static IRAM_ATTR void lcd_line(struct gb_s *gb, const uint8_t *pixels, const uint_fast8_t line)
 {
     gb_session_t *s = (gb_session_t *)gb->direct.priv;
-    if (s && s->on_line) s->on_line(pixels, (int)line, s->user);
+    if (!s || !s->on_line) return;
+#if NUCLEO_GB_CGB
+    // Each pixel is an index into the 64 live palette entries (BG 0-31, OBJ 32-63), already RGB565 in the
+    // panel's byte order (W2): one lookup per pixel and the line goes out as it is.
+    const uint16_t *pal = gb->cgb.fixPalette;
+    for (int x = 0; x < NUCLEO_GB_W; x++) s->line16[x] = pal[pixels[x] & 0x3F];
+    s->on_line(s->line16, (int)line, s->user);
+#else
+    s->on_line(pixels, (int)line, s->user);
+#endif
 }
 
 // ── battery RAM banks ───────────────────────────────────────────────────────────────────────────
@@ -666,17 +725,40 @@ static void session_free(gb_session_t *s)
     if (s->fp) fclose(s->fp);
     for (int i = 0; i < s->pg_n; i++) free(s->pg[i]);
     free(s->rom_all); ram_free(s);
+#if NUCLEO_GB_CGB
+    free(s->gb.wram); free(s->gb.vram);
+#endif
     free(s);
 }
 
-esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *user)
+esp_err_t nucleo_gb_open(const char *rom_path, gb_line_fn_t on_line, void *user)
 {
     if (!rom_path || !*rom_path) return ESP_ERR_INVALID_ARG;
     nucleo_gb_close();
 
+#if NUCLEO_GB_CGB
+    // The Color's 32 KB of work RAM and 16 KB of video RAM (patch W1: blocks the host owns), FIRST: the
+    // work RAM needs a 32 KB block and the heap has exactly one, the canvas the app has just released.
+    // Anything allocated before it (even the session) could be carved out of it.
+    uint8_t *wram = (uint8_t *)calloc(1, WRAM_SIZE);
+    uint8_t *vram = wram ? (uint8_t *)calloc(1, VRAM_SIZE) : NULL;
+    if (!vram) {
+        ESP_LOGE(TAG, "no RAM for the Color's work + video RAM (largest block %u B)",
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+        free(wram);
+        return ESP_ERR_NO_MEM;
+    }
+#endif
     gb_session_t *s = (gb_session_t *)calloc(1, sizeof(gb_session_t));
+#if NUCLEO_GB_CGB
+    if (!s) { free(wram); free(vram); }
+    else { s->gb.wram = wram; s->gb.vram = vram; }
+#endif
     if (!s) { ESP_LOGE(TAG, "no RAM for the session (%u B)", (unsigned)sizeof(gb_session_t)); return ESP_ERR_NO_MEM; }
     s->heap_bytes = sizeof(gb_session_t);
+#if NUCLEO_GB_CGB
+    s->heap_bytes += WRAM_SIZE + VRAM_SIZE;
+#endif
     s->on_line = on_line; s->user = user;
 
     s->fp = fopen(rom_path, "rb");
@@ -695,7 +777,7 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
         uint8_t hdr[0x150];
         if (fread(hdr, 1, sizeof hdr, s->fp) != sizeof hdr) { session_free(s); return ESP_ERR_INVALID_SIZE; }
         fseek(s->fp, 0, SEEK_SET);
-        if (hdr[0x143] == 0xC0) {                 // CGB-only: this is a DMG core, it would draw garbage
+        if (!NUCLEO_GB_CGB && hdr[0x143] == 0xC0) {   // CGB-only on the DMG core: it would draw garbage
             ESP_LOGW(TAG, "Game Boy Color-only cartridge");
             session_free(s);
             return ESP_ERR_INVALID_VERSION;
@@ -730,7 +812,7 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
     // mic pin) the game still runs, silently. Refusing to start a cartridge because audio was taken
     // would be the wrong trade on a games machine. It opens HERE, before the page cache, so its DMA
     // channel is already paid for when the greedy cache below decides how much of the heap to take.
-    s->sound = (nucleo_audio_pcm_open(AUDIO_SAMPLE_RATE, AUDIO_CHANNELS) == ESP_OK);
+    s->sound = (nucleo_audio_pcm_open_ex(AUDIO_SAMPLE_RATE, AUDIO_CHANNELS, EMU_AUDIO_QUEUE_FRAMES * AUDIO_SAMPLES) == ESP_OK);
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
     // Prefer holding the WHOLE ROM: it removes SD traffic from the hot path entirely, and the small
@@ -781,7 +863,11 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
 
     // Init reads the header through rom_read_init (the corrected bytes, see header_fix); the running
     // game gets the plain reader, and the real header, from here on.
+#if NUCLEO_GB_CGB
+    enum gb_init_error_e err = gb_init(&s->gb, rom_read_init, rom_read16, rom_read32, cart_ram_read, cart_ram_write, gb_err, s);
+#else
     enum gb_init_error_e err = gb_init(&s->gb, rom_read_init, cart_ram_read, cart_ram_write, gb_err, s);
+#endif
     if (err != GB_INIT_NO_ERROR) {
         ESP_LOGE(TAG, "gb_init failed (%d), cartridge type %02X", (int)err, s->hdr_type);
         S = NULL;                       // never leave a dangling session published
@@ -832,7 +918,13 @@ void nucleo_gb_run_frame(void)
 {
     if (!S) return;
     int64_t t0 = esp_timer_get_time();
+#if NUCLEO_GB_CGB
+    // Walnut's own recommended loop: opcodes fetched two at a time through the 16-bit reader and chained,
+    // instead of one dispatch per byte (vendor/README.md). It is what made the Color affordable at all.
+    gb_run_frame_dualfetch(&S->gb);
+#else
     gb_run_frame(&S->gb);
+#endif
     int64_t t1 = esp_timer_get_time();
     S->us_cpu += (uint32_t)(t1 - t0);
     S->frames++;
@@ -842,6 +934,7 @@ void nucleo_gb_run_frame(void)
     // shows up as a click rather than as drift.
     if (S->sound) {
         minigb_apu_audio_callback(&S->apu, S->audio);
+        emu_afilt_run(S->afilt, S->audio, AUDIO_SAMPLES_TOTAL, AUDIO_CHANNELS, 1);   // the APU's DAC has a DC offset
         nucleo_audio_pcm_write(S->audio, sizeof(S->audio));
         S->us_audio += (uint32_t)(esp_timer_get_time() - t1);
     }
@@ -882,7 +975,13 @@ void nucleo_gb_reset_counters(void)
 // session pointer, and those are the ONE thing that must not come from the file: a corrupt or
 // hand-edited state would otherwise hand the CPU an arbitrary address to call. They are saved with
 // everything else for simplicity and then overwritten from the live session on load.
+#if NUCLEO_GB_CGB
+#define STATE_MAGIC 0x3143474Eu   // 'NGC1': the console, then its work and video RAM, then the battery RAM
+#define STATE_EXTRA (WRAM_SIZE + VRAM_SIZE)
+#else
 #define STATE_MAGIC 0x3142474Eu   // 'NGB1'
+#define STATE_EXTRA 0
+#endif
 // "<save_base>.st<slot>". It used to be derived from the .sav path, which exists only for cartridges
 // with battery RAM — so on Tetris, Super Mario Land and every other RAM-less cart the path came out as
 // a bare ".st0" and save states silently failed.
@@ -907,6 +1006,10 @@ static esp_err_t state_write(const char *p)
     bool ok = fwrite(&magic, 1, 4, f) == 4
            && fwrite(&ram, 1, 4, f) == 4
            && fwrite(&S->gb, 1, sizeof S->gb, f) == sizeof S->gb
+#if NUCLEO_GB_CGB
+           && fwrite(S->gb.wram, 1, WRAM_SIZE, f) == WRAM_SIZE
+           && fwrite(S->gb.vram, 1, VRAM_SIZE, f) == VRAM_SIZE
+#endif
            && ram_export(S, f) == ram;
     ok = (fclose(f) == 0) && ok;
     if (!ok) { remove(p); ESP_LOGW(TAG, "state: short write %s", p); return ESP_FAIL; }
@@ -926,7 +1029,7 @@ esp_err_t nucleo_gb_state_save(int slot)
 static bool state_valid(const char *p)
 {
     struct stat sb;
-    if (stat(p, &sb) != 0 || (size_t)sb.st_size != 8 + sizeof(struct gb_s) + S->cart_ram_bytes) return false;
+    if (stat(p, &sb) != 0 || (size_t)sb.st_size != 8 + sizeof(struct gb_s) + STATE_EXTRA + S->cart_ram_bytes) return false;
     FILE *f = fopen(p, "rb");
     if (!f) return false;
     uint32_t magic = 0, ram = 0;
@@ -954,13 +1057,23 @@ static bool state_read_live(const char *p)
     uint8_t (*boot)(struct gb_s *, const uint_fast16_t) = g->gb_bootrom_read;
     void (*line)(struct gb_s *, const uint8_t *, const uint_fast8_t) = g->display.lcd_draw_line;
     void *priv = g->direct.priv;
+#if NUCLEO_GB_CGB
+    uint16_t (*rom16)(struct gb_s *, const uint_fast32_t) = g->gb_rom_read_16bit;
+    uint32_t (*rom32)(struct gb_s *, const uint_fast32_t) = g->gb_rom_read_32bit;
+    uint8_t *wram = g->wram, *vram = g->vram;
+#endif
     bool fs = g->direct.frame_skip, il = g->direct.interlace;
     uint8_t joy = g->direct.joypad;
 
     FILE *f = fopen(p, "rb");
     bool ok = f && fseek(f, 8, SEEK_SET) == 0
-                && fread(g, 1, sizeof *g, f) == sizeof *g
-                && ram_import(S, f) == S->cart_ram_bytes;
+                && fread(g, 1, sizeof *g, f) == sizeof *g;
+#if NUCLEO_GB_CGB
+    g->wram = wram; g->vram = vram;              // the file's pointers belong to another session
+    g->gb_rom_read_16bit = rom16; g->gb_rom_read_32bit = rom32;
+    ok = ok && fread(wram, 1, WRAM_SIZE, f) == WRAM_SIZE && fread(vram, 1, VRAM_SIZE, f) == VRAM_SIZE;
+#endif
+    ok = ok && ram_import(S, f) == S->cart_ram_bytes;
     if (f) fclose(f);
 
     g->gb_rom_read = rom; g->gb_cart_ram_read = crr; g->gb_cart_ram_write = crw; g->gb_error = err;
@@ -1074,7 +1187,7 @@ esp_err_t nucleo_gb_probe(const char *rom_path, nucleo_gb_info_t *out)
     out->rom_bytes = sz > 0 ? (uint32_t)sz : 0;
     out->cart_type = h[0x147];
     out->cgb_flag  = h[0x143];
-    if (out->cgb_flag == 0xC0) return ESP_ERR_INVALID_VERSION;
+    if (!NUCLEO_GB_CGB && out->cgb_flag == 0xC0) return ESP_ERR_INVALID_VERSION;
     return cart_unsupported(out->cart_type) ? ESP_ERR_NOT_SUPPORTED : ESP_OK;
 }
 

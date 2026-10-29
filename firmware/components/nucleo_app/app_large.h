@@ -74,6 +74,9 @@ struct Wheel {
     bool (*mark)(int i, void *ud);      // a dot before title i (last played, has a save); null = none
     void *ud;
     unsigned short acc, mark_col;
+    // Optional: draws something before title i (a console's mark) with its left edge at x, centred on cy, and
+    // returns its width (0 = nothing); the title follows it.
+    int (*icon)(int i, int x, int cy, bool mid, void *ud);
 };
 // The title in wheel slot k (-1 = none).
 inline int wheel_at(int sel, int n, int slots, int k)

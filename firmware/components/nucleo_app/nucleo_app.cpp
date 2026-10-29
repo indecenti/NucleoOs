@@ -2443,10 +2443,15 @@ void nucleo_app_run(void)
             const bool hud = fg && fg->on_draw_large && nucleo_surface_large() && nucleo_store_app_is_native(fg->id) &&
                              nucleo_native_loaded()[0] && !strcmp(nucleo_native_loaded(), fg->id) &&
                              !(nucleo_native_flags() & 0x0002u /* NAP_FLAG_NO_HUD */);
+            // NAP_FLAG_AUTO_HUD: the same bar, shown only on a tap and gone 3 s later (a game wants the panel whole).
+            const bool autohud = hud && (nucleo_native_flags() & 0x0004u /* NAP_FLAG_AUTO_HUD */);
             const char *want = hud ? fg->id : nullptr;
             if (!nucleo_surface_large()) s_hud_for = nullptr;      // leaving the large surface took the bar away
             if (want != s_hud_for) {
-                if (nucleo_extdisp_set_hud(hud ? fg->name : nullptr, fg ? fg->color : 0)) {   // the surface changed size
+                bool resized = autohud ? nucleo_extdisp_set_hud_auto(fg->name, fg->color)
+                                       : (nucleo_extdisp_set_hud_auto(nullptr, 0),
+                                          nucleo_extdisp_set_hud(hud ? fg->name : nullptr, fg ? fg->color : 0));
+                if (resized) {                                      // the surface changed size
                     d.fillScreen(BG);
                     nucleo_app_force_repaint();
                 }
@@ -2541,6 +2546,7 @@ void nucleo_app_run(void)
                 d.startWrite();
                 def->on_draw_large();
                 d.endWrite();
+                nucleo_extdisp_hud_redraw();       // the on-demand bar, if showing, stays on top of what was drawn
             } else if (s_dirty) {
                 s_dirty = false;
                 // Apps that freed the canvas (ANIMA) pin direct draw: don't lazily re-acquire the

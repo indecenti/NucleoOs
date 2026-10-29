@@ -1,0 +1,29 @@
+--- walnut_cgb.h.orig	2026-10-28 23:50:19.131177800 +0100
++++ walnut_cgb.h	2026-10-28 23:50:19.294675100 +0100
+@@ -77,7 +77,11 @@
+ // Uses alignment aware read/writes with an 8-bit fallback (16-bit alignment implemented for read path only in this version)
+ #define WALNUT_GB_16BIT_ALIGNED 1
+ #define WALNUT_GB_32BIT_ALIGNED 1
++/* NUCLEO PATCH (W2): the byte order of the RGB565 palette is the includer's choice (the Cardputer's
++ * panel takes it byte-swapped, so the scanline needs no per-pixel swap). Upstream: a fixed 0. */
++#ifndef WALNUT_GB_RGB565_BIGENDIAN
+ #define WALNUT_GB_RGB565_BIGENDIAN 0
++#endif
+ uint8_t __gb_read(struct gb_s *gb, uint16_t addr);
+ void __gb_write(struct gb_s *gb, uint_fast16_t addr, uint8_t val);
+ void __gb_write16(struct gb_s *gb, uint_fast16_t addr, uint16_t val);
+@@ -770,8 +774,12 @@
+ 	struct count_s counter;
+ 
+ 	/* TODO: Allow implementation to allocate WRAM, VRAM and Frame Buffer. */
+-	uint8_t wram[WRAM_SIZE];
+-	uint8_t vram[VRAM_SIZE];
++	/* NUCLEO PATCH (W1): work and video RAM are two blocks the HOST allocates and points to (32 KB and
++	 * 16 KB on a CGB), not arrays inside the console: inside it the struct would need ~49 KB in ONE block,
++	 * on a heap whose largest block is 32 KB. Every gb->wram[i] / gb->vram[i] in the core reads the same
++	 * through a pointer; set both before gb_init(), which clears VRAM. */
++	uint8_t *wram;
++	uint8_t *vram;
+ 	uint8_t oam[OAM_SIZE];
+ 	uint8_t hram_io[HRAM_IO_SIZE];
+ 

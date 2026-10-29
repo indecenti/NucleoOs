@@ -331,12 +331,14 @@ void wheel(int x, int y, int w, int h, const Wheel &wl)
             const int ix = x + 12 + dist * 5;                          // the wheel's curve: far rows step in
             if (m) d.fillRoundRect(x, wy + 1, ww, sh - 2, (sh - 2) / 2, wl.acc);
             const char *t = wl.label(i, wl.ud);
+            const int iw = wl.icon ? wl.icon(i, ix, wy + sh / 2, m, wl.ud) : 0;
+            const int lx = iw ? ix + iw + 6 : ix;
             char fitted[64];
             font(m ? 1 : 0);
-            fit(fitted, sizeof fitted, t ? t : "", x + ww - 8 - ix);
+            fit(fitted, sizeof fitted, t ? t : "", x + ww - 8 - lx);
             d.setTextDatum(middle_left);
             d.setTextColor(m ? INK : dist == 1 ? FG : MUTED, m ? wl.acc : BG);
-            d.drawString(fitted, ix, wy + sh / 2 + (m ? 0 : 1));
+            d.drawString(fitted, lx, wy + sh / 2 + (m ? 0 : 1));
             d.setTextDatum(top_left);
             if (wl.mark && wl.mark(i, wl.ud)) d.fillCircle(ix - 6, wy + sh / 2, 2, m ? INK : wl.mark_col);
             nucleo_touch_add(x, wy, ww, sh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));

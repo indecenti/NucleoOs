@@ -90,6 +90,7 @@ static void on_line(const uint8_t *px, int line, void *user)
  * "sound was opened and silent" are different bugs. */
 long g_pcm_writes;
 esp_err_t nucleo_audio_pcm_open(int rate, int channels) { (void)rate; (void)channels; return ESP_OK; }
+esp_err_t nucleo_audio_pcm_open_ex(int rate, int channels, int queue_frames) { (void)rate; (void)channels; (void)queue_frames; return ESP_OK; }
 esp_err_t nucleo_audio_pcm_write(const int16_t *pcm, size_t bytes) { (void)pcm; (void)bytes; g_pcm_writes++; return ESP_OK; }
 void      nucleo_audio_pcm_close(void) { }
 

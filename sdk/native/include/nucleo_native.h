@@ -19,6 +19,8 @@
 
 #define NAP_FLAG_NET         0x0001u       // uses the radio (pnet multiplayer)
 #define NAP_FLAG_NO_HUD      0x0002u       // draws its own Back on the second screen: no system bar over it
+#define NAP_FLAG_AUTO_HUD    0x0004u       // the system bar only on demand: a tap shows it over the app, 3 s later it
+                                           // goes (a game that wants the whole panel; nucleo_extdisp_hud_overlay)
 
 #ifdef __cplusplus
 extern "C" {

@@ -119,16 +119,21 @@ static const Meta META[] = {
 
 // The consoles, in the order the gallery lists them. Two share an emulator each, but every console is its own system.
 struct Art { const uint8_t *z; uint16_t n; uint8_t w, h; };
+// A console's NAME is never written in the gallery (it is searched by, not shown): its mark is drawn instead.
 struct System {
     const char *key, *app, *name, *maker;
     unsigned short col;
-    Art art;
+    Art art, mark;             // the photo (a 120x80 box) and the small mark (gbemu_art.h ART_*_S)
 };
 static const System SYS[] = {
-    { "gb",  "gbemu", "Game Boy",       "Nintendo, 1989", 0x8FF3, { ART_GB_Z,  sizeof ART_GB_Z,  ART_GB_W,  ART_GB_H } },
-    { "gbc", "gbemu", "Game Boy Color", "Nintendo, 1998", 0xC5F5, { ART_GB_Z,  sizeof ART_GB_Z,  ART_GB_W,  ART_GB_H } },
-    { "gg",  "ggemu", "Game Gear",      "Sega, 1990",     0x5D7F, { ART_GG_Z,  sizeof ART_GG_Z,  ART_GG_W,  ART_GG_H } },
-    { "sms", "ggemu", "Master System",  "Sega, 1986",     0xF96B, { ART_SMS_Z, sizeof ART_SMS_Z, ART_SMS_W, ART_SMS_H } },
+    { "gb",  "gbemu", "Game Boy",       "Nintendo, 1989", 0x8FF3, { ART_GB_Z,  sizeof ART_GB_Z,  ART_GB_W,  ART_GB_H },
+                                                                  { ART_GB_S_Z,  sizeof ART_GB_S_Z,  ART_GB_S_W,  ART_GB_S_H } },
+    { "gbc", "gbemu", "Game Boy Color", "Nintendo, 1998", 0xC5F5, { ART_GBC_Z, sizeof ART_GBC_Z, ART_GBC_W, ART_GBC_H },
+                                                                  { ART_GBC_S_Z, sizeof ART_GBC_S_Z, ART_GBC_S_W, ART_GBC_S_H } },
+    { "gg",  "ggemu", "Game Gear",      "Sega, 1990",     0x5D7F, { ART_GG_Z,  sizeof ART_GG_Z,  ART_GG_W,  ART_GG_H },
+                                                                  { ART_GG_S_Z,  sizeof ART_GG_S_Z,  ART_GG_S_W,  ART_GG_S_H } },
+    { "sms", "ggemu", "Master System",  "Sega, 1986",     0xF96B, { ART_SMS_Z, sizeof ART_SMS_Z, ART_SMS_W, ART_SMS_H },
+                                                                  { ART_SMS_S_Z, sizeof ART_SMS_S_Z, ART_SMS_S_W, ART_SMS_S_H } },
 };
 #define NSYS ((int)(sizeof SYS / sizeof SYS[0]))
 #define NATIVE (-1)            // the group of the native games
@@ -203,7 +208,13 @@ static void pretty(const char *file, char *out, size_t n)
 static const char *title_of(int i)
 {
     static char t[NAMEMAX];
-    if (s_level == 0) return group_title(s_grp[s_ix[i]]);
+    if (s_level == 0) {                            // a console: its mark, then its maker - never its name
+        const int g = s_grp[s_ix[i]];
+        if (g == NATIVE) return group_title(NATIVE);
+        const char *c = strchr(SYS[g].maker, ',');   // "Sega, 1990" -> "Sega": the mark tells the consoles apart
+        snprintf(t, sizeof t, "%.*s", c ? (int)(c - SYS[g].maker) : (int)strlen(SYS[g].maker), SYS[g].maker);
+        return t;
+    }
     if (s_group == NATIVE) return native_title(s_nat[s_ix[i]]);
     pretty(rom_name(i), t, sizeof t);
     return t;
@@ -697,6 +708,7 @@ static void relist(void)
 }
 
 static void pic_forget(void);
+static void marks_free(void);
 void gamefront_open(void)
 {
     last_load();
@@ -772,6 +784,7 @@ static int open_sel(char *launch_id, int cap)
     ret_capture();
     scan_abort();
     pic_forget();
+    marks_free();
     shelf_free();                                  // the game gets the RAM; gamefront_open() rebuilds the shelf
     SFX(LAUNCH, 45);
     return GF_LAUNCH;
@@ -801,7 +814,7 @@ int gamefront_key(int key, char ch, char *launch_id, int cap)
         if (s_flen) { s_filter[0] = '\0'; s_flen = 0; refilter(); return GF_REDRAW; }
         SFX(BACK, 35);
         if (s_level == 1 && s_ngrp > 1) { leave_group(); return GF_REDRAW; }
-        scan_abort(); shelf_free(); pic_forget();
+        scan_abort(); shelf_free(); pic_forget(); marks_free();
         return GF_CLOSE;
     case NK_DEL:
         if (s_flen) { s_filter[--s_flen] = '\0'; refilter(); }
@@ -1094,7 +1107,7 @@ static void caption(char *out, size_t n)
     out[0] = '\0';
     if (!s_n) return;
     if (s_level == 0) { count_games(out, n, s_grp_n[s_ix[s_sel]]); return; }
-    if (s_group != NATIVE) { if (!region_of(rom_name(s_sel), out, n)) snprintf(out, n, "%s", SYS[s_group].name); return; }
+    if (s_group != NATIVE) { region_of(rom_name(s_sel), out, n); return; }   // beside the console's mark
     const Meta *m = meta_of(nucleo_app_at(s_nat[s_ix[s_sel]])->id);
     const unsigned modes = m ? (unsigned)m->modes : (unsigned)M1P;
     const char *lab[5] = { TR5("1 giocatore", "1 player", "1 jugador", "1 joueur", "1 Spieler"), "vs CPU",
@@ -1125,10 +1138,7 @@ static const char *empty_line(void)
                               "Recherche des jeux sur la carte...", "Suche Spiele auf der Karte...");
     if (s_level == 0) return TR5("Nessun gioco", "No games", "Sin juegos", "Aucun jeu", "Keine Spiele");
     if (s_group == NATIVE) return TR5("Nessun gioco nativo", "No native games", "Sin juegos nativos", "Aucun jeu natif", "Keine nativen Spiele");
-    static char t[64];
-    snprintf(t, sizeof t, "%s: %s", SYS[s_group].name, TR5("nessuna ROM sulla SD", "no ROMs on the card", "ninguna ROM en la SD",
-                                                           "aucune ROM sur la carte", "keine ROMs auf der Karte"));
-    return t;
+    return TR5("Nessuna ROM sulla SD", "No ROMs on the card", "Ninguna ROM en la SD", "Aucune ROM sur la carte", "Keine ROMs auf der Karte");
 }
 static const char *empty_sub(void)
 {
@@ -1142,7 +1152,8 @@ static const char *empty_sub(void)
 }
 static const char *level_title(void)
 {
-    return s_level == 0 ? TR5("Giochi", "Games", "Juegos", "Jeux", "Spiele") : group_title(s_group);
+    if (s_level == 0) return TR5("Giochi", "Games", "Juegos", "Jeux", "Spiele");
+    return s_group == NATIVE ? group_title(NATIVE) : "";                    // a console: its mark beside it
 }
 static const char *search_hint(void) { return TR5("Scrivi per cercare", "Type to search", "Escribe para buscar", "Tapez pour chercher", "Tippen zum Suchen"); }
 static void count_text(char *out, size_t n)
@@ -1153,6 +1164,32 @@ static void count_text(char *out, size_t n)
 }
 static const char *wheel_label(int i, void *) { return title_of(i); }
 static const char *last_label(void) { return TR5("ultimo giocato", "last played", "ultimo jugado", "dernier joue", "zuletzt gespielt"); }
+
+// ── the consoles' marks ─────────────────────────────────────────────────────────────────────────────
+// A mark is ~0.5-0.9 KB once inflated: they are kept while the gallery is open (the systems' wheel shows them all) and
+// freed when it closes or a game starts.
+static uint16_t *s_mark[NSYS];
+static void marks_free(void) { for (uint16_t *&m : s_mark) { free(m); m = nullptr; } }
+// The console's mark on a light chip, 20 px tall, at (x, y); returns the chip's width.
+static int chip(int g, int x, int y)
+{
+    const Art &a = SYS[g].mark;
+    if (!s_mark[g]) {
+        uint16_t *px = (uint16_t *)malloc((size_t)a.w * a.h * 2);
+        if (px && !inflate_to(a.z, nullptr, a.n, (uint8_t *)px, (size_t)a.w * a.h * 2)) { free(px); px = nullptr; }
+        s_mark[g] = px;
+    }
+    const int cw = a.w + 10;
+    d.fillRoundRect(x, y, cw, 20, 5, ART_TILE);
+    if (s_mark[g]) d.pushImage(x + 5, y + (20 - a.h) / 2, a.w, a.h, (const lgfx::rgb565_t *)s_mark[g]);
+    return cw;
+}
+static int wheel_icon(int i, int x, int cy, bool, void *)
+{
+    if (s_level != 0) return 0;
+    const int g = s_grp[s_ix[i]];
+    return g == NATIVE ? 0 : chip(g, x, cy - 10);
+}
 
 // ── the screens ─────────────────────────────────────────────────────────────────────────────────────
 static const unsigned char WHEEL_BIG[SLOTS_BIG] = { 21, 23, 25, 32, 25, 23, 21 };
@@ -1172,6 +1209,7 @@ static void paint_big(void *)
     const unsigned short acc = acc_now();
     char cnt[24]; count_text(cnt, sizeof cnt);
     int y = lg::header(level_title(), header_right(), acc_of(s_level ? s_group : NATIVE), NK_BACK);
+    if (on_roms()) chip(s_group, 52, 5);
     y = lg::search(0, y, W, 36, s_filter, search_hint(), cnt, s_total > s_n ? (unsigned short)C_YELLOW : (unsigned short)MUTED, acc);
     const int top = y, bh = H - top;
     d.fillRect(0, top, W, bh, BG);
@@ -1183,19 +1221,28 @@ static void paint_big(void *)
     int ly = top + ph + 5;
     lg::font(0);
     char fitted[64];
+    int cx = tx + 2;
+    if (on_roms()) cx += chip(s_group, tx + 2, ly - 2) + 6;   // a cartridge's console: its mark
     if (is_last(s_sel) && s_level == 1) {          // the game played last says so in place of its caption
-        d.fillCircle(tx + 6, ly + 8, 3, C_LAST);
-        d.setTextColor(C_LAST, BG); d.drawString(last_label(), tx + 14, ly);
+        d.fillCircle(cx + 4, ly + 8, 3, C_LAST);
+        d.setTextColor(C_LAST, BG); d.drawString(last_label(), cx + 12, ly);
     } else {
-        lg::fit(fitted, sizeof fitted, cap, tw - 2);
-        d.setTextColor(acc, BG); d.drawString(fitted, tx + 2, ly);
+        lg::fit(fitted, sizeof fitted, cap, tx + tw - cx);
+        d.setTextColor(acc, BG); d.drawString(fitted, cx, ly);
     }
-    ly += 19;
-    lg::font(1); d.setTextColor(FG, BG);
+    ly += 21;
     const char *sub = subtitle();
-    const int lines = lg::wrap(title_of(s_sel), tx + 2, ly, tw - 4, 19, sub ? 1 : (H - ly >= 58 ? 3 : 2));
-    if (sub) { lg::font(0); d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, tw - 4); d.drawString(fitted, tx + 2, ly + lines * 19 + 1); }
-    const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST };
+    const int g0 = s_level == 0 ? s_grp[s_ix[s_sel]] : NATIVE;
+    if (g0 != NATIVE) {                            // a console: its mark and its maker, no name
+        const int mw = chip(g0, tx + 2, ly);
+        lg::font(0); d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, tw - mw - 8);
+        d.drawString(fitted, tx + mw + 8, ly + 2);
+    } else {
+        lg::font(1); d.setTextColor(FG, BG);
+        const int lines = lg::wrap(title_of(s_sel), tx + 2, ly, tw - 4, 19, sub ? 1 : (H - ly >= 58 ? 3 : 2));
+        if (sub) { lg::font(0); d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, tw - 4); d.drawString(fitted, tx + 2, ly + lines * 19 + 1); }
+    }
+    const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon };
     lg::wheel(WX, top, W - WX, bh, wl);
 }
 
@@ -1222,13 +1269,27 @@ static void paint_small(void *)
     d.drawString(cnt, CX - 3, ph + 4);                 // the position: beside the caption, the search line is narrow
     const int cw = d.textWidth(cnt) + 6;
     d.setTextDatum(top_left);
-    lg::fit(fitted, sizeof fitted, cap, CX - 6 - cw);
-    d.setTextColor(acc, BG); d.drawString(fitted, 3, ph + 4);
+    // First row: the console's mark (a cartridge's, or the system's itself), then the caption or "last played".
+    const int g0 = s_level == 0 ? s_grp[s_ix[s_sel]] : NATIVE, mg = on_roms() ? s_group : g0;
+    int cx = 3, ry = ph + 4;
+    if (mg != NATIVE) { cx = 6 + chip(mg, 2, ph + 3); ry = ph + 9; }
+    if (is_last(s_sel) && s_level == 1) {
+        d.fillCircle(cx + 2, ry + 3, 2, C_LAST); d.setTextColor(C_LAST, BG); d.drawString(last_label(), cx + 7, ry);
+    } else {
+        lg::fit(fitted, sizeof fitted, cap, CX - 6 - cw - cx);
+        d.setTextColor(acc, BG); d.drawString(fitted, cx, ry);
+    }
+    // Then the whole title (a console's maker in its place).
     const char *sub = subtitle();
-    d.setTextColor(FG, BG);
-    const int nl = lg::wrap(title_of(s_sel), 3, ph + 14, CX - 6, 9, sub ? 1 : 2);
-    if (sub) { d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, CX - 6); d.drawString(fitted, 3, ph + 14 + nl * 9); }
-    const lg::Wheel wl = { SLOTS_SMALL, WHEEL_SMALL, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST };
+    const int ty = mg != NATIVE ? ph + 23 : ph + 14;
+    if (g0 != NATIVE) {
+        d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, CX - 6); d.drawString(fitted, 3, ty);
+    } else {
+        d.setTextColor(FG, BG);
+        const int nl = lg::wrap(title_of(s_sel), 3, ty, CX - 6, 9, mg != NATIVE || sub ? 1 : 2);
+        if (sub) { d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, CX - 6); d.drawString(fitted, 3, ty + nl * 9); }
+    }
+    const lg::Wheel wl = { SLOTS_SMALL, WHEEL_SMALL, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon };
     lg::wheel(CX, 22, W - CX, H - 22, wl);
 }
 
@@ -1255,9 +1316,7 @@ static int details(Detail *out, int max)
             nucleo_store_app_is_native(nucleo_app_at(s_nat[s_ix[s_sel]])->id) ? "Store" : TR5("Integrato", "Built in", "Integrado", "Integre", "Eingebaut"));
         return n;
     }
-    const System &sy = SYS[s_group];
     const char *file = rom_name(s_sel);
-    add(TR5("Sistema", "System", "Sistema", "Systeme", "System"), sy.name);
     if (region_of(file, t, sizeof t)) add(TR5("Regione", "Region", "Region", "Region", "Region"), t);
     snprintf(t, sizeof t, "%s/", rom_dir(s_sel) + strlen(NUCLEO_SD_MOUNT));
     add(TR5("Cartella", "Folder", "Carpeta", "Dossier", "Ordner"), t);
@@ -1278,7 +1337,14 @@ void gamefront_draw_companion(void *gfx)
     const int top = nucleo_app_content_top(), ch = nucleo_app_content_height(), bottom = top + ch - 13;
     const unsigned short acc = acc_now();
     d.fillRect(0, top, 240, ch, BG);
-    int y = lg::comp_head(level_title(), acc_of(s_level ? s_group : NATIVE));
+    int y;
+    if (on_roms()) {                                   // a console's titles: its mark heads the card, no name
+        d.fillRect(0, top, 240, 22, BG);
+        const int mw = chip(s_group, 6, top + 1);
+        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left); d.setTextColor(acc_of(s_group), BG);
+        d.drawString(TR("sul secondo schermo", "on the second screen"), 12 + mw, top + 7);
+        y = top + 24;
+    } else y = lg::comp_head(level_title(), acc_of(s_level ? s_group : NATIVE));
     if (s_flen) {                                      // the search, while there is one
         d.setFont(&fonts::Font2); d.setTextColor(MUTED, BG); d.drawString(TR5("Cerca", "Search", "Buscar", "Cherche", "Suche"), 8, y);
         const int lx = 14 + d.textWidth(TR5("Cerca", "Search", "Buscar", "Cherche", "Suche"));
@@ -1292,8 +1358,12 @@ void gamefront_draw_companion(void *gfx)
         d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(MUTED, BG);
         lg::wrap(empty_line(), 8, y + 6, 224, 19, 2);
     } else {
-        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(acc, BG);
-        y += 2 + lg::wrap(title_of(s_sel), 8, y + 2, 224, 19, 2) * 19;
+        const int g0 = s_level == 0 ? s_grp[s_ix[s_sel]] : NATIVE;
+        if (g0 != NATIVE) { chip(g0, 8, y + 2); y += 26; }   // a console: its mark for a title
+        else {
+            d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(acc, BG);
+            y += 2 + lg::wrap(title_of(s_sel), 8, y + 2, 224, 19, 2) * 19;
+        }
         Detail dt[5];
         const int n = details(dt, 5);
         d.setFont(&fonts::Font2);

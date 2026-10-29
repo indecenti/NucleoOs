@@ -18,6 +18,7 @@
 //   EEPROM       the 128-byte 93C46 of the Sega sports cartridges, inside the machine struct
 #include "nucleo_gg.h"
 #include "nucleo_audio.h"
+#include "emu_audio.h"      // the speaker stage: low-pass and soft knee (the PSG centres itself, see psg_run)
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
@@ -134,6 +135,7 @@ typedef struct {
     uint16_t      pal[32];                      // CRAM as panel-order RGB565
 
     int16_t       pcm[PSG_SPF];
+    emu_afilt_t   afilt;                        // the speaker stage (emu_audio.h)
     int           psg_pos;
     bool          sound;
 
@@ -1408,7 +1410,7 @@ esp_err_t nucleo_gg_open(const char *rom_path, nucleo_gg_line_fn on_line, void *
     s->sms = (flags & CART_SMS) || ext_is(rom, ".sms");
 
     // The speaker before the pool, so its DMA channel is paid for before the pool takes what is left.
-    s->sound = nucleo_audio_pcm_open(PSG_RATE, 1) == ESP_OK;
+    s->sound = nucleo_audio_pcm_open_ex(PSG_RATE, 1, EMU_AUDIO_QUEUE_FRAMES * PSG_SPF) == ESP_OK;
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
     for (int i = 0; i < PG_SLOTS; i++) s->pg_tag[i] = PG_EMPTY;
@@ -1495,6 +1497,7 @@ void nucleo_gg_run_frame(void)
     s->us_cpu += (uint32_t)(t1 - t0);
     psg_run(s, PSG_SPF);
     if (s->sound) {
+        emu_afilt_run(&s->afilt, s->pcm, PSG_SPF, 1, 0);
         nucleo_audio_pcm_write(s->pcm, sizeof s->pcm);
         s->us_audio += (uint32_t)(esp_timer_get_time() - t1);
     }

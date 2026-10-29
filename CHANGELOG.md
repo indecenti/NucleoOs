@@ -29,7 +29,8 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   going back and starting a game, at a fraction of the system volume (muted = silent). New `nucleo_audio_sample()`.
 - **Cartridges launch from the gallery.** A Game Boy / Game Gear / Master System cartridge opens straight in its
   emulator; quitting the game comes back to the gallery on it, never to the emulator's shelf.
-- Native ABI level 5 (the emulators' modules need it); the gallery's texts are in the firmware in five languages
+- Consoles are shown by their marks, never by their written names (the user's rule, shared with the emulators).
+- Native ABI level 5 = level 4 + `nucleo_app_take_open_file` (the emulators' modules need it); the gallery's texts are in the firmware in five languages
   (the `gamefront` SD text pack is gone).
 
 ## [0.8.1] — 2026-10-28

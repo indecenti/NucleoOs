@@ -18,6 +18,7 @@
 //   @direct                                    the compact and companion looks draw straight to the screen (a
 //                                              launcher state that composes its own frames), not into the canvas
 //   @lib <name>                                a host library to link (-l<name>), e.g. z for a stub's inflate
+//   host:<n> (a key token)                     the app's own scene n (ui_host_scene): views no key sequence reaches
 //   @sd <path under sd/> <content>             a file the scenes find on the card (\n = newline)
 //   @sdfile <path under sd/> <file>            the same, copied byte for byte from tools/ui-host/<file> (binary)
 // No scene file: one scene, "home".
@@ -109,7 +110,7 @@ function compile(src, obj, extra = [], strict = false) {
   const cpp = /\.cpp$/.test(src);
   const w = strict ? ['-Wall', '-Wno-unused-function', '-Wno-format-truncation', '-Wno-missing-field-initializers', '-Wno-char-subscripts']
                    : ['-w', '-fpermissive'];
-  return run(cpp ? GPP : GCC, [cpp ? '-std=gnu++17' : '-std=gnu11', '-O0', '-g', ...w, ...extra, ...COMPAT, ...INC, '-c', src, '-o', obj])
+  return run(cpp ? GPP : GCC, [cpp ? '-std=gnu++17' : '-std=gnu11', '-O0', '-g', '-DNUCLEO_UI_HOST=1', ...w, ...extra, ...COMPAT, ...INC, '-c', src, '-o', obj])
     .then((out) => {
       if (strict && /warning:/.test(out)) warnings.push(`${basename(src)}: warnings\n${out.split('\n').filter((l) => /warning:/.test(l)).slice(0, 12).join('\n')}`);
       return obj;
