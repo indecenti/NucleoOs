@@ -276,8 +276,12 @@ static int  s_out_y0 = 0, s_out_h = OUT_H;
 // down (5/3), 320x240 — wider than its own aspect, as the Cardputer's filled view is.
 // A 256x240 NES picture is already the panel's height: 1:1, its own 256 columns centred (the panel shares the SD
 // card's SPI bus without DMA, so every pixel costs CPU time — 320 columns are a quarter more), 5/4 across if filled.
-#define BIG_W (s_src_w == SRC_W ? (s_stretch ? 320 : 240) : (s_src_h == 240 && !s_stretch) ? 256 : 320)
-#define BIG_H (s_src_w == SRC_W ? (s_stretch ? 240 : 216) : 240)
+// The external panel: 160x144 at 3/2 (or stretched to 320x240); 256-px pictures 1:1. A 256x192 Master System
+// picture is shown 1:1 too (stretch: 320x240 at 5/4): scaled, every frame was 153 KB on the panel's 40 MHz bus,
+// 30 ms, and a scrolling game (Sonic) fell to 35-50 frames a second; 1:1 is 98 KB, and its unchanged spans stay off
+// the bus (span_line).
+#define BIG_W (s_src_w == SRC_W ? (s_stretch ? 320 : 240) : !s_stretch ? 256 : 320)
+#define BIG_H (s_src_w == SRC_W ? (s_stretch ? 240 : 216) : (s_src_h == 192 && !s_stretch) ? 192 : 240)
 #define BIG_X ((320 - BIG_W) / 2)
 #define BIG_Y ((240 - BIG_H) / 2)
 #ifdef NUCLEO_UI_HOST
@@ -707,7 +711,7 @@ static void on_line16(const uint16_t *px, int line, void *user)
         }
         // Rows per source line on the panel: 3/2 (160x144: every odd line twice), 5/4 down (256x192: every fourth
         // line twice), 1 (256x240: the NES is already the panel's height).
-        const int twice_here = s_src_w == SRC_W ? (line & 1) : s_src_h == 192 ? (line & 3) == 1 : 0;
+        const int twice_here = s_src_w == SRC_W ? (line & 1) : (s_src_h == 192 && s_out_w != 256) ? (line & 3) == 1 : 0;
         if (st->seghash && s_out_w == 256 ? seg_same(px, line) : line_same(px, s_src_w * 2, line)) { rows_skip(1 + twice_here); return; }
         uint16_t *row = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
         bool twice;
