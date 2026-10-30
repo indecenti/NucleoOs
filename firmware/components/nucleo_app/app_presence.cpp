@@ -12,8 +12,9 @@
 //    ("NCSI" + counter) every 10 ms. Espressif rates a dedicated transmitter at a fixed rate as the most
 //    accurate CSI setup, and a second path tells WHICH side of the room someone crosses. The receiver
 //    recognises the Faro by that payload and runs a second detector on its frames.
-// Both devices must be on the same Wi-Fi (same channel). Promiscuous mode is on with a management-only
-// filter (ESP-NOW frames are action frames) and a no-op callback: it only widens what the CSI hook sees.
+// Both devices must be on the same Wi-Fi (same channel). Promiscuous mode is on with a management + data
+// filter (ESP-NOW frames are action frames, echo replies are data) and a no-op callback: it only widens
+// what the CSI hook sees.
 #include "nucleo_app.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
@@ -26,6 +27,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include "esp_timer.h"
+#include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_now.h"
 #include "esp_netif.h"
@@ -45,7 +47,7 @@ M5Canvas *nucleo_screen_wide(int w);   // nucleo_ui.cpp: the shared canvas seen 
 #define FARO_TTL_MS 3000               // a Faro unheard for this long is gone
 
 static pd_state_t s_pd, s_faro;
-static uint8_t    s_bssid[6], s_faro_mac[6];
+static uint8_t    s_bssid[6], s_faro_mac[6], s_my_mac[6];
 static volatile bool s_bssid_ok, s_faro_ready, s_faro_new;
 static volatile uint32_t s_faro_seen_ms;
 static bool       s_csi_on, s_promisc;
@@ -81,7 +83,9 @@ static bool has_magic(const uint8_t *p, int n)
 static void IRAM_ATTR csi_cb(void *, wifi_csi_info_t *info)
 {
     if (!info || !info->buf) return;
-    if (s_bssid_ok && !memcmp(info->mac, s_bssid, 6)) {
+    // Router link: only what it sends to US (the echo replies). Its frames to other clients go out with other
+    // rates and beamforming, so their profiles differ from ours and read as motion in an empty room.
+    if (s_bssid_ok && !memcmp(info->mac, s_bssid, 6) && !memcmp(info->dmac, s_my_mac, 6)) {
         pd_feed(&s_pd, info->buf, info->len, info->rx_ctrl.rssi, info->first_word_invalid);
     } else if (s_faro_ready && !memcmp(info->mac, s_faro_mac, 6)) {
         s_faro_seen_ms = now_ms();
@@ -95,10 +99,22 @@ static void IRAM_ATTR csi_cb(void *, wifi_csi_info_t *info)
 
 static void IRAM_ATTR promisc_cb(void *, wifi_promiscuous_pkt_type_t) {}
 
+// Modem sleep (the system default, WIFI_PS_MIN_MODEM) turns the radio off between DTIM beacons: the router
+// holds our echo replies and delivers a burst a few times a second, so the detector starved on <5 frames/s
+// and always read "clear". The radio listens all the time while we sense; the previous mode comes back after.
+static bool       s_ps_saved;
+static wifi_ps_type_t s_ps_prev = WIFI_PS_MIN_MODEM;
+
 static bool csi_enable(void)
 {
+    esp_wifi_get_mac(WIFI_IF_STA, s_my_mac);
+    if (!s_ps_saved && esp_wifi_get_ps(&s_ps_prev) == ESP_OK) s_ps_saved = true;
+    esp_wifi_set_ps(WIFI_PS_NONE);
     wifi_promiscuous_filter_t pf = {};
-    pf.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT;
+    // DATA too: with promiscuous on, the CSI hook only sees frames that pass this filter, and the router's
+    // OFDM frames (our echo replies) are data; its beacons go out at 1 Mb/s DSSS, which carries no CSI.
+    // MGMT alone left the detector at 0 frames/s, i.e. "clear" forever.
+    pf.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA;
     s_promisc = esp_wifi_set_promiscuous_rx_cb(promisc_cb) == ESP_OK && esp_wifi_set_promiscuous_filter(&pf) == ESP_OK
              && esp_wifi_set_promiscuous(true) == ESP_OK;
     wifi_csi_config_t cfg = {};
@@ -112,6 +128,7 @@ static void csi_disable(void)
 {
     if (s_csi_on) { esp_wifi_set_csi(false); esp_wifi_set_csi_rx_cb(nullptr, nullptr); s_csi_on = false; }
     if (s_promisc) { esp_wifi_set_promiscuous(false); esp_wifi_set_promiscuous_rx_cb(nullptr); s_promisc = false; }
+    if (s_ps_saved) { esp_wifi_set_ps(s_ps_prev); s_ps_saved = false; }
     s_faro_ready = false; s_faro_new = false;
 }
 
@@ -202,6 +219,7 @@ static void link_check(int64_t now)
     if (now - s_retry_us < 1000000 && s_status != PV_OK) return;
     s_retry_us = now;
     if (nucleo_wifiatk_sniffer_running()) {   // a radio tool owns the radio: never fight it
+        s_ps_saved = false;                   // its power mode is its own now: do not restore ours over it
         csi_disable(); pump_close(); beacon_stop(); s_status = PV_BUSY; return;
     }
     wifi_ap_record_t ap;
@@ -249,6 +267,10 @@ static bool poll(void)
         s_faro_rate = faro_fresh() ? (int)(s_faro.frames - s_faro_frames) : 0;
         s_faro_frames = s_faro.frames;
         s_rate_us = now;
+        if (s_status == PV_OK && !s_beacon && (now / 1000000) % 10 == 0)   // what the detector sees, for tuning (/api/logs)
+            ESP_LOGW("presence", "rate %d rssi %d level %.5f floor %.5f motion %.2f thr %.2f %s",
+                     s_rate, s_pd.rssi, s_pd.level, s_pd.lo, s_pd.motion, s_pd.thr,
+                     s_pd.phase == PD_CALIB ? "calib" : s_pd.present ? "PRESENT" : "clear");
     }
     if (s_status == PV_OK && !s_beacon) {
         uint32_t t = now_ms();
