@@ -12,7 +12,7 @@ phy_init,   data, phy,      0x11000,   0x1000,    # RF calibration
 nvs_keys,   data, nvs_keys, 0x12000,   0x1000,    # NVS encryption keys
 ota_0,      app,  ota_0,    0x20000,   0x380000,  # 3.5 MB app bank A
 ota_1,      app,  ota_1,    0x3A0000,  0x380000,  # 3.5 MB app bank B
-coredump,   data, coredump, 0x720000,  0x40000,   # 256 KB crash dumps
+nucleo_nap, data, littlefs, 0x720000,  0x40000,   # 256 KB native-app scratch region
 cfg,        data, spiffs,   0x760000,  0xA0000,   # 640 KB LittleFS config store
 ```
 
@@ -30,11 +30,15 @@ cfg,        data, spiffs,   0x760000,  0xA0000,   # 640 KB LittleFS config store
   rewrites `otadata` to its initial state, so a cable reflash boots `ota_0` cleanly. On a
   healthy boot `main.c` calls `esp_ota_mark_app_valid_cancel_rollback()`; on a bad boot the
   bootloader rolls back to the other bank. (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`.)
-- **Migration is cable-only.** `nvs`/`otadata`/`phy_init`/`nvs_keys`/`coredump`/`cfg` KEEP their
+- **Migration is cable-only.** `nvs`/`otadata`/`phy_init`/`nvs_keys`/`nucleo_nap`/`cfg` KEEP their
   exact offsets, so a cable reflash preserves Wi-Fi/pairing (nvs) and OS config (cfg) — no full
   erase needed. But a partition-table change itself is **not** OTA-safe: do the one-time switch to
   this layout over USB cable (`tools\flash.ps1 -Port COM3`), not via `POST /api/ota`.
-- **`coredump`** captures crashes for the Log Viewer / time-travel debug (ELF, to-flash).
+- **`nucleo_nap`** is the flash native apps run from ([native-apps.md](native-apps.md), "Scratch region").
+  Until 0.8.3 the same row was `coredump, data, coredump` (core dumps were already off): units flashed before
+  keep it, the loader accepts both. It is a labelled LittleFS row so M5Launcher recreates it; it must stay
+  before `cfg`, because the Launcher links only the last LittleFS/SPIFFS partition to an app (`cfg` is then
+  erased with it on uninstall; `nucleo_nap` is left behind as a removable data partition).
 - **`nvs_keys`** enables encrypted NVS for the device keypair (bundle signing, pairing).
 - **`cfg` (640 KB, LittleFS)** holds brick-class OS config (`setup.json`) on internal flash.
   LittleFS is copy-on-write with atomic rename, so a power cut mid-write cannot corrupt it the
@@ -61,6 +65,7 @@ app + flash-from-SD logic + FAT-corruption handling), not a table edit — only 
 
 Installed by M5Launcher, NucleoOS runs inside the Launcher's table instead of this one (our app in an
 `ota_N` slot, `cfg` recreated by label at 448 KB, no A/B banks of ours). The firmware detects that at
-runtime and switches off self-OTA — see [m5launcher.md](m5launcher.md). Keep `ota_0` the first app
+runtime and switches off self-OTA — see [m5launcher.md](m5launcher.md). The Launcher recreates `nucleo_nap`
+(448 KB) and `cfg` (448 KB) by label; `npm run guest:test` checks both and their order. Keep `ota_0` the first app
 partition and `cfg` a labelled data partition: that is what the Launcher's installer extracts
 (`npm run guest:test` gates it).

@@ -92,7 +92,7 @@ ANIMA is NucleoOS's offline natural-language assistant (retrieval + reasoning in
 |---|---|
 | [architecture.md](architecture.md) | The system principles and layer model (boot, core services, app runtime, transport, UIs). |
 | [memory-budget.md](memory-budget.md) | The riskiest bet: fitting Wi-Fi/BLE/HTTP/display/bus into ~512 KB — and the two RAM regimes: ~18 KB free in the full OS, ~65–90 KB (≈32 KB contiguous) in an app's Solo boot. |
-| [partition-table.md](partition-table.md) | The 8 MB flash layout — dual OTA banks (`ota_0`/`ota_1`), no factory, coredump + config partitions. |
+| [partition-table.md](partition-table.md) | The 8 MB flash layout — dual OTA banks (`ota_0`/`ota_1`), no factory, native-app scratch (`nucleo_nap`) + config partitions. |
 | [m5launcher.md](m5launcher.md) | Running as a guest of M5Launcher — the Launcher boot model, what guest mode changes (no self-OTA, Back to M5Launcher), and how to publish on M5Burner so it appears in the Launcher's OTA list. |
 | [sd-content-install.md](sd-content-install.md) | The release SD payload (built from sources, per-file manifest, hosted on Pages) and the design of the device downloading its SD content by itself — ownership rules, failure handling, test plan. |
 | [storage.md](storage.md) | The microSD filesystem — mount model (FAT32/exFAT over SPI3), capacity, first-boot provisioning. |

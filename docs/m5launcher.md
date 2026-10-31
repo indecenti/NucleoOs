@@ -8,6 +8,7 @@ NucleoOS ships **one binary** that works in two worlds:
 | Bootloader + partition table | ours (`firmware/partitions.csv`) | Launcher's (Launcher in a `test` slot, apps in `ota_N` slots) |
 | Firmware updates | self-OTA (Updates app, Settings ▸ Updates, `POST /api/ota`) with A/B rollback | **from the Launcher** (its OTA list); self-OTA is refused |
 | Getting back to another firmware | reflash | Settings ▸ Device ▸ **Back to M5Launcher**, or power-cycle + ENTER |
+| Native C store | yes | yes since 0.8.4 (the Launcher creates `nucleo_nap`, 448 KB) |
 
 Nothing is configured: the mode is detected at runtime from the live partition table
 (`firmware/components/nucleo_guest/`). Our own table never contains an app partition of subtype
@@ -64,6 +65,14 @@ Verified against the Launcher sources (bmorcelli/Launcher, Sept 2026) and its bo
   `NEW_VERSION_FOUND`) still runs — it is the only way back to a usable NVS — but logs loudly that it
   also resets the Launcher's settings. The Launcher resets `nvs.net80211` itself on install, so Wi-Fi
   is re-joined by our own `/cfg` network list.
+- **Native apps need `nucleo_nap`.** The Launcher's own table has a 64 KB `coredump` partition, which is
+  the Launcher's and never ours. Our table ships a labelled LittleFS row, `nucleo_nap`, that the Launcher
+  recreates (empty, 448 KB, 4 KB-aligned) like `cfg`; native apps run from the 64 KB-aligned 256 KB inside it.
+  A NucleoOS installed before 0.8.4 has none: the Store greys out the native store and says to reinstall from
+  the Launcher. Verified against the Launcher sources (f3623c0, 2026-10-30, `sd_functions.cpp` updateFromSD,
+  `partition_install_layout.cpp`): it never erases an empty data partition it creates (the loader trusts the
+  region only through its header), and it links one LittleFS/SPIFFS label per app, the last in table order,
+  so `nucleo_nap` sits before `cfg`. Details: [native-apps.md](native-apps.md), "Scratch region".
 - **Smaller `cfg`.** 448 KB instead of 640 KB; it holds small JSON config, pins/recents and the music
   DB, well within that.
 

@@ -6,8 +6,9 @@
 //      remembers the signed SHA-256;
 //   2. nap_inspect(): the one layout the SDK produces, every relocation and import, ABI level, layout fingerprint;
 //      the relocation tables are then kept in RAM for the passes below;
-//   3. allocates .data/.bss and maps the flash scratch region (the 256 KB "coredump" partition: core dumps are off)
-//      on the instruction bus; the data-bus alias of the same pages serves the module's constants;
+//   3. allocates .data/.bss and maps the flash scratch region (256 KB of the `nucleo_nap` partition, or of the
+//      `coredump` one on units flashed before it had that name: core dumps are off) on the instruction bus; the
+//      data-bus alias of the same pages serves the module's constants;
 //   4. a DRY pass relocates the whole image in RAM, sector by sector, and hashes it: every relocation target is
 //      checked here, before the flash is touched;
 //   5. writes that image to the region, unless its last sector says it already holds exactly it (module, firmware,
@@ -29,6 +30,7 @@ extern "C" {
 #include "nap_loader.h"
 #include "nucleo_store.h"
 #include "nucleo_board.h"
+#include "nucleo_guest.h"
 #include "esp_partition.h"
 #include "esp_mmu_map.h"
 #include "esp_app_desc.h"
@@ -47,7 +49,7 @@ extern "C" {
 #error "native apps rely on the ESP32-S3 MMU: one table shared by the instruction and data buses"
 #endif
 #if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH
-#error "the coredump partition is the native-app scratch region: core dumps to flash must stay off"
+#error "on units flashed before 0.8.4 the coredump partition is the native-app scratch region: core dumps to flash must stay off"
 #endif
 
 static const char *TAG = "native";
@@ -59,6 +61,7 @@ extern "C" const uint32_t nap_abi_level;
 #define NAP_FILE      "app.nap"
 #define SECTOR        4096u
 #define PAGE          0x10000u                      // MMU page
+#define SCRATCH_MAX   (256u * 1024)                 // the same room everywhere: a module that fits fits on every unit
 #define RAM_MAX       (48u * 1024)                  // largest .data + .bss accepted
 #define EXTRA_RAM_MAX (96u * 1024)                  // largest extra heap a module may ask to find free at launch
 #define RELOCS_MAX    (64u * 1024)                  // relocation tables kept in RAM while loading
@@ -77,6 +80,7 @@ struct CacheHdr {
 };
 
 static const esp_partition_t *s_part;
+static uint32_t s_base, s_size;                      // the mappable span of s_part: offset into it, length
 static bool s_part_looked;
 static char s_id[NAP_ID_MAX + 1];                    // resident module ("" = none)
 static const nucleo_app_def_t *s_def;                // what its nucleo_native_main registered
@@ -90,13 +94,30 @@ static nap_bases_t s_bases;
 static char s_err[80];
 static void (*s_unload_cb)(const char *id);
 
+// Which partition, and which part of it, is decided by guest_native_scratch() (host-gated by npm run guest:test):
+// under M5Launcher only our labelled partition, never the Launcher's own coredump.
 static const esp_partition_t *scratch(void)
 {
     if (!s_part_looked) {
         s_part_looked = true;
-        const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_COREDUMP, NULL);
-        if (p && p->address % PAGE == 0 && p->size >= 2 * PAGE && p->size % SECTOR == 0 && !p->encrypted) s_part = p;
-        else ESP_LOGW(TAG, "no scratch region: native apps unavailable (layout without a coredump partition)");
+        const esp_partition_t *found[16];
+        guest_part_t parts[16];
+        int n = 0;
+        esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, NULL);
+        for (; it && n < 16; it = esp_partition_next(it)) {
+            const esp_partition_t *p = esp_partition_get(it);
+            found[n] = p;
+            parts[n].type = (uint8_t)p->type; parts[n].subtype = (uint8_t)p->subtype;
+            parts[n].offset = p->address; parts[n].size = p->size;
+            snprintf(parts[n].label, sizeof parts[n].label, "%s", p->label);
+            n++;
+        }
+        esp_partition_iterator_release(it);
+        guest_span_t span;
+        if (guest_native_scratch(parts, n, nucleo_guest_layout_own(), PAGE, SCRATCH_MAX, &span) && !found[span.index]->encrypted) {
+            s_part = found[span.index]; s_base = span.skip; s_size = span.size;
+            ESP_LOGI(TAG, "scratch region: '%s' +0x%lx, %lu KB", s_part->label, (unsigned long)s_base, (unsigned long)(s_size / 1024));
+        } else ESP_LOGW(TAG, "no scratch region: native apps unavailable (no `" GUEST_NAP_LABEL "` partition of 128 KB+)");
     }
     return s_part;
 }
@@ -226,8 +247,8 @@ static bool image_pass(const nap_src_t *src, uint8_t *buf, uint8_t *old, uint8_t
         if (rc != NAP_OK) { set_err(nap_rc_name(rc), detail); ok = false; break; }
         mbedtls_sha256_update(&h, buf, n);
         if (write) {
-            if (esp_partition_read(s_part, off, old, n) == ESP_OK && !memcmp(old, buf, n)) { feed(nullptr); continue; }
-            if (esp_partition_erase_range(s_part, off, SECTOR) != ESP_OK || esp_partition_write(s_part, off, buf, n) != ESP_OK)
+            if (esp_partition_read(s_part, s_base + off, old, n) == ESP_OK && !memcmp(old, buf, n)) { feed(nullptr); continue; }
+            if (esp_partition_erase_range(s_part, s_base + off, SECTOR) != ESP_OK || esp_partition_write(s_part, s_base + off, buf, n) != ESP_OK)
                 { set_err("flash write", nullptr); ok = false; }
             s_written++;
         }
@@ -241,7 +262,7 @@ static bool image_pass(const nap_src_t *src, uint8_t *buf, uint8_t *old, uint8_t
 static bool header_matches(const CacheHdr &want)
 {
     CacheHdr h;
-    if (esp_partition_read(s_part, s_part->size - SECTOR, &h, sizeof h) != ESP_OK) return false;
+    if (esp_partition_read(s_part, s_base + s_size - SECTOR, &h, sizeof h) != ESP_OK) return false;
     bool ok = h.check == fnv(&h, offsetof(CacheHdr, check)) && !memcmp(&h, &want, offsetof(CacheHdr, check));
     if (!ok && h.magic == CACHE_MAGIC)                 // why the region is rewritten: tuning and diagnostics
         ESP_LOGW(TAG, "rewrite: module %s fw %s image %s ibus %08lx/%08lx ram %08lx/%08lx",
@@ -275,7 +296,7 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     src.exports = nap_exports; src.n_exports = nap_exports_count;
     src.abi_max = nap_abi_level; src.expect_id = id;
     src.layout = *(const volatile uint32_t *)&nucleo_native_layout_fw;   // a real load: the symbol stays in the image
-    src.flash_max = s_part->size - SECTOR; src.ram_max = RAM_MAX;
+    src.flash_max = s_size - SECTOR; src.ram_max = RAM_MAX;
 
     uint8_t *buf = nullptr, *relocs = nullptr;
     const nucleo_app_def_t *def = nullptr;
@@ -300,7 +321,7 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     // 3. Map the scratch pages: instruction bus for code, the data-bus alias of the same pages for constants.
     {
         s_span = (s_img.image_size + PAGE - 1) & ~(PAGE - 1);
-        esp_err_t e = esp_mmu_map(s_part->address, s_span, MMU_TARGET_FLASH0,
+        esp_err_t e = esp_mmu_map(s_part->address + s_base, s_span, MMU_TARGET_FLASH0,
                                   (mmu_mem_caps_t)(MMU_MEM_CAP_EXEC | MMU_MEM_CAP_READ | MMU_MEM_CAP_32BIT), 0, &s_map);
         if (e != ESP_OK) { s_map = nullptr; set_err("mmu map", esp_err_to_name(e)); goto fail; }
         uint32_t ibus = (uint32_t)s_map;
@@ -325,7 +346,7 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     else {
         ESP_LOGW(TAG, "%s: updating the scratch region (%u B image)", id, (unsigned)s_img.image_size);
         // The header goes first and comes back last: an interrupted write never vouches for a half image.
-        if (esp_partition_erase_range(s_part, s_part->size - SECTOR, SECTOR) != ESP_OK) { set_err("flash erase", nullptr); goto fail; }
+        if (esp_partition_erase_range(s_part, s_base + s_size - SECTOR, SECTOR) != ESP_OK) { set_err("flash erase", nullptr); goto fail; }
         uint8_t again[32];
         uint8_t *old = (uint8_t *)malloc(SECTOR);
         if (!old) { set_err("RAM", nullptr); goto fail; }
@@ -334,7 +355,7 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
         if (!wrote) goto fail;
         if (memcmp(again, sha, 32)) { set_err("image changed while writing", nullptr); goto fail; }
         ESP_LOGW(TAG, "%s: %u of %u sectors rewritten", id, (unsigned)s_written, (unsigned)((s_img.image_size + SECTOR - 1) / SECTOR));
-        if (esp_partition_write(s_part, s_part->size - SECTOR, &hdr, sizeof hdr) != ESP_OK) { set_err("flash write", "header"); goto fail; }
+        if (esp_partition_write(s_part, s_base + s_size - SECTOR, &hdr, sizeof hdr) != ESP_OK) { set_err("flash write", "header"); goto fail; }
     }
 
     // 6. What the CPU will read is what was relocated: data cache dropped over the alias, then the whole image

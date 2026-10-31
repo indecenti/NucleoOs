@@ -6,6 +6,12 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+### Fixed
+- **The Native C store works under M5Launcher.** It was greyed out there: native apps run from a flash region
+  the Launcher's partition table did not have. The region is now a labelled partition, `nucleo_nap`, that
+  M5Launcher creates when it installs NucleoOS (448 KB of flash). Already running NucleoOS from the Launcher?
+  Install the new `.bin` from the Launcher once; until then the Store says so. Stand-alone installs are unchanged.
+
 ## [0.8.3] — 2026-10-30
 
 ### Changed

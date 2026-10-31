@@ -99,8 +99,7 @@ One native app is resident at a time.
    can wrap around); every import in the export table; `nucleo_native_info` valid; ABI level, layout
    fingerprint and id as expected; sizes within the scratch region and the RAM budget. The relocation tables
    are then read once into RAM for the passes below.
-3. **Map.** The scratch region is the 256 KB `coredump` partition (core dumps to flash are off in this
-   firmware: the build fails if they are turned on). It is mapped with `esp_mmu_map` on the instruction
+3. **Map.** The scratch region is 256 KB of flash (see "Scratch region" below). It is mapped with `esp_mmu_map` on the instruction
    bus; on the ESP32-S3 the MMU table is shared by both buses, so the same pages are also visible through the
    data bus at a fixed offset, which serves the module's constants. `.data`/`.bss` get a heap block.
 4. **Dry pass.** The whole image is relocated in RAM sector by sector and hashed: every relocation target is
@@ -142,9 +141,27 @@ needs no code for it. A module that draws its own Back opts out with `NAP_FLAG_N
 they draw their Back themselves (`lg::header` / `lg::back`). Leaving the large surface (the Control Center,
 an overlay) takes the bar away with it.
 
-**Where native apps are unavailable:** a partition table without a 64 KB-aligned `coredump` partition — in
-practice, under M5Launcher (it recreates only SPIFFS/FAT partitions). The Store then shows the native store
-as unavailable, with the reason, and the web store as usual.
+### Scratch region
+
+Native code runs from 256 KB of flash mapped on the instruction bus. Which flash is chosen by
+`guest_native_scratch()` (`firmware/components/nucleo_guest/guest_policy.c`, gated by `npm run guest:test`):
+
+1. On our own two-bank layout, a `coredump` partition: units flashed before 0.8.4 keep that row across OTA
+   (the table is never rewritten over the air). Core dumps to flash are off; the build fails if they are
+   turned on.
+2. Otherwise the data partition labelled **`nucleo_nap`**. Our table ships it (the old `coredump` row renamed:
+   same offset and size, a LittleFS row) and, because it is a labelled LittleFS row, **M5Launcher recreates it**
+   when it installs our image: empty, 448 KB, at a 4 KB boundary. The loader uses the 256 KB that start at the
+   first 64 KB boundary inside it (at least 384 KB are always aligned).
+
+Under M5Launcher the `coredump` partition is the Launcher's own (64 KB) and is never used, whatever its size.
+The partition is never formatted: its content is only trusted when the last sector's header matches.
+
+**Where native apps are unavailable:** no partition qualifies — in practice a NucleoOS installed by M5Launcher
+before 0.8.4: installing a newer image from the Launcher creates `nucleo_nap` (448 KB more flash; the Launcher
+offers to free space when there is not enough). An owner can also create a LittleFS/SPIFFS partition labelled
+`nucleo_nap`, 128 KB or more, in the Launcher's partitioner. The Store shows the native store as unavailable,
+says how to get it, and shows the web store as usual.
 
 ## Security model
 

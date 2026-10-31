@@ -71,5 +71,6 @@ list beside the selected app's card (icon, facts, description, the Install / Upd
 grid of coloured tiles, and the Cardputer shows the selected app in full (name, state, facts, description).
 
 **Status (2026-10-27):** client, two channels and native loader written and host-tested; the loader runs
-Constellations from the SD card on both boards (docs/native-apps.md, "Verification"). Not yet in a release. Native apps need the `coredump` partition as their flash scratch region:
-unavailable under M5Launcher, where the Store shows the native store as such.
+Constellations from the SD card on both boards (docs/native-apps.md, "Verification"). Not yet in a release. Native apps need a flash scratch region (docs/native-apps.md,
+"Scratch region"): under M5Launcher, the `nucleo_nap` partition the Launcher creates when it installs 0.8.4 or
+later; without it the Store shows the native store as unavailable, with the remedy.

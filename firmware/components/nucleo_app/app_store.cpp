@@ -35,6 +35,7 @@ extern "C" {
 #include "nucleo_board.h"
 #include "nucleo_exclusive.h"
 #include "nucleo_store.h"
+#include "nucleo_guest.h"
 extern const char *nucleo_setup_ip(void);
 void nucleo_store_apps_sync(void);
 void nucleo_native_forget(const char *id);     // native_apps.cpp: unload it if loaded, before its files change
@@ -513,7 +514,8 @@ static void empty_state(int y, const char *msg, uint16_t col)
 }
 
 // The first screen: which store. Two cards, the highlighted one on an accent; native is greyed out (with the
-// reason) where this firmware cannot run native apps, e.g. under M5Launcher.
+// remedy) where this firmware has no scratch region: under M5Launcher, a NucleoOS installed before 0.8.4 (the
+// Launcher creates the `nucleo_nap` partition when it installs a newer image).
 static const unsigned short CH_COL[NCH] = { 0xFB4D, 0x4D1F };
 static void draw_choose(int top, int h)
 {
@@ -533,8 +535,12 @@ static void draw_choose(int top, int h)
         }
         const int tx = 15 + isz;
         txt(&fonts::FreeSansBold9pt7b, tx, y + 6, ch_name(c), on ? INK : FG);
-        const char *sub = off ? TR5("Non qui (M5Launcher)", "Not here (M5Launcher)", "Aqui no (M5Launcher)",
-                                    "Pas ici (M5Launcher)", "Nicht hier (M5Launcher)") : ch_sub(c);
+        const char *sub = !off ? ch_sub(c)
+                        : nucleo_guest_hosted() ? TR5("Reinstalla da M5Launcher", "Reinstall from M5Launcher",
+                                                      "Reinstala desde M5Launcher", "Reinstaller via M5Launcher",
+                                                      "Neu installieren (M5Launcher)")
+                        : TR5("Non in questa installazione", "Not on this setup", "No en esta instalacion",
+                              "Pas sur cette installation", "Nicht in dieser Installation");
         txt_fit(&fonts::Font0, tx, y + ch_h - 14, 230 - tx, sub, on ? INK : MUTED);
     }
 }
@@ -556,11 +562,13 @@ static bool catalog_fresh(int c)
 static void enter_channel(int c)
 {
     if (c == CH_NATIVE && !native_ok()) {
-        s_note = TR5("Le app native richiedono NucleoOS installato da solo (non sotto M5Launcher).",
-                     "Native apps need NucleoOS installed on its own (not under M5Launcher).",
-                     "Las apps nativas requieren NucleoOS solo (no bajo M5Launcher).",
-                     "Les apps natives exigent NucleoOS seul (pas sous M5Launcher).",
-                     "Native Apps brauchen NucleoOS allein (nicht unter M5Launcher).");
+        s_note = nucleo_guest_hosted()
+                     ? TR5("Reinstalla NucleoOS da M5Launcher (448 KB)", "Reinstall NucleoOS from M5Launcher (448 KB)",
+                           "Reinstala NucleoOS desde M5Launcher (448 KB)", "Reinstallez NucleoOS via M5Launcher (448 Ko)",
+                           "NucleoOS in M5Launcher neu installieren (448 KB)")
+                     : TR5("Tabella partizioni senza spazio per app native", "No room for native apps in this partition table",
+                           "Tabla de particiones sin espacio para apps nativas", "Table de partitions sans place pour apps natives",
+                           "Partitionstabelle ohne Platz fuer native Apps");
         nucleo_app_request_draw();
         return;
     }

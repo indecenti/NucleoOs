@@ -423,7 +423,7 @@ static void native_open() { store_choose(); app_key(NK_CHAR, '1'); }
 static const Scene STORE[] = {
     { "choose",    [] { store_choose(); app_draw(); } },
     { "choose-web",[] { store_choose(); down(1); app_draw(); } },
-    { "choose-nonative", [] { g_host_native_abi = 0; store_choose(); app_key(NK_CHAR, '1'); app_draw(); g_host_native_abi = 1; } },
+    { "choose-nonative", [] { g_host_native_abi = 0; g_host_guest = true; store_choose(); app_key(NK_CHAR, '1'); app_draw(); g_host_native_abi = 1; g_host_guest = false; } },   // M5Launcher, NucleoOS installed before 0.8.4
     { "native",    [] { native_open(); app_draw(); } },
     { "native-app",[] { native_open(); app_key(NK_ENTER); app_draw(); } },
     { "native-app-uninstall", [] { native_open(); app_key(NK_ENTER); app_key(NK_RIGHT); app_draw(); } },   // RIGHT focuses Uninstall

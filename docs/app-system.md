@@ -41,7 +41,7 @@ boot; opt-in automatic updates; a beta channel (a second signed catalog).
 ## Native apps from the SD card — **working on both boards; not yet released**
 
 Spec: [native-apps.md](native-apps.md). Installed on the SD card only; at launch the signed `.nap` module is
-re-verified, relocated into the 256 KB `coredump` partition (core dumps are off) and executed from flash
+re-verified, relocated into the 256 KB scratch region (`nucleo_nap`, or `coredump` on units flashed before 0.8.4) and executed from flash
 through the MMU, so an app costs RAM only for its own variables. ABI level 1 = what the built-in games use
 (195 functions); the layout fingerprint pins the shapes of the shared types; a native game gets the same Solo
 boot as a built-in one. Store games: Constellations, Tanks, Poker (all run from the SD card on both boards; out of the image by default,

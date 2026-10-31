@@ -90,3 +90,32 @@ void guest_launcher_plan(const guest_part_t *parts, int n, guest_install_plan_t 
         }
     }
 }
+
+static bool scratch_span(const guest_part_t *p, uint32_t page, uint32_t max, guest_span_t *out)
+{
+    const uint64_t start = ((uint64_t)p->offset + page - 1) / page * page;
+    const uint64_t end = (uint64_t)p->offset + p->size;
+    if (end <= start) return false;
+    uint64_t len = (end - start) / page * page;
+    if (len > max / page * page) len = max / page * page;
+    if (len < 2ull * page) return false;
+    out->skip = (uint32_t)(start - p->offset);
+    out->size = (uint32_t)len;
+    return true;
+}
+
+bool guest_native_scratch(const guest_part_t *parts, int n, bool own_layout, uint32_t page, uint32_t max,
+                          guest_span_t *out)
+{
+    if (!parts || !out || !page || (page & (page - 1))) return false;
+    for (int pass = 0; pass < 2; pass++) {
+        if (pass == 0 && !own_layout) continue;
+        for (int i = 0; i < n; i++) {
+            const guest_part_t *p = &parts[i];
+            if (p->type != GUEST_PT_TYPE_DATA) continue;
+            if (pass == 0 ? p->subtype != GUEST_PT_SUB_COREDUMP : strcmp(p->label, GUEST_NAP_LABEL) != 0) continue;
+            if (scratch_span(p, page, max, out)) { out->index = i; return true; }
+        }
+    }
+    return false;
+}
