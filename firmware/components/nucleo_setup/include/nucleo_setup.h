@@ -57,6 +57,22 @@ void nucleo_setup_set_time(time_t t);
 // marks the clock synced, persists across reboot). Used by the on-device Settings date/time editor.
 void nucleo_setup_set_datetime(int year, int mon, int day, int hour, int min);
 
+// ---- Time zone -----------------------------------------------------------------------------------------
+// Boot: apply the saved zone (default Europe/Rome) and, only if the clock is unset, the last saved time.
+// main calls it right after NVS + SD on EVERY boot (Solo included) — see clock_zones.h for the table.
+void        nucleo_setup_clock_init(void);
+int         nucleo_setup_tz_count(void);
+const char *nucleo_setup_tz_id_at(int i);       // IANA id ("Europe/Madrid"); "" out of range
+const char *nucleo_setup_tz_label_at(int i);    // ASCII label for the device font
+int         nucleo_setup_tz_index(void);        // current zone
+const char *nucleo_setup_tz_id(void);
+bool        nucleo_setup_tz_user_set(void);     // chosen explicitly (Settings / web OS), not the default
+// Set the zone (persists, applies live; the epoch is untouched). user=false is an automatic source (a
+// browser's reported zone): refused once the user has chosen. false = unknown id / refused.
+bool        nucleo_setup_set_tz_index(int i, bool user);
+bool        nucleo_setup_set_tz(const char *iana_id, bool user);
+int         nucleo_setup_tz_offset_min(void);   // local - UTC now, minutes (DST included)
+
 // Live link quality of the joined AP. rssi in dBm (negative; 0 = not associated); channel 1-13.
 int nucleo_setup_rssi(void);
 int nucleo_setup_channel(void);

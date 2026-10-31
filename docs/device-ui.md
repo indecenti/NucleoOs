@@ -208,6 +208,7 @@ Settings
 ├─ ANIMA        (inline)   → Offline / Hybrid / Online only (anima_ui.json + live flags)
 ├─ Language     (inline)   → it / en / es / fr / de
 ├─ Date/time    (14:05)    → no-typing field editor (day/month/year · hours:minutes)
+├─ Time zone    (inline)   → cycle ~54 zones west→east (value = cities, chip = live UTC offset)
 ├─ Device       (name)     → Name · PIN · Web sessions (sign everyone out) · Model · Version ·
 │                             Battery · SD · Free RAM · Uptime · Updates · Restart
 └─ Reset                   → Reset settings · Factory reset (ENTER ×3, the chip says what it erases)
@@ -241,7 +242,8 @@ Settings
 
 Only settings with a real firmware backend are listed. Web-only keys in `settings.json` with no
 firmware reader (`device.timezone`, `power.profile`, `power.sleep_timeout_s`, `network.ble.enabled`…)
-are deliberately absent: nothing on the device reads them (time zone and NTP are compile-time,
+are deliberately absent: nothing on the device reads them (the real time zone is NVS `nclock/tz`, see
+`docs/setup-wizard.md` "Clock and time zone"; NTP servers are compile-time,
 screen-off-while-remote is a `#define`, the real BLE switch is NVS `ble/on`).
 
 Both surfaces draw their icons from the shared system glyph set `ui_glyph.h` (Wi-Fi fan, sun,

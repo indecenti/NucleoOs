@@ -5,6 +5,7 @@
 #include "nucleo_storage.h"
 #include "nucleo_guest.h"
 #include "nucleo_sdcontent.h"   // nucleo_sdc_status_t
+#include "clock_zones.h"      // the real time-zone table (Settings ▸ Time zone)
 #include <string.h>
 #include <stdio.h>
 
@@ -41,6 +42,17 @@ void        nucleo_setup_set_datetime(int y, int mo, int d, int h, int mi)
 {
     struct tm t = {}; t.tm_year = y - 1900; t.tm_mon = mo - 1; t.tm_mday = d; t.tm_hour = h; t.tm_min = mi;
     g_host.wall = _mkgmtime(&t); g_host.time_synced = true;
+}
+// Time zone: the REAL table (clock_zones.c is linked); the simulated device sits in the default zone.
+static int  s_tz = -1;
+int         nucleo_setup_tz_count(void) { return clock_zone_count(); }
+int         nucleo_setup_tz_index(void) { if (s_tz < 0) s_tz = clock_zone_default(); return s_tz; }
+const char *nucleo_setup_tz_label_at(int i) { const clock_zone_t *z = clock_zone_at(i); return z ? z->label : ""; }
+bool        nucleo_setup_set_tz_index(int i, bool) { if (!clock_zone_at(i)) return false; s_tz = i; return true; }
+int         nucleo_setup_tz_offset_min(void)   // fixed per zone (standard time) so goldens never follow the PC's date
+{
+    const char *id = clock_zone_at(nucleo_setup_tz_index())->id;
+    return !strcmp(id, "America/Bogota") ? -300 : !strcmp(id, "Asia/Kolkata") ? 330 : 60;
 }
 int         nucleo_setup_scan(void) { return SCAN_N; }
 int         nucleo_setup_scan_count(void) { return SCAN_N; }

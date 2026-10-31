@@ -91,6 +91,20 @@ encoded, so the browser still asks for it. A QR / PIN screen inside the wizard r
 **Time sync** is not a wizard step either: SNTP starts automatically whenever the device gets an IP
 on a Wi-Fi network.
 
+### Clock and time zone
+
+- **Zone**: NVS namespace `nclock` (`tz` = IANA id, `user` = chosen explicitly), NOT `setup.json`: it must be
+  applied at the top of EVERY boot — Solo, BLE, USB-web and no-SD boots never load the setup document.
+  `nucleo_setup_clock_init()` (main, right after the UI language) applies it before anything draws a clock.
+  Unset = `Europe/Rome`, what every device ran before the zone was selectable. The table (IANA id, ASCII
+  label, POSIX rule, aliases) is `clock_zones.c`, gated by `npm run clockzones:test` against Node's IANA data.
+- **Who sets it**: Settings ▸ Time zone and `POST /api/time/zone` (user choice); `POST /api/time/set` with a
+  browser's `"tz"` (automatic — adopted only while the user has never chosen). Factory reset erases it.
+- **The saved time** (`/sd/system/time.json`, written on every NTP sync and manual set) is restored ONLY when
+  the clock is unset (power-on, < 2022). The system clock survives `esp_restart()`, and every Solo app launch is
+  one: restoring then rewound the clock to the last sync — hours back, never corrected in a Wi-Fi-less Solo
+  boot (the "time breaks whenever I open an app" report, 2026-10-31).
+
 ## Screen layout (240×135)
 
 A title line, up to ~6 body lines, and a hint line at the bottom. Menus highlight the

@@ -451,6 +451,7 @@ void app_main(void)
         nucleo_storage_provision();         bootmark("sd-provision");
         nucleo_storage_refresh();           bootmark("sd-refresh");
         nucleo_i18n_load();                 // system UI language (settings.json ui.language) for native apps
+        nucleo_setup_clock_init();          // time zone + (unset clock only) the saved time: EVERY boot, Solo included
 
         // Restore the user's saved display/audio prefs from the SAME settings.json the web Settings app
         // writes (power.display_brightness / volume / muted). Without this only the language survived a
@@ -471,6 +472,7 @@ void app_main(void)
         bootmark("registry");
     } else {
         ESP_LOGE(TAG, "no usable SD card");
+        nucleo_setup_clock_init();          // the zone still applies without a card (NVS); no saved time to restore
         // An erase interrupted by a power cut leaves an unmountable card: finish it (once), then reboot onto it.
         if (nucleo_storage_format_recover() == ESP_OK) { ESP_LOGW(TAG, "SD erase recovered: rebooting"); esp_restart(); }
     }
