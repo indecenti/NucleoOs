@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<!-- The page a window of the person's own app loads (nucleo-myapps.js, docs/myapps.md). It runs in a frame WITHOUT an
+     origin (wm.js sandbox), asks the shell's broker for its app's document (app.doc: the broker knows the app from
+     the frame's token, never from this URL) and writes it here. This policy then covers the app: its own inline code
+     and the OS bridge run; nothing reaches the network (no fetch, no remote script, image, style or font).
+     Kept self-contained and literal on purpose: an edition's build must not move the bridge path or this script
+     (NucleoOS Web serves it with the same policy as a header, tools/intestazioni.py "app-locale"). -->
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title></title>
+<style>html,body{margin:0;height:100%;background:transparent;color:#8a93a6;font:14px system-ui,sans-serif}p{margin:0;padding:24px;text-align:center}</style>
+<script>
+(function () {
+  'use strict';
+  var m = /(^#|&)nucleo-broker=([0-9a-f]{32})/.exec(location.hash || '');
+  if (window.parent === window || !m) return;
+  var id = 'la' + Date.now().toString(36);
+  function show(text) { var p = document.createElement('p'); p.textContent = text; document.body.textContent = ''; document.body.appendChild(p); }
+  function onMessage(e) {
+    var d = e.data;
+    if (e.source !== window.parent || !d || d.type !== 'nucleo.broker.reply' || d.id !== id) return;
+    window.removeEventListener('message', onMessage);
+    if (!d.ok || typeof d.html !== 'string') { show(String(d.error || 'unavailable')); return; }
+    // The document of the app, with /nucleo-app.js first in its <head>; the token stays in the address for it.
+    document.open();
+    document.write(d.html);
+    document.close();
+  }
+  window.addEventListener('message', onMessage);
+  window.parent.postMessage({ type: 'nucleo.broker', id: id, method: 'app.doc', args: { bridge: '/nucleo-app.js' }, nb: m[2] }, '*');
+})();
+</script>
+</head>
+<body></body>
+</html>

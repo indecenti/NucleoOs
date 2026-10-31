@@ -149,6 +149,39 @@
      "time.set",
      "wifi.manage"
     ]
+   },
+   {
+    "after": "0.8.3",
+    "caps": [
+     "ai.relay",
+     "anima.device",
+     "anima.l1",
+     "apps.nap",
+     "device.display",
+     "device.fido",
+     "device.gpio",
+     "device.ir",
+     "device.link",
+     "device.mic",
+     "device.tts",
+     "device.voice",
+     "diag",
+     "downloads.companion",
+     "fs.append",
+     "games.native-save",
+     "mail.smtp",
+     "net.proxy",
+     "ota",
+     "ota.firmware",
+     "pairing.sessions",
+     "power",
+     "runtime.service",
+     "seat.single",
+     "settings.boot",
+     "time.set",
+     "time.zone",
+     "wifi.manage"
+    ]
    }
   ],
   "handheld": [
@@ -285,6 +318,7 @@
    {
     "since": "0.0.0",
     "caps": [
+     "ai.server",
      "fs.copy",
      "fs.mounts",
      "fs.stat",

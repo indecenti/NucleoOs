@@ -20,6 +20,7 @@ import Caps from './nucleo-caps.js';                               // what this 
 import { initSystemUI } from './system-ui.js';        // night light, lock screen, shortcuts sheet, widgets
 import { CATEGORIES, CATEGORY_IDS, categoryOf, categoryKey } from './app-categories.js';   // one category vocabulary
 import Host from './nucleo-host.js';                  // a hosting server's session: real lock, sign out
+import MyApps, { isMyApp } from './nucleo-myapps.js';  // the person's own apps (written on request, in their folder)
 
 // Shell-namespaced translator: t(key, vars) → active-language string, falling back to core then key.
 // The catalog is loaded by I18N.init('shell') at boot; before that, calls return the key (harmless,
@@ -33,6 +34,7 @@ const t = I18N.scope('shell');
 // its manifest name: proper nouns (ANIMA, SSH, Paint) and anything the agent installs.
 function appName(a) {
   if (!a) return '';
+  if (a.local && a.names && a.names[I18N.lang]) return a.names[I18N.lang];   // the person's own app: its name in each language
   const k = 'app_' + a.id;
   const v = t(k);
   return v && v !== k ? v : (a.name || a.id);
@@ -1189,7 +1191,10 @@ function beginLoadAppPermissions() { if (!permsReady) permsReady = loadAppPermis
 async function startDesktopServices() {
   if (desktopStarted) return;
   desktopStarted = true;
-  await beginLoadAppPermissions();         // MUST precede the first window: `allow` is fixed at navigation
+  // The person's own apps join the list here, after the desktop painted (one small read, a 404 where there are
+  // none) and before the session restore, which may reopen one of them.
+  const [, mineChanged] = await Promise.all([beginLoadAppPermissions(), mergeMyApps()]);   // permissions MUST precede the first window: `allow` is fixed at navigation
+  renderAfterMyApps(mineChanged);
   if (!restartedOnce) startMigrations();   // not awaited: browser-only steps now, device requests after a pause
   if (!restartedOnce) {
     // first boot: the welcome; the wizard may end by opening an app (the Store) once it is done
@@ -1468,10 +1473,35 @@ async function boot() {
   }
 }
 
+// The person's own apps (nucleo-myapps.js): records built HERE from their index in the person's private folder, never
+// from /api/apps, always without an origin (trust 'sandbox' from the start: nothing to wait for). Their window loads
+// /local-app.html, which asks the broker for the app's page. A record whose id an installed app already uses is
+// skipped: the prefix makes that impossible, and the system's apps would win anyway.
+const MYAPP_ROUTE = new URL('./local-app.html', import.meta.url).pathname;
+async function mergeMyApps() {
+  let list = [];
+  try { list = await MyApps.list(); } catch { list = []; }
+  const others = state.apps.filter((a) => !a.local);
+  const taken = new Set(others.map((a) => a.id));
+  const mine = list.map((e) => MyApps.record(e, { route: MYAPP_ROUTE })).map((r) => {
+    const s = r && sanitizeApp(r);
+    return s && !taken.has(s.id) ? { ...s, local: true, created_by: 'agent', trust: 'sandbox', permissions: [], glyph: glyph(s) } : null;
+  }).filter(Boolean);
+  const before = state.apps.filter((a) => a.local).map((a) => a.id + '@' + a.version).join();
+  state.apps = others.concat(mine);
+  for (const a of mine) if (!state.startPins.includes(a.id)) state.startPins.push(a.id);
+  return before !== mine.map((a) => a.id + '@' + a.version).join();
+}
+function renderAfterMyApps(changed) { if (changed) { try { renderStartMenu(); renderDesktop(); } catch {} } }
+
 // Re-pull the installed-app list (after an over-the-air install/uninstall) and repaint the
 // launcher surfaces that list apps. Desktop shortcuts are user-arranged, so we leave them be;
 // the new app shows up in the Start menu and search right away.
 async function refreshApps() {
+  return (appsRefresh = refreshAppsNow().finally(() => { appsRefresh = null; }));
+}
+let appsRefresh = null;              // the refresh in flight: an open-app for an app it brings waits for it
+async function refreshAppsNow() {
   if (OpenWith) OpenWith.invalidate();   // a Store app installed or removed: its file types come and go with it
   try {
     const d = await fetchJSON('/api/apps');
@@ -1489,6 +1519,7 @@ async function refreshApps() {
       if (a.store === true) app.trust = 'sandbox';               // a Store app is never trusted, not even for a moment
       return app;
     });
+    await mergeMyApps();                           // the person's own apps, from their index (never from /api/apps)
     permsReady = null; beginLoadAppPermissions();   // and re-read the registry: the new app has its own
     // An app that was listed and no longer is has been removed (Store ▸ Remove): its window would only
     // show a 404 on the next reload. Only ids that were in the old list, so windows that never came from
@@ -1931,7 +1962,12 @@ function wireMessages() {
     // ANIMA (and other apps) can ask the shell to launch an app by id. `reload: true` also reloads the window
     // when it is already open (the caller just changed that app: an agent update, a newly installed game);
     // without it a re-open only focuses it, so unsaved work survives.
-    if (d.type === 'open-app' && d.id) { const a = byId(d.id); if (a) WM.open(a, d.query || '', d.reload === true ? { reload: true } : {}); return; }
+    if (d.type === 'open-app' && d.id) {
+      const go = () => { const a = byId(d.id); if (a) WM.open(a, d.query || '', d.reload === true ? { reload: true } : {}); return !!a; };
+      // An app ANIMA has just installed for the person: the refresh its apps-changed started may still be reading.
+      if (!go() && isMyApp(d.id)) (appsRefresh || mergeMyApps().then(renderAfterMyApps)).then(go, () => {});
+      return;
+    }
 
     // The ANIMA model installer is running a blocking download → make the OS "wait or cancel".
     if (d.type === 'os-install-modal') {
@@ -4216,8 +4252,14 @@ async function powerMenu() {
 }
 async function accountMenu() {
   const acct = document.getElementById('sm-account');
+  // Behind a hosting server's sign-in the account (password, passkeys, the people it manages) lives on the server's
+  // own page, not in Settings: it opens there, in a tab of its own.
+  const host = await Host.session();
+  const own = host && typeof host.signin_url === 'string' && host.signin_url.startsWith('/') && !host.signin_url.startsWith('//')
+    ? () => { closeStart(); window.open(host.signin_url, '_blank', 'noopener'); }
+    : () => openSettings(acct.dataset.user ? 'accounts' : '');
   const items = [
-    { label: t('start_account_settings'), glyph: '👤', fn: () => openSettings(acct.dataset.user ? 'accounts' : '') },
+    { label: t('start_account_settings'), glyph: '👤', fn: own },
     { sep: true },
     ...(await sessionItems()),
   ];

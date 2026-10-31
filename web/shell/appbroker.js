@@ -27,6 +27,7 @@
 
 import { CORE } from './nucleo-version.js';
 import { createFs } from './nucleo-fs.js';
+import { createMyApps, isMyApp } from './nucleo-myapps.js';
 
 // ── app record policy (pure) ──────────────────────────────────────────────────────────────────
 // /api/apps streams id/name/route/icon straight from each manifest — and the agent can publish a
@@ -45,6 +46,9 @@ function samePath(p) {
 export function sanitizeApp(a) {
   if (!a || typeof a !== 'object' || typeof a.id !== 'string' || !APP_ID.test(a.id)) return null;
   const out = { ...a };
+  // `local` marks one of the person's own apps (nucleo-myapps.js): only the shell sets it, from its own index, after
+  // this. A backend's list or a manifest claiming it would get that app's page and strings from the person's folder.
+  delete out.local;
   out.name = String(a.name == null || a.name === '' ? a.id : a.name).replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 80);
   // A route is where the window's iframe points: only an absolute same-origin path (never a scheme).
   out.route = typeof a.route === 'string' && a.route.startsWith('/') ? samePath(a.route) : '';
@@ -79,10 +83,10 @@ export const withToken = (src, token) => (token ? src + (src.includes('#') ? '&'
 //   storage.app     → /data/apps/<id>/…      its own private corner
 //   storage.shared  → /data/…                the shared user area (documents, pictures, recordings)
 // Anything else — /system, /apps, /www — is out of reach for both. OS_PRIVATE stays out of reach even under
-// storage.shared: the key vault and ANIMA's brain, the agent, every app's private corner, the code of the store apps,
-// SSH hosts. The Open/Save sheet hides the same folders (filedialog.js), so the user never hands one over either.
+// storage.shared: the key vault and ANIMA's brain, the agent, every app's private corner, the code of the store apps and
+// of the person's own apps (nucleo-myapps.js), SSH hosts. The Open/Save sheet hides the same folders (filedialog.js), so the user never hands one over either.
 const SHARED_ROOT = '/data';
-export const OS_PRIVATE = ['/data/anima', '/data/agent', '/data/apps', '/data/store-apps', '/data/ssh'];
+export const OS_PRIVATE = ['/data/anima', '/data/agent', '/data/apps', '/data/store-apps', '/data/my-apps', '/data/ssh'];
 
 // Normalise like the device does: collapse //, drop ./, resolve .. WITHOUT ever climbing past the root.
 export function normPath(p) {
@@ -130,7 +134,7 @@ export function resolveAppPath(appId, permissions, path) {
 // The whole vocabulary. Anything not listed is refused — a deny-list would be a promise we cannot keep.
 export const METHODS = ['fs.read', 'fs.write', 'fs.list', 'notify', 'sys.info', 'sys.status', 'ai.ask', 'ai.complete',
   'app.i18n', 'kv.get', 'kv.set', 'kv.remove', 'kv.all', 'sys.caps', 'file.save', 'file.open', 'file.launch', 'file.write',
-  'appfs.read', 'appfs.write', 'appfs.list', 'appfs.remove'];
+  'appfs.read', 'appfs.write', 'appfs.list', 'appfs.remove', 'app.doc'];
 // file.save bounds: a document the user made in the app, handed to the browser as a download. The
 // type comes from the extension, from a short list of inert formats (nothing a browser would run).
 export const SAVE_MAX_BYTES = 64 * 1024 * 1024;
@@ -209,6 +213,8 @@ export function methodAllowed(method, permissions) {
   if (method === 'file.open' || method === 'file.launch' || method === 'file.write') return true;
   // appfs.* is kv's binary sibling: the calling app's own folder, nothing else, so no declaration either.
   if (method.startsWith('appfs.')) return true;
+  // app.doc: the page of one of the person's own apps, for /local-app.html to write (exec refuses any other app).
+  if (method === 'app.doc') return true;
   // sys.status is the device telemetry every curated app reads from /api/status — time, uptime, SD
   // space, Wi-Fi name. Read-only and cheap, but it does describe the household's network, so it is
   // DECLARED (system.events), not free like sys.info.
@@ -283,8 +289,25 @@ export function createBroker({ fetchFn, fs: fsIn, findApp, notify, onFsChange, g
       return out;
     } catch { return {}; }
   }
+  const myapps = createMyApps({ fs });
+  // An app of the person (record.local, set by the shell from its own index, never from /api/apps) has no URL of
+  // its own: its strings and its page are files in its folder, read through the file layer.
+  const isLocal = (app) => !!(app && app.local === true && isMyApp(app.id));
   function appStrings(app, lg) {
     const key = app.id + '|' + lg;
+    if (!i18nCache.has(key) && isLocal(app)) {
+      const p = serial(async () => {
+        const parts = [await readCatalog('/i18n/core.en.json')];
+        if (lg !== 'en') parts.push(await readCatalog('/i18n/core.' + lg + '.json'));
+        parts.push(await myapps.strings(app.id, 'en').catch(() => ({})));
+        if (lg !== 'en') parts.push(await myapps.strings(app.id, lg).catch(() => ({})));
+        const out = Object.assign({}, ...parts);
+        for (const k of Object.keys(out)) if (k.startsWith('_') || !(typeof out[k] === 'string' || (out[k] && typeof out[k] === 'object'))) delete out[k];
+        return out;
+      });
+      i18nCache.set(key, p);
+      p.then((m) => { if (!Object.keys(m).length) i18nCache.delete(key); }, () => i18nCache.delete(key));
+    }
     if (!i18nCache.has(key)) {
       // Same files and same order as nucleo-i18n.js: core under the app, English under the language.
       const urls = ['/i18n/core.en.json', '/i18n/core.' + lg + '.json', '/apps/' + app.id + '/i18n.en.json', '/apps/' + app.id + '/i18n.' + lg + '.json'];
@@ -424,6 +447,18 @@ export function createBroker({ fetchFn, fs: fsIn, findApp, notify, onFsChange, g
     }
 
     if (method.startsWith('kv.')) return kvExec(app, method, args);
+
+    if (method === 'app.doc') {
+      if (!isLocal(app)) return { ok: false, error: 'denied: app.doc' };
+      // The bridge path comes from /local-app.html (an edition's build may serve the shell under a base, the bridge
+      // stays at the root): only that one file name, as a plain same-origin path.
+      const b = String((args && args.bridge) || '/nucleo-app.js');
+      const bridge = /^\/(?:[A-Za-z0-9._-]+\/)*nucleo-app\.js$/.test(b) && !b.includes('..') ? b : '/nucleo-app.js';
+      try {
+        const html = await serial(() => myapps.doc(app.id, { bridge }));
+        return html == null ? { ok: false, error: 'not-found' } : { ok: true, html };
+      } catch (e) { return { ok: false, error: (e && e.code) || 'failed' }; }
+    }
 
     if (method === 'sys.caps') {
       const c = getCaps ? await getCaps().catch(() => null) : null;

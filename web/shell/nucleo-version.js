@@ -10,7 +10,7 @@
 //             so an older web OS simply does not offer the app.
 //   CONTRACT  the /api contract's version (contract/api.yaml info.version)
 export const WEBOS = '1.0.0';
-export const CORE = 3;
+export const CORE = 4;
 export const CONTRACT = '1';
 
 export default { webos: WEBOS, core: CORE, contract: CONTRACT };

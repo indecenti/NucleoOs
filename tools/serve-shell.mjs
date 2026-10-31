@@ -69,7 +69,36 @@ async function apiApps() {
 // this one string everywhere (/api/status, /proc/version, /proc/uname, /api/diag sys.fw, ANIMA's
 // "che versione?") — a hand-edited literal here drifts from the release and makes the shell announce
 // an "update" to the version it is already running.
-const FW_VERSION = (() => {
+// Device time zone (mirrors nucleo_setup.c + clock_zones.c): the zone table is READ from the firmware source, so
+// the simulator offers exactly the device's zones and aliases; offsets come from Node's IANA data (the same rules,
+// gated by `npm run clockzones:test`). Unset = Europe/Rome; a browser's zone never overrides a user's choice.
+const SIM_ZONES = (() => {
+  try {
+    const src = readFileSync(join(REPO, 'firmware/components/nucleo_setup/clock_zones.c'), 'utf8');
+    return [...src.matchAll(/\{\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\s*\}/g)].map((m) => ({ id: m[1], label: m[2] }));
+  } catch { return [{ id: 'Europe/Rome', label: 'Roma' }]; }
+})();
+const SIM_ZONE_ALIASES = (() => {
+  try {
+    const src = readFileSync(join(REPO, 'firmware/components/nucleo_setup/clock_zones.c'), 'utf8');
+    return Object.fromEntries([...src.matchAll(/\{\s*"([^"]+)",\s*"([^"]+)"\s*\}/g)].map((m) => [m[1], m[2]]));
+  } catch { return {}; }
+})();
+const SIM_CLOCK = { tz: 'Europe/Rome', user: false };
+function simSetZone(id, user) {
+  const z = SIM_ZONES.find((x) => x.id === id) || SIM_ZONES.find((x) => x.id === SIM_ZONE_ALIASES[id]);
+  if (!z || (!user && SIM_CLOCK.user)) return false;
+  SIM_CLOCK.tz = z.id; SIM_CLOCK.user = SIM_CLOCK.user || user;
+  if (typeof apiStatus !== 'undefined') { apiStatus.network.tz = z.id; apiStatus.network.tz_offset = simZoneOffset(z.id); }
+  return true;
+}
+function simZoneOffset(id, t = Date.now()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: id, hourCycle: 'h23', year: 'numeric', month: 'numeric',
+    day: 'numeric', hour: 'numeric', minute: 'numeric' }).formatToParts(new Date(t)).map((x) => [x.type, x.value]));
+  return Math.round((Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute) - Math.floor(t / 60000) * 60000) / 60000);
+}
+// SIM_FW_VERSION plays another firmware version (e.g. the next release, to see what its capabilities switch on).
+const FW_VERSION = process.env.SIM_FW_VERSION || (() => {
   const vf = (f, dflt) => { try { return readFileSync(join(REPO, 'firmware', 'version', f), 'utf8').split(/\r?\n/)[0].trim() || dflt; } catch { return dflt; } };
   const git = (args) => { try { return execFileSync('git', args, { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim(); } catch { return null; } };
   const hash = git(['rev-parse', '--short=7', 'HEAD']) || 'nogit';
@@ -81,7 +110,7 @@ const FW_VERSION = (() => {
 const apiStatus = { os: 'NucleoOS', version: FW_VERSION, uptime_s: 0, profile: process.env.SIM_PROFILE === 'full' ? 'full' : 'web', free_heap: 210000,
   min_free_heap: 17000, largest_free_block: 42000,
   storage: { mounted: true, fs: 'exFAT', total_bytes: 63864569856, free_bytes: 63800000000 },
-  network: { mode: 'sta', ssid: 'home-wifi', ip: '192.168.1.42', time_synced: true }, apps: { installed: 9 },
+  network: { mode: 'sta', ssid: 'home-wifi', ip: '192.168.1.42', time_synced: true, tz: 'Europe/Rome', tz_offset: simZoneOffset('Europe/Rome') }, apps: { installed: 9 },
   // self_update/host mirror the firmware's guest mode (nucleo_httpd.c): SIM_GUEST=1 plays a device installed by
   // M5Launcher — no self-OTA (/api/ota answers 409), no rollback.
   ota: process.env.SIM_GUEST
@@ -788,8 +817,20 @@ const server = createServer(async (req, res) => {
     let b = null; try { b = JSON.parse((await readBody(req)).toString('utf8')); } catch {}
     if (!b) return send(res, 400, 'text/plain', 'bad json');
     if (!(Number(b.ts) > 0)) return send(res, 400, 'text/plain', 'missing ts');
+    if (typeof b.tz === 'string') simSetZone(b.tz, false);             // adopted only while the user never chose
     apiStatus.network.time_synced = true;
     return sendJSON(res, { ok: true, time: Math.floor(Date.now() / 1000) });
+  }
+  if (path === '/api/time' && req.method === 'GET') {                // clock + zone + the zone list (paired)
+    if (!isAuthed(req)) return reject401(res);
+    return sendJSON(res, { time: Math.floor(Date.now() / 1000), synced: !!apiStatus.network.time_synced, tz: SIM_CLOCK.tz,
+      tz_user: SIM_CLOCK.user, tz_offset: simZoneOffset(SIM_CLOCK.tz), zones: SIM_ZONES.map(({ id, label }) => ({ id, label })) });
+  }
+  if (path === '/api/time/zone' && req.method === 'POST') {          // the user's explicit zone choice (paired)
+    if (!isAuthed(req)) return reject401(res);
+    let b = null; try { b = JSON.parse((await readBody(req)).toString('utf8')); } catch {}
+    if (!b || typeof b.tz !== 'string' || !simSetZone(b.tz, true)) return send(res, 400, 'text/plain', 'unknown tz');
+    return sendJSON(res, { ok: true, tz: SIM_CLOCK.tz, tz_offset: simZoneOffset(SIM_CLOCK.tz) });
   }
   if (path === '/api/wifi/priority' && req.method === 'POST') {      // pin/unpin a saved network
     if (!isAuthed(req)) return reject401(res);

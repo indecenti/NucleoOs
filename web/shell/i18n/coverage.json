@@ -23,7 +23,7 @@
     "de": 100
   },
   "surfaces": 52,
-  "totalKeys": 4818,
+  "totalKeys": 4882,
   "namespaces": {
     "agent": 161,
     "anima": 174,
@@ -37,7 +37,7 @@
     "code-runner": 37,
     "community": 12,
     "contacts": 32,
-    "core": 179,
+    "core": 222,
     "dictation": 63,
     "dj": 32,
     "dos-importer": 53,
@@ -62,7 +62,7 @@
     "recorder": 107,
     "recycle-bin": 20,
     "scoreboard": 14,
-    "settings": 560,
+    "settings": 581,
     "shell": 437,
     "spreadsheet": 303,
     "ssh": 70,
