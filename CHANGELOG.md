@@ -6,7 +6,18 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.8.4] — 2026-11-01
+
+### Added
+- **Choose your time zone.** Settings ▸ Time zone on the device (54 zones, from Honolulu to Auckland, with
+  daylight saving) and a "Time and time zone" section in the web Settings. It applies at once and in every app.
+  Until you choose one, the first paired browser's zone is used; before, every device showed Italian time.
+
 ### Fixed
+- **The clock no longer goes back hours when you open an app.** Apps that start in their own boot (Music, Radio,
+  games…) restarted the device and reset the clock to the last internet sync; without Wi-Fi it stayed wrong.
+  The saved time is now used only when the clock is really unset, after the device was switched off.
+- **Presence** always said "clear": it got no Wi-Fi measurements to work on. Measured and tuned on the ADV.
 - **The Native C store works under M5Launcher.** It was greyed out there: native apps run from a flash region
   the Launcher's partition table did not have. The region is now a labelled partition, `nucleo_nap`, that
   M5Launcher creates when it installs NucleoOS (448 KB of flash). Already running NucleoOS from the Launcher?
