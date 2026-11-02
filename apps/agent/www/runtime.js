@@ -242,7 +242,8 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   const isGoogle = cfg.provider === 'google';                          // Gemini: OpenAI-compat tool-use via the device /api/llm proxy
   // A model on the user's PC (ANIMA's local/pc-llm.js agentCfg: Ollama /v1, LM Studio…): ONE model does every
   // role — the Groq tier names don't exist there, and swapping models on a PC GPU costs seconds each time.
-  const OAMODELS = cfg.local ? { orchestrator: cfg.model, worker: cfg.model, hard: cfg.model, small: cfg.model }
+  // cfg.fixed (ANIMA: the model the user chose in Settings ▸ AI): it does every role too, never another model.
+  const OAMODELS = (cfg.local || cfg.fixed) ? { orchestrator: cfg.model, worker: cfg.model, hard: cfg.model, small: cfg.model }
     : isGoogle ? GEMINI_MODELS : GROQ_MODELS;                           // OpenAI-compat tier set (all gemini-2.5-flash for Gemini)
   const STEPS = Math.min(40, (maxSteps | 0) > 0 ? (maxSteps | 0) : MAX_STEPS);
   // F2 — GATED HARDWARE. A capability is offered to the model ONLY when its manifest permission is in
@@ -326,6 +327,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   // No keys (the standalone Agenti app) → the single configured provider with its own Haiku→Sonnet→Opus ladder.
   const PROXY_PROVIDERS = Object.keys(PROVIDERS).filter((p) => providerOf(p).proxy);
   function routeCfg(spec) {
+    if (cfg.fixed) return { cfg, model: cfg.model };
     if (keys) {
       try {
         const r = routeFor({ ...spec, exclude: [...(spec.exclude || []), ...PROXY_PROVIDERS] }, keys, active);
@@ -771,7 +773,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     let pauses = 0;
     for (let step = 0; step < STEPS; step++) {
       if (aborter && aborter.signal.aborted) throw new Error('stopped');
-      const resp = await callAnthropicServed(wcfg, { model, system, messages, tools, maxTokens, signal: aborter && aborter.signal, fallback: MODELS.small });
+      const resp = await callAnthropicServed(wcfg, { model, system, messages, tools, maxTokens, signal: aborter && aborter.signal, fallback: cfg.fixed ? undefined : MODELS.small });
       messages.push({ role: 'assistant', content: resp.content });
       if (resp.stop_reason === 'tool_use') {
         const uses = (resp.content || []).filter((b) => b.type === 'tool_use');
@@ -792,7 +794,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
       const lastMsg = messages[messages.length - 1];
       if (lastMsg && lastMsg.role === 'user' && Array.isArray(lastMsg.content)) lastMsg.content.push({ type: 'text', text: BUDGET_ASK });
       else return '';                                   // a paused server tool ended the loop: no clean turn to extend
-      const resp = await callAnthropicServed(wcfg, { model, system, messages, tools, toolChoice: { type: 'none' }, maxTokens, signal: aborter && aborter.signal, fallback: MODELS.small });
+      const resp = await callAnthropicServed(wcfg, { model, system, messages, tools, toolChoice: { type: 'none' }, maxTokens, signal: aborter && aborter.signal, fallback: cfg.fixed ? undefined : MODELS.small });
       return textOf(resp.content);
     }, aborter && aborter.signal);
   }

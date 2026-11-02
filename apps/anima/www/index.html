@@ -5111,12 +5111,10 @@
       const wsx=_wsx || await wsContext(q);   // reuse the caller's workspace context when provided (no redundant device reads)
       const consoleCtx=await consoleFactsFor(false);   // la console viva (gioco aperto, recenti, batteria) come DATI per il modello
       const wsRoot=(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : undefined;
-      // MULTI-MODEL: hard turns (code / long-form) go to the STRONGEST configured model across all keys
-      // (Opus / 70B / Gemini-Pro); simple chat stays on the user's active model — no surprise, no latency.
-      // Per-subtask cross-provider fan-out (planning vs reasoning vs voice/image) lands in the agentic loop.
+      // The model chosen in Settings ▸ AI answers every turn: no routing to a stronger, cheaper or other provider's
+      // model behind the user's back. `hard` only sets the tier withAutoModel uses if that model was retired.
       const hard = ctxkit.wantsCode(q) || ctxkit.wantsLong(q);
-      let route = keyCfg;
-      if(hard){ try{ const r=AI.routeFor({difficulty:'hard'}, keyCfg.keys||{}, keyCfg); if(r&&r.key) route=r; }catch{} }
+      const route = keyCfg;
       const callWith=async(cfg)=>{
         const a=ctxkit.assemble({ history, user:q, mode:'only', provider:cfg.provider, model:cfg.model, lang, device:await deviceFacts(),   // now: contextkit's localised date + time + weekday
 
@@ -5128,11 +5126,7 @@
       catch(e){
         if(streamed || (_turnSig && _turnSig.aborted)) throw e;   // stopped, or half an answer is on screen: no silent retry
         noteAiErr(e, route);
-        // PROVIDER FALLBACK: on a definite failure, retry on the next-best configured provider BEFORE the
-        // caller degrades to WebLLM/offline (online means real LLM only). Only if a DIFFERENT key exists.
-        let fb=null; try{ fb=AI.routeFor({difficulty:hard?'hard':'fast', exclude:[route.provider]}, keyCfg.keys||{}, keyCfg); }catch{}
-        if(fb && fb.key && fb.provider!==route.provider){ txt = await callWith(fb); route=fb; }
-        else throw e;
+        throw e;                                                    // the caller says what failed; no silent switch of provider
       }
       if(!txt) return null;
       const used = _lastCloudModel || route.model;
@@ -5275,7 +5269,8 @@
       // instance runtime.js already loaded, so no extra fetch; mirrored as a floor if it ever fails to load.
       let ALWAYS=null; try{ ALWAYS=(await import('/apps/agent/agent-tools.js')).ALWAYS_CONFIRM; }catch{}
       if(!ALWAYS || typeof ALWAYS.has!=='function') ALWAYS=new Set(['delete_file','publish_app','manage_app']);
-      const cfg=pcCfg || { provider:keyCfg.provider, key:keyCfg.key, base:keyCfg.base, model:keyCfg.model, version:keyCfg.version, geminiTier:keyCfg.geminiTier };
+      // fixed: the chosen model does every role (planning, work, hard parts); other keys only for what it can't do
+      const cfg=pcCfg || { provider:keyCfg.provider, key:keyCfg.key, base:keyCfg.base, model:keyCfg.model, version:keyCfg.version, geminiTier:keyCfg.geminiTier, fixed:true };
       const root=(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : '/data/agent';
       const ui={
         status:(m)=>{ try{ _agentThink && _agentThink.note('⚙ '+m); }catch{} },
@@ -6440,7 +6435,7 @@
       keyCfg.provider=c.provider||keyCfg.provider; keyCfg.base=c.base||p.base; keyCfg.model=c.model||p.def;
       keyCfg.key=c.key||''; keyCfg.version=c.version||p.version; keyCfg.exec=c.exec||keyCfg.exec||'browser';
       keyCfg.geminiTier=c.geminiTier||keyCfg.geminiTier; if(c.keys) keyCfg.keys=c.keys; }
-    async function loadKey(){ try{ const c=await AI.readTeacher(); if(c && !c.unpaired){ keyHydrated=true; adoptKeyCfg(c); } }catch(e){} }
+    async function loadKey(){ try{ const c=await AI.readTeacher(); if(c && !c.unpaired){ keyHydrated=true; adoptKeyCfg(c); } }catch(e){} try{ paintSub(); }catch{} }
     async function ensureKeyLoaded(){ if(keyHydrated) return; try{ await loadKey(); }catch(e){} }   // hydrate keyCfg on first online use (independent of opening Settings)
     // Mount the shared key manager into the Settings drawer (once). Its onChange keeps keyCfg in sync so the
     // online pipeline / agents see edits immediately, without this app owning any provider/vault logic.
@@ -6449,7 +6444,7 @@
       const el=$('ai-keys-mount'); if(!el || _keyKm || _keyMounting) return;
       _keyMounting=true;
       try{ const { mountKeyManager }=await import('/ai-keys.js');
-        _keyKm=mountKeyManager(el, { variant:'compact', lang, onChange(c){ keyHydrated=true; adoptKeyCfg(c); try{ renderForgeReadiness(); }catch{} } });
+        _keyKm=mountKeyManager(el, { variant:'compact', lang, onChange(c){ keyHydrated=true; adoptKeyCfg(c); try{ renderForgeReadiness(); paintSub(); }catch{} } });
       }catch(e){ el.innerHTML='<div class="keystat">'+(TR('Gestore chiavi non disponibile.', 'Key manager unavailable.'))+'</div>'; }
       _keyMounting=false;
     }
@@ -6654,13 +6649,22 @@
     }, 500);
 
     // ---- apply state to the DOM ----------------------------------------------
+    // The header says which model answers: with a key, Auto starts from the model chosen in Settings ▸ AI (the
+    // answer's own tag says which engine really answered); Private, or no key, keep the plain subtitle.
+    function paintSub(){
+      const el=$('sub'); if(!el) return;
+      let on=false; try{ on=!isPrivate() && keyHydrated && !!keyCfg.key && !!keyCfg.model; }catch{}   // safe before the key state exists
+      if(on){
+        el.textContent=(curProv().label||keyCfg.provider)+' · '+AI.modelName(keyCfg.provider, keyCfg.model).name; el.title=keyCfg.model; return; }
+      el.textContent=L(isPrivate()?'modeSubPrivate':'modeSubAuto'); el.removeAttribute('title');
+    }
     function applyAll(){
       const t=UI[lang];
       document.documentElement.lang=lang;
       document.documentElement.setAttribute('data-theme',theme);
       document.documentElement.style.setProperty('--fs',fsize+'px');
       document.body.classList.toggle('nodetails',detMode==='0');
-      $('sub').textContent=L(isPrivate()?'modeSubPrivate':'modeSubAuto');
+      paintSub();
       input.placeholder=t.placeholder;
       $('h-appear').textContent=t.appearance; $('h-general').textContent=t.general; $('h-engine').textContent=t.engine; $('h-conv').textContent=t.conv;
       $('tab-appear').textContent=t.appearance; $('tab-general').textContent=t.general; $('tab-engine').textContent=t.engine;
@@ -7111,6 +7115,7 @@
     idle(()=>edgeMountIfCached(), 300);   // the WASM brain is a rung of every ladder now - warm it if cached
     wsLoad(); wsReflect();   // restore the persisted workspace (localStorage + fs.setRoot, no socket) IN the boot tick so file-intent routing + the label are correct from the first frame
     idle(wsBoot, 500);       // defer only the DEVICE reads (refreshTree /api/fs/list + the workspace.json fallback) off the boot burst
+    idle(()=>{ if(!isPrivate()) ensureKeyLoaded(); }, 1200);   // one small read of the key file, so the header names the model before the first question
     idle(sessSdLoad, 900);   // conversations started in another browser (the SD copy) — merged by id, off the boot burst
     idle(replayPending, 3000);   // personal facts taught here while the Cardputer was away -> hand them to their owner
     // Local brain freshness: one cheap check (fs listings) after the boot burst, then at most every 10 min on return.

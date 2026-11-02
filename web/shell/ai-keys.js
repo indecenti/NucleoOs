@@ -574,7 +574,12 @@ export function mountKeyManager(container, opts = {}) {
     // ai.js listModels: the served ids (fresh, so a just-started server is asked again), or null when it can't be asked.
     const ids = await AI.listModels(c, { fresh: true });
     if (!ids) { setStat(t().nolist); return null; }
-    const list = [...new Set(ids)].sort().map((id) => [id, id]);
+    // a cloud key: the known models first (their own order and label), then every other chat model, strongest
+    // first, by a readable name with the id beside it; a local server's ids stay as they are, in order
+    const uniq = [...new Set(ids)];
+    const known = p.local ? [] : (p.models || []).map((e) => e[0]).filter((id) => uniq.includes(id));
+    const order = p.local ? uniq.sort() : known.concat(AI.rankModels(uniq, 'max').filter((id) => !known.includes(id)));
+    const list = order.map((id) => { const n = AI.modelName(cfg.provider, id); return [id, n.desc ? n.name + ' · ' + n.desc : n.name]; });
     cfg.liveModels = { provider: cfg.provider, list };
     fillModels();
     setStat(list.length ? t().listed(list.length) : t().nolist);
