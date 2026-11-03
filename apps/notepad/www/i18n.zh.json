@@ -1,0 +1,24 @@
+{
+  "_lang": "zh",
+  "title_new": "新增 (Ctrl+N)",
+  "title_open": "打开 (Ctrl+O)",
+  "title_save": "保存 (Ctrl+S)",
+  "title_saveas": "另存为(Ctrl + Shift + S)",
+  "ph_editor": "在此处键入… · Ctrl + S保存· Ctrl + O打开· Ctrl + N新建",
+  "stats": {
+    "one": "{chars} chars · {lines} line",
+    "other": "{chars} chars · {lines} lines"
+  },
+  "loaded": "已加载{name}",
+  "could_not_open": "无法打开{name}",
+  "open_failed_unbound": "无法读取{name} —文件未被触及；保存将询问保存位置。",
+  "open_hint": "从文件指挥官打开文件以在此处编辑它。",
+  "saved_file": "已保存{name}",
+  "save_failed": "保存失败（ {status} ）",
+  "save_pending": "保存待定：无法访问操作系统文件API。",
+  "dlg_saveas": "另存为",
+  "dlg_open": "打开文本文件",
+  "confirm_dirty": "未保存的更改。继续并丢失它们？",
+  "prompt_save": "另存为（ SD路径） ：",
+  "prompt_open": "打开（ SD路径） ："
+}

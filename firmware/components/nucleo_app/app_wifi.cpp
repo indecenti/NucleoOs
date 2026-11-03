@@ -317,7 +317,7 @@ static void fmt_dur(char *b, int cap, int sec)
 
 // ---- choice lists -------------------------------------------------------------
 static const struct { const char *code, *name; } LANGS[] = {
-    { "it", "Italiano" }, { "en", "English" }, { "es", "Espanol" }, { "fr", "Francais" }, { "de", "Deutsch" },
+    { "it", "Italiano" }, { "en", "English" }, { "es", "Espanol" }, { "fr", "Francais" }, { "de", "Deutsch" }, { "zh", "Chinese" },
 };
 static int lang_idx(void)
 {

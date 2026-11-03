@@ -77,7 +77,7 @@ All files: **[latest release](https://github.com/indecenti/NucleoOs/releases/lat
 ## Why NucleoOS is the best system for the Cardputer
 
 Most Cardputer firmwares are a menu of tools. **NucleoOS is an actual OS** — a registry of
-capability‑scoped apps, an event‑sourced bus, pairing/auth, OTA with rollback, an i18n engine,
+capability‑scoped apps, an event‑sourced bus, pairing/auth, OTA with rollback, an i18n engine (six UI languages),
 notifications, a power manager, and **two complete user interfaces** that share one contract:
 
 | | **Native firmware** (on the 240×135 screen) | **NucleoOS Web** (any browser on your LAN) |
@@ -427,7 +427,7 @@ Every demanding feature respects a tight set of RAM tricks, validated on hardwar
 - **Multi‑runtime apps** — `web` (zero device RAM) · `vm` (sandboxed on‑device bytecode) ·
   `service` (native C) · `elf` (PSRAM‑gated). Install/run without reflashing.
 - **OS services** — capability‑scoped manifests, OTA A/B with rollback, PIN pairing + cookie auth,
-  delta SD‑sync (never `/MIR`), OS‑wide live i18n in 5 languages (IT/EN/DE/ES/FR; ANIMA and its
+  delta SD‑sync (never `/MIR`), OS‑wide live i18n in 6 languages (IT/EN/DE/ES/FR/**ZH**; ANIMA and its
   voice stay IT/EN), notifications, an OS‑wide **mic gate** and
   **download gate** (Web Locks), and a service‑worker update gate.
 - **Robustness gates** run before any build ships:

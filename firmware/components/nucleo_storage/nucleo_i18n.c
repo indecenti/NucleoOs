@@ -33,7 +33,7 @@ static void norm_lang(char *dst, size_t cap, const char *code)
 {
     if (code && code[0] && code[1]) {
         char a = (char)(code[0] | 0x20), b = (char)(code[1] | 0x20);
-        static const char *ok[] = { "it", "en", "es", "fr", "de" };
+        static const char *ok[] = { "it", "en", "es", "fr", "de", "zh" };
         for (size_t i = 0; i < sizeof(ok) / sizeof(ok[0]); i++) {
             if (a == ok[i][0] && b == ok[i][1]) { dst[0] = a; dst[1] = b; dst[2] = '\0'; return; }
         }

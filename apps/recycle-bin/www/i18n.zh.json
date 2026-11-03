@@ -1,0 +1,29 @@
+{
+  "_lang": "zh",
+  "title": "回收站",
+  "restore_all": "全部还原",
+  "empty_bin": "清空垃圾桶",
+  "restore": "恢复",
+  "count": {
+    "one": "· {count} item",
+    "other": "· {count} items"
+  },
+  "count_empty": "· empty",
+  "empty_title": "回收站是空的。",
+  "empty_hint": "您在File Commander中删除的文件会降落在这里，并且可以还原。",
+  "toast_restored_to": "已恢复至{path}",
+  "toast_restore_failed": "还原失败",
+  "toast_deleted_perm": "已永久删除",
+  "toast_restored_all": "已还原所有内容",
+  "toast_bin_emptied": "垃圾桶已清空",
+  "confirm_empty": {
+    "one": "要永久删除{count}项吗？此操作无法撤消。",
+    "other": "要永久删除{count}项吗？此操作无法撤消。"
+  },
+  "confirm_purge": "永久删除“{name}” ？此操作无法撤消。",
+  "toast_delete_failed": "删除失败—项目仍在垃圾桶中",
+  "err_index_unreadable": "当前无法读取回收站—未更改任何内容。请重试。",
+  "load_failed": "目前无法读取回收站。请稍后重试。",
+  "toast_pair_needed": "设备上需要配对",
+  "toast_restore_partial": "{count} not restored (try again)"
+}

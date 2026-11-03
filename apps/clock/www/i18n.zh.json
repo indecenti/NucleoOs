@@ -1,0 +1,21 @@
+{
+  "_lang": "zh",
+  "tab_clock": "按点儿",
+  "tab_timer": "倒计时",
+  "stopwatch": "码表",
+  "lap": "圈",
+  "cfg_title": "时钟设置",
+  "opt_24h": "24小时制",
+  "opt_seconds": "显示秒数",
+  "opt_analog": "模拟时钟Comment",
+  "dev_init": "device clock…",
+  "dev_unreachable": "device unreachable",
+  "dev_synced": "nucleo NTP-synced · {hh}:{mm}",
+  "dev_synced_drift": "nucleo NTP-synced · drift {secs}s ({hh}:{mm})",
+  "dev_waiting": "nucleo: waiting for NTP sync",
+  "dev_browser_set": "time set from browser",
+  "timer_done": "Time's up!",
+  "save_ok": "已保存到设备",
+  "save_fail": "保存失败—设备无法访问",
+  "save_unread": "未保存—无法读取您保存的设置。请在设备可访问时重试。"
+}

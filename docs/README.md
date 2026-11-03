@@ -38,7 +38,7 @@ source of truth for how the system works.
 | [media.md](media.md) | Media playback model — the device serves bytes, the browser decodes; plus the optional on-device audio/video paths. |
 | [voice.md](voice.md) | The on-device push-to-talk keyword recognizer (AVCEB: MFCC · CMN · DTW), trained by the Voice Manager app. |
 | [tts.md](tts.md) | Offline concatenative bilingual (IT/EN) voice — what ANIMA speaks aloud and why. |
-| [i18n.md](i18n.md) | The internationalization engine — five UI languages (it · en · es · fr · de), one language signal, per-app catalogs, the parity gate; ANIMA itself stays IT/EN. |
+| [i18n.md](i18n.md) | The internationalization engine — six UI languages (it · en · es · fr · de · **zh**), one language signal, per-app catalogs, the parity gate; ANIMA itself stays IT/EN; native TFT stays Latin/English when zh is selected. |
 | [keydeck.md](keydeck.md) | KeyDeck — turning the Cardputer into a Wi-Fi keyboard + monitor for the sibling NucleoV2 (ESP32-P4). |
 
 ## ANIMA — the assistant

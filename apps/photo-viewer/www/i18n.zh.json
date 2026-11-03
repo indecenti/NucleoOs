@@ -1,0 +1,8 @@
+{
+  "_lang": "zh",
+  "header_name": "图片",
+  "btn_wallpaper": "设为壁纸",
+  "img_failed": "无法加载{path}",
+  "dir_failed": "无法读取{dir} —设备是否可以访问？",
+  "dir_empty": "{dir}没有图片"
+}

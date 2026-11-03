@@ -1,0 +1,20 @@
+{
+  "_lang": "zh",
+  "title": "Metronome",
+  "tab.metronome": "Metronome",
+  "tab.tuner": "调谐器",
+  "start": "启动",
+  "stop": "停止",
+  "tap": "TAP TEMPO",
+  "sig": "节奏/酒吧",
+  "subdiv": "線點間隔",
+  "kbd.startstop": "start/stop",
+  "kbd.tap": "tap",
+  "a4": "A4",
+  "tuner.listen": "收聽",
+  "tuner.stop": "停止",
+  "tuner.hint": "在麦克风附近播放单个音符。",
+  "tuner.busy": "麦克风正在使用中",
+  "tuner.denied": "麦克风访问被拒绝",
+  "tuner.err": "麦克风不可用。"
+}
