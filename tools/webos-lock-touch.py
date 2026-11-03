@@ -42,6 +42,11 @@ def main() -> int:
         if rel in kept:
             continue
         files[rel] = digest(full)
+    # Drop stale entries removed from the tree (keeps lock aligned with git ls-files).
+    live = set(tracked_sources())
+    for rel in list(files):
+        if rel not in live and rel not in kept:
+            del files[rel]
     with open(LOCK, "w", encoding="utf-8", newline="\n") as f:
         json.dump(lock, f, indent=1, sort_keys=True, ensure_ascii=False)
         f.write("\n")
