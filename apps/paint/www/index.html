@@ -453,7 +453,7 @@ function isTyping(){ const a=document.activeElement; return !!(a && (a.tagName==
 
 // ---- language (IT/EN inline + es/fr/de overrides) — single source: the OS language (anima.lang).
 // Reads anima.lang first, then the document lang (kept in sync by /nucleo-i18n.js). Returns the FULL code.
-function paintLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; }catch{ return 'en'; } }
+function paintLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de','zh'].includes(l)?l:'en'; }catch{ return 'en'; } }
 function EN(){ return paintLang()==='en'; }
 // LT(it,en): pick the right string for the active language at call time. Used by every runtime message.
 // (Named LT, not L — `L` is the pervasive per-layer variable name throughout this file.)
@@ -1275,7 +1275,7 @@ $('layBlend').addEventListener('change', e=>setLayerBlend(e.target.value));
 // ===== NATURAL-LANGUAGE COMMAND BAR — type a phrase, Paint does it. DETERMINISTIC + OFFLINE (nlcommand.js,
 // zero hallucination). Fully ISOLATED in Paint: nothing routes through ANIMA; ANIMA still never touches images.
 let NLC=null; import('./nlcommand.js').then(m=>NLC=m).catch(()=>{});
-function cmdLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; }catch{ return 'en'; } }
+function cmdLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de','zh'].includes(l)?l:'en'; }catch{ return 'en'; } }
 function cmdResp(text,cls){ const r=$('cmdResp'); if(r){ r.textContent=text||''; r.className='cmd-resp'+(cls?' '+cls:''); } if(text) setMsg(text); }
 async function runCommand(text){ if(!text||!text.trim()) return; if(!NLC){ try{ NLC=await import('./nlcommand.js'); }catch{ cmdResp(LT('Modulo comandi non caricato','Commands module not loaded'),'warn'); return; } }
   const d=NLC.parseCommand(text, cmdLang());
@@ -1305,7 +1305,7 @@ window.addEventListener('keydown', e=>{ if(e.ctrlKey||e.metaKey||isTyping()) ret
 
 // ---- guided tutorial (tour.js) — bilingual, first-run + Aiuto menu ----
 let _tour=null;
-function tourLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; }catch{ return 'en'; } }
+function tourLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de','zh'].includes(l)?l:'en'; }catch{ return 'en'; } }
 async function loadTour(){ if(!_tour) _tour=await import('./tour.js'); return _tour; }
 async function startTour(force){ try{ const m=await loadTour(); m.startTour({ lang:tourLang(), force:!!force, modelDir:'/apps/paint/models/sdxs-512-dreamshaper-sketch', inShell }); }catch(e){ setMsg(LT('Tutorial non disponibile','Tutorial unavailable')); } }
 async function showShortcuts(){ try{ const m=await loadTour(); m.showShortcuts(tourLang()); }catch{} }
@@ -1341,7 +1341,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
   const escapeHtml = (s)=> String(s==null?'':s).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
   // Active OS language for Atelier strings. Reads anima.lang first (the canonical OS signal), then the
   // document lang (kept in sync by /nucleo-i18n.js). Mirrors the top-level paintLang().
-  const uiLang = ()=> { try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; }catch{ return 'en'; } };
+  const uiLang = ()=> { try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de','zh'].includes(l)?l:'en'; }catch{ return 'en'; } };
   // Same shape + behaviour as the top-level LT(): IT/EN inline, es/fr/de from the shared PAINT_L10N table.
   const UL = (it,en)=> { const l=uiLang(); if(l==='it') return it; if(l==='en') return en; return (PAINT_L10N[l]&&PAINT_L10N[l][en])||en; };
 

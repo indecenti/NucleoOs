@@ -764,7 +764,7 @@ const server = createServer(async (req, res) => {
       if (!isAuthed(req)) return reject401(res);
       let b = {}; try { b = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch {}
       const lg = String(b.lang || '').trim();
-      if (/^(it|en|es|fr|de)$/.test(lg)) {
+      if (/^(it|en|es|fr|de|zh)$/.test(lg)) {
         const changed = lg !== simState.lang;
         simState.lang = lg;
         persistSimLang(lg);                            // like nucleo_i18n.c persist_lang(): settings.json ui.language, always

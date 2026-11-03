@@ -1348,7 +1348,7 @@
     // ── Multilingual: it/en are inline; es/fr/de come from ANIMA_L10N, keyed by the ENGLISH string.
     //    TR() routes the inline it/en ternaries; UI.es/fr/de are deep-mapped from UI.en; the settings
     //    data-i18n loop consults the same table. ANIMA/LLM system prompts are intentionally left as-is.
-    function LANG(){ const l=(get('anima.lang','en')||'en').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; }   // English is the fallback floor (matches the OS i18n engine BASE)
+    function LANG(){ const l=(get('anima.lang','en')||'en').slice(0,2); return ['it','en','es','fr','de','zh'].includes(l)?l:'en'; }   // English is the fallback floor (matches the OS i18n engine BASE)
     const ANIMA_L10N = {
       es: {
         "offline assistant": "asistente offline",
@@ -2849,7 +2849,7 @@
     const _lastL={};
     function L(k,vars){ const v=I18N.t(k,vars,'anima'); if(v===k) return _lastL[k+'|'+(vars?JSON.stringify(vars):'')]||''; _lastL[k+'|'+(vars?JSON.stringify(vars):'')]=v; return v; }
     (function(){ const mp=(o,tr)=>{ if(typeof o==='string')return (tr&&tr[o]!=null)?tr[o]:o; if(Array.isArray(o))return o.map(v=>mp(v,tr)); if(o&&typeof o==='object'){ const r={}; for(const k in o) r[k]=mp(o[k],tr); return r; } return o; };
-      for(const L of ['es','fr','de']) UI[L]=mp(UI.en, ANIMA_L10N[L]); })();
+      for(const L of ['es','fr','de','zh']) UI[L]=mp(UI.en, ANIMA_L10N[L]); })();
 
     // ---- state ----------------------------------------------------------------
     let lang    = LANG();
@@ -4786,7 +4786,7 @@
     // the user wrote in — never a model's guess. null = not one of those (agenda, season) or no status.
     // The language a question was written in, for the replies the browser composes itself: the general detector
     // first, the short-question cues second ("ouvre les réglages" was answered "Apro Impostazioni"), else the OS one.
-    const qLangOf=(q, P)=>{ const l=(ctxkit.userLanguage && ctxkit.userLanguage(q)) || (P && P.guessLang && P.guessLang(q)) || lang; return ['it','en','es','fr','de'].includes(l) ? l : lang; };
+    const qLangOf=(q, P)=>{ const l=(ctxkit.userLanguage && ctxkit.userLanguage(q)) || (P && P.guessLang && P.guessLang(q)) || lang; return ['it','en','es','fr','de','zh'].includes(l) ? l : lang; };
     async function liveStatusReply(q, P){
       const k=P.liveKind && P.liveKind(q); if(!k) return null;
       const st=await statusNow(1500);
@@ -4931,7 +4931,7 @@
       const w = await weatherMod();
       // the weather NLU reads all five languages; the reply follows the language the question was written in
       const P=await cascadeMod(); const ql=(ctxkit.userLanguage && ctxkit.userLanguage(q)) || (P.guessLang && P.guessLang(q)) || lang;
-      const wl = ['it','en','es','fr','de'].includes(ql) ? ql : 'en';
+      const wl = ['it','en','es','fr','de','zh'].includes(ql) ? ql : 'en';
       if(!w.parseWeather(q, { lang:wl }).isWeather) return null;
       try{
         return await AM.withStep(_turnSig, AM.STEP_MS.web, (signal)=> w.weatherAnswer(q, wl,
@@ -6002,7 +6002,7 @@
       // Two modes. The old /offline /ibrida /online spellings still work and land on the mode they meant.
       if(['private','privato','privata','privado','privada','prive','privé','privat','offline','off'].includes(cmd)){ chooseMode('private'); toast(L('modeNow',{ mode:modeLabel('private') }),'ok'); return true; }
       if(['auto','ibrida','hybrid','on','online','only'].includes(cmd)){ chooseMode('auto'); toast(L('modeNow',{ mode:modeLabel('auto') }),'ok'); return true; }
-      if(['it','en','es','fr','de'].includes(cmd)){ chooseLang(cmd); return true; }
+      if(['it','en','es','fr','de','zh'].includes(cmd)){ chooseLang(cmd); return true; }
       if(['impostazioni','settings','config'].includes(cmd)){ openSettings(true); return true; }
       if(['voce','voice','speak'].includes(cmd)){ if(arg==='on'||arg==='off') webVoice=(arg==='on'); else webVoice=!webVoice; set('anima.webvoice',webVoice?'1':'0'); if(!webVoice) stopSpeaking(); applyAll(); toast(webVoice?(TR('Voce browser ON', 'Browser voice ON')):(TR('Voce browser OFF', 'Browser voice OFF')),'ok'); return true; }
       if(cmd==='compact'||cmd==='compatta'){ const n=compactSession(true); toast(n?(TR('Contesto compattato in background (','Context compacted in background (')+n+TR(' turni)',' turns)')):TR('Niente da compattare','Nothing to compact'),'ok'); return true; }
@@ -6461,7 +6461,7 @@
     $('clear').addEventListener('click',doClear);
 
     // ---- choose handlers ------------------------------------------------------
-    function chooseLang(l){ l=(l||'').slice(0,2); lang=['it','en','es','fr','de'].includes(l)?l:'en'; set('anima.lang',lang); applyAll(); renderAll();
+    function chooseLang(l){ l=(l||'').slice(0,2); lang=['it','en','es','fr','de','zh'].includes(l)?l:'en'; set('anima.lang',lang); applyAll(); renderAll();
       if(!recording){ if(voice&&voice.available) micBtn.title=idleTitle(); else if(voice&&voice.reason==='insecure') micBtn.title=L('voiceNeedsSecure'); }
       try{ if(I18N.lang!==lang) I18N.setLang(lang); }catch{}   // broadcast ANIMA's own toggle to the whole OS (its onChange repaints the catalog strings)
       try{ if(_keyKm&&_keyKm.setLang) _keyKm.setLang(lang); }catch{}   // relabel the shared key manager live

@@ -82,7 +82,7 @@ async function accountsToSet() {
 }
 
 const ONB_KEY = 'nucleo.onboarded';
-const CODES = ['it', 'en', 'es', 'fr', 'de'];
+const CODES = ['it', 'en', 'es', 'fr', 'de', 'zh'];
 // The language is the i18n engine's (window.NucleoI18N), which also knows the device's and the
 // browser's. Reading only localStorage was wrong twice: on a fresh browser the key is empty (the intro
 // came out in the wrong language), and picking the already-active language doesn't write it (setLang
@@ -363,7 +363,7 @@ function runWizard(acc = null, accountOnly = false) {
     function renderLanguage() {
       const langs = (window.NucleoI18N && window.NucleoI18N.LANGS)
         || [{ code: 'it', label: 'Italiano', flag: '🇮🇹' }, { code: 'en', label: 'English', flag: '🇬🇧' },
-            { code: 'es', label: 'Español', flag: '🇪🇸' }, { code: 'fr', label: 'Français', flag: '🇫🇷' }, { code: 'de', label: 'Deutsch', flag: '🇩🇪' }];
+            { code: 'es', label: 'Español', flag: '🇪🇸' }, { code: 'fr', label: 'Français', flag: '🇫🇷' }, { code: 'de', label: 'Deutsch', flag: '🇩🇪' }, { code: 'zh', label: '简体中文', flag: '🇨🇳' }];
       const cur = lang();
       // Re-render AFTER the switch: setLang loads the catalogs asynchronously, and an immediate
       // render still read the previous language.

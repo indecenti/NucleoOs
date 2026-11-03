@@ -1,0 +1,7 @@
+{
+  "_lang": "zh",
+  "app_title": "媒体播放器",
+  "library_hint": "库·/数据/音乐—由您的浏览器解码",
+  "empty_list": "无音频输入/数据/音乐",
+  "load_failed": "无法访问库—设备是否在线？"
+}

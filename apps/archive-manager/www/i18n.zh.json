@@ -1,0 +1,54 @@
+{
+  "_lang": "zh",
+  "app_title": "归档管理器",
+  "extract_here": "在此解压缩",
+  "compress": "压缩",
+  "status_idle": "未加载存档。正在等待存档...",
+  "empty_open_hint": "从文件指挥官打开.zip文件",
+  "working": "正在运行...",
+  "prog_files": {
+    "one": "{done} / {total} file",
+    "other": "{done} / {total} files"
+  },
+  "err_parse_compress": "解析要压缩的文件时出错。",
+  "loading_file": "正在加载{path}...",
+  "loading_archive": "加载存档",
+  "items_in": {
+    "one": "{count} item in {path}",
+    "other": "{count} items in {path}"
+  },
+  "error_x": "错误： {msg}",
+  "open_failed": "无法打开存档。",
+  "archive_empty": "存档为空",
+  "extracting_to": "正在提取至{dir}",
+  "extracting_file": "正在排出{name}... ({done}/{total})",
+  "extract_complete": "数据提取完毕!",
+  "files_extracted": {
+    "one": "{count} file extracted.",
+    "other": "{count} files extracted."
+  },
+  "extract_error": "提取性别错误",
+  "create_in": "在{dir}创建存档",
+  "name_label": "姓名：",
+  "preparing": "准备文件。",
+  "scanning": "正在扫描目录...",
+  "compressing": "压缩中...",
+  "reading_file": "正在读取{name}... ({i}/{total})",
+  "generating_zip": "正在生成.zip文件...",
+  "saving_archive": "正在保存存档...",
+  "compress_complete": "压缩完成！",
+  "saved_x": "已保存{name}",
+  "compress_error": "压缩错误",
+  "no_files": "没有要压缩的文件",
+  "err_read_file": "无法从设备中读取存档文件（错误{status} ）。",
+  "err_write_file": "无法写入{name} （错误{status} ）。",
+  "err_mkdir": "无法创建文件夹{name} （错误{status} ）。",
+  "err_list_dir": "无法列出文件夹{name} （错误{status} ）。",
+  "err_read_src": "无法读取{name} （错误{status} ）。",
+  "err_save_archive": "无法保存{name} （错误{status} ）。",
+  "confirm_overwrite": {
+    "one": "{count} file already exists and will be overwritten:\n{names}\n\nExtract anyway?",
+    "other": "{count} files already exist and will be overwritten:\n{names}\n\nExtract anyway?"
+  },
+  "format_label": "格式："
+}

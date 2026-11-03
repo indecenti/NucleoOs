@@ -1,0 +1,16 @@
+{
+  "_lang": "zh",
+  "prev_month": "上个月",
+  "next_month": "下月",
+  "new_event_ph": "新活动… （回车）",
+  "pick_day": "选择一天",
+  "empty_events": "没有事件。在下面添加一个。",
+  "saved_device": "已保存到设备",
+  "save_failed": "保存失败—设备无法访问",
+  "more_events": {
+    "one": "+ {count}更多",
+    "other": "+ {count}更多"
+  },
+  "read_failed": "无法从设备读取日历。编辑已暂停，因此不会覆盖任何内容，请稍后重试。",
+  "not_paired": "此浏览器未与设备配对，请配对以保存日历。"
+}

@@ -39,6 +39,7 @@ export const LANGS = [
   { code: 'es', label: 'Español',  flag: '🇪🇸', dir: 'ltr', locale: 'es-ES' },
   { code: 'fr', label: 'Français', flag: '🇫🇷', dir: 'ltr', locale: 'fr-FR' },
   { code: 'de', label: 'Deutsch',  flag: '🇩🇪', dir: 'ltr', locale: 'de-DE' },
+  { code: 'zh', label: '简体中文', flag: '🇨🇳', dir: 'ltr', locale: 'zh-CN' },
 ];
 const LANG_CODES = LANGS.map((l) => l.code);
 const META = Object.fromEntries(LANGS.map((l) => [l.code, l]));

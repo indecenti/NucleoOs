@@ -98,7 +98,7 @@ reference/*
 # (TTS voice packs from a GitHub Release; the Forge GGUF streams from Hugging Face)
 deploy/sd-safe/data/tts/**/clips.pcm
 deploy/sd-safe/apps/anima/www/forge/models/**/*.gguf
-tools/anima/.cache/teacher_*.npy
+tools/.i18n-zh-cache.json
 oversized-assets/parts/qwen-coder-gguf/
 oversized-assets/parts/teacher-npy/
 

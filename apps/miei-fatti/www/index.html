@@ -191,7 +191,7 @@
   const SETTINGS = '/system/config/settings.json';
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  const lang = () => { const l=(localStorage.getItem('anima.lang')||'en').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; };
+  const lang = () => { const l=(localStorage.getItem('anima.lang')||'en').slice(0,2); return ['it','en','es','fr','de','zh'].includes(l)?l:'en'; };
 
   // ---- ANIMA teach grammar (matches firmware tool_teach: LEAD + copula è/sono/significa) -----
   const LEAD = { it:'ricorda che ', en:'remember that ', es:'recuerda que ', fr:'souviens-toi que ', de:'merke dir, dass ' };
@@ -545,7 +545,7 @@
     // Mirror the OS language to the canonical anima.lang signal, but only as a FALLBACK: localStorage is
     // authoritative (the Settings app + i18n engine keep it live), so never clobber an already-set language.
     const cur=localStorage.getItem('anima.lang');
-    if(!['it','en','es','fr','de'].includes(cur) && ['it','en','es','fr','de'].includes(s?.ui?.language)) localStorage.setItem('anima.lang',s.ui.language); }
+    if(!['it','en','es','fr','de','zh'].includes(cur) && ['it','en','es','fr','de','zh'].includes(s?.ui?.language)) localStorage.setItem('anima.lang',s.ui.language); }
 
   // ---- boot ------------------------------------------------------------------
   async function load(){ const r=await readFacts(); readOk=r.ok; readStatus=r.ok?0:r.status;
@@ -583,7 +583,7 @@
 
   // ---- live: language, external edits, OS shortcuts -------------------------
   window.addEventListener('message',(e)=>{ const d=e.data||{};
-    if(d.type==='set-language'&&['it','en','es','fr','de'].includes(d.lang)){ localStorage.setItem('anima.lang',d.lang); loadStrings(d.lang).then(()=>{ applyStrings(); loadProfileInputs(); }); }
+    if(d.type==='set-language'&&['it','en','es','fr','de','zh'].includes(d.lang)){ localStorage.setItem('anima.lang',d.lang); loadStrings(d.lang).then(()=>{ applyStrings(); loadProfileInputs(); }); }
     if(d.t==='fs.changed'&&typeof d.d?.path==='string'){ if(d.d.path.endsWith('settings.json')) loadLangSetting().then(()=>window.__mieiFattiRelang()); else if(d.d.path===FILE&&!dirty) load().then(()=>{ loadProfileInputs(); render(); }); }
     if(d.type==='os-shortcut'){ const a=d.action; if(a==='new') (mode==='flat'?$('subj'):$('rel-a')).focus(); else if(a==='save') flushSave(); else if(a==='refresh') load().then(()=>{ loadProfileInputs(); render(); }); }
   });

@@ -36,7 +36,7 @@ export const SOURCES = [
   { id: 'p4', kind: 'p4-json', base: 'https://indecenti.github.io/nucleoos-p4-store/', needs: ['apps.p4'], install: 'device', where: 'p4' },
 ];
 
-export const LANGS = ['it', 'en', 'es', 'fr', 'de'];
+export const LANGS = ['it', 'en', 'es', 'fr', 'de', 'zh'];
 const INDEX_MAGIC = 'nucleoos-cardputer-index-v2';
 const SIG_MAGIC = 'nucleoos-cardputer-sig-v1';
 const PKG_MAGIC = 'nucleoos-cardputer-pkg-v1';

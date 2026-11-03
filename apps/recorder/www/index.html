@@ -228,7 +228,7 @@
   // System language (OS Settings → localStorage 'anima.lang'); English is the floor. Feeds the LOGIC
   // paths only: ANIMA / transcription / summary language and the browser SpeechRecognition locale.
   // Every user-facing label now resolves through the centralized i18n engine (t() / data-i18n).
-  const sysLang = () => { const l=(localStorage.getItem('anima.lang')||'en').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; };
+  const sysLang = () => { const l=(localStorage.getItem('anima.lang')||'en').slice(0,2); return ['it','en','es','fr','de','zh'].includes(l)?l:'en'; };
   // BCP-47 tag for the browser SpeechRecognition live transcript, per OS language.
   const SR_LOCALE = { it:'it-IT', en:'en-US', es:'es-ES', fr:'fr-FR', de:'de-DE' };
   // Centralized i18n engine: load core + the recorder catalog for the active OS language, auto-fill

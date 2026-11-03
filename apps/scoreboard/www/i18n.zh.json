@@ -1,0 +1,17 @@
+{
+  "_lang": "zh",
+  "title": "得分表",
+  "undo": "撤销",
+  "add": "플레이어",
+  "target": "获胜分数",
+  "sort": "按分数排序",
+  "reset": "新游戏",
+  "foot": "已保存在此设备上。无需连接即可工作。",
+  "player": "玩家",
+  "name": "Name",
+  "remove": "移除",
+  "winner": "胜场",
+  "empty": "添加带有+ Player的玩家。",
+  "confirm.remove": "删除{name} ？",
+  "confirm.reset": "是否将所有分数重置为零？"
+}

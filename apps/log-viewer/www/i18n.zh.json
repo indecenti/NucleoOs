@@ -1,0 +1,33 @@
+{
+  "_lang": "zh",
+  "app_title": "日志查看器",
+  "filter_ph": "筛选器类型/数据",
+  "btn_pause": "暂停",
+  "btn_resume": "恢复执行",
+  "btn_history": "历史",
+  "btn_clear": "清空",
+  "btn_diag": "🩺 Diagnose",
+  "btn_health": "健康",
+  "follow": "遵守",
+  "history_hint": "从SD卡读取事件日志（按需—否则保持设备空闲）",
+  "diag_hint": "构建一个紧凑的健康摘要（设备+ ANIMA ）以粘贴到AI",
+  "health_hint": "自适应探头：合成实时健康事件（仅在可见时，从不在繁重工作期间）",
+  "diag_title": "健康诊断",
+  "diag_sub": "复制此块并将其粘贴到AI以进行诊断。",
+  "gathering": "正在收集诊断…",
+  "diag_err": "诊断不可用",
+  "btn_copy": "📋 Copy",
+  "btn_regen": "↻ Regenerate",
+  "btn_close": "关闭",
+  "copied": "复制到剪贴板",
+  "empty_state": "收听现场活动……<br><span style=\"font-size:11px\">按“<b>🩺诊断</b>”以获取健康读数，或按“<b>历史记录</b>”以获取SD日志。</span>",
+  "events": {
+    "one": "{count} event",
+    "other": "{count} events"
+  },
+  "events_of": "（共{total} ）",
+  "status_paused": "已暂停",
+  "src_journal": "journal: {lines} lines on SD",
+  "src_none": "no journal on SD yet",
+  "src_error": "journal unavailable"
+}

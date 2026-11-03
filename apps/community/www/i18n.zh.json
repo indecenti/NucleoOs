@@ -1,0 +1,15 @@
+{
+  "_lang": "zh",
+  "title": "粉丝论坛",
+  "lede": "加入NucleoOS Discord ：提问，展示您的构建，首先获取发布消息。",
+  "open": "打开Discord",
+  "copy": "复制邀请链接",
+  "copied": "已复制！",
+  "scan": "使用手机扫描",
+  "bot.title": "快速解答",
+  "bot.text": "在服务器中，键入<code>/ask</code>和您的问题，或<code>/guide</code>获取简短指南。",
+  "help.title": "更多說明",
+  "help.text": "在帮助论坛中打开帖子：每个帖子有一个问题，包括您的主板和固件版本。",
+  "rules.title": "友善待人，注意安全",
+  "rules.text": "切勿发布密码、API密钥或Wi-Fi详细信息。没有ROM或盗版文件。"
+}

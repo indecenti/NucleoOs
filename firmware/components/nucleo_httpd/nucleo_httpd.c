@@ -1486,7 +1486,7 @@ static esp_err_t anima_get(httpd_req_t *req)
         // es/fr/de user gets an online answer in their own language. Unknown codes keep the OS default.
         if (httpd_query_key_value(query, "lang", lv, sizeof(lv)) == ESP_OK && lv[0] && lv[1]) {
             char a = (char)(lv[0] | 0x20), b = (char)(lv[1] | 0x20);
-            static const char *ok[] = { "it", "en", "es", "fr", "de" };
+            static const char *ok[] = { "it", "en", "es", "fr", "de", "zh" };
             for (size_t i = 0; i < sizeof(ok) / sizeof(ok[0]); i++)
                 if (a == ok[i][0] && b == ok[i][1]) { lang[0] = a; lang[1] = b; lang[2] = 0; break; }
         }
