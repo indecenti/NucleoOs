@@ -51,13 +51,16 @@ SECTIONS
   .rodata         : { *(.rodata .rodata.* .rodata1) }                    :rodata
   .eh_frame       : { KEEP (*(.eh_frame)) }                              :rodata
   .gcc_except_table : { *(.gcc_except_table .gcc_except_table.*) }       :rodata
+  /* Constants holding pointers (C++ vtables, tables of functions, an engine's ROM tables): read-only once relocated,
+     and the loader relocates the rodata segment while it copies the module to flash. Here they cost no RAM (they
+     used to sit in the data segment: MicroQuickJS's stdlib tables alone were 11 KB of a module's heap). */
+  .data.rel.ro    : { *(.data.rel.ro.local* .data.rel.ro .data.rel.ro.*) } :rodata
 
   . = ALIGN(16);
   /* GCC for Xtensa emits constructors in .ctors / destructors in .dtors: they join the init / fini arrays the
      loader runs (DT_INIT_ARRAY / DT_FINI_ARRAY). Order across files is unspecified, as in C++ itself. */
   .init_array     : { KEEP (*(SORT(.init_array.*))) KEEP (*(.init_array)) KEEP (*(SORT(.ctors.*))) KEEP (*(.ctors)) } :data
   .fini_array     : { KEEP (*(SORT(.fini_array.*))) KEEP (*(.fini_array)) KEEP (*(SORT(.dtors.*))) KEEP (*(.dtors)) } :data
-  .data.rel.ro    : { *(.data.rel.ro.local* .data.rel.ro .data.rel.ro.*) } :data
   .dynamic        : { *(.dynamic) }                                      :data :dynamic
   .got            : { *(.got) }                                          :data
   .data           : { *(.data .data.* .data1) }                          :data

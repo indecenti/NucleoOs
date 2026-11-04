@@ -41,6 +41,11 @@ bool code_run(void *arena, size_t arena_size, const char *src, size_t len, const
 // separator, backslashes). Returns false when refused. Exposed for the agent's tools and the host gate.
 bool code_path(const char *root, const char *rel, char *out, size_t cap);
 
+// The model's markdown made readable on the device's fonts (240x135, ASCII): **bold**, __bold__ and `code` lose
+// their marks, ``` fences become two-space indented lines, "# Title" loses its hashes, [text](url) keeps the
+// text. The model is asked for plain text; this is the guarantee. Returns the length written to `out`.
+size_t code_md_plain(const char *in, char *out, size_t cap);
+
 #ifdef __cplusplus
 }
 #endif

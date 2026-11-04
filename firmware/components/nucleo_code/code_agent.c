@@ -63,9 +63,11 @@ static const char *SYS =
     "tables), no long prose, and never name your internal tools.\n\n"
     "JavaScript on this device is MicroQuickJS, a strict ES5 subset. Follow it exactly:\n"
     "- Use var and function declarations only. NOT available: let, const, arrow functions, template literals, classes, "
-    "destructuring, spread, default parameters, Map, Set, Symbol, Promise, async/await, generators, modules.\n"
-    "- Missing methods: Object.assign/values/entries/freeze; Array find/findIndex/includes/from/fill; String includes/startsWith/"
-    "endsWith/padStart/padEnd; Number.isInteger. Write tiny helpers instead (e.g. s.indexOf(x) >= 0).\n"
+    "destructuring, spread, default parameters, Symbol, Promise, async/await, generators, modules.\n"
+    "- Added by the device (loaded only when your code names them): Object.assign/values/entries; Array find/findIndex/"
+    "includes/fill, Array.from/of; String includes/startsWith/endsWith/padStart/padEnd; Number.isInteger/isFinite; and a "
+    "small Map and Set (new Map(pairs), get/set/has/delete/forEach, size is a property, keys()/values()/entries() return "
+    "arrays, no for...of over them).\n"
     "- Available: Object.keys, Array map/filter/forEach/reduce/sort/indexOf/slice/splice/concat/join, for...of over arrays, "
     "String split/replace/replaceAll/trim/repeat/charCodeAt/toUpperCase (ASCII only), RegExp, JSON, Math, typed arrays, "
     "try/catch, Date.now() (no other Date method).\n"
@@ -430,7 +432,8 @@ static char *build_body(agent_t *a)
     if (eff) { cJSON *oc = cJSON_AddObjectToObject(root, "output_config"); cJSON_AddStringToObject(oc, "effort", eff); }
     // system: the instructions (cached) + the environment
     char env[400];
-    snprintf(env, sizeof env, "<env>\nWorkspace: %s\nModel: %s\n</env>", a->cfg.root, a->cfg.model);
+    snprintf(env, sizeof env, "<env>\nWorkspace: %s\nModel: %s\nAnswer in: %s (code, file names and identifiers stay as they are)\n</env>",
+             a->cfg.root, a->cfg.model, a->cfg.lang ? a->cfg.lang : "the language of the user's message");
     cJSON *sys = cJSON_AddArrayToObject(root, "system");
     cJSON *s1 = cJSON_CreateObject(); cJSON_AddStringToObject(s1, "type", "text"); cJSON_AddStringToObject(s1, "text", SYS);
     cJSON *cc = cJSON_AddObjectToObject(s1, "cache_control"); cJSON_AddStringToObject(cc, "type", "ephemeral");

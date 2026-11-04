@@ -6,6 +6,23 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+- **ANIMA chooses the cloud model and its effort.** On the Cardputer, ANIMA's IA tab has Model (Sonnet 5.5,
+  Opus 5.5, Haiku 5.5, Fable 5.1, and the other providers you have a key for) and Effort (low to max, medium by
+  default); in the web OS, a model picker next to ANIMA's input (and `/model`) groups every model you can reach,
+  and Settings > AI has the effort too. Both write the same file, so the two stay in step.
+- **Native app ABI level 9**: what a language engine needs (double-precision and 64-bit arithmetic helpers,
+  setjmp/longjmp) and the JSON builders, for Nucleo Code, the coding agent coming to the Native C store.
+
+### Changed
+- **ANIMA answers with the model you chose.** With a key and the network up, the model answers every question that
+  is not the device's own (time, battery, files, timers, apps stay local and instant); what the offline brain found
+  becomes its notes, what you told ANIMA about yourself its memory, and when the model does not answer the next one
+  does (the other Claude model, then your other providers). Mode Off is still fully offline.
+- **Claude answers on the device are streamed**, so thinking at any effort no longer trips the watchdog, and a
+  request that reached Anthropic is never sent twice (each retry used to be billed).
+- **Native apps use less RAM**: constants holding pointers (C++ vtables, function tables) now stay in flash.
+
 ## [0.8.6] — 2026-11-04
 
 ### Added

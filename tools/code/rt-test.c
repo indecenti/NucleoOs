@@ -93,6 +93,19 @@ int main(void)
         printf("%-14s %6u KB  %6u B  %u\n", P[i].name, (unsigned)lo, (unsigned)m.live_max, m.ms);
         CHECK(lo && lo <= 64, "%s needs more than 64 KB on the host", P[i].name);
     }
+    // the model's markdown made plain for the device's fonts
+    {
+        char md[512];
+        code_md_plain("# Fatto\nHo scritto **calc.js** con `evaluate()`.\n```js\nprint(1)\n```\nVedi [la guida](http://x).", md, sizeof md);
+        CHECK(!strcmp(md, "Fatto\nHo scritto calc.js con evaluate().\n  print(1)\nVedi la guida."), "md_plain: [%s]", md);
+        code_md_plain("**a** __b__ c", md, 4);   // bounded
+        CHECK(strlen(md) < 4, "md_plain bound: [%s]", md);
+    }
+    // the compatibility chunks load only when named, and work
+    r = run(24, "print('ab'.includes('b'), [1,2].find(function(v){return v>1}), Object.values({a:7})[0], '5'.padStart(2,'0'), new Map([['k',1]]).get('k'));", 2000);
+    CHECK(r.ok && strstr(g_out, "true 2 7 05 1"), "compat: %s [%s]", r.error, g_out);
+    r = run(24, "gc(); print(sys.mem().used);", 2000);
+    { int plain = atoi(g_out); CHECK(plain > 0 && plain < 6000, "no compat cost for a plain script: %d", plain); }
     printf(fails ? "FAILED %d\n" : "ALL OK\n", fails);
     return fails != 0;
 }

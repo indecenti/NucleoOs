@@ -13,6 +13,8 @@
 #include "nucleo_board.h"      // NUCLEO_SD_MOUNT
 #include "nucleo_exclusive.h"  // NX_SOLO
 #include "nucleo_theme.h"
+#include "app_large.h"        // lg:: two-screen kit
+#include "nucleo_touch.h"
 #include <M5GFX.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -182,8 +184,75 @@ static void draw_output(int y)
     }
 }
 
+// ---- two screens (CLAUDE.md "never a mirror"): the 320x240 panel holds the files (tap = pick, tap again = run)
+// and the run: result, time, memory, output; the Cardputer becomes the companion (the pick, the verdict, keys).
+static const char *row_right_lg(int i, void *) { return (S->ran[0] && !strcmp(S->files[i], S->ran)) ? (S->res.ok ? "ok" : "!") : ""; }
+static unsigned short row_color_lg(int i, void *) { return (S->ran[0] && !strcmp(S->files[i], S->ran) && !S->res.ok) ? 0xF800 : C_INK; }
+static int s_lg_scroll;
+
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    const int W = d.width(), H = d.height(), LW = 128;
+    int y = lg::header("Code", "work/bench", ACCENT);
+    lg::text_list(0, y, LW, H - y, S->nfiles, S->sel, &s_lg_scroll, row_label, row_right_lg, row_color_lg, nullptr, ACCENT);
+    const int x = LW + 4, w = W - x - 4;
+    lg::panel(x, y + 2, w, H - y - 4, lg::card());
+    if (!S->ran[0]) {
+        lg::message(x, y + 2, w, H - y - 4, L("Tocca un file", "Tap a file", "Toca un archivo", "Touchez un fichier", "Tippe eine Datei"),
+                    L("tocca ancora per eseguirlo, B per il banco", "tap again to run it, B for the bench", "otra vez para ejecutarlo, B banco",
+                      "encore pour le lancer, B banc", "nochmal zum Starten, B Bench"), ACCENT);
+        nucleo_touch_commit();
+        return;
+    }
+    lg::font(1);
+    d.setTextDatum(top_left);
+    char st[64];
+    d.setTextColor(S->res.ok ? 0x07E0 : 0xF800, lg::card());
+    if (S->res.ok) snprintf(st, sizeof st, "%s  ok  %u ms", S->ran, (unsigned)S->res.ms);
+    else snprintf(st, sizeof st, "%s  %s", S->ran, S->res.timeout ? "timeout" : S->res.oom ? "memory" : "error");
+    d.drawString(st, x + 6, y + 8);
+    d.setFont(&fonts::Font0); d.setTextSize(1);
+    d.setTextColor(C_DIM, lg::card());
+    snprintf(st, sizeof st, "live %u B / arena %u KB   heap %u KB", (unsigned)S->res.live_max, S->arena / 1024, S->heap_after / 1024);
+    d.drawString(st, x + 6, y + 26);
+    int yy = y + 38;
+    if (!S->res.ok) {
+        d.setTextColor(0xF800, lg::card());
+        char er[200]; snprintf(er, sizeof er, "%s %s", S->res.where, S->res.error);
+        yy += 10 * lg::wrap(er, x + 6, yy, w - 12, 10, 3);
+    }
+    d.setTextColor(C_INK, lg::card());
+    const int cols = (w - 12) / 6;                          // Font0: 6 px a column
+    int line = 0; const char *p = S->out;
+    while (*p && yy + 9 <= H - 6) {
+        const char *e = p; int c = 0;
+        while (*e && *e != '\n' && c < cols && c < 60) { e++; c++; }
+        if (line++ >= S->scroll) { char b[64]; memcpy(b, p, (size_t)(e - p)); b[e - p] = 0; d.drawString(b, x + 6, yy); yy += 10; }
+        p = *e == '\n' ? e + 1 : e;
+    }
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void)
+{
+    d.fillRect(0, nucleo_app_content_top(), 240, nucleo_app_content_height(), C_BG);
+    int y = lg::comp_head("Code", ACCENT);
+    d.setFont(&fonts::Font2); d.setTextSize(1); d.setTextDatum(top_left);
+    d.setTextColor(C_INK, C_BG);
+    d.drawString(S->nfiles ? S->files[S->sel] : "-", 8, y + 6);
+    if (S->ran[0]) {
+        char st[64];
+        snprintf(st, sizeof st, "%s: %s %ums", S->ran, S->res.ok ? "ok" : (S->res.where[0] ? S->res.where : "error"), (unsigned)S->res.ms);
+        d.setTextColor(S->res.ok ? 0x07E0 : 0xF800, C_BG);
+        d.drawString(st, 8, y + 28);
+    }
+    lg::comp_keys(L("invio esegui  b banco  su/giu", "enter run  b bench  up/dn", "intro ejecuta  b banco", "entree lancer  b banc", "enter starten  b Bench"));
+}
+
 static void on_draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int y = app_ui_title("Code", ACCENT, S->output ? S->ran : "phase 1: runtime");
     if (S->output) { draw_output(y); nucleo_app_set_hint(L("su/giu scorri  invio lista  b banco", "up/dn scroll  enter list  b bench", "arr/ab  intro lista  b banco", "haut/bas  entree liste  b banc", "auf/ab  enter Liste  b Bench")); return; }
     int bottom = nucleo_app_content_top() + nucleo_app_content_height();
@@ -194,6 +263,12 @@ static void on_draw(void)
 static void on_key(int key, char ch)
 {
     if (ch == 'b' || ch == 'B') { bench_all(); nucleo_app_request_draw(); return; }
+    if (nucleo_app_two_screens()) {                          // taps on the panel's list arrive as keys
+        int t = lg::row_tap(key, ch, s_lg_scroll, S->nfiles, &S->sel);
+        if (t == 2 && S->nfiles) { run_file(S->files[S->sel], 5000); S->output = true; }
+        if (t) { nucleo_app_request_draw(); return; }
+        if (key == NK_UP && S->scroll > 0 && S->output) { S->scroll--; nucleo_app_request_draw(); return; }
+    }
     if (S->output) {
         if (key == NK_UP && S->scroll > 0) S->scroll--;
         else if (key == NK_DOWN) S->scroll++;
@@ -206,7 +281,7 @@ static void on_key(int key, char ch)
     nucleo_app_request_draw();
 }
 
-static void on_enter(void) { ensure_bench(); scan(); S->output = false; nucleo_app_request_draw(); }
+static void on_enter(void) { ensure_bench(); scan(); S->output = false; s_lg_scroll = 0; nucleo_app_request_draw(); }
 static void on_exit(void) {}
 
 static const nucleo_app_ram_t APP_RAM[] = { { (void **)&S, sizeof(State) }, { nullptr, 0 } };
@@ -217,7 +292,7 @@ extern "C" void nucleo_register_code(void)
         "code", "Code", "Tools", "Nucleo Code",
         'C', ACCENT, on_enter, on_key, nullptr, on_draw, on_exit,
         NX_SOLO,          // a fresh heap with Wi-Fi up: the model's TLS and the engine's arena take turns
-        APP_RAM, nullptr
+        APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

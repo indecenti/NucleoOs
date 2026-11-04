@@ -34,6 +34,7 @@ typedef struct {
     const char *root;           // the workspace (absolute); every tool path resolves under it
     const char *model;          // "claude-sonnet-5-5"
     const char *effort;         // "low".."max" (NULL = medium)
+    const char *lang;           // the OS language the answers are written in ("Italian"...; NULL = the user's)
     int         max_calls;      // model calls per user turn (0 = 30)
     int         max_tokens;     // per model call (0 = 16000)
     void       *arena;          // run_js engine arena (only used while a script runs)

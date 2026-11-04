@@ -161,7 +161,50 @@ JSValue js_nc_sys_sleep(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
 JSValue js_nc_sys_time(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
 { (void)this_val; (void)argc; (void)argv; return JS_NewInt64(ctx, RT(ctx)->env->now_ms ? RT(ctx)->env->now_ms() : 0); }
 
+
+size_t code_md_plain(const char *in, char *out, size_t cap)
+{
+    size_t o = 0; bool fence = false, bol = true;
+    if (!cap) return 0;
+    for (const char *p = in; *p && o + 4 < cap; ) {
+        if (bol && !strncmp(p, "```", 3)) {                     // a fence line: drop it, indent what it holds
+            fence = !fence;
+            while (*p && *p != '\n') p++;
+            if (*p) p++;
+            continue;
+        }
+        if (bol && fence) { out[o++] = ' '; out[o++] = ' '; }
+        if (bol && !fence && *p == '#') { while (*p == '#') p++; while (*p == ' ') p++; bol = false; continue; }
+        bol = false;
+        if (!fence && ((p[0] == '*' && p[1] == '*') || (p[0] == '_' && p[1] == '_'))) { p += 2; continue; }
+        if (!fence && *p == '`') { p++; continue; }
+        if (!fence && *p == '[') {                                // [text](url) -> text
+            const char *e = strchr(p, ']');
+            if (e && e[1] == '(' && strchr(e, ')')) { for (const char *q = p + 1; q < e && o + 4 < cap; q++) out[o++] = *q; p = strchr(e, ')') + 1; continue; }
+        }
+        if (*p == '\n') bol = true;
+        out[o++] = *p++;
+    }
+    out[o] = 0;
+    return o;
+}
+
 #include "code_stdlib.h"            // the ROM tables (gen/ on the device, build/code-host on the PC)
+#include "code_compat.h"            // the compatibility chunks (code_compat.js)
+
+// Does `src` name one of `needles` (space-separated)? A false positive only costs a chunk's memory.
+static bool names_any(const char *src, size_t len, const char *needles)
+{
+    char w[40];
+    for (const char *p = needles; *p; ) {
+        while (*p == ' ') p++;
+        size_t n = 0; while (p[n] && p[n] != ' ' && n < sizeof w - 1) { w[n] = p[n]; n++; }
+        w[n] = 0; p += n;
+        if (!n) break;
+        for (size_t i = 0; i + n <= len; i++) if (src[i] == w[0] && !memcmp(src + i, w, n)) return true;
+    }
+    return false;
+}
 
 // ---- running -------------------------------------------------------------------------------------------
 static int rt_interrupt(JSContext *ctx, void *opaque)
@@ -207,7 +250,10 @@ bool code_run(void *arena, size_t arena_size, const char *src, size_t len, const
     JS_SetContextOpaque(ctx, &r);
     JS_SetLogFunc(ctx, rt_log);
     JS_SetInterruptHandler(ctx, rt_interrupt);
-    JSValue v = JS_Eval(ctx, src, len, filename, 0);
+    JSValue v = JS_UNDEFINED;
+    for (size_t i = 0; i < sizeof CODE_COMPAT / sizeof CODE_COMPAT[0] && !JS_IsException(v); i++)
+        if (names_any(src, len, CODE_COMPAT[i].needles)) v = JS_Eval(ctx, CODE_COMPAT[i].src, strlen(CODE_COMPAT[i].src), "compat", 0);
+    if (!JS_IsException(v)) v = JS_Eval(ctx, src, len, filename, 0);
     if (JS_IsException(v)) {
         JSValue ex = JS_GetException(ctx);
         JSCStringBuf b;

@@ -74,7 +74,8 @@ int main(int argc, char **argv)
     _mkdir(ws);
     void *arena = malloc(arena_kb * 1024);
     static char toolbuf[64 * 1024];
-    agent_cfg_t cfg = { ws, model, effort, 30, 16000, arena, arena_kb * 1024, toolbuf, sizeof toolbuf };
+    const char *lang = getenv("NC_LANG");                // the bench answers in the prompt's language unless set
+    agent_cfg_t cfg = { ws, model, effort, lang, 30, 16000, arena, arena_kb * 1024, toolbuf, sizeof toolbuf };
     agent_io_t io = { post, NULL, on_text, on_tool, on_tool_done, NULL, on_todo, NULL, now_ms, sleep_ms, NULL };
     agent_t *a = agent_new(&cfg, &io);
     int64_t t0 = now_ms();
