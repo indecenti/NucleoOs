@@ -234,6 +234,8 @@ static uint16_t s_tile[16 * 16];         // one Hextile tile when a rectangle is
 static bool s_full = true;               // the next request asks for the whole view (not incremental)
 static int  s_pending = 0;               // requests the server still owes us
 static char s_pw[NUCLEO_SECRET_MAX];     // the password, only between the form / the secret store and the login
+static bool s_auth_vnc = false;          // this session answered a VNC password challenge
+static bool s_need_pw = false;           // it ended because the PC wants a (different) password: ask for it
 
 static bool des_ok()
 {
@@ -245,12 +247,13 @@ static bool des_ok()
 
 static bool vnc_auth()
 {
-    if (!s_pw[0]) { fail(L("il PC chiede la password", "the PC wants a password", "el PC pide contrasena", "le PC veut un mot de passe", "der PC will ein Passwort")); return false; }
+    if (!s_pw[0]) { s_need_pw = true; fail(L("il PC chiede la password", "the PC wants a password", "el PC pide contrasena", "le PC veut un mot de passe", "der PC will ein Passwort")); return false; }
     if (!des_ok()) { fail("DES self-test"); return false; }
     uint8_t ch[16];
     if (!rd(ch, 16)) return false;
     vnc_des_response(s_pw, ch);
     memset(s_pw, 0, sizeof s_pw);
+    s_auth_vnc = true;
     return wr(ch, 16);
 }
 
@@ -266,6 +269,7 @@ static bool security_result(bool v38)
         const int keep = n < sizeof why - 1 ? (int)n : (int)sizeof why - 1;
         rd(why, keep); skip(n - (uint32_t)keep);
     }
+    if (s_auth_vnc) s_need_pw = true;
     fail(L("password sbagliata", "wrong password", "contrasena incorrecta", "mot de passe faux", "falsches Passwort"));
     return false;
 }
@@ -975,6 +979,7 @@ static void run_session(const char *name)
 {
     memset(&M, 0, sizeof M);
     M.t_start = esp_timer_get_time();
+    s_auth_vnc = s_need_pw = false;
     s_status[0] = 0;
     s_cur_name = name;
     bool switched = false;
@@ -1143,6 +1148,7 @@ static Saved s_edit;
 static int s_edit_i = -1;                 // -1 = a new one
 static int s_fsel = 0, s_fscroll = 0;
 static bool s_del_armed = false, s_pw_touched = false, s_pw_known = false;
+static bool s_pw_prompt = false;          // opened because the PC asked: Enter on the password saves and connects
 static char s_port_txt[8];
 
 static int form_rows() { return s_edit_i >= 0 ? F_N : F_DEL; }
@@ -1179,11 +1185,12 @@ static void open_form(int i)
     s_pw_touched = false;
     s_pw_known = false;
     if (i >= 0) { char k[16]; pw_key(s_edit.uid, k); char tmp[NUCLEO_SECRET_MAX]; s_pw_known = nucleo_secret_get(k, tmp, sizeof tmp) && tmp[0]; memset(tmp, 0, sizeof tmp); }
-    s_fsel = 0; s_fscroll = 0; s_del_armed = false; s_status[0] = 0;
+    s_fsel = 0; s_fscroll = 0; s_del_armed = false; s_status[0] = 0; s_pw_prompt = false;
     s_page = P_FORM;
     nucleo_app_request_draw();
 }
-static void form_leave() { memset(s_pw, 0, sizeof s_pw); s_page = P_LIST; s_status[0] = 0; }
+static void form_leave() { memset(s_pw, 0, sizeof s_pw); s_page = P_LIST; s_status[0] = 0; s_pw_prompt = false; }
+static void connect_sel();
 static void form_save()
 {
     s_edit.port = atoi(s_port_txt);
@@ -1200,7 +1207,9 @@ static void form_save()
     if (s_edit_i >= 0) { s_saved[s_edit_i] = s_edit; s_sel = s_edit_i; }
     else { s_saved[s_nsaved] = s_edit; s_sel = s_nsaved++; }
     conns_save();
+    const bool again = s_pw_prompt;
     form_leave();
+    if (again) connect_sel();                            // the PC asked for it: try the new password straight away
 }
 static void form_delete()
 {
@@ -1220,6 +1229,7 @@ static void form_activate()
         case F_AUTO: s_edit.autoc = !s_edit.autoc; break;
         case F_SAVE: form_save(); break;
         case F_DEL:  if (s_del_armed) form_delete(); else s_del_armed = true; break;
+        case F_PASS: if (s_pw_prompt) { form_save(); break; } if (s_fsel + 1 < form_rows()) s_fsel++; break;
         default:     if (s_fsel + 1 < form_rows()) s_fsel++; break;     // a text field: Enter goes on
     }
 }
@@ -1236,9 +1246,16 @@ static void connect_sel()
     static char name[24];
     snprintf(name, sizeof name, "%s", s.name);
     s_exit_app = false;
+    const int sel = s_sel;
     run_session(name);
     s_drawn = -1;
-    if (s_exit_app) nucleo_app_exit();
+    if (s_exit_app) { nucleo_app_exit(); return; }
+    if (s_need_pw && s_test_setup == false) {            // the PC wants a password: ask for it right here
+        char why[sizeof s_status]; snprintf(why, sizeof why, "%s", s_status);
+        open_form(sel);
+        s_fsel = F_PASS; s_pw_touched = true; s_pw_prompt = true;
+        snprintf(s_status, sizeof s_status, "%s", why);
+    }
 }
 
 // list rows: the saved PCs, then "new"
@@ -1339,6 +1356,7 @@ static void paint_comp_form()
         d.fillRect(cx, Y(47), 3, 22, ACCENT);
         const char *hint = s_fsel == F_PORT ? L("solo cifre, di solito 5900", "digits only, usually 5900", "solo cifras, normalmente 5900", "chiffres, souvent 5900", "nur Ziffern, meist 5900")
                          : s_fsel == F_HOST ? L("IP o nome, es. 192.168.1.20", "IP or name, e.g. 192.168.1.20", "IP o nombre, ej. 192.168.1.20", "IP ou nom, ex. 192.168.1.20", "IP oder Name, z.B. 192.168.1.20")
+                         : s_fsel == F_PASS && s_pw_prompt ? L("scrivila e premi Invio: mi collego", "type it and press Enter to connect", "escribela y pulsa Intro", "tapez-le puis Entree", "eingeben, dann Enter")
                          : s_fsel == F_PASS ? L("max 8 caratteri, resta nel Cardputer", "8 characters max, kept in the Cardputer", "max 8, queda en el Cardputer", "8 max, reste dans le Cardputer", "max 8, bleibt im Cardputer")
                          : L("come lo vuoi chiamare", "what to call it", "como llamarlo", "comment l'appeler", "wie er heissen soll");
         text(8, 84, hint, C_DIM);
@@ -1439,7 +1457,7 @@ static void on_tick()
             connect_sel();
             // Bench card: run the sessions back to back and write how each one ended (a crash leaves the log short).
             for (int run = 1; run <= s_retries + 1; run++) {
-                FILE *lf = fopen(VNC_DIR "/sessions.log", run == 1 ? "w" : "a");
+                FILE *lf = s_test_setup ? fopen(VNC_DIR "/sessions.log", run == 1 ? "w" : "a") : nullptr;
                 if (lf) { fprintf(lf, "%d %s %s heapmin=%u\n", run, C.fail ? "error" : "ok", M.err, (unsigned)M.free_min); fclose(lf); }
                 if (run > s_retries) break;
                 esp_task_wdt_reset(); vTaskDelay(pdMS_TO_TICKS(1500));
