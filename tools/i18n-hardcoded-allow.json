@@ -1,6 +1,6 @@
 {
   "_comment": "Baseline of pre-existing hardcoded UI text (tools/i18n-hardcoded-check.mjs). Each entry is DEBT: route it through the i18n engine, then delete it here. NEW text not listed fails the gate. `global` applies to every surface (brand/symbol tokens).",
-  "global": [],
+  "global": ["中文"],
   "surfaces": {
     "shell": [
       "/data",
