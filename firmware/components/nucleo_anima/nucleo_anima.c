@@ -1717,6 +1717,29 @@ enum { AG_LITERAL = 0, AG_AUTO = 1, AG_RETRIEVE = 2 };
 // it must contain a real word — a run of >=3 letters (accented UTF-8 bytes count as letters). Pure
 // digits/separators/symbols (dates, numbers, "A1:B10", "x7gq2", "??") have no such run -> not askable.
 // The deterministic L0/L1/math tiers still run first; this only fences off the fabrication-prone tiers.
+
+// MODEL FIRST (2026-11-04). With a cloud key and the network up, the model the user chose answers every
+// turn except the ones only the DEVICE can answer: its live state and actions (launch, system readings,
+// tools: files, timers, calendar, calculations), the user's own memory, the skills that compute an exact
+// value (date maths, conversions, Ohm, Roman numerals, world clock...), live data (weather, FX, news) and
+// a pending clarify/slot. Everything else the offline brain produced (L0 static FAQ, L1 cards, HDC/facet
+// reasoning, Wikipedia/Wikidata, dialogue glue, an honest miss) is handed to the model with the whole
+// conversation; the offline answer stays as the fallback when no model answers.
+static bool a_local_answer(const anima_result_t *r)
+{
+    if (r->action == ANIMA_ACT_LAUNCH || r->action == ANIMA_ACT_SYSTEM || r->action == ANIMA_ACT_TOOL) return true;
+    if (r->awaiting || !strcmp(r->state, "clarify") || !strcmp(r->state, "tool")) return true;
+    static const char *const loc[] = {
+        "clarify", "calc", "convert", "date", "math", "ohm", "percent", "prime", "roman", "spreadsheet",
+        "worldclock", "fx", "weather", "news", "agenda", "ram", "network", "capabilities", "add_event",
+        "offer_reminder", "profile", "recall", "teach", "not_ready", "open_app", "close_app", "open_file",
+        "create_file", "image_gen", "tool",
+        "grok", "code", "teacher", "longform", "online_only", "online_only_offline",   // already the model's
+        NULL };
+    for (int i = 0; loc[i]; i++) if (!strcmp(r->intent, loc[i])) return true;
+    return false;
+}
+
 static bool a_is_askable(const char *q)
 {
     while (*q == ' ' || *q == '\t') q++;
@@ -3904,6 +3927,10 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // unconfigured/offline — we deliberately do NOT fall back to the offline tiers (that's hybrid "On").
     if (s_online_only) {
         bool avail = nucleo_anima_online_available();
+        {   // the device's own answers first: the model cannot read the clock, the battery or open an app
+            anima_result_t lr = l0_query(q, en);
+            if (lr.tier != ANIMA_TIER_NONE && a_local_answer(&lr)) { r = lr; mem_update(&r); goto done; }
+        }
         // CODE even in online-only: take the dedicated code path (code prompt, bigger token budget,
         // verbatim long_reply) — the prose teacher's clip_reply sentence-truncates on '.' and so
         // mangles a snippet mid-statement (cuts "pygame.display." in half).
@@ -4479,6 +4506,21 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // honest "non lo so": r already holds the NONE result from try_cascade.
 
 done: {
+        // MODEL FIRST (see a_local_answer): whatever the offline brain answered, the configured model answers
+        // instead when the turn is not the device's own. The offline answer is the fallback.
+        if (q && q[0] && q[1] && !a_local_answer(&r) && nucleo_anima_online_available() && nucleo_anima_teacher_configured()) {
+            anima_result_t mr; memset(&mr, 0, sizeof mr);
+            // the offline brain's finding becomes the model's <notes>: the two layers cooperate, not compete
+            bool knew = r.reply[0] && (r.tier == ANIMA_TIER_FACT || r.tier == ANIMA_TIER_STITCH || r.tier == ANIMA_TIER_REMOTE);
+            nucleo_anima_online_set_notes(knew ? r.reply : NULL);
+            bool ok = a_is_code_request(q) ? nucleo_anima_online_code(q, en, &mr) : nucleo_anima_online_chat_ctx(q, ctx, nctx, en, &mr);
+            if (ok && mr.reply[0]) {
+                r = mr; mem_update(&r);
+                snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);
+                s_session.dirty = true;
+                need_subj[0] = 0;              // the model read the whole conversation: no subject check
+            }
+        }
         g_anima_stage = 0; g_anima_phase = 0;  // DIAG: query returned cleanly (no crash this turn)
         // Anaphoric follow-up answered by a card that never names the thread's subject = an off-topic
         // match (not a fabrication, so the halluc gates can't see it) -> honest miss instead.

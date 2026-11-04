@@ -111,6 +111,8 @@ int nucleo_anima_online_chat_ctx(const char *input, const anima_turn_t *turns, i
 // CODE generation: returns ONE professional, fenced code snippet (verbatim, newlines preserved, larger
 // budget than chat). For "scrivimi/dammi un esempio di codice python". Returns 1 if answered, 0 if no key/offline.
 int nucleo_anima_online_code(const char *input, bool en, anima_result_t *out);
+// What the offline brain found for this turn, handed to the next model turn as <notes> (consumed once).
+void nucleo_anima_online_set_notes(const char *notes);
 
 // LONG-FORM in segments: returns the NEXT ~one-paragraph chunk of a complete long answer (story, essay,
 // detailed explanation), continuing from `tail` (the end of what was written so far) WITHOUT repeating
