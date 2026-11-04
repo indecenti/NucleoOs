@@ -43,18 +43,18 @@ import { runWorkerLocal } from './local-worker.js';   // the LOCAL transport (F0
 import { smokeApp, smokeSummary, stageAppRecipe } from './app-recipe.js';   // F5: install-and-smoke on the device + app-recipe learning   // ONE intelligent queue for every device-touching call (reads pooled, writes + Gemini proxy exclusive)
 // multi-model router + capability matrix (image/whisper) for the capability tools + the shared key headers / relay rule
 // (authHeaders sends no key for a sealed-vault placeholder; viaProxy relays only Gemini — or everything on a sealed vault)
-// + the single sonnet-5 thinking rule
-import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError, whisperUrl, anthThinking, authHeaders as aiAuth, viaProxy } from '/ai.js';
+// + the one effort rule (withEffort: output_config.effort, never a `thinking` field)
+import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError, whisperUrl, withEffort, authHeaders as aiAuth, viaProxy } from '/ai.js';
 // NOTE: hardware (IR/WiFi/GPIO) is deliberately NOT a tool here. "ANIMA Code" is a general coding/
 // workspace agent (our Claude Code); device skills live INSIDE the dedicated apps (e.g. the IR Remote
 // app embeds its own scoped ANIMA skill via anima-skill.js). Centralising skills per-app cuts
 // cross-domain hallucinations and keeps this agent focused on code.
 
 export const MODELS = {
-  orchestrator: 'claude-haiku-4-5',   // cheap/fast triage + small tasks
+  orchestrator: 'claude-haiku-5-5',   // cheap/fast triage + small tasks
   worker: 'claude-sonnet-5-5',        // default doer
   hard: 'claude-opus-5-5',            // deep reasoning
-  small: 'claude-haiku-4-5',
+  small: 'claude-haiku-5-5',
 };
 const MAX_STEPS = 14;            // tool-use rounds per worker
 const MAX_PAUSE = 6;             // server-tool (web_search) continuations
@@ -99,8 +99,9 @@ async function callAnthropic(cfg, { model, system, messages, tools, toolChoice, 
   const base = (cfg.base || 'https://api.anthropic.com').replace(/\/+$/, '');
   for (let attempt = 0; attempt < 3; attempt++) {
     // Body is built FROM THE CURRENT MODEL on every attempt, so the 5xx fallback swap below can't
-    // send the old model's parameters (thinking guard included — anthThinking is the one shared rule).
-    const body = { model, max_tokens: maxTokens, messages, ...anthThinking(model) };
+    // send the old model's parameters. withEffort (ai.js) is the one shared rule: the user's effort where the model
+    // takes it, room for the thinking a 5.x model always does, and never a `thinking` field (5.x rejects "disabled").
+    const body = withEffort(cfg, { model, max_tokens: maxTokens, messages });
     // Cache the (turn-stable) system prompt so the loop's 2nd…Nth steps reuse it instead of re-billing the
     // full block each round — the seeded workspace context makes this worth it. Ignored by APIs without caching.
     if (system) body.system = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];

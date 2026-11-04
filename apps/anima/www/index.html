@@ -345,6 +345,47 @@
     .webtog:hover{opacity:1;background:var(--hover-strong)}
     .webtog[aria-pressed="true"]{filter:none;opacity:1;border-color:var(--accent2);
       background:color-mix(in srgb,var(--accent2) 20%,transparent);box-shadow:0 0 0 1px var(--accent2) inset}
+    /* ◆ model picker (button by the input + pop-over; /model) */
+    .mpick{flex:none;align-self:flex-end;display:flex;align-items:center;gap:6px;max-width:220px;height:30px;border:1px solid var(--line2);background:var(--hover);color:var(--muted);
+      border-radius:var(--r-pill);padding:0 10px 0 9px;font:11.5px var(--mono);cursor:pointer;transition:color var(--t),border-color var(--t)}
+    .mpick:hover,.mpick[aria-expanded="true"]{color:var(--text);border-color:var(--accent)}
+    .mpick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    .mpick .mpi{color:var(--accent);font-size:10px}
+    .mpick .mpl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .mpick .mpc{opacity:.65;font-size:9px}
+    .mp{position:fixed;z-index:70;display:none;flex-direction:column;max-height:min(64vh,540px);background:var(--panel);border:1px solid var(--line2);border-radius:var(--r-lg);box-shadow:var(--sh-2);overflow:hidden}
+    .mp.open{display:flex;animation:palin .14s var(--ease)}
+    .mp-q{border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--text);padding:11px 13px;font:13px inherit;outline:none}
+    .mp-list{overflow:auto;padding:4px 5px 6px;overscroll-behavior:contain}
+    .mp-g{font:600 10px var(--mono);letter-spacing:.6px;text-transform:uppercase;color:var(--dim);padding:10px 9px 4px}
+    .mp-row{display:flex;align-items:center;gap:9px;padding:7px 9px;min-height:38px;border-radius:var(--r);cursor:pointer}
+    .mp-row.sel{background:var(--hover-strong)}
+    .mp-row.off{cursor:default;opacity:.55}
+    .mp-ck{width:14px;flex:none;color:var(--accent);font-weight:700;text-align:center}
+    .mp-t{display:grid;min-width:0;flex:1}
+    .mp-t b{font-weight:600;color:var(--text);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mp-t small{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mp-e{flex:none;font:10.5px var(--mono);color:var(--accent2)}
+    .mp-e:empty{display:none}
+    .mp-b{flex:none;border:1px solid var(--line2);border-radius:var(--r-pill);padding:0 7px;font:10px var(--mono);color:var(--muted)}
+    .mp-eff{display:flex;align-items:center;flex-wrap:wrap;gap:5px;border-top:1px solid var(--line);padding:7px 9px}
+    .mp-eff[hidden]{display:none}
+    .mp-el{font:600 10px var(--mono);letter-spacing:.5px;text-transform:uppercase;color:var(--dim);margin-right:3px}
+    .mp-ei{border:1px solid var(--line2);background:transparent;color:var(--muted);border-radius:var(--r-pill);padding:3px 9px;min-height:26px;font:11px inherit;cursor:pointer}
+    .mp-ei:hover{color:var(--text);border-color:var(--accent)}
+    .mp-ei.on{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:600}
+    .mp-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding:6px 8px}
+    .mp-setup{border:0;background:transparent;color:var(--accent2);cursor:pointer;font:12px inherit;padding:5px 7px;border-radius:var(--r-sm)}
+    .mp-setup:hover,.mp-setup:focus-visible{background:var(--hover)}
+    .mp-keys{font:10.5px var(--mono);color:var(--dim)}
+    .mp-empty{display:grid;gap:6px;margin:6px 4px;padding:12px;border:1px dashed var(--line2);border-radius:var(--r);color:var(--muted);font-size:12px;line-height:1.45}
+    .mp-empty b{color:var(--text);font-size:12.5px}
+    .mp-connect{justify-self:start;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:var(--r-pill);padding:5px 12px;cursor:pointer;font:600 12px inherit}
+    .mp-connect:hover{background:var(--hover)}
+    .mp-load{padding:16px 12px;color:var(--muted);font-size:12px}
+    /* a phone: the message box keeps its room, the button shrinks to its diamond (the name stays its aria-label) */
+    @media (max-width:560px){.mpick{max-width:96px}.mpick .mpc{display:none}.mp-keys{display:none}}
+    @media (max-width:440px){.mpick{padding:0 9px}.mpick .mpl{display:none}}
     /* Sources block under a web-grounded answer */
     .sources{margin-top:9px;border-top:1px solid var(--line2);padding-top:7px}
     .sources .lab{display:block;color:var(--muted);font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px}
@@ -1061,6 +1102,7 @@
         <span class="prompt">›</span>
         <textarea id="q" rows="1" autocomplete="off" autofocus spellcheck="false" aria-label="Message" data-i18n-attr="aria-label:messageAria"></textarea>
         <button class="mic" id="mic" type="button" title="Dictate" aria-label="Dictate" data-i18n-attr="aria-label:micAria" hidden>🎤</button>
+        <button class="mpick" id="mpick" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="mp"><span class="mpi" aria-hidden="true">◆</span><span class="mpl">Auto</span><span class="mpc" aria-hidden="true">▾</span></button>
         <button class="webtog" id="webtog" type="button" aria-pressed="false" title="Web" aria-label="Web">🌐</button>
         <button class="send" id="send" type="submit">Send</button>
       </div>
@@ -1107,6 +1149,7 @@
     import { compact as ctxCompact, usage as ctxUsage } from './context.js';
     import * as ctxkit from './contextkit.js';   // context engine: token-budgeted, injection-safe messages[] for any backend
     import * as AI from '/ai.js';                 // shell registry: the ONE provider table + teacher.json vault + cloud wire
+    import * as MP from './model-pick.js';      // the model picker's options and picks (pure, tested in Node)
     import * as AM from '/anima-mode.js';         // the ONE engine-mode definition + turn abort/timeout helper (shared with the copilot)
     // Lazily imported modules, memoized ONLY once they loaded. The Cardputer drops connections while it
     // reboots into its web-server mode (the shell connecting triggers it) or while its few sockets are busy,
@@ -3517,6 +3560,7 @@
       d.appendChild(det); w.appendChild(d); logEl.appendChild(w);
     }
     function renderAll(){
+      try{ syncPick(); }catch{}   // a conversation switch brings its own model (the picker's choice)
       // A re-render (session switch, language change) is not news: silence the live region while the whole
       // transcript is rebuilt, so a screen reader does not read the conversation out from the top.
       bulk=true; logEl.setAttribute('aria-live','off'); logEl.innerHTML=''; welcomeBox();
@@ -4976,14 +5020,18 @@
       const req = { system, messages: Array.isArray(userOrMessages) ? userOrMessages : [{role:'user',content:String(userOrMessages||'')}],
                     maxTokens: opts.maxTokens||1024, temperature: typeof opts.temperature==='number' ? opts.temperature : 0.4 };
       const proxyUrl = AI.providerOf(provider).proxy ? (u)=>'/api/llm?url='+encodeURIComponent(u) : null;
-      const streaming = !!opts.onDelta && !proxyUrl;
+      // The address, the key header and the effort follow shell/ai.js (one rule for every app): a sealed vault's saved
+      // key rides the device relay, never a header; an Anthropic body carries the chosen effort (output_config).
+      const effort = opts.effort || '';
+      const wire = { apiUrl:AI.apiUrl, authHeaders:AI.authHeaders, prepare:(c, b)=>AI.withEffort({ ...c, effort }, b) };
+      const streaming = !!opts.onDelta && !/^\/api\/llm\?/.test(AI.apiUrl({ provider, base, key, proxy:!!proxyUrl }, '/x'));
       // The model is CHOSEN, not pinned (AI.withAutoModel): the saved one while the provider still serves it,
       // else the best one it serves for the tier; a model the provider retired is replaced and the call retried.
       // A stream is bounded by silence (idle) and a generous total; a single-shot call by one step timeout.
       const pick = { tier: opts.tier || 'mid' };
       const out = await AI.withAutoModel({ provider, base, model, key, version, tier: pick.tier }, (c)=>
         AM.withStep(opts.signal, streaming ? AM.STEP_MS.stream : AM.STEP_MS.cloud, (signal)=>
-          chatComplete({ provider:c.provider, base:c.base, model:c.model, key:c.key, version:c.version }, req, { signal, onDelta:opts.onDelta, idleMs:AM.STEP_MS.idle, proxyUrl })), pick);
+          chatComplete({ provider:c.provider, base:c.base, model:c.model, key:c.key, version:c.version }, req, { signal, onDelta:opts.onDelta, idleMs:AM.STEP_MS.idle, proxyUrl, ...wire })), pick);
       _lastCloudModel = pick.used || model;
       return out;
     }
@@ -5119,7 +5167,7 @@
         const a=ctxkit.assemble({ history, user:q, mode:'only', provider:cfg.provider, model:cfg.model, lang, device:await deviceFacts(),   // now: contextkit's localised date + time + weekday
 
           workspace:wsRoot, tree:wsx.tree, files:wsx.files, consoleCtx });
-        return cloudComplete(cfg.provider, cfg.base, cfg.model, cfg.key, cfg.version, a.system, a.messages, { maxTokens:a.maxTokens, temperature:a.temperature, signal:_turnSig, onDelta, tier: hard ? 'max' : 'mid' });
+        return cloudComplete(cfg.provider, cfg.base, cfg.model, cfg.key, cfg.version, a.system, a.messages, { maxTokens:a.maxTokens, temperature:a.temperature, signal:_turnSig, onDelta, tier: hard ? 'max' : 'mid', effort:cfg.effort });
       };
       let txt;
       try{ txt = await callWith(route); }
@@ -5165,9 +5213,12 @@
       const cfg=E.loadLocalConfig(); if(!cfg.enabled) return null;
       const wsRoot=(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : undefined;
       const a=ctxkit.assemble({ history, user:q, mode:'server', lang, device:await deviceFacts(), workspace:wsRoot, tree:(wsx&&wsx.tree)||'', files:(wsx&&wsx.files)||[] });
+      // a PC model chosen in the picker: that server, that model (no ladder of other models behind it)
+      const pin=pcPin(); let servers;
+      if(pin){ servers=(await E.liveServers({ config:cfg })).filter((s)=>s.id===pin.server); if(!servers.length) return null; }
       const res=await E.localComplete(ctxkit.wantsCode(q)?'code':'chat', {
         messages:[{ role:'system', content:a.system }, ...a.messages], temperature:a.temperature, maxTokens:a.maxTokens,
-        loopbackOnly:!!opts.private, signal:opts.signal||_turnSig, onDelta:opts.onDelta, config:cfg });
+        loopbackOnly:!!opts.private, signal:opts.signal||_turnSig, onDelta:opts.onDelta, config:cfg, ...(pin ? { servers, model:pin.model } : {}) });
       if(!res || !res.text) return null;
       const eng=res.engine||{};
       const steps=[(eng.server||'')+' · '+(eng.model||'')];
@@ -5257,7 +5308,7 @@
       return (k,v)=>{ const s=d[k]; return typeof s==='string' ? s.replace(/\{(\w+)\}/g,(m,n)=> v && v[n]!=null ? String(v[n]) : m) : k; };
     }
     async function agentRuntime(pcCfg){   // pcCfg: a model on the user's PC (local/pc-llm.js agentCfg) instead of a cloud key
-      const sig=lang+'|'+(pcCfg?('pc:'+pcCfg.base+'|'+pcCfg.model):((keyCfg.key||'')+'|'+(keyCfg.model||'')+'|'+keysSig()))+'|'+((fs.hasRoot&&fs.hasRoot())?fs.getRoot():'');
+      const sig=lang+'|'+(pcCfg?('pc:'+pcCfg.base+'|'+pcCfg.model):((keyCfg.key||'')+'|'+(keyCfg.model||'')+'|'+(keyCfg.effort||'')+'|'+keysSig()))+'|'+((fs.hasRoot&&fs.hasRoot())?fs.getRoot():'');
       if(_agentRt && _agentRtKey===sig) return _agentRt;
       // device webfs maps /apps/<id>/<rest> → /apps/<id>/www/<rest>: the URI must NOT contain /www/.
       // ONE FILE AT A TIME (/seq-import.js): no service worker gates requests on http://, and a plain import()
@@ -5270,7 +5321,7 @@
       let ALWAYS=null; try{ ALWAYS=(await import('/apps/agent/agent-tools.js')).ALWAYS_CONFIRM; }catch{}
       if(!ALWAYS || typeof ALWAYS.has!=='function') ALWAYS=new Set(['delete_file','publish_app','manage_app']);
       // fixed: the chosen model does every role (planning, work, hard parts); other keys only for what it can't do
-      const cfg=pcCfg || { provider:keyCfg.provider, key:keyCfg.key, base:keyCfg.base, model:keyCfg.model, version:keyCfg.version, geminiTier:keyCfg.geminiTier, fixed:true };
+      const cfg=pcCfg || { provider:keyCfg.provider, key:keyCfg.key, base:keyCfg.base, model:keyCfg.model, version:keyCfg.version, geminiTier:keyCfg.geminiTier, effort:keyCfg.effort||'', fixed:true };
       const root=(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : '/data/agent';
       const ui={
         status:(m)=>{ try{ _agentThink && _agentThink.note('⚙ '+m); }catch{} },
@@ -5492,7 +5543,8 @@
         // in Private (it never leaves this PC), or when the user chose "local first"; otherwise the user's cloud
         // model answers and the local server is its fallback (1b) — no key, no internet, quota gone.
         let lcfg={ enabled:false }; try{ lcfg=(await enginesMod()).loadLocalConfig(); }catch{}
-        const localFirst = priv || !keyCfg.key || lcfg.prefer==='local';
+        const pin = pcPin();   // a model on this PC chosen in the picker answers first, and alone
+        const localFirst = priv || !keyCfg.key || lcfg.prefer==='local' || !!pin;
         const tryLocalServer=async()=>{
           if(!lcfg.enabled) return null;
           try{ const wsx=await wsxOnce(); return await AM.withStep(sig, AM.STEP_MS.local, (signal)=>localServerAsk(sendQ, wsx, { private:priv, onDelta, signal })); }
@@ -5527,7 +5579,7 @@
         // 1 - CLOUD. Browser-direct, never through the firmware: the mbedTLS handshake OOMs on this
         //     PSRAM-less chip. The agentic loop is browser-hosted for the same reason; a proxy
         //     provider (relayed via the device) skips the loop so a 14-step relay cannot hammer it.
-        if(!r && !priv && keyCfg.key && !sig.aborted){
+        if(!r && !priv && !pin && keyCfg.key && !sig.aborted){
           const loopEligible = useAgents && !curProv().proxy;
           const wsx = await wsxOnce();   // built ONCE - shared by the loop seed and fallback
           if(loopEligible && !sig.aborted){
@@ -5981,7 +6033,7 @@
     function sysLine(t){ const {body}=botShell(null,false); renderMd(body,t); body.dataset.raw=t; scrollDown(); }
     // The slash list / help with the two engine modes (/auto, /private) in place of the retired three.
     const RETIRED_MODE_CMD=/^\/(offline|ibrida|hybrid|online)$/;
-    function cmdList(){ const out=[]; let put=false;
+    function cmdList(){ const out=[{c:'/model',d:L('cmdModel')}]; let put=false;
       for(const c of UI[lang].cmds){ if(RETIRED_MODE_CMD.test(c.c)){ if(!put){ out.push({c:'/auto',d:L('cmdAuto')},{c:'/private',d:L('cmdPrivate')}); put=true; } continue; } out.push(c); }
       return out; }
     function helpText(){ return UI[lang].helpText.replace(/^( *)\/offline \/(?:ibrida|hybrid) \/online +[^\n]*$/m, (m,sp)=>sp+'/auto /private'+' '.repeat(12)+L('cmdModes')); }
@@ -6004,7 +6056,9 @@
       // F4 retired the detached forge-demo.html (its relative imports 404 when served by the device);
       // the ANIMA Code surface is the Agenti app: engine picker (🧠), model install, honest capability verdicts.
       if(cmd==='forge'){ addUser(q); if(os.inShell) os.openApp('agent'); sysLine(TR('Apro **Agenti** — ANIMA Code: scegli il motore (cloud o locale) dal pulsante 🧠.', 'Opening **Agents** — ANIMA Code: pick the engine (cloud or local) from the 🧠 button.')); return true; }
-      if(['models','modelli','modello'].includes(cmd)){ window.openModelManager&&window.openModelManager(); return true; }
+      // /model [query]: the model picker, pre-filtered ("/model haiku" with one match picks it)
+      if(['model','modello','modelo','modele','modèle','modell'].includes(cmd)){ mpOpen(parts.slice(1).join(' ')); return true; }
+      if(['models','modelli'].includes(cmd)){ window.openModelManager&&window.openModelManager(); return true; }
       return false;
     }
     const slashEl=$('slash'); let slashSel=0, slashItems=[];
@@ -6040,6 +6094,7 @@
       A.push({cat:C.lang, icon:'A', label:t.language+': EN', cur:lang==='en', run:()=>chooseLang('en')});
       for(const m of AM.MODES) A.push({cat:C.mode, icon:'◉', label:t.mode+': '+modeLabel(m), cur:mode===m, run:()=>chooseMode(m)});
       A.push({cat:C.set, icon:'⚙', label:t.appearance+' / '+t.engine, run:()=>openSettings(true)});
+      A.push({cat:C.set, icon:'◆', label:L('mpPalette'), keys:['/model'], run:()=>mpOpen()});
       A.push({cat:C.set, icon:'⬇', label:(TR('Gestione modelli (download)', 'Model manager (downloads)')), run:()=>window.openModelManager&&window.openModelManager()});
       A.push({cat:C.set, icon:'⌨', label:t.shortcuts, keys:['?'], run:openShortcuts});
       A.push({cat:C.nav, icon:'↑', label:TR('Vai in cima', 'Scroll to top'), run:()=>{stickBottom=false;logEl.scrollTop=0;}});
@@ -6434,7 +6489,9 @@
     function adoptKeyCfg(c){ if(!c) return; const p=AI.providerOf(c.provider||keyCfg.provider);
       keyCfg.provider=c.provider||keyCfg.provider; keyCfg.base=c.base||p.base; keyCfg.model=c.model||p.def;
       keyCfg.key=c.key||''; keyCfg.version=c.version||p.version; keyCfg.exec=c.exec||keyCfg.exec||'browser';
-      keyCfg.geminiTier=c.geminiTier||keyCfg.geminiTier; if(c.keys) keyCfg.keys=c.keys; }
+      keyCfg.geminiTier=c.geminiTier||keyCfg.geminiTier; if(c.keys) keyCfg.keys=c.keys;
+      keyCfg.effort=c.effort||'';                    // Settings ▸ AI's effort (teacher.json); a picked one overrides it below
+      try{ applyPickToKey(); }catch{} }
     async function loadKey(){ try{ const c=await AI.readTeacher(); if(c && !c.unpaired){ keyHydrated=true; adoptKeyCfg(c); } }catch(e){} try{ paintSub(); }catch{} }
     async function ensureKeyLoaded(){ if(keyHydrated) return; try{ await loadKey(); }catch(e){} }   // hydrate keyCfg on first online use (independent of opening Settings)
     // Mount the shared key manager into the Settings drawer (once). Its onChange keeps keyCfg in sync so the
@@ -6477,7 +6534,10 @@
     // so "Private" means the same thing in Ctrl+Space. Provider keys are configuration, not a mode.
     function isPrivate(){ return AM.isPrivate(mode); }
     const modeLabel = (m)=> L(AM.isPrivate(m) ? 'modePrivate' : 'modeAuto');
-    function chooseMode(m){ mode=AM.writeMode(m); applyAll(); syncL1Ext();
+    function chooseMode(m){ mode=AM.writeMode(m);
+      // the mode chip, /auto and /private are picks too: the picker shows what will answer
+      try{ const p=pickNow(); if(m==='private' && p.kind!=='private' && p.kind!=='pc') applyPick({ kind:'private' }, true); else if(m!=='private' && p.kind==='private') applyPick({ kind:'auto' }, true); }catch{}
+      applyAll(); syncL1Ext();
       // Private leans on the local brains: offer the WASM brain (consent-gated, never a silent pull) only when
       // no PC model can serve it — with Ollama ready the 96 MB offer was noise.
       if(isPrivate()) (async()=>{ if(!(await pcServerLive())) ensureEdge(true).catch(()=>{}); })(); }
@@ -6655,8 +6715,9 @@
       const el=$('sub'); if(!el) return;
       let on=false; try{ on=!isPrivate() && keyHydrated && !!keyCfg.key && !!keyCfg.model; }catch{}   // safe before the key state exists
       if(on){
-        el.textContent=(curProv().label||keyCfg.provider)+' · '+AI.modelName(keyCfg.provider, keyCfg.model).name; el.title=keyCfg.model; return; }
+        el.textContent=(keyCfg.provider==='box' ? L('mpServer') : (curProv().label||keyCfg.provider))+' · '+AI.modelName(keyCfg.provider, keyCfg.model).name; el.title=keyCfg.model; try{ paintPickBtn(); }catch{} return; }
       el.textContent=L(isPrivate()?'modeSubPrivate':'modeSubAuto'); el.removeAttribute('title');
+      try{ paintPickBtn(); }catch{}
     }
     function applyAll(){
       const t=UI[lang];
@@ -7104,8 +7165,195 @@
       const x=_secEl.querySelector('.sb-x'); x.title=L('close'); x.setAttribute('aria-label', L('secDismiss'));
     }
 
+    // ===========================================================================
+    // MODEL PICKER (Claude-Code style): the "◆ Auto ▾" button by the input and /model <query>. Every brain this
+    // device can reach, by name, one click away: Auto (the ladder, Settings ▸ AI's model first) · Private · each
+    // cloud key the device holds (teacher.json, keys{} included) · the hosting server's models (capability ai.server)
+    // · the models on this PC (Ollama, LM Studio…). The grouping is model-pick.js (tested in Node); the choice belongs
+    // to the conversation (session.pick) and becomes the default for new ones (anima.pick). A model chosen by name
+    // answers alone; its effort (Claude) is chosen here too, with ←/→ or the strip above the footer.
+    // ===========================================================================
+    const PICK_STORE='anima.pick';
+    function pickNow(){
+      let p=null; const s=activeSession();
+      if(s && MP.pickValid(s.pick)) p=s.pick;
+      else { try{ const g=JSON.parse(get(PICK_STORE,'null')); if(MP.pickValid(g)) p=g; }catch{} }
+      // Private set elsewhere (the copilot, another tab) wins over a pick that would need the network
+      if(isPrivate() && (!p || p.kind==='auto' || p.kind==='cloud' || p.kind==='server')) return { kind:'private' };
+      return p || { kind:'auto' };
+    }
+    // keyCfg follows the pick (a cloud model by name, the server's model, an effort); Auto keeps the teacher.json one.
+    // Called from adoptKeyCfg, so every reload of the vault re-applies the conversation's choice.
+    function applyPickToKey(){
+      const p=pickNow();
+      if(p.kind==='cloud'){
+        const k=(keyCfg.keys||{})[p.provider], pr=AI.providerOf(p.provider);
+        if(p.provider!==keyCfg.provider){ if(!k || !(k.key || (pr.keyOptional && k.base))) return;   // that key is gone: the saved model answers
+          keyCfg.provider=p.provider; keyCfg.base=k.base||pr.base; keyCfg.key=k.key||''; keyCfg.version=k.version||pr.version||''; keyCfg.effort=k.effort||''; }
+        keyCfg.model=p.model;
+      } else if(p.kind==='server'){
+        keyCfg.provider='box'; keyCfg.base=p.base; keyCfg.model=p.model; keyCfg.key='server'; keyCfg.version=''; keyCfg.effort='';
+      }
+      if(p.effort) keyCfg.effort=p.effort;
+    }
+    // A model on this PC chosen by name: { server, model } for localServerAsk, else null.
+    function pcPin(){ const p=pickNow(); return p.kind==='pc' ? { server:p.server, model:p.model } : null; }
+    let _pickApplied='';
+    function enterPick(p, boot){
+      _pickApplied=MP.pickKey(p)+'|'+(p.effort||'');
+      // Private is a pick of its own; a PC model keeps the mode it was chosen in; every other pick may use the network.
+      const want = p.kind==='private' ? 'private' : p.kind==='pc' ? mode : 'auto';
+      if(want!==mode){ mode=AM.writeMode(want); try{ syncL1Ext(); }catch{} }
+      // re-read the vault (cached 30 s by ai.js) and re-apply the pick; at boot the idle key read does it, off the boot burst
+      if(!boot){ keyHydrated=false; loadKey().catch(()=>{}).then(()=>{ try{ paintPickBtn(); }catch{} }); }
+      try{ applyAll(); }catch{} paintPickBtn();
+    }
+    // A conversation switch (renderAll) brings its own pick along.
+    function syncPick(){ const p=pickNow(); if(MP.pickKey(p)+'|'+(p.effort||'')!==_pickApplied) enterPick(p); }
+    function applyPick(p, quiet){
+      if(!MP.pickValid(p)) p={ kind:'auto' };
+      const s=activeSession(); if(s){ s.pick=p; persist(); }
+      set(PICK_STORE, JSON.stringify(p)); set('anima.modeSet','1');
+      enterPick(p);
+      if(!quiet) toast(L('mpChosen',{ name:pickLabel(p, true) }),'ok');
+    }
+    // " · medium": the effort the request will really carry (clamped to what the model takes), '' where none.
+    function effortTag(provider, model, e){ const v=AI.effortFor(provider, model, e); return v ? ' · '+AI.effortLabel(v, lang) : ''; }
+    function pickLabel(p, withEffort){
+      if(!p || p.kind==='auto'){
+        let l=L('modeAuto');
+        if(keyHydrated && keyCfg.key && keyCfg.model && !isPrivate()) l+=' · '+AI.modelName(keyCfg.provider, keyCfg.model).name+(withEffort?effortTag(keyCfg.provider, keyCfg.model, keyCfg.effort):'');
+        return l;
+      }
+      if(p.kind==='private') return L('modePrivate');
+      if(p.kind==='cloud') return AI.modelName(p.provider, p.model).name+(withEffort?effortTag(p.provider, p.model, p.effort||keyCfg.effort):'');
+      return p.model;
+    }
+    function paintPickBtn(){
+      const b=$('mpick'); if(!b) return;
+      const l=pickLabel(pickNow(), true);
+      b.querySelector('.mpl').textContent=l;
+      b.title=L('mpButton',{ name:l });
+      b.setAttribute('aria-label', b.title);
+    }
+    // What the pop-over offers, gathered live: the vault, each key's /models (cached 12 h by ai.js), the server's
+    // models where the server runs some (ai.server), the PC servers that answer (their own cache in ai-engines.js).
+    async function pickOptions(){
+      const t=await AI.readTeacher().catch(()=>null);
+      const vk=MP.vaultKeys(AI, t), live={};
+      const none={ base:'', models:[], unavailable:'' };
+      const [ids, server, pcs]=await Promise.all([
+        Promise.all(Object.values(vk).map((c)=>AI.listModels(c).catch(()=>null))),
+        Caps.has('ai.server').then(async(ok)=>{ if(!ok) return null;
+          try{ const r=await fetch('/api/ai/server',{ cache:'no-store', credentials:'same-origin' }); const j=r.ok?await r.json():null;
+            return j && j.ok ? { base:j.base||'', models:j.models||[], unavailable:j.unavailable||'' } : none; }catch{ return none; } }).catch(()=>null),
+        (async()=>{ try{ const E=await enginesMod(); const cfg=E.loadLocalConfig(); if(!cfg.enabled) return [];
+          return (await E.liveServers({ config:cfg })).filter((s)=>s.status==='ok' && s.models && s.models.length)
+            .map((s)=>({ id:s.id, label:s.name||s.id, models:s.models.map((m)=>({ id:m.id, name:m.id })) })); }catch{ return []; } })(),
+      ]);
+      Object.keys(vk).forEach((p,i)=>{ live[p]=ids[i]; });
+      return MP.buildGroups(AI, L, { teacher:t, live, server, pcs, pick:pickNow() });
+    }
+    let _mp=null, _mpData=null, _mpRows=[], _mpSel=0, _mpEff={};   // _mpEff: the effort chosen in this pop-over, per row
+    const rowEffort=(it)=> it && it.levels && it.levels.length ? AI.effortFor('anthropic', it.model || it.p.model, _mpEff[MP.pickKey(it.p)] || it.effort) : '';
+    function mpEl(){
+      if(_mp) return _mp;
+      const d=document.createElement('div'); d.className='mp'; d.id='mp'; d.setAttribute('role','dialog');
+      d.innerHTML='<input class="mp-q" id="mp-q" autocomplete="off" spellcheck="false" aria-controls="mp-list" aria-autocomplete="list">'
+        +'<div class="mp-list" id="mp-list" role="listbox"></div>'
+        +'<div class="mp-eff" id="mp-eff" hidden></div>'
+        +'<div class="mp-foot"><button type="button" class="mp-setup" id="mp-setup"></button><span class="mp-keys">↑↓ · ⏎ · ←→ · Esc</span></div>';
+      document.body.appendChild(d); _mp=d;
+      const q=d.querySelector('#mp-q');
+      q.addEventListener('input',()=>{ _mpSel=0; mpRender(); });
+      q.addEventListener('keydown',mpKey);
+      d.querySelector('#mp-list').addEventListener('click',(e)=>{
+        if(e.target.closest('.mp-connect')){ mpClose(); openSettings(true); return; }
+        const r=e.target.closest('.mp-row[data-i]'); if(r) mpChoose(+r.dataset.i); });
+      d.querySelector('#mp-list').addEventListener('mousemove',(e)=>{ const r=e.target.closest('.mp-row[data-i]'); if(r && +r.dataset.i!==_mpSel){ _mpSel=+r.dataset.i; mpMark(); } });
+      d.querySelector('#mp-eff').addEventListener('click',(e)=>{ const b=e.target.closest('[data-e]'), it=_mpRows[_mpSel]; if(!b || !it) return;
+        _mpEff[MP.pickKey(it.p)]=b.dataset.e; mpEffPaint(); mpRowEff(); q.focus(); });
+      d.querySelector('#mp-setup').addEventListener('click',()=>{ mpClose(); openSettings(true); });
+      document.addEventListener('pointerdown',(e)=>{ if(_mp.classList.contains('open') && !_mp.contains(e.target) && !$('mpick').contains(e.target)) mpClose(); });
+      addEventListener('resize',()=>{ if(_mp.classList.contains('open')) mpPlace(); });
+      return d;
+    }
+    function mpRender(){
+      const list=_mp.querySelector('#mp-list'), q=_mp.querySelector('#mp-q').value, cur=MP.pickKey(pickNow());
+      _mpRows=[]; let html='';
+      if(_mpData && !_mpData.any && !q.trim()) html+='<div class="mp-empty"><b>'+esc(L('mpEmptyTitle'))+'</b><span>'+esc(L('mpEmptyBody'))+'</span>'
+        +'<button type="button" class="mp-connect">'+esc(L('mpConnect'))+' →</button></div>';
+      for(const g of MP.filterGroups(_mpData ? _mpData.groups : [], q)){
+        if(g.g) html+='<div class="mp-g" role="presentation">'+esc(g.g)+'</div>';
+        for(const it of g.items){
+          if(it.off){ html+='<div class="mp-row off" aria-disabled="true"><span class="mp-ck">·</span><span class="mp-t"><b>'+esc(it.label)+'</b><small>'+esc(it.sub||'')+'</small></span></div>'; continue; }
+          const i=_mpRows.push(it)-1, on=MP.pickKey(it.p)===cur;
+          html+='<div class="mp-row'+(on?' on':'')+'" role="option" id="mp-o'+i+'" data-i="'+i+'" aria-selected="'+(on?'true':'false')+'">'
+            +'<span class="mp-ck" aria-hidden="true">'+(on?'✓':'')+'</span><span class="mp-t"><b>'+esc(it.label)+'</b>'+(it.sub?'<small>'+esc(it.sub)+'</small>':'')+'</span>'
+            +'<span class="mp-e" data-ef="'+i+'"></span>'+(it.badge?'<span class="mp-b">'+esc(it.badge)+'</span>':'')+'</div>';
+        }
+      }
+      if(!html) html='<div class="mp-load">'+esc(UI[lang].noResults||'—')+'</div>';
+      list.innerHTML=html;
+      if(_mpSel>=_mpRows.length) _mpSel=Math.max(0,_mpRows.length-1);
+      mpRowEff(); mpMark();
+    }
+    // The effort beside each row that takes one (the level its request will carry).
+    function mpRowEff(){ _mp.querySelectorAll('.mp-e[data-ef]').forEach((el)=>{ const e=rowEffort(_mpRows[+el.dataset.ef]); el.textContent=e?AI.effortLabel(e, lang):''; }); }
+    // The strip above the footer: the highlighted model's effort levels; a tap or ←/→ changes it.
+    function mpEffPaint(){
+      const box=_mp.querySelector('#mp-eff'), it=_mpRows[_mpSel];
+      if(!it || !it.levels || !it.levels.length){ box.hidden=true; return; }
+      const cur=rowEffort(it);
+      box.hidden=false;
+      box.innerHTML='<span class="mp-el">'+esc(AI.effortLabel('label', lang))+'</span>'+it.levels.map((l)=>'<button type="button" class="mp-ei'+(l===cur?' on':'')+'" data-e="'+l+'" aria-pressed="'+(l===cur)+'">'+esc(AI.effortLabel(l, lang))+'</button>').join('');
+    }
+    function mpMark(){
+      _mp.querySelectorAll('.mp-row.sel').forEach((r)=>r.classList.remove('sel'));
+      const r=_mp.querySelector('#mp-o'+_mpSel), q=_mp.querySelector('#mp-q');
+      if(r){ r.classList.add('sel'); r.scrollIntoView({block:'nearest'}); q.setAttribute('aria-activedescendant','mp-o'+_mpSel); } else q.removeAttribute('aria-activedescendant');
+      mpEffPaint();
+    }
+    function mpKey(e){
+      if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); mpClose(); $('mpick').focus(); return; }
+      if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); if(!_mpRows.length) return; _mpSel=(_mpSel+(e.key==='ArrowDown'?1:-1)+_mpRows.length)%_mpRows.length; mpMark(); return; }
+      if((e.key==='ArrowLeft'||e.key==='ArrowRight') && !e.shiftKey){ const it=_mpRows[_mpSel];
+        if(it && it.levels && it.levels.length){ e.preventDefault(); _mpEff[MP.pickKey(it.p)]=MP.stepEffort(it.levels, rowEffort(it), e.key==='ArrowLeft'?-1:1); mpEffPaint(); mpRowEff(); } return; }
+      if(e.key==='Enter'){ e.preventDefault(); if(_mpRows[_mpSel]) mpChoose(_mpSel); }
+    }
+    function mpChoose(i){
+      const it=_mpRows[i]; if(!it) return;
+      // the effort is kept in the pick only when chosen here (or already chosen for it): otherwise Settings ▸ AI's applies
+      const p=Object.assign({}, it.p), key=MP.pickKey(it.p), cur=pickNow();
+      const e=_mpEff[key] || (MP.pickKey(cur)===key ? cur.effort : '');
+      if(e && it.levels && it.levels.length) p.effort=rowEffort(Object.assign({}, it, { effort:e }));
+      mpClose(); applyPick(p); input.focus();
+    }
+    function mpPlace(){
+      const b=$('mpick').getBoundingClientRect(), w=Math.min(420, innerWidth-16);
+      _mp.style.width=w+'px'; _mp.style.left=Math.max(8, Math.min(b.left, innerWidth-w-8))+'px'; _mp.style.bottom=Math.max(8, innerHeight-b.top+8)+'px';
+    }
+    async function mpOpen(seed){
+      const d=mpEl(), q=d.querySelector('#mp-q');
+      _mpEff={};
+      d.classList.add('open'); $('mpick').setAttribute('aria-expanded','true');
+      q.value=seed||''; q.placeholder=L('mpSearch'); q.setAttribute('aria-label', q.placeholder);
+      d.querySelector('#mp-setup').textContent=L('mpManage');
+      d.querySelector('#mp-list').innerHTML='<div class="mp-load">'+esc(L('mpLoading'))+'</div>';
+      d.querySelector('#mp-eff').hidden=true;
+      mpPlace(); q.focus();
+      _mpData=await pickOptions().catch(()=>({ groups:[], any:false }));
+      if(!d.classList.contains('open')) return;
+      _mpSel=0; mpRender();
+      const k=_mpRows.findIndex((r)=>MP.pickKey(r.p)===MP.pickKey(pickNow())); if(k>=0 && !q.value){ _mpSel=k; mpMark(); }
+      if(seed && _mpRows.length===1) mpChoose(0);                 // "/model haiku" with one match picks it
+    }
+    function mpClose(){ if(_mp) _mp.classList.remove('open'); const b=$('mpick'); if(b) b.setAttribute('aria-expanded','false'); }
+    $('mpick').addEventListener('click',()=>{ if(_mp && _mp.classList.contains('open')) mpClose(); else mpOpen(); });
+
     // ---- boot -----------------------------------------------------------------
     loadSessions(); history=activeSession().history;
+    try{ enterPick(pickNow(), true); }catch{}   // the conversation's model (picker), before the first paint
     document.documentElement.setAttribute('data-theme',theme);
     applyAll(); autogrow(); renderAll();
     // BROWSER mode is the default, but we NEVER auto-download the multi-MB brain at boot. At idle (after first

@@ -23,10 +23,10 @@
     "de": 100
   },
   "surfaces": 52,
-  "totalKeys": 4882,
+  "totalKeys": 4901,
   "namespaces": {
     "agent": 161,
-    "anima": 174,
+    "anima": 193,
     "arcade": 74,
     "archive-manager": 39,
     "authenticator": 32,

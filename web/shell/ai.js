@@ -34,7 +34,12 @@ export const PROVIDERS = {
     label: 'Claude', base: 'https://api.anthropic.com', version: '2023-06-01',
     prefix: /^sk-ant-/, ph: 'sk-ant-…', def: 'claude-sonnet-5-5',
     // model tuples are [id, it, en, es, fr, de] — render via modelLabel() so the picker follows the OS language.
-    models: [['claude-sonnet-5-5', 'Sonnet 5.5 · equilibrio', 'Sonnet 5.5 · balanced', 'Sonnet 5.5 · equilibrado', 'Sonnet 5.5 · équilibré', 'Sonnet 5.5 · ausgewogen'], ['claude-opus-5-5', 'Opus 5.5 · massima qualità', 'Opus 5.5 · top quality', 'Opus 5.5 · máxima calidad', 'Opus 5.5 · qualité maximale', 'Opus 5.5 · höchste Qualität'], ['claude-haiku-4-5', 'Haiku 4.5 · veloce/economico', 'Haiku 4.5 · fast/cheap', 'Haiku 4.5 · rápido/económico', 'Haiku 4.5 · rapide/économique', 'Haiku 4.5 · schnell/günstig']],
+    // (a saved id missing from this list — claude-haiku-4-5, claude-sonnet-4-6… — keeps working: modelName() reads it,
+    // resolveModel() honours it while the key still serves it, and a former default follows its family forward)
+    models: [['claude-sonnet-5-5', 'Sonnet 5.5 · equilibrio', 'Sonnet 5.5 · balanced', 'Sonnet 5.5 · equilibrado', 'Sonnet 5.5 · équilibré', 'Sonnet 5.5 · ausgewogen'],
+      ['claude-opus-5-5', 'Opus 5.5 · massima qualità', 'Opus 5.5 · top quality', 'Opus 5.5 · máxima calidad', 'Opus 5.5 · qualité maximale', 'Opus 5.5 · höchste Qualität'],
+      ['claude-haiku-5-5', 'Haiku 5.5 · veloce/economico', 'Haiku 5.5 · fast/cheap', 'Haiku 5.5 · rápido/económico', 'Haiku 5.5 · rapide/économique', 'Haiku 5.5 · schnell/günstig'],
+      ['claude-fable-5-1', 'Fable 5.1 · il più capace (costoso)', 'Fable 5.1 · most capable (expensive)', 'Fable 5.1 · el más capaz (caro)', 'Fable 5.1 · le plus performant (coûteux)', 'Fable 5.1 · am leistungsfähigsten (teuer)']],
   },
   openai: {
     label: 'Groq', base: 'https://api.groq.com/openai/v1', version: '',
@@ -114,7 +119,7 @@ export const CAPMATRIX = {
 // by the engine; google.max=Pro is offered only when geminiTier==='paid'). Single source so a preset
 // can ask for "max"/"mid"/"fast" without re-hardcoding model strings.
 export const TIERS = {
-  anthropic: { max: 'claude-opus-5-5',          mid: 'claude-sonnet-5-5',    fast: 'claude-haiku-4-5' },
+  anthropic: { max: 'claude-opus-5-5',          mid: 'claude-sonnet-5-5',    fast: 'claude-haiku-5-5' },
   openai:    { max: 'llama-3.3-70b-versatile',  mid: 'llama-3.1-8b-instant', fast: 'llama-3.1-8b-instant' },
   xai:       { max: 'grok-2-latest',            mid: 'grok-2-latest',        fast: 'grok-2-1212' },
   google:    { max: 'gemini-2.5-pro',           mid: 'gemini-2.5-flash',     fast: 'gemini-2.5-flash-lite' },
@@ -144,7 +149,7 @@ function cfgFor(provider, entry, model, exec, tier) {
   entry = entry || {};
   // `tier` travels with the cfg: the static TIERS id is only a first guess, and withAutoModel re-picks at call
   // time for the same tier when the provider no longer serves it.
-  return { provider, base: entry.base || p.base, model: model || entry.model || p.def, key: entry.key || '', version: entry.version || p.version, exec: exec || entry.exec || 'browser', tier: tier || 'mid' };
+  return { provider, base: entry.base || p.base, model: model || entry.model || p.def, key: entry.key || '', version: entry.version || p.version, exec: exec || entry.exec || 'browser', tier: tier || 'mid', effort: entry.effort || '' };
 }
 
 // Pick the best call cfg for a subtask across all configured keys.
@@ -752,7 +757,8 @@ async function _readTeacher() {
     if (pub) { j = fromPublic(j); _sealed = true; }
     const provider = (j.provider && PROVIDERS[j.provider]) ? j.provider : (isLanUrl(j.base) ? 'local' : (j.base && /anthropic/.test(j.base) ? 'anthropic' : (j.base && /generativelanguage/.test(j.base) ? 'google' : (j.base && /x\.ai/.test(j.base) ? 'xai' : (j.key ? 'openai' : 'anthropic')))));
     const p = providerOf(provider);
-    const cfg = { provider, base: j.base || p.base, model: j.model || p.def, key: j.key || '', keyHint: j.keyHint || '', version: j.version || p.version, exec: j.exec || 'browser', keys: j.keys || {}, geminiTier: j.geminiTier || '', stt_url: j.stt_url || '', stt_model: j.stt_model || '', vision_model: j.vision_model || '', vision_base: j.vision_base || '', vision_key: j.vision_key || '', vision: typeof j.vision === 'boolean' ? j.vision : null };
+    const cfg = { provider, base: j.base || p.base, model: j.model || p.def, key: j.key || '', keyHint: j.keyHint || '', version: j.version || p.version, exec: j.exec || 'browser', keys: j.keys || {}, geminiTier: j.geminiTier || '', stt_url: j.stt_url || '', stt_model: j.stt_model || '', vision_model: j.vision_model || '', vision_base: j.vision_base || '', vision_key: j.vision_key || '', vision: typeof j.vision === 'boolean' ? j.vision : null,
+      effort: EFFORTS.includes(j.effort) ? j.effort : '', _extra: unknownFields(j) };
     _teacherCache = cfg; _teacherAt = Date.now();
     return cfg;
   } catch { return null; }
@@ -770,18 +776,34 @@ export async function whisperKey(opts = {}) {
   return g && g.key ? { key: g.key, base: g.base || PROVIDERS.openai.base } : null;
 }
 
-// Canonical teacher.json: the active provider at top-level (what the firmware reads) + a keys map
-// so switching providers doesn't lose the other key.
+// The top-level fields of teacher.json this file writes itself. Anything else (a field another edition, a newer
+// shell or the firmware added) is carried through a read/write untouched: readTeacher keeps it in cfg._extra and
+// buildTeacherDoc puts it back. (keys.<provider> entries are copied whole, so their unknown fields survive too.)
+const TEACHER_FIELDS = new Set(['provider', 'base', 'model', 'key', 'version', 'exec', 'keys', 'geminiTier', 'effort',
+  'stt_url', 'stt_model', 'vision_model', 'vision_base', 'vision_key', 'vision', 'keyHint', 'unpaired']);
+function unknownFields(j) {
+  const out = {};
+  for (const [k, v] of Object.entries(j || {})) if (!TEACHER_FIELDS.has(k) && !/_(set|hint)$/.test(k) && k[0] !== '_') out[k] = v;
+  return out;
+}
+// The firmware reads the file into a 4 KB buffer: a document past this is refused here, never truncated there.
+export const TEACHER_MAX_BYTES = 4096;
+
+// Canonical teacher.json: the active provider at top-level (what the firmware reads: provider, base, model, key,
+// version, effort) + a keys map so switching providers doesn't lose the other key.
 export function buildTeacherDoc(cfg) {
   const p = providerOf(cfg.provider);
   // The detected Gemini plan lives BOTH on the per-key entry (so the multi-model router can read it after the
   // user switches the active provider away from Google) AND at the top level (what the firmware reads today).
+  // effort: always written for Claude (absent = DEFAULT_EFFORT; written out so a device that MERGES the document
+  // can be set back to the default), elsewhere only when one was chosen.
   const entry = Object.assign({ base: cfg.base || p.base, model: cfg.model || p.def, key: cfg.key || '' },
-    cfg.provider === 'anthropic' ? { version: cfg.version || p.version } : {},
+    cfg.provider === 'anthropic' ? { version: cfg.version || p.version, effort: normEffort(cfg.effort) } : (EFFORTS.includes(cfg.effort) ? { effort: cfg.effort } : {}),
     (cfg.provider === 'google' && cfg.geminiTier) ? { geminiTier: cfg.geminiTier } : {});
   const keys = Object.assign({}, cfg.keys || {});
   const keyless = providerOf(cfg.provider).keyOptional && entry.base && entry.model;   // a LAN server needs no key
-  if (entry.key || keyless) keys[cfg.provider] = entry; else delete keys[cfg.provider];
+  // the active entry is updated in place: a field another edition put in it (keys.<provider>.x) stays
+  if (entry.key || keyless) keys[cfg.provider] = Object.assign({}, keys[cfg.provider] || {}, entry); else delete keys[cfg.provider];
   const extra = (cfg.provider === 'google' && cfg.geminiTier) ? { geminiTier: cfg.geminiTier } : {};   // top-level mirror for the firmware
   // The home speech-to-text server (whisper.cpp / speaches) rides along so a key change never drops it.
   const stt = cfg.stt_url ? Object.assign({ stt_url: cfg.stt_url }, cfg.stt_model ? { stt_model: cfg.stt_model } : {}) : {};
@@ -790,7 +812,7 @@ export function buildTeacherDoc(cfg) {
   const vis = {};
   for (const k of ['vision_model', 'vision_base', 'vision_key']) if (cfg[k]) vis[k] = cfg[k];
   if (typeof cfg.vision === 'boolean') vis.vision = cfg.vision;
-  const doc = Object.assign({ provider: cfg.provider, exec: cfg.exec || 'browser' }, entry, extra, stt, vis, { keys });
+  const doc = Object.assign({}, cfg._extra && typeof cfg._extra === 'object' ? cfg._extra : {}, { provider: cfg.provider, exec: cfg.exec || 'browser' }, entry, extra, stt, vis, { keys });
   return toDevice(doc);
 }
 
@@ -807,10 +829,11 @@ function toDevice(o) {
   return out;
 }
 
-// Write the vault (paired): merged on the device, keys left blank are kept. true | 'unpaired' | false.
+// Write the vault (paired): merged on the device, keys left blank are kept. true | 'unpaired' | 'too_big' | false.
 export async function writeTeacher(cfg) {
   try {
     const body = JSON.stringify(buildTeacherDoc(cfg));
+    if (new TextEncoder().encode(body).length > TEACHER_MAX_BYTES) return 'too_big';
     let r = _noTeacherApi ? null : await fetch(TEACHER_API, { method: 'POST', body });
     if (!r || r.status === 404) { _noTeacherApi = true; r = await fetch('/api/fs/write?path=' + encodeURIComponent(AI_PATH), { method: 'POST', body }); }   // classic vault
     if (r.ok) invalidateTeacher();   // our own write changed it — drop the memo so the next read is fresh
@@ -862,11 +885,75 @@ export async function adoptBrowserKey() {
   try { localStorage.removeItem('groq.key'); } catch {}
 }
 
-// Sonnet 5 runs ADAPTIVE thinking when `thinking` is omitted (the 4.x family ran thinking-off): for chat
-// surfaces that is slower + costlier, and a tiny max_tokens can be eaten by thinking before any text. The
-// rule as the ESP32-P4 apps (agent runtime, games coach) import it: disabled ONLY for sonnet-5* (fable-5
-// rejects "disabled" with a 400; 4.x is already off). This file's own wire does not apply it yet.
-export const anthThinking = (model) => (String(model || '').includes('sonnet-5') ? { thinking: { type: 'disabled' } } : {});
+// ── effort (Anthropic) ──────────────────────────────────────────────────────────────────────────────
+// How hard a Claude model thinks before it answers: output_config.effort (inside output_config, never top-level).
+// The 5.x family thinks ADAPTIVELY and always: `thinking: {type:"disabled"}` is a 400 on claude-opus-5-5,
+// claude-sonnet-5-5 and claude-fable-5-1 and `budget_tokens` a 400 on every 5.x model, so NO request built here
+// ever sends a `thinking` field — a low effort is the way to make them quick. Older models: Opus 4.7/4.8 take the
+// five levels, Opus 4.6 / Sonnet 4.6 four (no xhigh), Opus 4.5 three; Sonnet 4.5 and Haiku 4.5 none (the field is
+// omitted). The user's level is stored per key in teacher.json (keys.<provider>.effort, the active one also at the
+// top level); absent means DEFAULT_EFFORT. Other providers get no field: nothing is invented for them.
+export const EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+export const DEFAULT_EFFORT = 'medium';
+export const normEffort = (e) => (EFFORTS.includes(e) ? e : DEFAULT_EFFORT);
+// claude-<family>-<major>[-<minor>][-<date>] anywhere in the id (a relay or platform may prefix it).
+function claudeOf(model) {
+  const m = /(?:^|[./:])claude-(fable|mythos|opus|sonnet|haiku)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?(?:@.*)?$/.exec(String(model || '').toLowerCase());
+  return m ? { fam: m[1], major: +m[2], minor: m[3] ? +m[3] : 0 } : null;
+}
+// The effort levels `model` accepts ([] = send no effort at all).
+export function effortLevels(provider, model) {
+  if (provider !== 'anthropic') return [];
+  const c = claudeOf(model);
+  if (!c) return [];
+  if (c.major >= 5) return EFFORTS.slice();
+  if (c.major !== 4) return [];
+  if (c.fam === 'opus' && c.minor >= 7) return EFFORTS.slice();
+  if ((c.fam === 'opus' || c.fam === 'sonnet') && c.minor === 6) return ['low', 'medium', 'high', 'max'];
+  if (c.fam === 'opus' && c.minor === 5) return ['low', 'medium', 'high'];
+  return [];
+}
+// The level to send for `wanted` on `model`: the nearest one it accepts at or below it ('' = none).
+export function effortFor(provider, model, wanted) {
+  const lv = effortLevels(provider, model);
+  if (!lv.length) return '';
+  const w = normEffort(wanted);
+  for (let i = EFFORTS.indexOf(w); i >= 0; i--) if (lv.includes(EFFORTS[i])) return EFFORTS[i];
+  return lv[0];
+}
+// Models whose thinking is on even when the request says nothing about it (the 5.x family).
+export const thinksByDefault = (model) => { const c = claudeOf(model); return !!c && c.major >= 5; };
+// Thinking tokens count against max_tokens: a call that asks for a short answer (a 16-token ping, a 700-token plan)
+// must still leave room for the thinking its effort implies, or the reply comes back empty. max_tokens is a ceiling,
+// not a cost: only what the model writes is billed.
+export const EFFORT_FLOOR = Object.freeze({ low: 2048, medium: 4096, high: 8192, xhigh: 16000, max: 32000 });
+// An Anthropic /v1/messages body with cfg.effort applied: output_config.effort where the model takes it, max_tokens
+// raised to the effort's floor on a model that always thinks. Any other provider's body comes back as it was.
+export function withEffort(cfg, body) {
+  if (!isAnth(cfg) || !body) return body;
+  const e = effortFor('anthropic', body.model, cfg.effort);
+  if (!e) return body;
+  const out = Object.assign({}, body, { output_config: Object.assign({}, body.output_config || {}, { effort: e }) });
+  if (thinksByDefault(body.model)) out.max_tokens = Math.max(Number(body.max_tokens) || 0, EFFORT_FLOOR[e]);
+  return out;
+}
+// The effort level's name in the OS language (Settings ▸ AI, ANIMA's model picker).
+const EFFORT_NAMES = {
+  it: { low: 'bassa', medium: 'media', high: 'alta', xhigh: 'molto alta', max: 'massima', label: 'Impegno' },
+  en: { low: 'low', medium: 'medium', high: 'high', xhigh: 'extra high', max: 'max', label: 'Effort' },
+  es: { low: 'bajo', medium: 'medio', high: 'alto', xhigh: 'muy alto', max: 'máximo', label: 'Esfuerzo' },
+  fr: { low: 'faible', medium: 'moyen', high: 'élevé', xhigh: 'très élevé', max: 'maximal', label: 'Effort' },
+  de: { low: 'niedrig', medium: 'mittel', high: 'hoch', xhigh: 'sehr hoch', max: 'maximal', label: 'Aufwand' },
+};
+export function effortLabel(level, lang) {
+  let l = lang;
+  if (!l) { try { l = localStorage.getItem('anima.lang') || document.documentElement.lang || 'en'; } catch { l = 'en'; } }
+  const row = EFFORT_NAMES[String(l).slice(0, 2)] || EFFORT_NAMES.en;
+  return row[level === 'label' ? 'label' : normEffort(level)];
+}
+// Kept for code that imports it. The rule it carried (send `thinking:{type:"disabled"}` to every sonnet-5* id) is wrong
+// for claude-sonnet-5-5, which answers that with a 400: it adds no thinking field at all (effort is the lever: withEffort).
+export const anthThinking = () => ({});
 
 // Completion. Returns the assistant text; throws an AiError (explainAiError() says what to do).
 // The model is auto-chosen and re-picked if the provider retired it (withAutoModel). opts.tier = 'max'|'mid'|'fast'.
@@ -883,7 +970,7 @@ async function completeOnce(cfg, system, user, maxTokens, opts) {
     const resp = await fetch(apiUrl(cfg, '/v1/messages'), {
       method: 'POST', signal: opts.signal,
       headers: authHeaders(cfg),
-      body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens || 1024, ...(system ? { system } : {}), messages: [{ role: 'user', content: user }] }),
+      body: JSON.stringify(withEffort(cfg, { model: cfg.model, max_tokens: maxTokens || 1024, ...(system ? { system } : {}), messages: [{ role: 'user', content: user }] })),
     });
     const text = await resp.text().catch(() => '');
     let j = null; try { j = JSON.parse(text); } catch {}
@@ -928,7 +1015,7 @@ async function chatOnce(cfg, { system, messages, user, maxTokens, temperature, s
   const msgs = Array.isArray(messages) ? messages : [{ role: 'user', content: String(user == null ? '' : user) }];
   const anth = isAnth(cfg);
   const body = anth
-    ? { model: cfg.model, max_tokens: maxTokens || 1024, ...(system ? { system } : {}), messages: msgs }
+    ? withEffort(cfg, { model: cfg.model, max_tokens: maxTokens || 1024, ...(system ? { system } : {}), messages: msgs })
     : { model: cfg.model, ...(maxTokens != null ? { max_tokens: maxTokens } : {}), ...(typeof temperature === 'number' ? { temperature } : {}),
         messages: [...(system ? [{ role: 'system', content: system }] : []), ...msgs] };
   const stream = typeof onDelta === 'function';
@@ -987,7 +1074,7 @@ async function toolCallOnce(cfg, { system, messages = [], tools = [], signal, ma
     const resp = await fetch(apiUrl(cfg, '/v1/messages'), {
       method: 'POST', signal,
       headers: authHeaders(cfg),
-      body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens, ...(system ? { system } : {}), ...(atools.length ? { tools: atools } : {}), messages }),
+      body: JSON.stringify(withEffort(cfg, { model: cfg.model, max_tokens: maxTokens, ...(system ? { system } : {}), ...(atools.length ? { tools: atools } : {}), messages })),
     });
     const text = await resp.text().catch(() => '');
     let j = null; try { j = JSON.parse(text); } catch {}

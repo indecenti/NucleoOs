@@ -28,6 +28,7 @@ import * as GPU from './webllm.js';   // browser-GPU models (WebGPU): offered wh
 const STR = {
   it: {
     checking: 'controllo…', saving: 'salvo…', testing: 'provo…', deleting: 'elimino…',
+    effhint: 'Quanto ragiona il modello prima di rispondere: più alto = più accurato, più lento e più costoso. Si cambia anche in ANIMA (◆ accanto al messaggio).', toobig: 'Il file delle impostazioni AI è pieno (4 KB): elimina una chiave che non usi più.', setsaved: 'Salvato:',
     active: 'Chiave attiva:', nokey: 'Nessuna chiave per questo provider.', noset: 'Nessuna chiave impostata.',
     typefirst: 'Scrivi prima una chiave.', notlooklike: 'Non sembra una chiave ', saveanyway: '. Salvo lo stesso?',
     saved: 'Salvata:', deleted: 'Chiave eliminata.', delActive: 'Chiave eliminata. Attivo: ',
@@ -80,6 +81,7 @@ const STR = {
   },
   en: {
     checking: 'checking…', saving: 'saving…', testing: 'testing…', deleting: 'deleting…',
+    effhint: 'How much the model thinks before answering: higher is more thorough, slower and costlier. ANIMA can change it too (◆ by the message box).', toobig: 'The AI settings file is full (4 KB): delete a key you no longer use.', setsaved: 'Saved:',
     active: 'Active key:', nokey: 'No key for this provider.', noset: 'No key set.',
     typefirst: 'Type a key first.', notlooklike: 'That does not look like a ', saveanyway: ' key. Save anyway?',
     saved: 'Saved:', deleted: 'Key deleted.', delActive: 'Key deleted. Active: ',
@@ -132,6 +134,7 @@ const STR = {
   },
   es: {
     checking: 'comprobando…', saving: 'guardando…', testing: 'probando…', deleting: 'eliminando…',
+    effhint: 'Cuánto piensa el modelo antes de responder: más alto = más preciso, más lento y más caro. También se cambia en ANIMA (◆ junto al mensaje).', toobig: 'El archivo de ajustes de IA está lleno (4 KB): elimina una clave que ya no uses.', setsaved: 'Guardado:',
     active: 'Clave activa:', nokey: 'No hay clave para este proveedor.', noset: 'Ninguna clave configurada.',
     typefirst: 'Escribe primero una clave.', notlooklike: 'No parece una clave ', saveanyway: '. ¿Guardar de todos modos?',
     saved: 'Guardada:', deleted: 'Clave eliminada.', delActive: 'Clave eliminada. Activa: ',
@@ -184,6 +187,7 @@ const STR = {
   },
   fr: {
     checking: 'vérification…', saving: 'enregistrement…', testing: 'test…', deleting: 'suppression…',
+    effhint: 'Combien le modèle réfléchit avant de répondre : plus haut = plus soigné, plus lent et plus coûteux. ANIMA peut aussi le changer (◆ à côté du message).', toobig: 'Le fichier des réglages IA est plein (4 Ko) : supprimez une clé que vous n’utilisez plus.', setsaved: 'Enregistré :',
     active: 'Clé active :', nokey: 'Aucune clé pour ce fournisseur.', noset: 'Aucune clé définie.',
     typefirst: 'Saisissez d’abord une clé.', notlooklike: 'Cela ne ressemble pas à une clé ', saveanyway: '. Enregistrer quand même ?',
     saved: 'Enregistrée :', deleted: 'Clé supprimée.', delActive: 'Clé supprimée. Active : ',
@@ -236,6 +240,7 @@ const STR = {
   },
   de: {
     checking: 'prüfe…', saving: 'speichere…', testing: 'teste…', deleting: 'lösche…',
+    effhint: 'Wie viel das Modell vor der Antwort nachdenkt: höher = gründlicher, langsamer und teurer. Auch in ANIMA änderbar (◆ neben der Nachricht).', toobig: 'Die KI-Einstellungsdatei ist voll (4 KB): lösche einen Schlüssel, den du nicht mehr nutzt.', setsaved: 'Gespeichert:',
     active: 'Aktiver Schlüssel:', nokey: 'Kein Schlüssel für diesen Anbieter.', noset: 'Kein Schlüssel festgelegt.',
     typefirst: 'Gib zuerst einen Schlüssel ein.', notlooklike: 'Das sieht nicht nach einem ', saveanyway: '-Schlüssel aus. Trotzdem speichern?',
     saved: 'Gespeichert:', deleted: 'Schlüssel gelöscht.', delActive: 'Schlüssel gelöscht. Aktiv: ',
@@ -330,6 +335,8 @@ function injectCss() {
 .nkm-seg{display:inline-flex;border:1px solid var(--line,#2a2a35);border-radius:var(--r-sm,8px);overflow:hidden}
 .nkm-seg .it{cursor:pointer;padding:6px 12px;font-size:13px;color:var(--dim,#8a8a9a)}
 .nkm-seg .it.on{background:var(--accent,#9b8cff);color:var(--accent-on,#0e0e12);font-weight:600}
+.nkm-seg button.it{border:0;background:transparent;font:inherit;font-size:13px}
+.nkm-seg button.it.on{background:var(--accent,#9b8cff)}
 .nkm-btns{display:flex;gap:7px;flex-wrap:wrap}
 .nkm-btn{cursor:pointer;border:1px solid var(--line,#2a2a35);background:var(--panel,#1a1a22);color:var(--ink,#e8e8ee);
   border-radius:var(--r-sm,8px);padding:7px 12px;font:inherit;font-size:13px}
@@ -385,6 +392,8 @@ export function mountKeyManager(container, opts = {}) {
     (full && showTier ? `<div class="nkm-row" data-el="tierrow" style="display:none"><label>${esc(t().plan)}</label><span class="nkm-badge" data-el="tier">…</span><button type="button" class="nkm-btn" data-el="detect">${esc(t().detect)}</button></div>` : '') +
     `<div class="nkm-row" data-el="baserow" style="display:none"><label>${esc(t().base)}</label><input data-el="base" type="url" autocomplete="off" spellcheck="false" placeholder="http://192.168.1.10:11434/v1"><span class="nkm-btns" data-el="presets"></span></div>` +
     `<div class="nkm-row"><label>${esc(t().model)}</label><select data-el="model"></select><input data-el="modeltxt" style="display:none" autocomplete="off" spellcheck="false" placeholder="${esc(t().typemodel)}"><button type="button" class="nkm-btn" data-el="refresh">${esc(t().refresh)}</button></div>` +
+    `<div class="nkm-row" data-el="effrow" style="display:none"><label>${esc(AI.effortLabel('label', lang))}</label><span class="nkm-seg" role="group" aria-label="${esc(AI.effortLabel('label', lang))}" data-el="eff"></span></div>` +
+    `<div class="nkm-exechint" data-el="effhint" style="display:none">${esc(t().effhint)}</div>` +
     `<div class="nkm-note" data-el="localnote" style="display:none">${esc(t().localnote)}</div>` +
     (showExec ? `<div class="nkm-row"><label>${esc(t().exec)}</label><span class="nkm-seg" data-el="exec"><span class="it" data-x="browser">${esc(t().browser)}</span><span class="it" data-x="device">${esc(t().device)}</span></span></div>` : '') +
     (showExec ? `<div class="nkm-exechint" data-el="exechint"></div>` : '') +
@@ -490,12 +499,25 @@ export function mountKeyManager(container, opts = {}) {
       }));
     }
     fillModels();
+    paintEffort();
+  }
+  // Effort (Claude): the levels the chosen model takes; hidden for a model or a provider that takes none.
+  function paintEffort() {
+    const row = $('effrow'); if (!row) return;
+    const lv = AI.effortLevels(cfg.provider, pickedModel());
+    row.style.display = lv.length ? '' : 'none';
+    if ($('effhint')) $('effhint').style.display = lv.length ? '' : 'none';
+    if (!lv.length) return;
+    const cur = AI.effortFor(cfg.provider, pickedModel(), cfg.effort);
+    $('eff').innerHTML = lv.map((l) => `<button type="button" class="it${l === cur ? ' on' : ''}" data-e="${l}" aria-pressed="${l === cur}">${esc(AI.effortLabel(l, lang))}</button>`).join('');
+    $('eff').querySelectorAll('[data-e]').forEach((b) => b.addEventListener('click', () => { cfg.effort = b.dataset.e; paintEffort(); keepSaved(); }));
   }
 
   function adopt(p) {
     const d = AI.providerOf(p), st = (cfg.keys && cfg.keys[p]) || {};
     cfg.provider = p; cfg.base = st.base || d.base; cfg.model = st.model || d.def;
     cfg.version = st.version || d.version; cfg.key = st.key || ''; cfg.keyHint = st.keyHint || ''; cfg.geminiModels = null;
+    cfg.effort = st.effort || '';
   }
   function chooseProvider(p) {
     if (!AI.PROVIDERS[p]) return;
@@ -517,9 +539,10 @@ export function mountKeyManager(container, opts = {}) {
     cfg.stt_url = c.stt_url || ''; cfg.stt_model = c.stt_model || '';
     cfg.vision_model = c.vision_model || ''; cfg.vision_base = c.vision_base || ''; cfg.vision_key = c.vision_key || '';
     cfg.vision = typeof c.vision === 'boolean' ? c.vision : null;
+    cfg.effort = c.effort || ''; cfg._extra = c._extra || {};   // _extra: fields another edition or the firmware wrote, written back untouched
     if ($('stt')) { $('stt').value = cfg.stt_url; $('sttstat').textContent = cfg.stt_url ? t().sttok : t().sttoff; }
     if ($('vismodel')) { $('vismodel').value = cfg.vision_model; $('visstat').textContent = cfg.vision_model ? t().visok : t().visoff; }
-    if (cfg.key) cfg.keys[cfg.provider] = Object.assign({ base: cfg.base, model: cfg.model, key: cfg.key, keyHint: cfg.keyHint }, cfg.provider === 'anthropic' ? { version: cfg.version } : {});
+    if (cfg.key) cfg.keys[cfg.provider] = Object.assign({}, cfg.keys[cfg.provider] || {}, { base: cfg.base, model: cfg.model, key: cfg.key, keyHint: cfg.keyHint }, cfg.provider === 'anthropic' ? { version: cfg.version } : {}, cfg.effort ? { effort: cfg.effort } : {});
     paint(); setStat((cfg.key || (prov().local && cfg.base)) ? statText() : t().noset);
     onChange(getCfg());
   }
@@ -548,9 +571,12 @@ export function mountKeyManager(container, opts = {}) {
       if (!cfg.model) { setStat(t().needmodel); return; }
       if (v) cfg.key = v;
     } else {
-      if (!v) { setStat(t().typefirst); return; }
-      if (!p.prefix.test(v) && !confirm(t().notlooklike + p.label + t().saveanyway)) return;
-      cfg.key = v; cfg.model = pickedModel();
+      // No key typed: a model / effort change keeps the key already saved for this provider (on a sealed vault that
+      // is the VAULT_KEY placeholder, written back as "" so the device keeps the real one).
+      if (!v && !cfg.key) { setStat(t().typefirst); return; }
+      if (v && !p.prefix.test(v) && !confirm(t().notlooklike + p.label + t().saveanyway)) return;
+      if (v) cfg.key = v;
+      cfg.model = pickedModel();
     }
     setStat(t().saving);
     const r = await AI.writeTeacher(cfg);
@@ -562,7 +588,21 @@ export function mountKeyManager(container, opts = {}) {
       fillChips();
       if (cfg.provider === 'google') calibrate();
     } else if (r === 'unpaired') setStat(t().pairSave);
-    else setStat(t().savefail);
+    else setStat(r === 'too_big' ? t().toobig : t().savefail);
+  }
+  // A model or effort change on a provider whose key is already saved is written at once: no Save, no key to retype.
+  async function keepSaved() {
+    const p = prov();
+    if ($('key') && $('key').value.trim()) return;                 // a key being typed is saved by Save
+    if (p.local ? !(cfg.base && pickedModel()) : !cfg.key) return;  // nothing saved yet for this provider
+    cfg.model = pickedModel();
+    const r = await AI.writeTeacher(cfg);
+    if (r === true) {
+      if (cfg.keys && cfg.keys[cfg.provider]) cfg.keys[cfg.provider] = Object.assign({}, cfg.keys[cfg.provider], { model: cfg.model }, cfg.effort ? { effort: cfg.effort } : {});
+      const e = AI.effortFor(cfg.provider, cfg.model, cfg.effort);
+      setStat(`${t().setsaved} <b>${esc(AI.modelName(cfg.provider, cfg.model).name)}</b>${e ? ' · ' + esc(AI.effortLabel('label', lang)) + ': ' + esc(AI.effortLabel(e, lang)) : ''}`);
+      onChange(getCfg());
+    } else setStat(r === 'unpaired' ? t().pairSave : r === 'too_big' ? t().toobig : t().savefail);
   }
 
   async function refreshModels() {
@@ -617,7 +657,7 @@ export function mountKeyManager(container, opts = {}) {
       if (remaining.length) {
         const np = remaining[0], e = keys[np];
         cfg.keys = keys;
-        cfg.provider = np; cfg.base = e.base; cfg.model = e.model; cfg.key = e.key; cfg.keyHint = e.keyHint || ''; cfg.version = e.version || '2023-06-01';
+        cfg.provider = np; cfg.base = e.base; cfg.model = e.model; cfg.key = e.key; cfg.keyHint = e.keyHint || ''; cfg.version = e.version || '2023-06-01'; cfg.effort = e.effort || '';
         const r = await AI.writeTeacher(cfg);
         if (r === true) { paint(); if ($('key')) $('key').value = ''; setStat(t().delActive + esc(AI.PROVIDERS[np].label)); onChange(getCfg()); return; }
         if (r === 'unpaired') { setStat(t().pairSave); return; }
@@ -631,7 +671,7 @@ export function mountKeyManager(container, opts = {}) {
     } catch { setStat(t().delfail); }
   }
 
-  function getCfg() { return { provider: cfg.provider, base: cfg.base, model: cfg.model, key: cfg.key, version: cfg.version, exec: cfg.exec, geminiTier: cfg.geminiTier, hasKey: !!cfg.key, keys: cfg.keys }; }
+  function getCfg() { return { provider: cfg.provider, base: cfg.base, model: cfg.model, key: cfg.key, version: cfg.version, exec: cfg.exec, geminiTier: cfg.geminiTier, effort: cfg.effort || '', hasKey: !!cfg.key, keys: cfg.keys }; }
 
   // ======== sections beyond the key: each appears ONLY where it is proven to work ========
   // Device sections (network mode, Telegram, workspace/heartbeat/permissions, wake word, home Whisper, vision helper)
@@ -846,7 +886,7 @@ export function mountKeyManager(container, opts = {}) {
   $('test').addEventListener('click', test);
   $('del').addEventListener('click', del);
   $('key').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
-  if ($('model')) $('model').addEventListener('change', () => { cfg.model = $('model').value; });
+  if ($('model')) $('model').addEventListener('change', () => { cfg.model = $('model').value; paintEffort(); keepSaved(); });
   if ($('detect')) $('detect').addEventListener('click', () => { setStat(t().checking); calibrate(); });
   if ($('exec')) $('exec').querySelectorAll('.it').forEach((b) => b.addEventListener('click', () => {
     cfg.exec = b.dataset.x === 'device' ? 'device' : 'browser'; paint();
