@@ -9,6 +9,7 @@ below is a convenience summary of the major dependencies.
 |---|---|---|
 | ESP-IDF | ESP32-S3 firmware framework / drivers | Apache-2.0 |
 | Lua | on-device VM app runtime | MIT |
+| MicroQuickJS | Nucleo Code script runtime (native store module, `firmware/components/nucleo_code/vendor`) | MIT |
 | Vosk | on-device speech transcription (WASM) | Apache-2.0 |
 | WebLLM / MLC | in-browser LLM (Qwen2, WebGPU) | Apache-2.0 |
 | wllama (llama.cpp) | in-browser LLM inference | MIT |

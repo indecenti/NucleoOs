@@ -13,7 +13,7 @@
 #pragma once
 #include <stdint.h>
 
-#define NUCLEO_NATIVE_ABI    8u            // the level this SDK builds against (abi/v8.txt)
+#define NUCLEO_NATIVE_ABI    9u            // the level this SDK builds against (abi/v9.txt)
 #define NAP_MAGIC            0x3150414eu   // "NAP1" little-endian
 #define NAP_ID_MAX           32
 
