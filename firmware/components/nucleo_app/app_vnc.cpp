@@ -934,8 +934,8 @@ static void paint_menu()
         d.setTextColor(f ? C_BG : (i == MA_QUIT ? C_WARN : C_INK), f ? pill : C_BG);
         d.drawString(menu_label(i), 12, Y(y));
     }
-    foot(L("; . scegli  Invio esegui  Esc chiudi  Fn+Esc esci", "; . pick  Enter run  Esc close  Fn+Esc quit", "; . elige  Intro  Esc cierra  Fn+Esc sale",
-           "; . choisir  Entree  Esc ferme  Fn+Esc quitte", "; . waehlen  Enter  Esc zu  Fn+Esc Ende"));
+    foot(L("; . scegli   Invio esegui   Esc chiudi", "; . pick   Enter run   Esc close", "; . elige   Intro ejecuta   Esc cierra",
+           "; . choisir   Entree   Esc ferme", "; . waehlen   Enter   Esc zu"));
 }
 
 static const char *legend(int i, int col)
@@ -963,13 +963,12 @@ static void paint_keys()
         text(6, 21 + i * 9, legend(i, 0), C_INK);
         text(126, 21 + i * 9, legend(i, 1), C_DIM);
     }
-    if (s_single) text(6, 112, L("Fn+Tab mouse: ; . , / muovi, Invio clic, Del destro", "Fn+Tab mouse: ; . , / move, Enter click, Del right",
-                                 "Fn+Tab raton: ; . , / mueve, Intro clic, Del derecho", "Fn+Tab souris: ; . , / bouge, Entree clic, Del droit",
-                                 "Fn+Tab Maus: ; . , / bewegt, Enter Klick, Del rechts"), C_GOOD);
+    if (s_single) text(6, 112, L("Fn+Tab mouse: ; . , /  Invio  Del dx", "Fn+Tab mouse: ; . , /  Enter  Del right", "Fn+Tab raton: ; . , /  Intro  Del der",
+                                 "Fn+Tab souris: ; . , /  Entree  Del dr", "Fn+Tab Maus: ; . , /  Enter  Del re"), C_GOOD);
     else text(6, 112, L("tocco clic, tieni destro, tieni+trascina seleziona", "tap click, hold right, hold+drag selects", "toque clic, manten derecho, manten+arrastra",
                    "appui clic, tenir droit, tenir+glisser", "tippen Klick, halten rechts, halten+ziehen"), C_GOOD);
-    if (s_single) foot(L("mouse: - = rotella, D trascina  Esc torna", "mouse: - = wheel, D drag  Esc back", "raton: - = rueda, D arrastra  Esc",
-                         "souris: - = molette, D glisser  Esc", "Maus: - = Rad, D ziehen  Esc"));
+    if (s_single) foot(L("- = rotella   D trascina   Esc", "- = wheel   D drag   Esc", "- = rueda   D arrastra   Esc",
+                         "- = molette   D glisse   Esc", "- = Rad   D ziehen   Esc"));
     else foot(L("trascina sposta, bordo destro rotella  Esc", "drag moves, right edge = wheel  Esc", "arrastra mueve, borde derecho rueda  Esc",
            "glisser deplace, bord droit molette  Esc", "ziehen schiebt, rechter Rand Rad  Esc"));
 }
@@ -1253,8 +1252,10 @@ static void run_session(const char *name)
                 if (want != s_cpage) { s_cpage = want; comp_dirty = true; }
                 if (t > 16000000 && !s_mouse && !(s_shots_done & 32)) mouse_toggle();
                 if (t > 19000000 && s_mouse && !(s_shots_done & 32)) { auto_shot(5, "session-mouse"); mouse_toggle(); }
+                if (s_single && t > 20000000 && s_cz == 1 && !(s_shots_done & 64)) set_zoom(4);
+                if (s_single && t > 24000000 && s_cz == 4) { auto_shot(6, "session-zoom"); set_zoom(1); }
             }
-            if (s_bench > 0 && now - t_pan > 4000000) {   // bench: walk the desktop, a full view each time
+            if (s_bench > 0 && !s_mouse && s_cz == 1 && now - t_pan > 4000000) {   // bench: walk the desktop, a full view each time
                 t_pan = now; pan_i = (pan_i + 1) % (int)(sizeof PAN / sizeof PAN[0]);
                 s_vx = PAN[pan_i][0]; s_vy = PAN[pan_i][1]; clamp_view(); s_full = true; M.pans++;
             }
@@ -1581,6 +1582,7 @@ static int note_line(int y, const char *t, unsigned short col)
     return y + 17;
 }
 
+static int whole_rows(int h) { return h - h % 22; }   // app_ui_list's rows: never half a row at the bottom
 static void single_list()
 {
     const int top = nucleo_app_content_top(), bottom = top + nucleo_app_content_height();
@@ -1588,7 +1590,7 @@ static void single_list()
     int y = app_ui_title(L("Desktop remoto", "Remote desktop", "Escritorio remoto", "Bureau a distance", "Fernzugriff"), ACCENT, right);
     if (s_status[0]) y = note_line(y, s_status, C_WARN);
     else if (!s_nsaved) y = note_line(y, L("Serve un server VNC sul PC", "Needs a VNC server on the PC", "Hace falta un servidor VNC", "Il faut un serveur VNC", "Braucht einen VNC-Server"), C_INK);
-    app_ui_list(y, bottom - y, s_nsaved + 1, s_sel, list_label, list_right, list_color, nullptr);
+    app_ui_list(y, whole_rows(bottom - y), s_nsaved + 1, s_sel, list_label, list_right, list_color, nullptr);
     nucleo_app_set_hint(s_sel < s_nsaved ? KEYS_LIST_PC() : KEYS_LIST_NEW());
 }
 static void single_form()
@@ -1597,7 +1599,7 @@ static void single_form()
     char right[8]; snprintf(right, sizeof right, "%d/%d", s_fsel + 1, form_rows());
     int y = app_ui_title(s_edit_i >= 0 ? L("Modifica", "Edit", "Editar", "Modifier", "Bearbeiten") : L("Nuovo PC", "New PC", "Nuevo PC", "Nouveau PC", "Neuer PC"), ACCENT, right);
     y = s_status[0] ? note_line(y, s_status, C_WARN) : note_line(y, form_hint_text(), C_DIM);
-    app_ui_list(y, bottom - y, form_rows(), s_fsel, frow_label, frow_right, frow_color, nullptr);
+    app_ui_list(y, whole_rows(bottom - y), form_rows(), s_fsel, frow_label, frow_right, frow_color, nullptr);
     nucleo_app_set_hint(form_text(s_fsel) ? KEYS_FORM_TXT() : KEYS_FORM_OPT());
 }
 
