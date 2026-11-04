@@ -258,7 +258,7 @@ static bool des_ok()
 static bool vnc_auth()
 {
     if (!s_pw[0]) { s_need_pw = true; fail(L("il PC chiede la password", "the PC wants a password", "el PC pide contrasena", "le PC veut un mot de passe", "der PC will ein Passwort")); return false; }
-    if (!des_ok()) { fail("DES self-test"); return false; }
+    if (!des_ok()) { fail(L("errore interno (DES)", "internal error (DES)", "error interno (DES)", "erreur interne (DES)", "interner Fehler (DES)")); return false; }
     uint8_t ch[16];
     if (!rd(ch, 16)) return false;
     vnc_des_response(s_pw, ch);
