@@ -965,12 +965,12 @@ static void paint_keys()
     }
     if (s_single) text(6, 112, L("Fn+Tab mouse: ; . , /  Invio  Del dx", "Fn+Tab mouse: ; . , /  Enter  Del right", "Fn+Tab raton: ; . , /  Intro  Del der",
                                  "Fn+Tab souris: ; . , /  Entree  Del dr", "Fn+Tab Maus: ; . , /  Enter  Del re"), C_GOOD);
-    else text(6, 112, L("tocco clic, tieni destro, tieni+trascina seleziona", "tap click, hold right, hold+drag selects", "toque clic, manten derecho, manten+arrastra",
-                   "appui clic, tenir droit, tenir+glisser", "tippen Klick, halten rechts, halten+ziehen"), C_GOOD);
+    else text(6, 112, L("tocco = clic    tieni = destro", "tap = click    hold = right", "toque = clic    manten = derecho",
+                        "appui = clic    tenir = droit", "tippen = Klick    halten = rechts"), C_GOOD);
     if (s_single) foot(L("- = rotella   D trascina   Esc", "- = wheel   D drag   Esc", "- = rueda   D arrastra   Esc",
                          "- = molette   D glisse   Esc", "- = Rad   D ziehen   Esc"));
-    else foot(L("trascina sposta, bordo destro rotella  Esc", "drag moves, right edge = wheel  Esc", "arrastra mueve, borde derecho rueda  Esc",
-           "glisser deplace, bord droit molette  Esc", "ziehen schiebt, rechter Rand Rad  Esc"));
+    else foot(L("tieni+muovi trascina  bordo: rotella", "hold+move drags  edge: wheel", "manten+mueve arrastra  borde: rueda",
+                "tenir+bouger glisse  bord: molette", "halten+ziehen  Rand: Rad"));
 }
 
 static void companion()
@@ -1510,8 +1510,8 @@ static void on_draw_large()
 static const char *KEYS_LIST_PC()  { return L("Invio collega  E modifica  N nuovo", "Enter connect  E edit  N new", "Intro conecta  E edita  N nueva",
                                              "Entree connecte  E modifie  N nouveau", "Enter verbindet  E aendern  N neu"); }
 static const char *KEYS_LIST_NEW() { return L("Invio crea  Fn+Esc esci", "Enter create  Fn+Esc quit", "Intro crea  Fn+Esc sale", "Entree cree  Fn+Esc quitte", "Enter neu  Fn+Esc Ende"); }
-static const char *KEYS_FORM_TXT() { return L("Invio avanti  Fn+; . campo  Esc annulla", "Enter next  Fn+; . field  Esc cancel", "Intro sigue  Fn+; . campo  Esc anula",
-                                             "Entree suite  Fn+; . champ  Esc annule", "Enter weiter  Fn+; . Feld  Esc ab"); }
+static const char *KEYS_FORM_TXT() { return L("Invio avanti  Fn+; . campo  Esc", "Enter next  Fn+; . field  Esc", "Intro sigue  Fn+; . campo  Esc",
+                                             "Entree suite  Fn+; . champ  Esc", "Enter weiter  Fn+; . Feld  Esc"); }
 static const char *KEYS_FORM_OPT() { return L("; . campo  Invio cambia  Esc annulla", "; . field  Enter change  Esc cancel", "; . campo  Intro cambia  Esc anula",
                                              "; . champ  Entree change  Esc annule", "; . Feld  Enter aendert  Esc ab"); }
 static const char *form_hint_text()
@@ -1618,9 +1618,8 @@ static void paint_comp_list()
         else {
             snprintf(ln, sizeof ln, "zoom 1:%d%s", s.scale, s.autoc ? L("  -  si apre da solo", "  -  opens by itself", "  -  se abre solo", "  -  s'ouvre seul", "  -  startet selbst") : "");
             text(8, y + 56, ln, C_INK, &fonts::Font2);
-            d.setFont(&fonts::Font2); d.setTextColor(C_DIM, C_BG);
-            lg::wrap(L("VNC non e cifrato: usalo solo nella rete di casa", "VNC is not encrypted: home network only", "VNC no cifra: solo en la red de casa",
-                       "VNC n'est pas chiffre: reseau maison seulement", "VNC ist unverschluesselt: nur im Heimnetz"), 8, y + 76, 224, 16, 2);
+            text(8, y + 76, L("Non cifrato: solo rete di casa", "Not encrypted: home network only", "Sin cifrar: solo red de casa",
+                              "Non chiffre: reseau maison", "Unverschluesselt: nur Heimnetz"), C_DIM, &fonts::Font2);
         }
         lg::comp_keys(KEYS_LIST_PC());
     } else {
