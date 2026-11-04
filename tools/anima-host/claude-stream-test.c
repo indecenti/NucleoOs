@@ -17,6 +17,7 @@ typedef struct { const char *q, *a; } anima_turn_t;
 
 static int fails;
 #define CHECK(c) do { if (!(c)) { printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #c); fails++; } } while (0)
+#include "claude-tools-test.inc"
 static void eff(const char *m, const char *w, const char *exp, bool expthink)
 {
     bool th; const char *e = anth_effort_for(m, w, &th);
@@ -76,6 +77,7 @@ int main(void)
     s = calloc(1, sizeof *s); s->cap = 100; anth_sse_feed(s, err, (int)strlen(err));
     CHECK(s->err && !s->txt); free(s);
 
+    test_tool_stream();
     printf(fails ? "FAILED %d\n" : "ALL OK\n", fails);
     return fails != 0;
 }

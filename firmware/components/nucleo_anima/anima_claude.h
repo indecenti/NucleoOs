@@ -116,3 +116,123 @@ static void anth_sse_feed(anth_sse_t *s, const char *b, int n)
     }
 }
 
+
+// ===========================================================================
+// The full event stream (Nucleo Code's agent, the LLM service of ABI 9): text, TOOL CALLS, usage and the stop
+// reason, delivered through callbacks as they complete. A tool call's input arrives as input_json_delta
+// pieces; they are joined in a buffer the caller gives (bounded: an input that does not fit is reported with
+// json == NULL so the agent can answer "too large, write it in parts"). Server tools (web search) run on
+// Anthropic's side: their blocks are skipped here.
+// ===========================================================================
+typedef struct { uint32_t in, out, cache_read, cache_write; } anth_usage_t;
+typedef struct {
+    void (*text)(void *op, const char *s, size_t n);
+    void (*tool)(void *op, const char *id, const char *name, const char *json, size_t n);   // json NULL = too large
+    void (*done)(void *op, const char *stop_reason, const anth_usage_t *u);
+    void (*error)(void *op, const char *msg);
+    void (*thinking)(void *op, const char *signature);        // a finished thinking block (text omitted): pass it back
+} anth_cb_t;
+typedef struct {
+    anth_cb_t cb; void *op;
+    char  *tj; size_t tjlen, tjcap; bool tjover;   // the current tool call's input (caller's buffer)
+    int    tool_index;                              // content block index of the open tool call, -1 = none
+    int    think_index;                             // ... of the open thinking block, -1 = none
+    size_t siglen; bool sigover;
+    char   sig[2048];                               // its signature (the reasoning stays on Anthropic's side)
+    char   tid[48], tname[48];
+    char   stop[24];
+    anth_usage_t usage;
+    bool   done, err, skip;
+    size_t ll;
+    char   line[4096];
+} anth_stream_t;
+
+static void anth_stream_init(anth_stream_t *s, const anth_cb_t *cb, void *op, char *tool_buf, size_t tool_cap)
+{
+    memset(s, 0, sizeof *s);
+    if (cb) s->cb = *cb;
+    s->op = op; s->tj = tool_buf; s->tjcap = tool_cap; s->tool_index = -1; s->think_index = -1;
+}
+static uint32_t anth_u32(cJSON *o, const char *k) { cJSON *v = o ? cJSON_GetObjectItem(o, k) : NULL; return cJSON_IsNumber(v) ? (uint32_t)v->valuedouble : 0; }
+
+static void anth_stream_line(anth_stream_t *s)
+{
+    s->line[s->ll] = 0;
+    if (strncmp(s->line, "data:", 5)) return;
+    const char *d = s->line + 5; while (*d == ' ') d++;
+    cJSON *o = cJSON_Parse(d); if (!o) return;
+    cJSON *ty = cJSON_GetObjectItem(o, "type");
+    const char *t = cJSON_IsString(ty) ? ty->valuestring : "";
+    if (!strcmp(t, "content_block_delta")) {
+        cJSON *dl = cJSON_GetObjectItem(o, "delta"), *dt = dl ? cJSON_GetObjectItem(dl, "type") : NULL;
+        const char *k = cJSON_IsString(dt) ? dt->valuestring : "";
+        if (!strcmp(k, "text_delta")) {
+            cJSON *x = cJSON_GetObjectItem(dl, "text");
+            if (cJSON_IsString(x) && s->cb.text) s->cb.text(s->op, x->valuestring, strlen(x->valuestring));
+        } else if (!strcmp(k, "signature_delta") && s->think_index >= 0) {
+            cJSON *x = cJSON_GetObjectItem(dl, "signature");
+            if (cJSON_IsString(x)) {
+                size_t n = strlen(x->valuestring);
+                if (s->siglen + n < sizeof s->sig) { memcpy(s->sig + s->siglen, x->valuestring, n); s->siglen += n; s->sig[s->siglen] = 0; }
+                else s->sigover = true;
+            }
+        } else if (!strcmp(k, "input_json_delta") && s->tool_index >= 0) {
+            cJSON *x = cJSON_GetObjectItem(dl, "partial_json");
+            if (cJSON_IsString(x)) {
+                size_t n = strlen(x->valuestring);
+                if (s->tj && s->tjlen + n < s->tjcap) { memcpy(s->tj + s->tjlen, x->valuestring, n); s->tjlen += n; s->tj[s->tjlen] = 0; }
+                else s->tjover = true;
+            }
+        }
+    } else if (!strcmp(t, "content_block_start")) {
+        cJSON *b = cJSON_GetObjectItem(o, "content_block"), *bt = b ? cJSON_GetObjectItem(b, "type") : NULL;
+        if (cJSON_IsString(bt) && !strcmp(bt->valuestring, "thinking")) {
+            s->think_index = (int)anth_u32(o, "index"); s->siglen = 0; s->sig[0] = 0; s->sigover = false;
+        } else if (cJSON_IsString(bt) && !strcmp(bt->valuestring, "tool_use")) {
+            cJSON *id = cJSON_GetObjectItem(b, "id"), *nm = cJSON_GetObjectItem(b, "name");
+            s->tool_index = (int)anth_u32(o, "index");
+            snprintf(s->tid, sizeof s->tid, "%s", cJSON_IsString(id) ? id->valuestring : "");
+            snprintf(s->tname, sizeof s->tname, "%s", cJSON_IsString(nm) ? nm->valuestring : "");
+            s->tjlen = 0; s->tjover = false; if (s->tj && s->tjcap) s->tj[0] = 0;
+        }
+    } else if (!strcmp(t, "content_block_stop")) {
+        if (s->think_index >= 0 && (int)anth_u32(o, "index") == s->think_index) {
+            if (s->cb.thinking && s->siglen && !s->sigover) s->cb.thinking(s->op, s->sig);
+            s->think_index = -1;
+        }
+        if (s->tool_index >= 0 && (int)anth_u32(o, "index") == s->tool_index) {
+            if (s->cb.tool) {
+                if (s->tjover) s->cb.tool(s->op, s->tid, s->tname, NULL, 0);
+                else s->cb.tool(s->op, s->tid, s->tname, s->tjlen ? s->tj : "{}", s->tjlen ? s->tjlen : 2);
+            }
+            s->tool_index = -1;
+        }
+    } else if (!strcmp(t, "message_start")) {
+        cJSON *m = cJSON_GetObjectItem(o, "message"), *u = m ? cJSON_GetObjectItem(m, "usage") : NULL;
+        s->usage.in = anth_u32(u, "input_tokens"); s->usage.cache_read = anth_u32(u, "cache_read_input_tokens");
+        s->usage.cache_write = anth_u32(u, "cache_creation_input_tokens");
+    } else if (!strcmp(t, "message_delta")) {
+        cJSON *dl = cJSON_GetObjectItem(o, "delta"), *sr = dl ? cJSON_GetObjectItem(dl, "stop_reason") : NULL;
+        if (cJSON_IsString(sr)) snprintf(s->stop, sizeof s->stop, "%s", sr->valuestring);
+        cJSON *u = cJSON_GetObjectItem(o, "usage");
+        if (u) { uint32_t out = anth_u32(u, "output_tokens"); if (out) s->usage.out = out; }
+    } else if (!strcmp(t, "message_stop")) {
+        s->done = true;
+        if (s->cb.done) s->cb.done(s->op, s->stop[0] ? s->stop : "end_turn", &s->usage);
+    } else if (!strcmp(t, "error")) {
+        cJSON *e = cJSON_GetObjectItem(o, "error"), *msg = e ? cJSON_GetObjectItem(e, "message") : NULL;
+        s->err = true;
+        if (s->cb.error) s->cb.error(s->op, cJSON_IsString(msg) ? msg->valuestring : "stream error");
+    }
+    cJSON_Delete(o);
+}
+static void anth_stream_feed(anth_stream_t *s, const char *b, int n)
+{
+    for (int i = 0; i < n && !s->done && !s->err; i++) {
+        char ch = b[i];
+        if (ch == '\n') { if (!s->skip) anth_stream_line(s); s->ll = 0; s->skip = false; }
+        else if (ch == '\r') { }
+        else if (s->ll < sizeof s->line - 1) s->line[s->ll++] = ch;
+        else s->skip = true;
+    }
+}

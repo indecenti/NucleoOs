@@ -1,5 +1,5 @@
 # NucleoOS native app ABI, level 9 = level 8 + the C runtime a language engine needs (Nucleo Code, docs/nucleo-code.md):
-# libgcc's double-precision and 64-bit helpers (the ESP32-S3 FPU is single precision), setjmp/longjmp and abort.
+# cJSON's builders (the agent's requests), libgcc's double-precision and 64-bit helpers (the ESP32-S3 FPU is single precision), setjmp/longjmp and abort.
 # Same rules as v1.txt.
 THEME_BG
 THEME_DIM
@@ -316,3 +316,25 @@ longjmp
 abort
 __assert_func
 realloc
+cJSON_CreateObject
+cJSON_CreateArray
+cJSON_CreateString
+cJSON_CreateNumber
+cJSON_CreateBool
+cJSON_CreateNull
+cJSON_AddItemToObject
+cJSON_AddItemToArray
+cJSON_AddStringToObject
+cJSON_AddNumberToObject
+cJSON_AddBoolToObject
+cJSON_AddObjectToObject
+cJSON_AddArrayToObject
+cJSON_PrintUnformatted
+cJSON_ParseWithLength
+cJSON_Duplicate
+cJSON_DetachItemFromArray
+cJSON_DeleteItemFromArray
+cJSON_GetStringValue
+cJSON_IsObject
+cJSON_free
+cJSON_GetObjectItemCaseSensitive

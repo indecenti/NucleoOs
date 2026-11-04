@@ -18,7 +18,7 @@ const CJSON = cjsonDirs.find((d) => existsSync(join(d, 'cJSON.c')));
 if (!CJSON) { console.error(`[claude-stream] cJSON (ESP-IDF) not found in ${cjsonDirs.join(', ')}; set IDF_PATH`); process.exit(1); }
 const exe = join(build, 'claude-stream' + (process.platform === 'win32' ? '.exe' : ''));
 const cc = spawnSync(GCC, ['-std=gnu11', '-O0', '-Wall', '-Wno-unused-function',
-  '-I', join(repo, 'firmware/components/nucleo_anima'), '-I', CJSON,
+  '-I', join(repo, 'firmware/components/nucleo_anima'), '-I', CJSON, '-I', here,
   join(here, 'claude-stream-test.c'), join(CJSON, 'cJSON.c'), '-o', exe], { encoding: 'utf8', env });
 if (cc.error || cc.status !== 0) { console.error('[claude-stream] compile failed:\n' + (cc.stderr || cc.stdout || cc.error?.message)); process.exit(1); }
 const run = spawnSync(exe, [], { encoding: 'utf8', env });

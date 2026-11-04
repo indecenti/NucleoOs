@@ -1,0 +1,1 @@
+inventory.js is broken: it does not run on this device and its report is wrong. The spec is the comment at the top of the file. Find every bug, fix it, run it and show me the final output.

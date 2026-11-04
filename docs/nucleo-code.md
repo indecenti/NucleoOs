@@ -246,3 +246,52 @@ Sources: [MicroQuickJS](https://github.com/bellard/mquickjs) · [MicroQuickJS as
 [PikaPython](https://www.hackster.io/news/pikascript-crams-python-onto-microcontrollers-with-just-4kb-of-ram-and-32kb-of-storage-f23957b215c7) ·
 [MicroPython heap on ESP32](https://github.com/micropython/micropython/pull/7963) · [Tasmota Berry](https://docs.lvgl.io/8/get-started/platforms/tasmota-berry.html) ·
 [JS engines on ESP32](https://esp32.com/viewtopic.php?p=8687)
+
+## 14. Status and measurements (2026-11-05)
+
+Built (store-only, host-tested; the device bench `b` in the Code app is still to run on the ADV):
+- `nucleo_code/code_rt.c` — the runtime: MicroQuickJS in a caller arena, time limit, workspace-confined `fs`,
+  errors with file:line, memory live after GC. Gate: `npm run code:test`.
+- `nucleo_code/code_agent.c` — the agent loop: Anthropic text editor (view / create / str_replace / insert),
+  `run_js`, `search`, `todo_write`; thinking signatures passed back; prompt cache on system + tools + a moving
+  breakpoint on the last message; usage and cost per turn. `anima_claude.h` parses the full stream (text,
+  tool_use with `input_json_delta`, thinking signatures, usage, stop reason). Gate: `npm run claude:test`.
+- ABI 9 (unreleased): v8 + libgcc double / 64-bit helpers, setjmp/longjmp, abort, realloc, cJSON builders.
+- Module `code` 0.1.0: 203,724 B (117 KB code), 11.7 KB static RAM (the stdlib tables' relocated pointers:
+  to reduce).
+
+### The dialect, measured (MicroQuickJS 6d4d7eb6)
+Not available: `let`/`const`, arrow functions, template literals, `class`, destructuring, spread, default
+parameters, `Map`/`Set`/`Symbol`/`Promise`, `Object.assign/values/entries/freeze`, `Array find/includes/from`,
+`String includes/startsWith/endsWith/padStart`, `Number.isInteger`. Writing past an array's end throws. A catch
+variable name must be unique in its function and differ from every `var` there (SyntaxError otherwise).
+Available: ES5 core, `for...of` on arrays, method shorthand, `repeat/replaceAll/trim*`, RegExp, JSON, typed
+arrays, `Object.keys`. The system prompt states all of it; a compatibility layer for the missing methods is next.
+
+### Agent bench, real API (`npm run code:bench`, checkers the model never sees, run in the device engine)
+
+| Task | Sonnet 5.5 medium | Sonnet 5.5 low |
+|---|---|---|
+| calc: tokenizer + recursive-descent parser, 19 checks | pass, 2 calls, $0.039 | pass, $0.033 |
+| bugfix: ES6 + 3 logic bugs in a seeded file | pass, 3 calls, $0.015 | pass, $0.015 |
+| csv: report from a CSV + markdown file | pass, 3 calls, $0.018 | pass, $0.019 |
+| sudoku: backtracking with fewest-candidates | pass, 2 calls, $0.018 | pass, $0.015 |
+| ledger: cents arithmetic, overdrafts, malformed lines | pass, 3 calls, $0.027 | pass, $0.025 |
+| story: 3 chapters + index, plan first | pass, 6 calls, $0.072 | pass, $0.052 |
+| lisp: interpreter with closures, recursion, errors (15 checks) | pass, 3 calls, $0.078 | — |
+| port: Python script to JS, identical output | pass, 3 calls, $0.029 | — |
+
+Observed: parallel tool calls (create + run in one message); prompt cache reads from the second call; on the
+first sudoku run the model found that the given puzzle had no solution, named the typo in the data and did not
+force an answer. It still writes markdown in its final answer despite the instruction: the UI renders it as
+plain text (strip `**`, backticks, fences) rather than relying on the prompt.
+
+### Next
+1. Device bench (RAM per phase, §8) with the ADV; then the arena size and the static RAM.
+2. The LLM service in the firmware (`nucleo_llm_post`: TLS + key + streamed bytes; the parser runs in the module)
+   and the agent inside the Code app: status bar, tool cards, approvals, diff view, session on the SD card.
+3. Apps from the agent: a script API for screen / keys / sound and the ADV's 320x240 panel, `promote_app` into
+   `/apps/scripts/<id>/` (launcher), and **visual testing**: a test run returns a screenshot of what the app drew
+   (both screens) plus scripted keys, so the model checks its own UI.
+4. ANIMA offers Code from the Store when asked to write or run a program and Code is not installed (and the
+   same for other tools: emulators for a ROM, VNC for a remote desktop).
