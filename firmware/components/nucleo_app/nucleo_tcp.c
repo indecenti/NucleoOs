@@ -45,7 +45,9 @@ static bool address_allowed(uint32_t a /* network order */)
     return true;
 }
 
-static void wdt(void) { esp_task_wdt_reset(); }
+// Every call feeds the caller's task watchdog (the app loop is subscribed, 8 s): a session that only ever waits in
+// short slices, or that receives without waiting, would otherwise starve it. Unsubscribed callers are left alone.
+static void wdt(void) { if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset(); }
 
 int nucleo_tcp_connect(const char *host, int port, int timeout_ms)
 {
@@ -96,9 +98,9 @@ bool nucleo_tcp_readable(int h, int timeout_ms)
         const int slice = left > 100 ? 100 : left;
         fd_set r; FD_ZERO(&r); FD_SET(s, &r);
         struct timeval tv = { 0, slice * 1000 };
+        wdt();
         if (select(s + 1, &r, NULL, NULL, &tv) > 0) return true;
         left -= slice;
-        if (left > 0) wdt();
     } while (left > 0);
     return false;
 }
@@ -120,6 +122,7 @@ int nucleo_tcp_send(int h, const void *buf, int len, int timeout_ms)
     if (s < 0 || (!buf && len > 0) || len < 0) return NUCLEO_TCP_ERROR;
     const char *p = (const char *)buf;
     int left = len;
+    wdt();
     const int64_t until = esp_timer_get_time() + (int64_t)(timeout_ms > 0 ? timeout_ms : 1) * 1000;
     while (left > 0) {
         const int w = send(s, p, left, 0);

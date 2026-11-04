@@ -42,6 +42,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_task_wdt.h"
 #include "esp_timer.h"
 #include "esp_random.h"
 #include "cJSON.h"
@@ -985,7 +986,7 @@ static void run_session(const char *name)
     char sub[96];
     snprintf(sub, sizeof sub, "%s:%d", s_host, s_port);
     if (!nucleo_tcp_network_up()) panel_message(L("Attendo il Wi-Fi...", "Waiting for Wi-Fi...", "Esperando Wi-Fi...", "Attente du Wi-Fi...", "Warte auf WLAN..."), sub, C_DIM);
-    for (int i = 0; i < 200 && !nucleo_tcp_network_up(); i++) vTaskDelay(pdMS_TO_TICKS(100));
+    for (int i = 0; i < 200 && !nucleo_tcp_network_up(); i++) { esp_task_wdt_reset(); vTaskDelay(pdMS_TO_TICKS(100)); }
     heap_sample(); M.free_before = M.free_now; M.free_min = M.largest_min = 0;
     C = {}; C.h = 0;
     G = Gesture{};
@@ -1016,6 +1017,7 @@ static void run_session(const char *name)
         int gmode_seen = G_IDLE;
         bool quit = false, comp_dirty = true;
         while (!quit && !C.fail) {
+            esp_task_wdt_reset();                         // the session runs inside one app callback: keep the dog fed
             int64_t now = esp_timer_get_time();
             // A full request starts the count again: a server may never answer the incremental one it still holds
             // for the old view (nothing changes there), and waiting for it would stall the new view.
@@ -1440,7 +1442,7 @@ static void on_tick()
                 FILE *lf = fopen(VNC_DIR "/sessions.log", run == 1 ? "w" : "a");
                 if (lf) { fprintf(lf, "%d %s %s heapmin=%u\n", run, C.fail ? "error" : "ok", M.err, (unsigned)M.free_min); fclose(lf); }
                 if (run > s_retries) break;
-                vTaskDelay(pdMS_TO_TICKS(1500));
+                esp_task_wdt_reset(); vTaskDelay(pdMS_TO_TICKS(1500));
                 connect_sel();
             }
             if (s_bench > 0 || s_retries > 0) { nucleo_app_exit(); return; }   // a bench run goes back to the full OS by itself
