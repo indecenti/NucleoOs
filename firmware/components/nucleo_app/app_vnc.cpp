@@ -36,6 +36,7 @@
 #include "nucleo_theme.h"
 #include "app_gfx.h"
 #include "app_large.h"
+#include "app_ui.h"
 #include "vnc_des.h"
 #include <M5GFX.h>
 #include "freertos/FreeRTOS.h"
@@ -732,6 +733,16 @@ static M5Canvas *s_band = nullptr;
 static int s_oy = 0;
 static inline int Y(int y) { return y - s_oy; }
 
+static void band_alloc()
+{
+    if (s_band) return;
+    s_band = new (std::nothrow) M5Canvas();
+    if (s_band) {
+        s_band->setColorDepth(16);
+        if (!s_band->createSprite(240, BAND_H)) { delete s_band; s_band = nullptr; }
+    }
+}
+static void band_free() { if (s_band) { s_band->deleteSprite(); delete s_band; s_band = nullptr; } }
 static void band_render(LovyanGFX *dst, int top, int h, void (*paint)(void))
 {
     if (!dst) return;
@@ -1101,6 +1112,8 @@ static void run_session(const char *name)
     memset(&M, 0, sizeof M);
     M.t_start = esp_timer_get_time();
     s_auth_vnc = s_need_pw = false;
+    nucleo_app_set_direct_draw(true);                    // the session draws straight to the screens: the canvas's RAM is its
+    band_alloc();
     s_status[0] = 0;
     s_cur_name = name;
     bool switched = false;
@@ -1297,6 +1310,8 @@ static void run_session(const char *name)
     free(s_strip); s_strip = nullptr;
     d.setSwapBytes(swap);
     if (switched) nucleo_surface_set_large(false);
+    band_free();
+    nucleo_app_set_direct_draw(false);                   // the list and the form: back to the system's canvas
     snprintf(s_status, sizeof s_status, "%s", C.fail ? M.err : "");
     nucleo_app_force_repaint();
     nucleo_app_request_draw();
@@ -1476,69 +1491,159 @@ static void on_draw_large()
     }
     nucleo_touch_commit();
     s_drawn = s_page;
-    // The Cardputer's page: with the canvas given back the run loop does not call on_draw on two screens, so the
-    // app paints it itself, through the band (no flicker).
-    if (LovyanGFX *ig = (LovyanGFX *)nucleo_extdisp_internal_gfx()) band_render(ig, 0, 135, s_page == P_FORM ? paint_comp_form : paint_comp_list);
 }
 
+// ── the Cardputer's screen outside a session: the system's canvas (buffered, no flicker) and the system's kit ──
+// Two screens: the companion of the panel (lg::comp_head / comp_keys), the detail of what the panel shows.
+// One screen: the pages themselves, as every Cardputer list app (app_ui), the keys in the system's bar.
+static const char *KEYS_LIST_PC()  { return L("Invio collega  E modifica  N nuovo", "Enter connect  E edit  N new", "Intro conecta  E edita  N nueva",
+                                             "Entree connecte  E modifie  N nouveau", "Enter verbindet  E aendern  N neu"); }
+static const char *KEYS_LIST_NEW() { return L("Invio crea  Fn+Esc esci", "Enter create  Fn+Esc quit", "Intro crea  Fn+Esc sale", "Entree cree  Fn+Esc quitte", "Enter neu  Fn+Esc Ende"); }
+static const char *KEYS_FORM_TXT() { return L("Invio avanti  Fn+; . campo  Esc annulla", "Enter next  Fn+; . field  Esc cancel", "Intro sigue  Fn+; . campo  Esc anula",
+                                             "Entree suite  Fn+; . champ  Esc annule", "Enter weiter  Fn+; . Feld  Esc ab"); }
+static const char *KEYS_FORM_OPT() { return L("; . campo  Invio cambia  Esc annulla", "; . field  Enter change  Esc cancel", "; . campo  Intro cambia  Esc anula",
+                                             "; . champ  Entree change  Esc annule", "; . Feld  Enter aendert  Esc ab"); }
+static const char *form_hint_text()
+{
+    switch (s_fsel) {
+        case F_NAME: return L("Come lo vuoi chiamare", "What to call it", "Como llamarlo", "Comment l'appeler", "Wie er heissen soll");
+        case F_HOST: return L("IP o nome del PC, es. 192.168.1.20", "The PC's IP or name, e.g. 192.168.1.20", "IP o nombre del PC, ej. 192.168.1.20",
+                              "IP ou nom du PC, ex. 192.168.1.20", "IP oder Name des PCs, z.B. 192.168.1.20");
+        case F_PORT: return L("Solo cifre, di solito 5900", "Digits only, usually 5900", "Solo cifras, normalmente 5900", "Chiffres, souvent 5900", "Nur Ziffern, meist 5900");
+        case F_PASS: return s_pw_prompt ? L("Scrivila e premi Invio: mi collego", "Type it and press Enter to connect", "Escribela y pulsa Intro",
+                                            "Tapez-le puis Entree", "Eingeben, dann Enter")
+                                        : L("Max 8 caratteri, resta nel Cardputer", "8 characters max, kept in the Cardputer", "Max 8, queda en el Cardputer",
+                                            "8 max, reste dans le Cardputer", "Max 8, bleibt im Cardputer");
+        case F_ZOOM: return L("Quanto rimpicciolire il desktop", "How much to shrink the desktop", "Cuanto reducir el escritorio", "Reduction du bureau", "Wie stark verkleinern");
+        case F_AUTO: return L("Si collega appena apri l'app", "Connects as soon as the app opens", "Conecta al abrir la app", "Connecte des l'ouverture", "Verbindet beim Start");
+        case F_SAVE: return L("Salva e torna all'elenco", "Save and back to the list", "Guardar y volver", "Enregistrer et revenir", "Speichern, zurueck");
+        default:     return L("Toglie il PC e la sua password", "Removes the PC and its password", "Quita el PC y su contrasena", "Retire le PC et son mot de passe", "Entfernt PC und Passwort");
+    }
+}
+// What a form field holds, as shown: passwords as stars (or whether one is stored), a cursor on the field being typed.
+static const char *form_value(int f, char *v, int cap)
+{
+    switch (f) {
+        case F_NAME: case F_HOST: case F_PORT: { int c; snprintf(v, cap, "%s%s", form_buf(f, &c), f == s_fsel ? "_" : ""); break; }
+        case F_PASS:
+            if (s_pw_touched) { const int n = (int)strlen(s_pw); int k = 0; for (; k < n && k < cap - 2; k++) v[k] = '*'; if (f == s_fsel) v[k++] = '_'; v[k] = 0; }
+            else snprintf(v, cap, "%s", s_pw_known ? L("salvata", "saved", "guardada", "enregistre", "gespeichert") : L("nessuna", "none", "ninguna", "aucun", "keins"));
+            break;
+        case F_ZOOM: snprintf(v, cap, "< 1:%d >", s_edit.scale); break;
+        case F_AUTO: snprintf(v, cap, "%s", s_edit.autoc ? L("si", "on", "si", "oui", "an") : L("no", "off", "no", "non", "aus")); break;
+        case F_DEL:  snprintf(v, cap, "%s", s_del_armed ? L("Invio: conferma", "Enter: confirm", "Intro: confirma", "Entree: confirme", "Enter: bestaetigen") : ""); break;
+        default: v[0] = 0; break;
+    }
+    return v;
+}
+static const char *short_label(int f)
+{
+    switch (f) {
+        case F_NAME: return L("Nome", "Name", "Nombre", "Nom", "Name");
+        case F_HOST: return L("Indirizzo", "Address", "Direccion", "Adresse", "Adresse");
+        case F_PORT: return L("Porta", "Port", "Puerto", "Port", "Port");
+        case F_PASS: return "Password";
+        case F_ZOOM: return "Zoom";
+        case F_AUTO: return L("All'avvio", "On open", "Al abrir", "Au demarrage", "Beim Start");
+        case F_SAVE: return L("Salva", "Save", "Guardar", "Enregistrer", "Speichern");
+        default:     return L("Elimina", "Delete", "Borrar", "Supprimer", "Loeschen");
+    }
+}
+static const char *NEW_ROW() { return L("+ Nuovo PC", "+ New PC", "+ Nuevo PC", "+ Nouveau PC", "+ Neuer PC"); }
+
+// one screen: the list
+static const char *list_label(int i, void *) { return i < s_nsaved ? s_saved[i].name : NEW_ROW(); }
+static const char *list_right(int i, void *) { return i < s_nsaved ? s_saved[i].host : nullptr; }
+static unsigned short list_color(int i, void *) { return i < s_nsaved ? ACCENT : C_GOOD; }
+// one screen: the form, one row per field (label, value)
+static char s_fval[F_N][40];
+static const char *frow_label(int i, void *) { return short_label(i); }
+static const char *frow_right(int i, void *) { return form_value(i, s_fval[i], sizeof s_fval[i]); }
+static unsigned short frow_color(int i, void *) { return i == F_DEL ? C_BAD : i == F_SAVE ? C_GOOD : ACCENT; }
+
+// A line under the title: what went wrong, or the field's help.
+static int note_line(int y, const char *t, unsigned short col)
+{
+    d.setFont(&fonts::Font2); d.setTextSize(1); d.setTextDatum(top_left); d.setTextColor(col, C_BG);
+    char f[64]; lg::fit(f, sizeof f, t, 228);
+    d.drawString(f, 8, y);
+    d.setFont(&fonts::Font0);
+    return y + 17;
+}
+
+static void single_list()
+{
+    const int top = nucleo_app_content_top(), bottom = top + nucleo_app_content_height();
+    char right[12]; snprintf(right, sizeof right, "%d PC", s_nsaved);
+    int y = app_ui_title(L("Desktop remoto", "Remote desktop", "Escritorio remoto", "Bureau a distance", "Fernzugriff"), ACCENT, right);
+    if (s_status[0]) y = note_line(y, s_status, C_WARN);
+    else if (!s_nsaved) y = note_line(y, L("Serve un server VNC sul PC", "Needs a VNC server on the PC", "Hace falta un servidor VNC", "Il faut un serveur VNC", "Braucht einen VNC-Server"), C_INK);
+    app_ui_list(y, bottom - y, s_nsaved + 1, s_sel, list_label, list_right, list_color, nullptr);
+    nucleo_app_set_hint(s_sel < s_nsaved ? KEYS_LIST_PC() : KEYS_LIST_NEW());
+}
+static void single_form()
+{
+    const int top = nucleo_app_content_top(), bottom = top + nucleo_app_content_height();
+    char right[8]; snprintf(right, sizeof right, "%d/%d", s_fsel + 1, form_rows());
+    int y = app_ui_title(s_edit_i >= 0 ? L("Modifica", "Edit", "Editar", "Modifier", "Bearbeiten") : L("Nuovo PC", "New PC", "Nuevo PC", "Nouveau PC", "Neuer PC"), ACCENT, right);
+    y = s_status[0] ? note_line(y, s_status, C_WARN) : note_line(y, form_hint_text(), C_DIM);
+    app_ui_list(y, bottom - y, form_rows(), s_fsel, frow_label, frow_right, frow_color, nullptr);
+    nucleo_app_set_hint(form_text(s_fsel) ? KEYS_FORM_TXT() : KEYS_FORM_OPT());
+}
+
+// two screens: the companion of the panel
 static void paint_comp_list()
 {
-    head_band(L("Desktop remoto", "Remote desktop", "Escritorio remoto", "Bureau a distance", "Fernzugriff"), "VNC", 0);
+    int y = lg::comp_head(L("Desktop remoto", "Remote desktop", "Escritorio remoto", "Bureau a distance", "Fernzugriff"), ACCENT);
     if (s_sel < s_nsaved) {
         const Saved &s = s_saved[s_sel];
-        text(8, 24, s.name, C_INK, &fonts::FreeSansBold12pt7b);
-        char ln[96]; snprintf(ln, sizeof ln, "%s : %d", s.host, s.port); text(8, 52, ln, ACCENT, &fonts::Font2);
-        snprintf(ln, sizeof ln, "zoom 1:%d%s", s.scale, s.autoc ? L("   si apre da solo", "   opens by itself", "   se abre solo", "   s'ouvre seul", "   startet selbst") : "");
-        text(8, 72, ln, C_DIM);
-        if (s_status[0]) text(8, 86, s_status, C_WARN, &fonts::Font2);
-        else text(8, 88, L("VNC non e cifrato: solo nella rete di casa", "VNC is not encrypted: home network only", "VNC no cifra: solo red de casa",
-                           "VNC non chiffre: reseau maison seulement", "VNC unverschluesselt: nur Heimnetz"), C_DIM);
-        foot(L("Invio collega   E modifica   N nuovo", "Enter connect   E edit   N new", "Intro conecta   E edita   N nueva",
-               "Entree connecte   E modifie   N nouveau", "Enter verbindet   E aendern   N neu"));
+        char ln[96]; lg::fit(ln, sizeof ln, s.name, 224);
+        text(8, y + 4, ln, C_INK, &fonts::FreeSansBold12pt7b);
+        snprintf(ln, sizeof ln, "%s : %d", s.host, s.port);
+        char f[96]; d.setFont(&fonts::Font2); lg::fit(f, sizeof f, ln, 224);
+        text(8, y + 34, f, ACCENT, &fonts::Font2);
+        if (s_status[0]) { d.setFont(&fonts::Font2); d.setTextColor(C_WARN, C_BG); lg::wrap(s_status, 8, y + 56, 224, 17, 2); }
+        else {
+            snprintf(ln, sizeof ln, "zoom 1:%d%s", s.scale, s.autoc ? L("  -  si apre da solo", "  -  opens by itself", "  -  se abre solo", "  -  s'ouvre seul", "  -  startet selbst") : "");
+            text(8, y + 56, ln, C_INK, &fonts::Font2);
+            d.setFont(&fonts::Font2); d.setTextColor(C_DIM, C_BG);
+            lg::wrap(L("VNC non e cifrato: usalo solo nella rete di casa", "VNC is not encrypted: home network only", "VNC no cifra: solo en la red de casa",
+                       "VNC n'est pas chiffre: reseau maison seulement", "VNC ist unverschluesselt: nur im Heimnetz"), 8, y + 76, 224, 16, 2);
+        }
+        lg::comp_keys(KEYS_LIST_PC());
     } else {
-        text(8, 26, L("Nuovo collegamento", "New connection", "Nueva conexion", "Nouvelle connexion", "Neue Verbindung"), C_INK, &fonts::FreeSansBold12pt7b);
-        text(8, 56, L("Un server VNC sul PC (porta 5900)", "A VNC server on the PC (port 5900)", "Un servidor VNC en el PC (5900)",
-                      "Un serveur VNC sur le PC (5900)", "Ein VNC-Server am PC (5900)"), C_DIM, &fonts::Font2);
-        foot(L("Invio crea   Esc esci", "Enter create   Esc quit", "Intro crea   Esc sale", "Entree cree   Esc quitte", "Enter neu   Esc Ende"));
+        text(8, y + 4, L("Nuovo PC", "New PC", "Nuevo PC", "Nouveau PC", "Neuer PC"), C_INK, &fonts::FreeSansBold12pt7b);
+        d.setFont(&fonts::Font2); d.setTextColor(C_INK, C_BG);
+        lg::wrap(L("Sul PC serve un server VNC (TightVNC, RealVNC...), di solito sulla porta 5900.",
+                   "The PC needs a VNC server (TightVNC, RealVNC...), usually on port 5900.",
+                   "El PC necesita un servidor VNC (TightVNC, RealVNC...), puerto 5900.",
+                   "Le PC doit avoir un serveur VNC (TightVNC, RealVNC...), port 5900.",
+                   "Der PC braucht einen VNC-Server (TightVNC, RealVNC...), Port 5900."), 8, y + 34, 224, 17, 4);
+        lg::comp_keys(KEYS_LIST_NEW());
     }
 }
 static void paint_comp_form()
 {
-    head_band(s_edit_i >= 0 ? L("Modifica", "Edit", "Editar", "Modifier", "Bearbeiten") : L("Nuovo", "New", "Nuevo", "Nouveau", "Neu"), s_edit.name[0] ? s_edit.name : nullptr, 0);
-    text(8, 22, field_label(s_fsel), C_DIM, &fonts::Font2);
-    if (form_text(s_fsel)) {
-        int cap; const char *b = form_buf(s_fsel, &cap);
-        char masked[12] = "";
-        if (s_fsel == F_PASS) { const int n = (int)strlen(s_pw); memset(masked, '*', n); masked[n] = 0; b = masked; }
-        d.fillRoundRect(6, Y(42), 228, 34, 8, lg::card());
-        d.setFont(&fonts::FreeSansBold12pt7b); d.setTextDatum(top_left); d.setTextColor(C_INK, lg::card());
-        const char *show = b;
-        while ((int)d.textWidth(show) > 210 && *show) show++;          // the end of a long address stays in sight
-        d.drawString(show, 14, Y(48));
-        const int cx = 14 + (int)d.textWidth(show) + 2;
-        d.fillRect(cx, Y(47), 3, 22, ACCENT);
-        const char *hint = s_fsel == F_PORT ? L("solo cifre, di solito 5900", "digits only, usually 5900", "solo cifras, normalmente 5900", "chiffres, souvent 5900", "nur Ziffern, meist 5900")
-                         : s_fsel == F_HOST ? L("IP o nome, es. 192.168.1.20", "IP or name, e.g. 192.168.1.20", "IP o nombre, ej. 192.168.1.20", "IP ou nom, ex. 192.168.1.20", "IP oder Name, z.B. 192.168.1.20")
-                         : s_fsel == F_PASS && s_pw_prompt ? L("scrivila e premi Invio: mi collego", "type it and press Enter to connect", "escribela y pulsa Intro", "tapez-le puis Entree", "eingeben, dann Enter")
-                         : s_fsel == F_PASS ? L("max 8 caratteri, resta nel Cardputer", "8 characters max, kept in the Cardputer", "max 8, queda en el Cardputer", "8 max, reste dans le Cardputer", "max 8, bleibt im Cardputer")
-                         : L("come lo vuoi chiamare", "what to call it", "como llamarlo", "comment l'appeler", "wie er heissen soll");
-        text(8, 84, hint, C_DIM);
-        foot(L("Invio/Tab avanti  Fn+; . campo  Esc annulla", "Enter/Tab next  Fn+; . field  Esc cancel", "Intro/Tab sigue  Fn+; . campo  Esc anula",
-               "Entree/Tab suite  Fn+; . champ  Esc annule", "Enter/Tab weiter  Fn+; . Feld  Esc ab"));
-    } else {
-        char v[32] = "";
-        if (s_fsel == F_ZOOM) snprintf(v, sizeof v, "1:%d", s_edit.scale);
-        else if (s_fsel == F_AUTO) snprintf(v, sizeof v, "%s", s_edit.autoc ? L("si", "on", "si", "oui", "an") : L("no", "off", "no", "non", "aus"));
-        if (v[0]) text(8, 46, v, ACCENT, &fonts::FreeSansBold12pt7b);
-        if (s_status[0]) text(8, 84, s_status, C_WARN, &fonts::Font2);
-        foot(L("; . campo  Invio cambia  Esc annulla", "; . field  Enter change  Esc cancel", "; . campo  Intro cambia  Esc anula",
-               "; . champ  Entree change  Esc annule", "; . Feld  Enter aendert  Esc ab"));
-    }
+    int y = lg::comp_head(s_edit_i >= 0 ? L("Modifica", "Edit", "Editar", "Modifier", "Bearbeiten") : L("Nuovo PC", "New PC", "Nuevo PC", "Nouveau PC", "Neuer PC"), ACCENT);
+    text(8, y + 2, field_label(s_fsel), C_INK, &fonts::Font2);
+    char v[48]; form_value(s_fsel, v, sizeof v);
+    // the value, big: the end of a long address stays in sight
+    d.fillRoundRect(6, y + 20, 228, 32, 8, lg::card());
+    d.setFont(&fonts::FreeSansBold12pt7b); d.setTextSize(1); d.setTextDatum(middle_left); d.setTextColor(C_INK, lg::card());
+    const char *show = v;
+    while ((int)d.textWidth(show) > 212 && *show) show++;
+    d.drawString(show[0] ? show : "-", 14, y + 36); d.setTextDatum(top_left);
+    if (s_status[0]) { d.setFont(&fonts::Font2); d.setTextColor(C_WARN, C_BG); lg::wrap(s_status, 8, y + 58, 224, 17, 2); }
+    else { d.setFont(&fonts::Font2); d.setTextColor(C_DIM, C_BG); lg::wrap(form_hint_text(), 8, y + 58, 224, 17, 2); }
+    lg::comp_keys(form_text(s_fsel) ? KEYS_FORM_TXT() : KEYS_FORM_OPT());
 }
 static void on_draw()
 {
-    // Without the second screen the same pages, compact, on the Cardputer itself (two screens: on_draw_large).
-    band_render(nucleo_app_gfx(), nucleo_app_content_top(), nucleo_app_content_height(), s_page == P_FORM ? paint_comp_form : paint_comp_list);
+    if (nucleo_app_two_screens()) { if (s_page == P_FORM) paint_comp_form(); else paint_comp_list(); }
+    else {
+        if (s_page == P_FORM) single_form(); else single_list();
+        s_drawn = s_page;                                // one screen: this is the page (the bench's screenshots wait for it)
+    }
 }
 
 static void form_key(int key, char ch)
@@ -1646,14 +1751,7 @@ static void on_enter()
     load_config();                                       // the prototype's vnc.json (bench, import)
     conns_load();
     s_page = P_LIST; s_drawn = -1; s_scroll = 0; s_shots_done = 0; s_auto_done = false;
-    nucleo_screen_release();                             // the 32 KB canvas: the session draws straight to the screen
-    nucleo_app_set_direct_draw(true);
-    nucleo_app_set_keep_awake(true);
-    s_band = new (std::nothrow) M5Canvas();
-    if (s_band) {
-        s_band->setColorDepth(16);
-        if (!s_band->createSprite(240, BAND_H)) { delete s_band; s_band = nullptr; }
-    }
+    nucleo_app_set_keep_awake(true);                     // the list and the form draw buffered: the system's canvas
     nucleo_app_set_back_handler(back_handler);
     nucleo_app_set_hint(L("Invio collega  E modifica  N nuovo", "Enter connect  E edit  N new", "Intro conecta  E edita  N nueva",
                           "Entree connecte  E modifie  N nouveau", "Enter verbindet  E aendern  N neu"));
@@ -1664,7 +1762,7 @@ static void on_exit()
     memset(s_pw, 0, sizeof s_pw);
     nucleo_touch_raw(false);
     if (C.h > 0) { nucleo_tcp_close(C.h); C.h = 0; }
-    if (s_band) { s_band->deleteSprite(); delete s_band; s_band = nullptr; }
+    band_free();
 }
 
 static const nucleo_app_ram_t APP_RAM[] = {

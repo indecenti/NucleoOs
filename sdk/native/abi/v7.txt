@@ -1,5 +1,5 @@
 # NucleoOS native app ABI, level 7 = level 6 + the network an app may have (nucleo_tcp: TCP client connections the system
-# opens for an app with the "net" permission), its secrets (nucleo_secret), the raw touch pointer and the Cardputer's screen readback. Same rules as v1.txt.
+# opens for an app with the "net" permission), its secrets (nucleo_secret), the raw touch pointer, the Cardputer's screen readback and the compact list (app_ui). Same rules as v1.txt.
 THEME_BG
 THEME_DIM
 THEME_FG
@@ -282,3 +282,5 @@ _ZN2lg13settings_listEiiiiiiiPiPFviPNS_7SettingEPvES3_t          # lg::settings_
 cJSON_IsString
 cJSON_IsTrue
 __lshrdi3
+_Z12app_ui_titlePKctS0_                                       # app_ui_title(char const*, unsigned short, char const*)
+_Z11app_ui_listiiiiPFPKciPvES3_PFtiS1_ES1_                     # app_ui_list(int, int, int, int, char const* (*)(int, void*), char const* (*)(int, void*), unsigned short (*)(int, void*), void*)
