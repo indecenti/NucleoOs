@@ -351,10 +351,14 @@ async function pollDevice(snap) {
       if (!timePushed) {
         timePushed = true;
         if (await Caps.has('time.set')) try {
+          const body = { ts: Math.floor(Date.now() / 1000) };
+          // The browser's zone rides along only where the device takes it (time.zone): it adopts it while the
+          // user never chose one. Older firmware reads a 48-byte body, so the longer one would fail the push.
+          if (await Caps.has('time.zone')) try { body.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined; } catch {}
           const ok = (await fetch('/api/time/set', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ts: Math.floor(Date.now() / 1000) }),
+            body: JSON.stringify(body),
           })).ok;
           if (ok) { dot.className = 'dot ok'; txt.textContent = t('dev_browser_set'); return; }
         } catch {}

@@ -52,6 +52,12 @@ void nucleo_update_dismiss_latest(void);
 // Returns false if a check/install task is already running.
 bool nucleo_update_kick_check(bool from_boot);
 
+// The daily background check, driven by the UI task's loop. quiet: the launcher is in front, nobody has
+// touched it for a while, no remote session. Returns UPD_BG_LEND when the caller must lend the screen
+// canvas now (nucleo_screen_hold(true)), UPD_BG_RETURN when the job ended and it can take it back.
+enum { UPD_BG_NONE, UPD_BG_LEND, UPD_BG_RETURN };
+int nucleo_update_bg_tick(bool quiet);
+
 // Spawn the OTA install worker. Call AFTER the app entered its exclusive/reclaimed posture (and,
 // per the fresh-heap design, from a Solo boot). Returns false if already running. Progress via
 // nucleo_update_get_state(); on success the device reboots by itself (phase UPD_REBOOTING).

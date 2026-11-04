@@ -3,11 +3,12 @@
 // tools/presence-host drives the very same code on the PC.
 //
 // Physics in one line: a body moving through the radio path between the router and the Cardputer changes
-// the multipath fingerprint of every frame. Per frame we keep the mean subcarrier amplitude and the mean
-// sin(phase); their variance over the last PD_WIN frames, each normalised against a slow-rising floor and a
-// decaying peak, is blended 60/40 into a 0..1 motion score (the constants of the original
-// Cardputer-CSI-Human-Detector). Presence is latched when motion crosses the threshold on two consecutive
-// steps and coasts for PD_HOLD_MS after the last motion, so a person standing still stays "present".
+// the multipath fingerprint of every frame. Per frame we compare the shape of the 52-tone amplitude profile
+// with its recent average (1 - Pearson correlation, as Espressif's esp-radar "wander"): the AGC scales every
+// tone alike and the raw phase carries a random per-packet offset, so neither reads as motion. The mean of
+// that deviation over the last PD_WIN frames, measured against the lowest level of the last 2 minutes,
+// is the 0..1 motion score. Presence is latched when motion crosses the threshold on two
+// consecutive steps and coasts for PD_HOLD_MS after the last motion, so a person standing still stays "present".
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
@@ -21,6 +22,9 @@ extern "C" {
 #define PD_HOLD_MS   10000       // presence coasts this long after the last motion
 #define PD_CALIB_MS  6000        // baseline learning at start / on demand
 #define PD_EVENTS    4           // last presence episodes remembered
+#define PD_TONES     52          // L-LTF data tones, k = -26..26 without DC
+#define PD_FLOOR_N   12          // noise floor = lowest level over PD_FLOOR_N buckets...
+#define PD_FLOOR_MS  10000       // ...of 10 s each: the last 2 minutes
 
 typedef enum { PD_CALIB, PD_RUN } pd_phase_t;
 
@@ -28,11 +32,17 @@ typedef struct { uint32_t start_ms, end_ms; uint8_t peak; } pd_event_t;   // end
 
 typedef struct {
     // CSI ring (written by pd_feed)
-    float    amp[PD_WIN], pha[PD_WIN];
+    float    dev[PD_WIN];           // per frame: 1 - correlation with the reference profile
+    float    ref[PD_TONES];         // slow average of the amplitude profile (mean 1)
+    bool     ref_ok;
     uint32_t frames;                // total frames fed
     int8_t   rssi;
     // normalisation state
-    float    vmin, vmax, pmin, pmax;
+    float    level;                 // mean deviation over the window, this step (raw, for diagnostics)
+    float    lo;                    // noise floor of `level`
+    float    fmin[PD_FLOOR_N];      // lowest level per floor bucket (<0 = not seen yet)
+    int      fhead;                 // bucket being filled
+    uint32_t fbucket_ms;            // when it started
     // output
     pd_phase_t phase;
     uint32_t calib_start_ms;

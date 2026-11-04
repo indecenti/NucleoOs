@@ -110,6 +110,19 @@ int                s_bl_pct = 100;               // settings "external_brightnes
 spi_device_handle_t s_touch = nullptr;           // the XPT2046, kept for the touch task
 volatile int       s_presses = 0, s_last_x = -1, s_last_y = -1;
 volatile int       s_tap_x = -1, s_tap_y = -1;       // where the last target tap landed (nucleo_touch_last)
+// Raw pointer (nucleo_touch_raw): an app with its own gestures gets every sample instead of the gesture layer.
+volatile bool      s_raw_on = false;
+nucleo_touch_raw_t s_raw_q[16];
+volatile int       s_raw_head = 0, s_raw_tail = 0;   // head = next write, tail = next read (one writer, one reader)
+portMUX_TYPE       s_raw_mux = portMUX_INITIALIZER_UNLOCKED;
+void raw_push(bool down, int x, int y, uint32_t ms)
+{
+    portENTER_CRITICAL(&s_raw_mux);
+    const int nx = (s_raw_head + 1) % 16;
+    if (nx == s_raw_tail && !down) s_raw_tail = (s_raw_tail + 1) % 16;   // full: a lift must never be lost
+    if (nx != s_raw_tail) { s_raw_q[s_raw_head] = nucleo_touch_raw_t{ down, (short)x, (short)y, ms }; s_raw_head = nx; }
+    portEXIT_CRITICAL(&s_raw_mux);
+}
 bool               s_primary = true;             // settings "external_primary": an attached panel hosts large screens
 bool               s_fit = true;                 // settings "external_fit": compact screens scaled 4/3 (320x180)
 volatile int       s_layout = 0;                 // settings "external_layout": 0 duplicate, 1 Cardputer only, 2 second only
@@ -118,6 +131,7 @@ volatile int       s_layout_gen = 0;             // bumped when the frame geomet
 volatile bool      s_cal_req = false;            // Settings asked for a recalibration
 volatile bool      s_solo = false;               // the panel is `d`, natively (the launcher on 320x240)
 volatile bool      s_calibrating = false;        // the calibration screen owns the panel (the mirror is dark)
+volatile bool      s_cal_redraw = false;         // something painted over the calibration screen: the touch task repaints it
 
 // A pin another module actively drives LOW defeats our weak pull-up (e.g. a LoRa cap's BUSY on G6).
 bool driven_low_against_pullup(int pin)
@@ -261,6 +275,7 @@ void bl_follow(uint8_t brightness)
     dark_sync();                                    // dark: nothing reaches it until on (or calibration ends)
     if (on == was || !s_dev || s_layout == 1) return;   // Cardputer only: the panel is black already
     if (!on && s_bl_pin < 0) { lock_opt(); s_dev->fillScreen(TFT_BLACK); unlock_opt(); }
+    if (on && s_calibrating) { s_cal_redraw = true; return; }   // the touch task repaints the target
     if (on) draw_chrome();
     if (on && s_solo && s_hud_h) { lock_opt(); draw_hud(); unlock_opt(); }   // the OS repaints the rest
 }
@@ -446,14 +461,14 @@ bool      s_has_cal_raw = false;
 void ext_lock(void)   { xSemaphoreTakeRecursive(s_tc->mux, portMAX_DELAY); }
 void ext_unlock(void) { xSemaphoreGiveRecursive(s_tc->mux); }
 
-bool chrome_on(void) { return s_touch_input && s_tc && s_tc->mux && !s_solo && s_layout != 1; }
+bool chrome_on(void) { return s_touch_input && s_tc && s_tc->mux && !s_solo && s_layout != 1 && !s_calibrating; }
 // Calibration can run on any surface (the mirrored frame or the large one): it needs only touch input and a
 // panel that is shown.
 bool cal_on(void) { return s_touch_input && s_tc && s_tc->mux && s_layout != 1; }
 volatile bool s_repaint_req = false;
 void draw_bar(int h)
 {
-    if (!h || !s_dev) return;
+    if (!h || !s_dev || s_calibrating) return;
     const int W = s_dev->width(), bh = h - 8, cy = h / 2;
     s_dev->startWrite();
     s_dev->fillRect(0, 0, W, h, THEME_BG);
@@ -529,6 +544,7 @@ void end_calib(void)
     dark_sync();
     lock_opt();
     s_tc->dev->fillScreen(TFT_BLACK);
+    if (s_solo && s_hud_h) draw_hud();
     unlock_opt();
     draw_chrome();
     s_repaint_req = true;
@@ -634,6 +650,7 @@ void touch_task(void *)
     ScrollTrack sc = {};
     bool was_scroll = false;
     int64_t t_down = 0;
+    bool raw_down = false; int raw_up_n = 0, raw_x = -1, raw_y = -1;
     for (;;) {
         if (s_cal_req) {                           // Settings / Control Center: "Calibrate touch"
             s_cal_req = false;
@@ -645,6 +662,14 @@ void touch_task(void *)
                 continue;
             }
         }
+        if (calibrating && !cal_on()) {            // Cardputer only / touch off mid-calibration: give it up
+            calibrating = false;
+            s_calibrating = false;
+            dark_sync();
+            lock_opt(); s_tc->dev->fillScreen(TFT_BLACK); unlock_opt();   // no target left behind
+            s_repaint_req = true;
+        }
+        if (calibrating && s_cal_redraw) { s_cal_redraw = false; draw_calib(cal.step, false); }
         static int layout_seen = 0;
         if (s_solo != solo_seen || s_layout_gen != layout_seen) {   // surface or frame changed: re-lay the keys
             solo_seen = s_solo;
@@ -654,7 +679,7 @@ void touch_task(void *)
             was_down = false;
         }
         if (s_layout == 1 && !calibrating) { vTaskDelay(pdMS_TO_TICKS(200)); continue; }   // Cardputer only
-        const bool busy = g.down || wake_hold || sc.vel != 0 || (calibrating && (cal.down || cal.wait_release));
+        const bool busy = g.down || raw_down || wake_hold || sc.vel != 0 || (calibrating && (cal.down || cal.wait_release));
         vTaskDelay(pdMS_TO_TICKS(busy ? 20 : 40));
         if (s_hud_until && !g.down && (int32_t)((uint32_t)(esp_timer_get_time() / 1000) - s_hud_until) >= 0) {
             s_hud_until = 0;                       // the on-demand bar times out: the app repaints under it
@@ -718,6 +743,22 @@ void touch_task(void *)
 
         int sx = 0, sy = 0;
         if (on) extdisp_cal_apply(&s_tc->cal, rx, ry, W, H, &sx, &sy);
+        if (s_raw_on || raw_down) {
+            // Raw pointer: no targets, no scroll areas, no long-press Back. Every sample while the finger is down
+            // that moved (or the first), then ONE lift after EXT_RELEASE_N empty samples (the film flickers).
+            int ax = 0, ay = 0;
+            const bool in = on && to_screen(solo_seen, sx, sy, &ax, &ay);
+            if (in) {
+                raw_up_n = 0;
+                if (!raw_down || ax != raw_x || ay != raw_y) { raw_push(true, ax, ay, now); raw_x = ax; raw_y = ay; }
+                raw_down = true;
+            } else if (raw_down && ++raw_up_n >= EXT_RELEASE_N) {
+                raw_push(false, raw_x, raw_y, now);
+                raw_down = false; raw_up_n = 0;
+            }
+            if (s_raw_on || raw_down) { was_down = false; continue; }
+            extdisp_gesture_init(&g, solo_seen ? s_tc->keys_solo : s_tc->keys);   // raw just ended: start clean
+        }
         int ev[EXT_MAX_EVENTS];
         const int n = extdisp_gesture_feed(&g, now, on, sx, sy, ev);
         if (g.down && !was_down) {
@@ -1041,7 +1082,8 @@ namespace {
 
 extern "C" bool nucleo_surface_large_ok(void)
 {
-    return s_mirror && s_primary && s_layout != 1 && (!s_tc || (s_tc->cal_stored && !s_calibrating));
+    // A recalibration keeps the surface as it is: switching it would wipe the target and draw the soft keys.
+    return s_mirror && s_primary && s_layout != 1 && (!s_tc || s_tc->cal_stored);
 }
 
 extern "C" bool nucleo_surface_large(void) { return s_solo; }
@@ -1053,7 +1095,7 @@ extern "C" bool nucleo_surface_set_large(bool on)
     lock_opt();                                   // the touch task never draws mid-switch
     if (!on && s_hud_h) { s_mirror->set_inset(0); s_hud_h = 0; }   // the system bar belongs to the large surface
     bool ok = s_mirror->set_solo(on);
-    if (ok && !on) s_dev->fillScreen(TFT_BLACK);  // wipe the large screen; the caller repaints the centred frame
+    if (ok && !on && !s_calibrating) s_dev->fillScreen(TFT_BLACK);  // wipe the large screen; the caller repaints the centred frame
     unlock_opt();
     if (!ok) return false;
     s_solo = on;
@@ -1086,7 +1128,7 @@ extern "C" bool nucleo_extdisp_set_layout(int layout)
     s_mirror->set_ext_off(layout == 1);
     s_mirror->set_pri_off(layout == 2);
     s_layout = layout;
-    s_dev->fillScreen(TFT_BLACK);                 // Cardputer only: stays black; otherwise the caller repaints
+    if (!s_calibrating) s_dev->fillScreen(TFT_BLACK);   // Cardputer only: stays black; otherwise the caller repaints
     unlock_opt();
     d.clearClipRect();
     draw_chrome();
@@ -1106,7 +1148,7 @@ extern "C" bool nucleo_extdisp_set_fit(bool on)
     if (s_mirror && !s_solo && s_mirror->fit() != on) {
         lock_opt();
         if (s_mirror->set_fit(on)) {
-            s_dev->fillScreen(TFT_BLACK);                            // the frame moves: wipe, the caller repaints it
+            if (!s_calibrating) s_dev->fillScreen(TFT_BLACK);        // the frame moves: wipe, the caller repaints it
             if (s_tc) {
                 s_tc->frame = { s_mirror->origin_x(), s_mirror->origin_y(), s_mirror->frame_w(), s_mirror->frame_h() };
                 extdisp_sk_layout(s_dev->width(), s_dev->height(), s_tc->frame.ox, s_tc->frame.oy, s_tc->frame.fw,
@@ -1233,6 +1275,22 @@ extern "C" bool nucleo_extdisp_draw_internal(void (*fn)(void *gfx))
 }
 
 // ---- touch targets (include/nucleo_touch.h) ----------------------------------------------------------------
+extern "C" void nucleo_touch_raw(bool on)
+{
+    portENTER_CRITICAL(&s_raw_mux);
+    s_raw_head = 0; s_raw_tail = 0;
+    portEXIT_CRITICAL(&s_raw_mux);
+    s_raw_on = on;
+}
+extern "C" bool nucleo_touch_raw_read(nucleo_touch_raw_t *ev)
+{
+    bool got = false;
+    portENTER_CRITICAL(&s_raw_mux);
+    if (s_raw_tail != s_raw_head) { *ev = s_raw_q[s_raw_tail]; s_raw_tail = (s_raw_tail + 1) % 16; got = true; }
+    portEXIT_CRITICAL(&s_raw_mux);
+    return got;
+}
+
 extern "C" bool nucleo_touch_last(int *x, int *y)
 {
     if (s_tap_x < 0) return false;

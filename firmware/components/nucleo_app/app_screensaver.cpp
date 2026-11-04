@@ -23,7 +23,7 @@
 #include "ui_glyph.h"       // UG_CHECK: the effect in use
 #include "app_large.h"      // two screens: the effect list + preview on the 320x240 panel, the effect itself when running
 #include "nucleo_touch.h"
-#include "nucleo_i18n.h"    // TR(it,en): hint bar follows the system language
+#include "nucleo_i18n.h"    // TR5(it,en,es,fr,de): the texts follow the system language
 #include <M5GFX.h>
 #include <time.h>
 #include <string.h>
@@ -117,6 +117,24 @@ static void clock_step(void)
     if (cl_y + CL_TH >= s_vh) { cl_y = (int16_t)(s_vh - CL_TH); cl_vy = -1; cl_ci = (cl_ci + 1) % NCL; }
 }
 
+// "Tue 29 Sep" in the system language (strftime has only the C locale here).
+static void fmt_date(char *out, size_t n, const struct tm *tm)
+{
+    static const char *const DAY[5][7] = {
+        { "Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab" }, { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" },
+        { "Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab" }, { "Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam" },
+        { "So", "Mo", "Di", "Mi", "Do", "Fr", "Sa" } };
+    static const char *const MON[5][12] = {
+        { "Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic" },
+        { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" },
+        { "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic" },
+        { "Jan", "Fev", "Mar", "Avr", "Mai", "Jun", "Jul", "Aou", "Sep", "Oct", "Nov", "Dec" },
+        { "Jan", "Feb", "Mrz", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez" } };
+    const char *l = TR5("0", "1", "2", "3", "4");
+    const int li = l[0] - '0';
+    snprintf(out, n, "%s %02d %s", DAY[li][tm->tm_wday % 7], tm->tm_mday, MON[li][tm->tm_mon % 12]);
+}
+
 static void clock_frame(void)                        // pure: draws the state, never moves it
 {
     const bool big = CL_BIG;
@@ -134,7 +152,7 @@ static void clock_frame(void)                        // pure: draws the state, n
     snprintf(hms, sizeof(hms), "%02d:%02d:%02d",
              tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0, tm ? tm->tm_sec : 0);
     char dat[20];
-    if (tm) strftime(dat, sizeof(dat), "%a %d %b", tm);
+    if (tm) fmt_date(dat, sizeof dat, tm);
     else    snprintf(dat, sizeof(dat), "---");
 
     d.setFont(big ? (const lgfx::IFont *)&fonts::Font7 : &fonts::Font0);
@@ -423,7 +441,7 @@ static void draw_settings(void)
     int ch = nucleo_app_content_height();
 
     if (s_tab == 0) {
-        int y0 = app_ui_title(TR("EFFETTO", "EFFECT"), C_PURPLE, "TAB ►");
+        int y0 = app_ui_title(TR5("EFFETTO", "EFFECT", "EFECTO", "EFFET", "EFFEKT"), C_PURPLE, "TAB ►");
         app_ui_list(y0, ch - 24, 5, s_sel, mode_label, mode_right, mode_color, nullptr);
     } else {
         int y0 = app_ui_title("TIMER", C_PURPLE, "◄ TAB");
@@ -432,7 +450,7 @@ static void draw_settings(void)
 
         char sv[20]; fmt_timer(sv, sizeof sv);
 
-        const char *sub = TR("Attivazione automatica dopo", "Starts automatically after");
+        const char *sub = TR5("Attivazione automatica dopo", "Starts automatically after", "Se activa sola tras", "Demarre seul apres", "Startet automatisch nach");
         d.setTextSize(1); d.setTextColor(C_GREY, BG);
         d.setCursor((W - (int)strlen(sub) * 6) / 2, y0 + 6);
         d.print(sub);
@@ -451,7 +469,7 @@ static void draw_settings(void)
         d.setCursor((W - (int)strlen(hlp) * 6) / 2, vy + 22);
         d.print(hlp);
 
-        const char *sts = g_threshold_ms > 0 ? TR("Attivo", "On") : TR("Disabilitato", "Disabled");
+        const char *sts = g_threshold_ms > 0 ? TR5("Attivo", "On", "Activo", "Actif", "An") : TR5("Disabilitato", "Disabled", "Desactivado", "Desactive", "Aus");
         d.setTextColor(g_threshold_ms > 0 ? C_GREEN : C_RED, BG);
         d.setCursor((W - (int)strlen(sts) * 6) / 2, vy + 36);
         d.print(sts);
@@ -575,10 +593,10 @@ static void on_tick(void) {}
 static const char *effect_name(int mode)
 {
     switch (mode) {
-        case MODE_OFF:   return TR("Spento", "Off");
-        case MODE_STARS: return TR("Stelle", "Stars");
-        case MODE_FIRE:  return TR("Fuoco", "Fire");
-        default:         return TR("Orologio", "Clock");
+        case MODE_OFF:   return TR5("Spento", "Off", "Apagado", "Eteint", "Aus");
+        case MODE_STARS: return TR5("Stelle", "Stars", "Estrellas", "Etoiles", "Sterne");
+        case MODE_FIRE:  return TR5("Fuoco", "Fire", "Fuego", "Feu", "Feuer");
+        default:         return TR5("Orologio", "Clock", "Reloj", "Horloge", "Uhr");
     }
 }
 // A still, representative preview of an effect inside a box (the gallery is static; on device it is a glance).
@@ -589,14 +607,16 @@ static void preview_effect(int mode, int x, int y, int w, int h)
     const int cx = x + w / 2, cy = y + h / 2;
     if (mode == MODE_OFF) {
         lg::font(1); d.setTextColor(MUTED, 0x0000); d.setTextDatum(middle_center);
-        d.drawString(TR("Schermo spento", "Screen off"), cx, cy); d.setTextDatum(top_left); return;
+        d.drawString(TR5("Schermo spento", "Screen off", "Pantalla apagada", "Ecran eteint", "Bildschirm aus"), cx, cy); d.setTextDatum(top_left); return;
     }
     if (mode == MODE_CLOCK) {
         const uint16_t col = CL_COLS[2];
         d.fillRoundRect(cx - 74, cy - 22, 148, 44, 4, (uint16_t)((col >> 3) & 0x1CE3));
         d.setFont(&fonts::Font0); d.setTextColor(col, 0x0000); d.setTextSize(3); d.setTextDatum(middle_center);
         d.drawString("12:34:56", cx, cy - 4);
-        d.setTextSize(1); d.setTextColor(0x8C71, 0x0000); d.drawString("Mar 05 Mag", cx, cy + 18);
+        d.setTextSize(1); d.setTextColor(0x8C71, 0x0000); struct tm ex = {}; ex.tm_wday = 2; ex.tm_mday = 5; ex.tm_mon = 4;   // a sample date
+        char dat[20]; fmt_date(dat, sizeof dat, &ex);
+        d.drawString(dat, cx, cy + 18);
         d.setTextDatum(top_left); return;
     }
     if (mode == MODE_STARS) {
@@ -627,7 +647,7 @@ static void lg_mode_row(int i, lg::Setting *s, void *)
 {
     s->label = effect_name(i);
     if (i == g_mode) { s->rglyph = UG_CHECK; s->vcol = C_GREEN; }
-    if (i == 4) { s->label = TR("Prova", "Test"); s->kind = lg::ROW_NAV; s->lcol = C_YELLOW; }   // Font2 has no "►"
+    if (i == 4) { s->label = TR5("Prova", "Test", "Probar", "Tester", "Testen"); s->kind = lg::ROW_NAV; s->lcol = C_YELLOW; }   // Font2 has no "►"
     if (i == 5) { s->label = "Timer"; s->kind = lg::ROW_NAV; }        // its value: the header and the pane
 }
 
@@ -638,10 +658,10 @@ static void lg_timer(int x, int y, int w, int h)
     lg::panel(x, y, w, h);
     const unsigned short cb = lg::card();
     lg::font(1); d.setTextColor(MUTED, cb); d.setTextDatum(top_center);
-    d.drawString(TR("Si attiva dopo", "Starts after"), x + w / 2, y + 12);
+    d.drawString(TR5("Si attiva dopo", "Starts after", "Se activa tras", "Demarre apres", "Startet nach"), x + w / 2, y + 12);
     lg::font(3); d.setTextColor(C_YELLOW, cb); d.drawString(sv, x + w / 2, y + 36);
     lg::font(0); d.setTextColor(g_threshold_ms > 0 ? C_GREEN : C_RED, cb);
-    d.drawString(g_threshold_ms > 0 ? TR("Attivo", "On") : TR("Disabilitato", "Disabled"), x + w / 2, y + 74);
+    d.drawString(g_threshold_ms > 0 ? TR5("Attivo", "On", "Activo", "Actif", "An") : TR5("Disabilitato", "Disabled", "Desactivado", "Desactive", "Aus"), x + w / 2, y + 74);
     const int sec = (int)(g_threshold_ms / 1000), ty = y + h - 52;
     lg::slider(SL_X, ty + 4, SL_W, sec < 5 ? 0 : (sec - 5) * 100 / 595, C_YELLOW, 8);
     lg::font(4); d.setTextColor(MUTED, cb);
@@ -661,7 +681,7 @@ static void draw_large(void)
         return;
     }
     char rt[20]; fmt_timer(rt, sizeof rt);
-    const int y = lg::header(TR("Salvaschermo", "Screensaver"), rt, C_PURPLE);
+    const int y = lg::header(TR5("Salvaschermo", "Screensaver", "Salvapantallas", "Economiseur", "Bildschirmschoner"), rt, C_PURPLE);
     lg::settings_list(8, y + 2, PX - 12, 240 - y - 2, 34, 6, s_tab ? 5 : s_sel, &s_lg_scroll, lg_mode_row, nullptr, C_PURPLE);
     d.fillRect(0, y, 8, 240 - y, BG);                // the margin left of the list (drawn straight, no clear)
     d.fillRect(PX - 4, y, 324 - PX, 240 - y, BG);
@@ -670,7 +690,7 @@ static void draw_large(void)
     preview_effect(s_sel < 4 ? s_sel : g_mode, PX, py, PW, ph - 28);
     nucleo_touch_add(PX, py, PW, ph - 28, NK_ENTER, 0);   // tap the preview = use it / test it
     lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(top_center);
-    d.drawString(s_sel == 4 ? TR("Tocca per provare", "Tap to test") : TR("Tocca di nuovo per usarlo", "Tap again to use it"),
+    d.drawString(s_sel == 4 ? TR5("Tocca per provare", "Tap to test", "Toca para probar", "Touchez pour tester", "Tippen zum Testen") : TR5("Tocca di nuovo per usarlo", "Tap again to use it", "Toca otra vez para usarlo", "Touchez encore pour l'utiliser", "Nochmal tippen zum Nutzen"),
                  PX + PW / 2, py + ph - 20);
     d.setTextDatum(top_left);
     nucleo_touch_commit();
@@ -682,32 +702,47 @@ static void draw_companion(void)
     const int y = lg::comp_head("SALVASCHERMO", C_PURPLE);
     if (s_running) {
         d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(C_GREEN, BG);
-        d.drawString(TR("In esecuzione", "Running"), 8, y + 10);
+        d.drawString(TR5("In esecuzione", "Running", "En marcha", "En cours", "Laeuft"), 8, y + 10);
         d.setFont(&fonts::Font0); d.setTextColor(FG, BG); d.drawString(effect_name(g_mode), 8, y + 36);
-        lg::comp_keys(TR("un tasto per uscire", "a key to exit")); return;
+        lg::comp_keys(TR5("un tasto per uscire", "a key to exit", "una tecla para salir", "une touche pour sortir", "Taste zum Beenden")); return;
     }
     if (s_tab == 0) {
         d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(s_sel == 4 ? C_YELLOW : (s_sel == g_mode ? C_GREEN : FG), BG);
-        d.drawString(s_sel == 4 ? TR("Prova", "Test") : effect_name(s_sel), 8, y + 10);
+        d.drawString(s_sel == 4 ? TR5("Prova", "Test", "Probar", "Tester", "Testen") : effect_name(s_sel), 8, y + 10);
         d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
         const char *dsc = mode_right(s_sel, nullptr);
         if (dsc) d.drawString(dsc, 8, y + 34);
         char p[20]; snprintf(p, sizeof p, "%d / 5", s_sel + 1);
         d.setTextColor(DIM, BG); d.drawString(p, 8, y + 50);
-        lg::comp_keys(TR("su/giu  INVIO usa/prova  TAB timer", "up/dn  ENTER use/test  TAB timer"));
+        lg::comp_keys(TR5("su/giu  INVIO usa/prova  TAB timer", "up/dn  ENTER use/test  TAB timer", "arr/abj  INTRO usa/prueba  TAB tiempo", "haut/bas  ENTREE utilise/teste  TAB temps", "auf/ab  ENTER nutzen/testen  TAB Zeit"));
     } else {
         char sv[20]; fmt_timer(sv, sizeof sv);
         d.setFont(&fonts::FreeSansBold12pt7b); d.setTextColor(C_YELLOW, BG); d.drawString(sv, 8, y + 14);
-        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.drawString(TR("attivazione automatica", "auto activation"), 8, y + 46);
-        lg::comp_keys(TR("</> 5s  su/giu 30s  TAB effetto", "</> 5s  up/dn 30s  TAB effect"));
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.drawString(TR5("attivazione automatica", "auto activation", "activacion automatica", "activation auto", "Autostart"), 8, y + 46);
+        lg::comp_keys(TR5("</> 5s  su/giu 30s  TAB effetto", "</> 5s  up/dn 30s  TAB effect", "</> 5s  arr/abj 30s  TAB efecto", "</> 5s  haut/bas 30s  TAB effet", "</> 5s  auf/ab 30s  TAB Effekt"));
     }
 }
 
 // on_draw: for the saver, draws the full frame on the canvas (Technique 1).
 // For settings, redraws only when s_dirty.
+// Two screens, running: the Cardputer plays the same effect as the panel (the saver chosen in Settings), drawn for
+// its own 240x135 view from the panel's state (draw_large steps it); the clock's place is scaled to the small view.
+static void effect_draw_compact(void)
+{
+    if (g_mode == MODE_OFF) { d.fillRect(0, 0, W, H, 0x0000); return; }   // backlight 0
+    const int vw = s_vw, vh = s_vh, x = cl_x, y = cl_y;
+    s_vw = W; s_vh = H;
+    if (vw > W) {                                    // the panel's clock box is 256x70, the Cardputer's 144x38
+        cl_x = (int16_t)(x * (W - 144) / (vw - 256));
+        cl_y = (int16_t)(y * (H - 38) / (vh - 70));
+    }
+    effect_draw(nullptr);
+    s_vw = vw; s_vh = vh; cl_x = (int16_t)x; cl_y = (int16_t)y;
+}
+
 static void on_draw(void)
 {
-    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    if (nucleo_app_two_screens()) { if (s_running) effect_draw_compact(); else draw_companion(); return; }
     if (s_running) {
         if (g_mode != MODE_OFF) { effect_step(); effect_draw(nullptr); }   // off: backlight 0, nothing to draw
         return;

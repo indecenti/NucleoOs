@@ -169,7 +169,7 @@ let voicePending = false;             // the NEXT ask came from voice → speak 
 let ttsInfo = null;                   // cached GET /api/tts ({enabled,available}), probed once per session
 
 // ---- i18n (kept tiny; mirrors the ANIMA app's tone) ----
-// Exported for the catalog-parity gate (tools/shell-copilot-catalog.test.mjs): the OS i18n gate
+// Exported for the catalog-parity gate (tests/suite/shell-copilot-catalog.test.mjs): the OS i18n gate
 // cannot see this inline table, so the test is what keeps the five languages in step.
 export const STR = {
   it: {
@@ -607,7 +607,7 @@ async function toggleVoice() {
   if (voiceOn) { stopVoice(); return; }
   if (busy) return;
   let mod = null;
-  try { mod = await import('/apps/dictation/www/asr.js'); } catch {}
+  try { mod = await import('/apps/dictation/asr.js'); } catch {}
   if (voiceOn) return;                       // double-click while the module loaded
   if (!mod) { addBot(T().micErr); return; }
   const a = mod.createASR();
@@ -647,7 +647,7 @@ function stopVoice() {
 // GET /api/anima/verify — SEQUENTIALLY (one device call at a time), at most 3 per reply so a
 // listy answer can't trickle badges for seconds. Only DECISIVE verdicts render; an unknown is
 // silence, never a grey wall. Measured before building (the design-review bar was 20% decisive):
-// 45% decisive, 0 unknown among routed, on tools/anima-host/truthlamp-yield.mjs's corpus.
+// 45% decisive, 0 unknown among routed, on the corpus of NucleoOs tools/anima-host/truthlamp-yield.mjs.
 async function verifyReplyClaims(reply, turn) {
   let ex = null;
   try { ex = await import('/apps/anima/forge/extract.js'); } catch { return; }

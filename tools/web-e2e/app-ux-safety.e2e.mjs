@@ -62,15 +62,13 @@ test('archive-manager: opens the file the shell passes, asks before overwriting,
   t.after(async () => { await browser.close(); await sim.stop(); });
   const it = cat('archive-manager', 'it');
 
-  // Build the .zip in the page with the app's own JSZip: no folder entries, so the extractor itself has
-  // to create sub/deep/ (the firmware's /api/fs/write never creates parent folders).
+  // Build the .zip in the page with the OS's own ZIP writer (shell/nucleo-zip.js, what the app uses): no folder
+  // entries, so the extractor itself has to create sub/deep/ (the firmware's /api/fs/write never creates parent folders).
   const maker = await openApp(browser, sim, 'archive-manager', 'en');
   const st = await maker.eval(`(async () => {
-    const z = new JSZip();
-    z.file('a.txt', 'NEW A', { createFolders: false });
-    z.file('sub/deep/b.txt', 'B', { createFolders: false });
-    const blob = await z.generateAsync({ type: 'blob' });
-    return (await fetch('/api/fs/write?path=' + encodeURIComponent('/data/arc/test.zip'), { method: 'POST', body: blob })).status;
+    const zip = (await import('/nucleo-zip.js')).default;
+    const bytes = await zip.create([{ name: 'a.txt', data: 'NEW A' }, { name: 'sub/deep/b.txt', data: 'B' }]);
+    return (await fetch('/api/fs/write?path=' + encodeURIComponent('/data/arc/test.zip'), { method: 'POST', body: bytes })).status;
   })()`);
   assert.equal(st, 200, 'test archive written');
 
@@ -105,8 +103,9 @@ test('archive-manager: opens the file the shell passes, asks before overwriting,
   await t.test('a failed read reports in the user\'s language, not hard-coded English', async () => {
     await sim.control('/api/_sim/fault', { route: '/api/fs/read', status: 503 });
     const p2 = await openApp(browser, sim, 'archive-manager', 'it', '?path=' + encodeURIComponent('/data/arc/test.zip'));
-    await sim.control('/api/_sim/fault', { clear: true });
+    // the device stays unreachable until the failure is on screen (the app may read after the page went quiet)
     const txt = await p2.waitFor(`(() => { const s = document.getElementById('list').textContent; return s.includes(${JSON.stringify(it.open_failed)}) && s; })()`, { timeout: 15000 });
+    await sim.control('/api/_sim/fault', { clear: true });
     assert.ok(txt, 'the open failure is shown');
     assert.ok(!/Failed to read file/.test(txt), 'hard-coded English: ' + txt);
     assert.ok(txt.includes(it.err_read_file.replace('{status}', '503')), 'the localized reason is shown: ' + txt);

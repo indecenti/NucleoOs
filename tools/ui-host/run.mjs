@@ -64,7 +64,7 @@ const INC = [
   '-I', join(FW, 'nucleo_kbd', 'include'), '-I', join(FW, 'nucleo_ui', 'include'),
   '-I', join(FW, 'nucleo_storage', 'include'), '-I', join(FW, 'nucleo_voice', 'include'), '-I', CJSON,
   '-I', join(FW, 'nucleo_guest', 'include'), '-I', join(FW, 'nucleo_sdcontent', 'include'),
-  '-I', join(FW, 'nucleo_store', 'include'),
+  '-I', join(FW, 'nucleo_store', 'include'), '-I', join(FW, 'nucleo_setup'),
   '-I', join(FW, 'nucleo_audio', 'include'), '-I', join(FW, 'nucleo_power', 'include'),   // app_video.cpp
   '-I', join(root, 'firmware', 'managed_components', 'espressif__esp_new_jpeg', 'include'),
 ];
@@ -109,7 +109,7 @@ const fwSrc = [
   join(FW, 'nucleo_app', 'app_store.cpp'), join(FW, 'nucleo_app', 'store_apps.cpp'), join(FW, 'nucleo_store', 'store_engine.c'),   // native Store app + its launcher apps
   join(FW, 'nucleo_sdcontent', 'sdc_sha256.c'), join(FW, 'nucleo_sdcontent', 'sdc_registry.c'), join(here, 'store_stubs.cpp'),
   join(FW, 'nucleo_app', 'app_video.cpp'), join(here, 'video_stubs.cpp'),   // native Video (two-screen browser)
-  join(here, 'host_stubs.cpp'), join(here, 'settings_stubs.cpp'), join(here, 'updates_stubs.cpp'), join(here, 'scenes.cpp'),
+  join(FW, 'nucleo_setup', 'clock_zones.c'), join(here, 'host_stubs.cpp'), join(here, 'settings_stubs.cpp'), join(here, 'updates_stubs.cpp'), join(here, 'scenes.cpp'),
 ];
 
 const t0 = Date.now();

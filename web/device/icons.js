@@ -98,6 +98,15 @@ export function drawIcon(g, id, cx, cy, s) {
       g.tri(cx - s * 0.34, cy + s * 0.3, cx + s * 0.34, cy + s * 0.3, cx, cy + s * 0.7, g.bg);
       break;
 
+    case 'vnc':                                    // remote desktop: a monitor with the pointer on it
+      g.frr(cx - s, cy - s * 0.85, 2 * s, s * 1.35, s * 0.18);
+      g.frr(cx - s + T * 0.8, cy - s * 0.85 + T * 0.8, 2 * s - T * 1.6, s * 1.35 - T * 1.6, 2, g.bg);
+      g.bx(cx - T * 0.5, cy + s * 0.5, T, s * 0.26);
+      g.bx(cx - s * 0.45, cy + s * 0.72, s * 0.9, T * 0.6);
+      g.tri(cx - s * 0.3, cy - s * 0.58, cx - s * 0.3, cy + s * 0.1, cx + s * 0.2, cy - s * 0.12);
+      g.ln(cx - s * 0.1, cy - s * 0.08, cx + s * 0.1, cy + s * 0.28, T * 0.6);
+      break;
+
     case 'chrono':                                 // stopwatch: dial ring + top plunger + single hand
       g.bx(cx - T * 0.4, cy - s * 0.98, T * 0.8, s * 0.34);
       g.fc(cx, cy - s * 0.98, T * 0.6);

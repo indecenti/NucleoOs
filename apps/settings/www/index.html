@@ -100,6 +100,9 @@
       background:#fff;border-radius:50%;transition:.25s cubic-bezier(.4,0,.2,1);box-shadow:0 2px 4px rgba(0,0,0,0.25)}
     .sw input:checked+span{background:var(--accent)}
     .sw input:checked+span::after{transform:translateX(20px)}
+    /* AI ▸ Models on the server (server-models.js) */
+    .srv-row{display:flex;align-items:center;gap:12px} .srv-info{flex:1;min-width:0} .srv-name{font-weight:600}
+    .srv-line{margin-top:6px} .srv-msg{margin-top:6px;color:var(--ok)}
     /* AI ▸ Models on your PC (pc-models.js) */
     .pc-srv label{display:flex;align-items:center;gap:8px}
     .pc-base{font-size:0.8214rem;color:var(--dim);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:1px 6px;overflow-wrap:anywhere}
@@ -327,6 +330,12 @@
     @media(max-width:720px){ .sidebar{width:62px} .nav-item .lbl{display:none} .pulse-grid{grid-template-columns:repeat(2,1fr)} .info-grid{grid-template-columns:1fr} }
     /* Phone: label above, control below at full width. With the label fixed at 158 px the control
        kept 60 px: sliders and "Turn on" overflowed the card (checked at 375 px). */
+    .acc-h3{margin:16px 0 8px;font-size:0.9286rem}
+    .acc-form{gap:8px;flex-wrap:wrap}
+    .acc-form input,.acc-form select{min-width:0;flex:1 1 150px}
+    .acc-list{display:flex;flex-direction:column;gap:6px}
+    .acc-list .arow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line, #2a3a5e)}
+    .acc-list .arow .grow{flex:1 1 200px;min-width:0;overflow-wrap:anywhere}
     @media(max-width:560px){
       main.content{padding:12px 10px}
       .sect{padding-left:14px;padding-right:14px}
@@ -522,6 +531,10 @@
           <div class="scope-legend" id="scope-legend" style="margin-top:11px"></div>
         </div>
 
+        <div class="sect" id="ai-server-sect" hidden><h2><span data-i18n="serverModels">Modelli del server</span> <span class="badge live" data-i18n="badgeServerModels">Sul server</span></h2>
+          <div class="hint" style="margin-bottom:6px" data-i18n-html="serverModelsHint">Il server che ospita NucleoOS fa girare dei modelli <b>per te</b>: niente chiavi da mettere, niente da scaricare. Qui vedi quanto contesto ha ogni domanda e quante richieste ti restano oggi.</div>
+          <div id="server-models-mount"><span class="hint" data-i18n="srvLoading">chiedo al server…</span></div>
+        </div>
         <div class="sect" id="ai-local-sect"><h2><span data-i18n="pcModels">Modelli sul tuo PC</span> <span class="badge live" data-i18n="badgePcModels">Gratis · offline</span></h2>
           <div class="hint" style="margin-bottom:6px" data-i18n-html="pcModelsHint">Un server IA su <b>questo computer</b> risponde ad ANIMA, al copilota e ad Agenti <b>senza chiave e senza Internet</b>.</div>
           <div id="pc-models-mount"><span class="hint" data-i18n="pcDetecting">cerco i server…</span></div>
@@ -579,13 +592,18 @@
         <div class="sect" id="sect-dev-fw" hidden><h2 data-i18n="deviceIdentity">Identità dispositivo</h2>
           <div class="row"><label data-i18n="deviceName">Nome dispositivo</label><div class="ctl"><input type="text" id="dev-name" maxlength="32" placeholder="nucleo-01"></div></div>
           <div class="row"><label>Locale</label><div class="ctl"><input type="text" id="dev-locale" maxlength="12" placeholder="it-IT"></div></div>
-          <div class="row"><label data-i18n="timezone">Fuso orario</label><div class="ctl"><input type="text" id="dev-tz" maxlength="40" placeholder="Europe/Rome"></div></div>
+          <div class="row" id="row-dev-tz"><label data-i18n="timezone">Fuso orario</label><div class="ctl"><input type="text" id="dev-tz" maxlength="40" placeholder="Europe/Rome"></div></div>
           <div class="hint" style="margin-top:6px" data-i18n="deviceNameHint">Il nome è usato da mDNS/Swarm e si applica al prossimo avvio.</div></div>
         <div class="sect" id="sect-dev-live" hidden><h2><span data-i18n="deviceIdentity">Identità dispositivo</span> <span class="badge live">Live</span></h2>
           <div class="row"><label for="dev-live-name" data-i18n="deviceName">Nome dispositivo</label><div class="ctl"><input type="text" id="dev-live-name" maxlength="32" autocomplete="off" spellcheck="false" disabled></div></div>
           <div class="row"><label for="dev-live-tz" data-i18n="timezone">Fuso orario</label><div class="ctl"><select id="dev-live-tz" disabled></select></div></div>
           <div class="row" style="border-bottom:none"><label></label><div class="ctl" style="gap:10px;flex-wrap:wrap"><button class="primary" id="dev-apply" disabled>✓ <span data-i18n="applyConsole">Applica al dispositivo</span></button><span class="hint" id="dev-stat" role="status" aria-live="polite"></span></div></div>
           <div class="hint" style="margin-top:6px" data-i18n-html="deviceNameHintLive">Nome e fuso sono quelli veri della console.</div></div>
+        <div class="sect" id="sect-dev-clock" hidden><h2><span data-i18n="clockZoneTitle">Ora e fuso orario</span> <span class="badge live">Live</span></h2>
+          <div class="row"><label for="dev-clock-tz" data-i18n="timezone">Fuso orario</label><div class="ctl"><select id="dev-clock-tz" disabled></select></div></div>
+          <div class="row" id="row-clock-browser" hidden><label></label><div class="ctl" style="gap:10px;flex-wrap:wrap"><span class="hint" id="clock-browser-txt"></span><button id="clock-browser-use" data-i18n="clockZoneUse">Usa questo</button></div></div>
+          <div class="row" style="border-bottom:none"><label></label><div class="ctl" style="gap:10px;flex-wrap:wrap"><button class="primary" id="clock-apply" disabled>✓ <span data-i18n="applyConsole">Applica al dispositivo</span></button><span class="hint" id="clock-stat" role="status" aria-live="polite"></span></div></div>
+          <div class="hint" style="margin-top:6px"><span id="clock-now"></span> <span data-i18n="clockZoneHint">Il dispositivo mostra l'ora in questo fuso, in ogni app e dopo ogni riavvio. Cambia solo l'ora mostrata: l'orologio resta esatto.</span></div></div>
         <div class="sect" id="sect-pair" hidden><h2><span data-i18n="pairing">Accoppiamento</span> <span class="badge fw">Live</span></h2>
           <div class="row"><label data-i18n="pairRequire">Richiedi accoppiamento ai nuovi browser</label>
             <div class="ctl"><span class="sw"><input type="checkbox" id="pair-enabled"><span></span></span><span class="hint" id="pair-stat">…</span></div></div>
@@ -629,6 +647,8 @@
             <button class="danger" id="sec-revoke-all">🧹 <span data-i18n="revokeAll">Revoca tutte</span></button></div>
           <div class="hint" style="margin-top:10px" data-i18n="sessionsHint">Ogni browser associato col PIN è una sessione. Se hai perso un dispositivo o usato una rete non fidata, revoca le sessioni. Quelle inutilizzate scadono da sole dopo 90 giorni.</div></div>
       </section>
+
+      <section id="tab-accounts" class="tab-content"><div id="acc-host"></div></section>
 
       <!-- ═══════════ DIAGNOSTICS ═══════════ -->
       <section id="tab-diagnostics" class="tab-content">
@@ -700,6 +720,7 @@
             <div class="info-cell"><div class="il" data-i18n="uptime">Acceso da</div><div class="iv" id="info-uptime">—</div></div>
             <div class="info-cell"><div class="il" data-i18n="sdStorage">Storage SD</div><div class="iv" id="info-sd">—</div></div>
             <div class="info-cell"><div class="il">NucleoOS</div><div class="iv" id="info-ver">—</div></div>
+            <div class="info-cell"><div class="il">Web OS</div><div class="iv" id="info-webos">—</div></div>
             <div class="info-cell" id="info-ota-cell" hidden><div class="il">Slot OTA</div><div class="iv" id="info-ota">—</div></div>
             <div class="info-cell"><div class="il" data-i18n="installedApps">App installate</div><div class="iv" id="info-apps">—</div></div>
           </div></div>
@@ -763,9 +784,13 @@ import { PRESETS, applyPreset, planPreset, feasibility, buildRegistry, gaps, APP
 import { buildActionRegistry, filterActions } from './actions.js';
 import { ENDPOINTS, runSelfTest, formatReport } from './selftest.js';
 import { initUpdatesTab } from './fwupdate.js';
+import { mountAccounts, ICON as ACCOUNTS_ICON } from './accounts.js';   // Accounts tab (users.multi)
+import User from '/nucleo-user.js';
 import fs from '/nucleo-fs.js';
 import Caps from '/nucleo-caps.js';   // what this device has: one shared answer (/api/system/caps, or the fallback table)
 import os from '/nucleo-shell.js';    // the OS around this window: status snapshot, dialogs, open app, clipboard
+import { WEBOS, CORE } from '/nucleo-version.js';   // this web OS's release and core level (docs/versions.md)
+{ const v = document.getElementById('info-webos'); if (v) v.textContent = WEBOS + ' · core ' + CORE; }
 
 // ═══════════ serial device gate ═══════════
 // ONE request to the Cardputer at a time, always. The device is a single-task PSRAM-less httpd
@@ -837,12 +862,16 @@ function applyGates() {
   const show = (id, on) => { const el = $(id); if (el) el.hidden = !on; };
   const brain = has('anima.device'), linux = DEV.esp === false, boot = has('settings.boot'), live = !boot && (DEV.bri || DEV.vol), diag = has('diag');
   show('sect-screen', has('device.display'));
+  show('ai-server-sect', has('ai.server'));
   show('sect-levels', boot || DEV.bri || DEV.vol); show('row-bri', boot || DEV.bri); show('row-vol', boot || DEV.vol);
   show('sect-net-fw', boot); show('sect-ipv6', boot); show('sect-dev-fw', boot); show('sect-l1', hasL1());
   show('row-voice-always', has('device.voice')); show('row-voice-always-hint', has('device.voice')); show('info-ota-cell', has('ota.firmware'));
   show('sect-tts', DEV.tts); show('sect-sessions', has('pairing.sessions'));
   show('sect-peers', has('peers')); show('sect-backup', has('backup')); show('pc-sync', DEV.saves);
   show('sect-pair', has('pairing.pin')); show('sect-dev-live', has('device.identity'));
+  // time.zone: the device's own zone picker. device.identity already covers the zone where present; the
+  // settings.json text field is then dead (no firmware reads device.timezone), so it goes.
+  show('sect-dev-clock', has('time.zone') && !has('device.identity')); show('row-dev-tz', !has('time.zone'));
   show('sect-wifi-scan', has('wifi.manage')); show('btn-reboot', has('power'));
   show('sect-heap', diag); show('sect-logs', diag);
   show('tile-heap', diag); show('tile-cpu', diag);          // nothing to poll without diag
@@ -861,6 +890,7 @@ function applyGates() {
   if (ht && ht.getAttribute('data-i18n') !== hk) { ht.setAttribute('data-i18n', hk); ht.textContent = T(hk); }
   // the Updates tab drives the firmware OTA + SD-content install (/api/ota, status.ota/.sdc): ota.firmware only
   const nav = $$('.nav-item')[TABS.findIndex(([id]) => id === 'updates')]; if (nav) nav.hidden = !updatesTab();
+  const accNav = $$('.nav-item')[TABS.findIndex(([id]) => id === 'accounts')]; if (accNav) accNav.hidden = !has('users.multi');
   const key = JSON.stringify(DEV) + [...CAP].join();       // scenes / toggles / palette follow the feature set
   if (key !== gatesKey) {
     gatesKey = key; buildScenes(); buildQuick(); buildActions();
@@ -895,7 +925,7 @@ async function probe(path) { try { const r = await api(path); return answered(r)
 // ═══════════ tabs / sidebar ═══════════
 const TABS = [
   ['control', '🎛'], ['display', '📺'], ['personalization', '🎨'], ['network', '🌐'],
-  ['ai', '🧠'], ['device', '💻'], ['diagnostics', '🩺'], ['updates', '⬆️'], ['about', 'ℹ️'],
+  ['ai', '🧠'], ['device', '💻'], ['accounts', ACCOUNTS_ICON], ['diagnostics', '🩺'], ['updates', '⬆️'], ['about', 'ℹ️'],
 ];
 let activeTab = 'control';
 function buildSidebar() {
@@ -904,6 +934,7 @@ function buildSidebar() {
     const el = document.createElement('div');
     el.className = 'nav-item' + (id === activeTab ? ' active' : '');
     if (id === 'updates' && !updatesTab()) el.hidden = true;     // see applyGates
+    if (id === 'accounts' && !has('users.multi')) el.hidden = true;     // also before the first account: the setup is there
     el.innerHTML = `<span class="ni">${icon}</span><span class="lbl">${T('tab_' + id)}</span>`;
     el.addEventListener('click', () => selectTab(id));
     sb.appendChild(el);
@@ -921,12 +952,14 @@ function selectTab(id) {
   if (id === 'diagnostics') refreshLogs();
 }
 function onTabFirstOpen(id) {
+  if (id === 'accounts') mountAccounts($('acc-host'), { T, os, User });
   if (id === 'personalization') loadWallpapers();
   if (id === 'diagnostics') refreshHeapDetail();   // selectTab already refreshes the logs on every open
-  if (id === 'device') { refreshSessions(); loadPairing(); loadDevice(); }
+  if (id === 'device') { refreshSessions(); loadPairing(); loadDevice(); loadClock(); }
   if (id === 'display') loadLevels();
   if (id === 'updates' && Updates) Updates.check(false);   // respects the 24h TTL; "Check now" forces
   if (id === 'ai') mountPcModelsUI();                      // probes this PC's localhost ports: only once AI is opened
+  if (id === 'ai' && has('ai.server')) mountServerModelsUI();   // the hosting server's models (ai.server)
 }
 
 // ═══════════ live data poller (the ONLY timer) ═══════════
@@ -1701,6 +1734,56 @@ $('dev-live-name').addEventListener('input', devCheck);
 $('dev-live-tz').addEventListener('change', devCheck);
 $('dev-apply').addEventListener('click', applyDevice);
 
+// Device clock zone (time.zone): GET /api/time lists the zones the device knows; POST /api/time/zone sets one.
+// The browser's own zone is offered, never applied silently.
+let clockInfo = null;
+const BROWSER_TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } })();
+function fmtOffset(min) {
+  const a = Math.abs(min | 0), h = Math.floor(a / 60), m = a % 60;
+  return 'UTC' + (min < 0 ? '−' : '+') + h + (m ? ':' + String(m).padStart(2, '0') : '');
+}
+function paintClock(d) {
+  const sel = $('dev-clock-tz');
+  if (Array.isArray(d.zones)) {
+    sel.innerHTML = '';
+    for (const z of d.zones) {
+      const o = document.createElement('option'); o.value = z.id; o.textContent = `${z.label} — ${z.id.replace(/_/g, ' ')}`; sel.appendChild(o);
+    }
+    clockInfo = { zones: d.zones };
+  }
+  if (!clockInfo) return;
+  Object.assign(clockInfo, { tz: d.tz, tz_offset: d.tz_offset, time: d.time });
+  sel.value = d.tz; sel.disabled = !sel.options.length;
+  let now = '';
+  try {
+    now = new Date((d.time || Date.now() / 1000) * 1000).toLocaleTimeString(document.documentElement.lang || undefined,
+      { timeZone: d.tz, hour: '2-digit', minute: '2-digit' });
+  } catch {}
+  $('clock-now').textContent = T('clockZoneNow').replace('{time}', now).replace('{offset}', fmtOffset(d.tz_offset)) + (d.tz_user ? '' : ' ' + T('clockZoneDefault'));
+  const offer = BROWSER_TZ && BROWSER_TZ !== d.tz && clockInfo.zones.some((z) => z.id === BROWSER_TZ);
+  $('row-clock-browser').hidden = !offer;
+  if (offer) $('clock-browser-txt').textContent = T('clockZoneBrowser').replace('{zone}', BROWSER_TZ.replace(/_/g, ' '));
+  $('clock-apply').disabled = true;
+}
+async function loadClock() {
+  if (!has('time.zone') || has('device.identity')) return;
+  const d = await apiJson('/api/time');
+  if (d) paintClock(d); else $('clock-stat').textContent = T('unreachable');
+}
+async function applyClock(tz) {
+  const st = $('clock-stat');
+  if (!clockInfo || !tz || tz === clockInfo.tz) return;
+  $('clock-apply').disabled = true; st.textContent = '…';
+  const r = await apiJson('/api/time/zone', { method: 'POST', body: { tz } });
+  if (!r || !r.ok) { st.textContent = T('consoleRefused'); $('dev-clock-tz').value = clockInfo.tz; return; }
+  const d = await apiJson('/api/time');
+  paintClock(d || { tz: r.tz, tz_offset: r.tz_offset, tz_user: true, time: clockInfo.time });
+  st.textContent = T('appliedConsole');
+}
+$('dev-clock-tz').addEventListener('change', () => { $('clock-apply').disabled = !clockInfo || $('dev-clock-tz').value === clockInfo.tz; $('clock-stat').textContent = ''; });
+$('clock-apply').addEventListener('click', () => applyClock($('dev-clock-tz').value));
+$('clock-browser-use').addEventListener('click', () => { $('dev-clock-tz').value = BROWSER_TZ; applyClock(BROWSER_TZ); });
+
 function toForm() {
   $('dev-name').value = model.device.name; $('dev-locale').value = model.device.locale; $('dev-tz').value = model.device.timezone;
   if (!DEV.bri) { $('pw-bri').value = model.power.display_brightness; $('pw-bri-v').textContent = model.power.display_brightness + '%'; }   // live: the device's own value
@@ -2051,7 +2134,7 @@ async function probeDevice() {
   applyGates();
   if (DEV.display || DEV.bri || DEV.vol) await loadLevels();
   if (DEV.saves) pcInit();
-  if (tabOpened.device) { refreshSessions(); loadPairing(); loadDevice(); }
+  if (tabOpened.device) { refreshSessions(); loadPairing(); loadDevice(); loadClock(); }
 }
 
 // ═══════════ ANIMA caps (L1) ═══════════
@@ -2123,6 +2206,17 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
     try { I18N.onChange(() => { if (km && km.setLang) km.setLang(kmLang()); }); } catch {}
   } catch (e) { mountEl.innerHTML = '<span class="hint">' + T('keyMgrUnavailable') + ' (' + (e && e.message || e) + ').</span>'; }
 })();
+
+// ═══════════ AI ▸ Models on the server (server-models.js, capability ai.server) ═══════════
+let serverModels = null;
+async function mountServerModelsUI() {
+  const host = $('server-models-mount'); if (!host || serverModels) return;
+  try {
+    const [M, A] = await Promise.all([import('./server-models.js'), import('/ai.js')]);
+    await coreReady;
+    serverModels = M.mountServerModels(host, { T: (k, v) => I18N.t(k, v, 'settings'), fs, AI_PATH: A.AI_PATH });
+  } catch (e) { host.innerHTML = '<span class="hint">' + T('srvErr') + '</span>'; }
+}
 
 // ═══════════ AI ▸ Models on your PC (pc-models.js on the shared engine layer /ai-engines.js) ═══════════
 // The one full view of ai.local.engines (per browser): on/off, servers, who answers first, the model per task.
@@ -2499,8 +2593,11 @@ async function load() {
   model = merge(DEFAULTS, onDisk);
   // Sanitize garbage only — every OS language is valid here. This used to clamp to it/en, wiping a
   // stored es/fr/de back to Italian on every open (and persisting the damage on the next save).
-  // English is the floor: an invalid/absent value resolves to English unless the locale is explicitly it-*.
-  if (!LANGS.some((l) => l.code === model.ui.language)) model.ui.language = /^it/i.test(model.device.locale || '') ? 'it' : 'en';
+  // No language in the file (a device that keeps it elsewhere: /api/lang, the wizard's choice): the OS's current one,
+  // which Settings would otherwise overwrite for the whole OS. English is the floor only when even that is unknown.
+  if (!LANGS.some((l) => l.code === model.ui.language)) {
+    model.ui.language = LANGS.some((l) => l.code === I18N.lang) ? I18N.lang : /^it/i.test(model.device.locale || '') ? 'it' : 'en';
+  }
   lang = detectLang(model);
   applyLiveUI(); toForm(); updateScreenUI(); setDirty(false);
   status(rd.ok ? T('ready') : readFailText(rd.status), rd.ok);

@@ -317,7 +317,9 @@ async function doSearch() {
       const el = document.createElement('div');
       el.className = 'r';
       const admin = [r.admin1, r.country].filter(Boolean).join(', ');
-      el.innerHTML = `${r.name} <small>· ${admin}</small>`;
+      const small = document.createElement('small');          // names come from a third-party service: text, never HTML
+      small.textContent = '· ' + admin;
+      el.append(String(r.name || ''), ' ', small);
       el.addEventListener('click', () => setPlace({ name: r.name, lat: r.latitude, lon: r.longitude }));
       box.appendChild(el);
     }

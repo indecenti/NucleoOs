@@ -19,7 +19,7 @@
 #include "nucleo_gg.h"
 #include "nucleo_audio.h"
 #include "emu_audio.h"      // the speaker stage: low-pass and soft knee (the PSG centres itself, see psg_run)
-#include "emu_romstore.h"   // the cartridge from internal flash (ABI level 7)
+#include "emu_romstore.h"   // the cartridge from internal flash (ABI level 8)
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"

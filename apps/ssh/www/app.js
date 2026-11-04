@@ -319,14 +319,18 @@ $('new-btn').addEventListener('click', () => { if (client) return; sel = null; r
 (async function boot() {
   await loadHosts(); renderHosts();
   caps = await probeCaps();
+  // The reads above can take seconds on a busy device: a form the user opened meanwhile ("+ New") is theirs,
+  // never replaced by the start screen (it took what they were typing with it).
+  const userForm = () => !!$('area').querySelector('.form');
   if (caps && caps.available && caps.ssh) {
     devMode = true;
     $('settings-btn').hidden = true;
     const sub = $('sub'); sub.setAttribute('data-i18n', 'subtitle_device'); sub.textContent = t('subtitle_device');
     paintDevice();
-    showForm(sel);
+    if (!userForm()) showForm(sel);
     return;
   }
+  if (userForm()) { refreshBridge(); return; }
   if (!bridge().token) {
     $('area').innerHTML = '<div class="gate"><div><div class="gi">⌘</div><h2 data-i18n="gate_title">Terminale SSH reale</h2><p data-i18n-html="gate_body">Si collega ai tuoi host SSH tramite un piccolo <b>bridge</b> che avvii su una tua macchina (PC/Pi/NAS) — nessun servizio terzo. Avvia <code>tools/nucleo-ssh-bridge</code> (<code>npm i &amp;&amp; node index.js</code>), poi imposta URL e token qui.</p><button class="pri" id="gate-set" data-i18n="gate_set_btn">Imposta bridge</button></div></div>';
     const gs = $('gate-set'); if (gs) gs.addEventListener('click', () => openSettings());

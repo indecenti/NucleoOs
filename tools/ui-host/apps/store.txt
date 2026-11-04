@@ -12,7 +12,7 @@ native-2nd  c:1 D
 web         c:2
 web-games   c:2 TAB
 cats        c:2 TAB TAB
-cat-tools   c:2 TAB TAB D ENTER
+cat-tools   c:2 TAB TAB R ENTER
 mine        c:2 TAB TAB TAB
 app-new     c:2 ENTER
 app-update  c:2 TAB TAB TAB ENTER

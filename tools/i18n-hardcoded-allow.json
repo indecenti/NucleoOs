@@ -120,7 +120,10 @@
       "https://api.groq.com/openai/v1"
     ],
     "help": [
+      "DE",
       "EN",
+      "ES",
+      "FR",
       "IT"
     ],
     "log-viewer": [
@@ -197,6 +200,7 @@
       "Slot OTA",
       "Swarm (ESP-NOW)",
       "Tocca per comandare il pannello.",
+      "Web OS",
       "heap",
       "internal SRAM",
       "it-IT",

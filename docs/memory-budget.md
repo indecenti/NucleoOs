@@ -78,6 +78,30 @@ RAM. A green gate + clean build can still reboot-loop on hardware. **Always boot
 change on a real device (serial `BOOTSTEP` log must reach `httpd`) before OTAing it to units you
 can't easily recover.** See `releasing.md` for the serial recovery procedure.
 
+## Two RAM regimes: full OS vs Solo boot
+
+The "~18 KB free" figure quoted across the docs is the **full OS** after boot: httpd, the web OS link,
+mDNS, ANIMA and the UI canvas all resident. It is the budget for anything that runs *alongside* the
+system. An app that declares `NX_SOLO` does not live in that budget: opening it reboots into its own
+**Solo boot**, which brings up only what the app needs (no httpd, no L1, no mDNS) and starts from a clean,
+unfragmented arena. Leaving the app reboots into the full OS.
+
+| Regime | Free | Largest block | Source |
+|---|---:|---:|---|
+| Full OS, web OS connected | ~14–18 KB | — | `anima-native.md` |
+| Solo boot over USB, no Wi-Fi | 65,728 | 31,744 | `native-emulation.md` |
+| Solo boot, UI canvas released (`gbemu`) | ~90,000 | 32,768 | `native-emulation.md` |
+| Solo boot, Wi-Fi STA + one TLS session | ~79 KB | ~32 KB | `sd-content-install.md` |
+
+What follows for app design:
+- **Size heavy native apps for the Solo boot, not the full OS.** One TLS session fits there (the updater
+  and the SD-content installer already do it); in the full OS it does not.
+- **The ceiling is the contiguous block (~32 KB), not the free total.** Even in Solo boot nothing may need a
+  full frame buffer: stream into the screen in tiles. The Wi-Fi radio costs ~48 KB and can halve the
+  largest block — an app with no use for the network keeps it off (see `native-emulation.md`).
+- **TLS records are at most 8 KB** (`CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=8192`): network payloads arrive in
+  pieces and are consumed as they arrive.
+
 ## ANIMA web workers — sized by measurement
 
 `/api/anima` never runs the FULL cascade on the lean 18 KB httpd task: each query spawns a **transient**

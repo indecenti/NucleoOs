@@ -1144,8 +1144,13 @@
       });
     }
 
-    // Intercepted navigation listeners
+    // Intercepted navigation listeners. Only from this app's own tab frames (same origin: pages come through the
+    // device's proxy), and only to http(s): any other frame could otherwise send a tab to javascript: or anywhere.
+    const fromOwnTab = (e) => e.origin === location.origin &&
+      Array.prototype.some.call(document.querySelectorAll('iframe'), (f) => f.contentWindow === e.source);
+    const webUrl = (u) => { try { const x = new URL(String(u), location.href); return x.protocol === 'http:' || x.protocol === 'https:'; } catch (err) { return false; } };
     window.addEventListener('message', function(e) {
+      if (!e.data || !fromOwnTab(e) || (e.data.url !== undefined && !webUrl(e.data.url))) return;
       if (e.data && e.data.type === 'browser-navigate') {
         const activeTab = state.tabs.find(t => t.id === state.activeTabId);
         if (activeTab) {

@@ -255,6 +255,7 @@ void app_ui_confirm(const char *title, const char *msg, bool yes_focus)
 
     d.fillRoundRect(cx, cy, cw, chh, 9, BG);
     d.drawRoundRect(cx, cy, cw, chh, 9, DANGER);
+    d.setFont(&fonts::Font0); d.setTextDatum(textdatum_t::top_left);   // never the caller's last font / datum
 
     d.setTextSize(2); d.setTextColor(DANGER, BG);
     char t[19]; snprintf(t, sizeof t, "%.18s", title ? title : "");
@@ -276,6 +277,7 @@ void app_ui_confirm(const char *title, const char *msg, bool yes_focus)
     d.drawRoundRect(nx, by, bw, bh, 7, ACC);
     d.setTextColor(yes_focus ? FG : INK, yes_focus ? BG : ACC);
     d.setCursor(nx + bw / 2 - (int)strlen(no) * 6, by + 4); d.print(no);
+    d.setTextSize(1);
     nucleo_touch_add(yx, by - 6, bw, bh + 12, NK_CHAR, 'y');   // touch: the buttons answer (app_ui_confirm_key)
     nucleo_touch_add(nx, by - 6, bw, bh + 12, NK_CHAR, 'n');
 }

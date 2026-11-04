@@ -65,11 +65,36 @@ The rules that keep an installed app working across OS updates:
    Level 4 = level 3 + what the two emulators need (51 names): the sprite panel behind their scaler, the PCM sink,
    the second-screen surface and exclusive-mode calls, the heap probes, a few libc/libgcc helpers and the ROM
    inflater for zipped cartridges.
+   Level 6 = level 5 + the second core (`nucleo_cowork_*`).
+   Level 7 = level 6 + the network an app may have (`nucleo_tcp_*`, below), its secrets (`nucleo_secret_*`), the
+   raw touch pointer (`nucleo_touch_raw`, `nucleo_touch_raw_read`, `nucleo_touch_last`), the Cardputer's screen
+   readback (`nucleo_extdisp_screen_size` / `_row`), `lg::settings_list`, `cJSON_IsString` / `cJSON_IsTrue` and
+   `__lshrdi3`. First needed by VNC (Remote desktop).
 
 Not in v1, on purpose: the web server (`httpd_*`: a module's handlers would outlive it, and the web OS's
 catch-all route is registered last, so a late endpoint is never reached), task creation, raw radio, OTA,
 NVS, the registry, partitions. A module cannot outlive its own foreground life except through what the
 framework already bounds (handlers it sets are cleared when the app closes).
+
+### Network (level 7)
+
+Sockets, lwIP and Wi-Fi are never exported. A module that needs a connection the user asked for uses
+`nucleo_tcp.h`: TCP client connections the firmware opens for it — `nucleo_tcp_connect(host, port, ms)`, then
+`_send`, `_recv`, `_readable`, `_close`, every call bounded in time (the waits feed the task watchdog), at most
+`NUCLEO_TCP_MAX` (2) at once. Refused: loopback, `0.x`, multicast, broadcast and the device's own address, so an app
+cannot reach the Cardputer's own services. `nucleo_tcp_connect` asks `nucleo_app_net_allowed()`
+(`store_apps.cpp`): built-in apps may; a store app only when its signed record grants `net`. The framework closes
+whatever an app left open when it closes. A store app with `net` gets its Solo boot **with** Wi-Fi (`NX_SOLO`,
+decided by the store record before the module loads; the `wifi` games keep opening inline). The Store shows the
+permission before installing, and `tools/store.py` rejects a module that imports `nucleo_tcp_*` without `net`, any
+raw socket/lwIP/Wi-Fi name, or `net` below level 7 (store `docs/rules.md`, "Network, declared").
+
+### Secrets (level 7)
+
+`nucleo_secret.h`: a value of up to 64 bytes (a password) under a name of up to 15 characters, in NVS (internal
+flash), in a namespace made from the foreground app's id — an app sees only its own, and nothing is on the SD card,
+which anyone can take out. Not encrypted at rest unless flash encryption is on: it keeps a secret off the removable
+card, not away from whoever holds the device.
 
 ## Building one
 
@@ -103,8 +128,7 @@ One native app is resident at a time.
    can wrap around); every import in the export table; `nucleo_native_info` valid; ABI level, layout
    fingerprint and id as expected; sizes within the scratch region and the RAM budget. The relocation tables
    are then read once into RAM for the passes below.
-3. **Map.** The scratch region is the 256 KB `coredump` partition (core dumps to flash are off in this
-   firmware: the build fails if they are turned on). It is mapped with `esp_mmu_map` on the instruction
+3. **Map.** The scratch region is 256 KB of flash (see "Scratch region" below). It is mapped with `esp_mmu_map` on the instruction
    bus; on the ESP32-S3 the MMU table is shared by both buses, so the same pages are also visible through the
    data bus at a fixed offset, which serves the module's constants. `.data`/`.bss` get a heap block.
 4. **Dry pass.** The whole image is relocated in RAM sector by sector and hashed: every relocation target is
@@ -146,9 +170,27 @@ needs no code for it. A module that draws its own Back opts out with `NAP_FLAG_N
 they draw their Back themselves (`lg::header` / `lg::back`). Leaving the large surface (the Control Center,
 an overlay) takes the bar away with it.
 
-**Where native apps are unavailable:** a partition table without a 64 KB-aligned `coredump` partition — in
-practice, under M5Launcher (it recreates only SPIFFS/FAT partitions). The Store then shows the native store
-as unavailable, with the reason, and the web store as usual.
+### Scratch region
+
+Native code runs from 256 KB of flash mapped on the instruction bus. Which flash is chosen by
+`guest_native_scratch()` (`firmware/components/nucleo_guest/guest_policy.c`, gated by `npm run guest:test`):
+
+1. On our own two-bank layout, a `coredump` partition: units flashed before 0.8.4 keep that row across OTA
+   (the table is never rewritten over the air). Core dumps to flash are off; the build fails if they are
+   turned on.
+2. Otherwise the data partition labelled **`nucleo_nap`**. Our table ships it (the old `coredump` row renamed:
+   same offset and size, a LittleFS row) and, because it is a labelled LittleFS row, **M5Launcher recreates it**
+   when it installs our image: empty, 448 KB, at a 4 KB boundary. The loader uses the 256 KB that start at the
+   first 64 KB boundary inside it (at least 384 KB are always aligned).
+
+Under M5Launcher the `coredump` partition is the Launcher's own (64 KB) and is never used, whatever its size.
+The partition is never formatted: its content is only trusted when the last sector's header matches.
+
+**Where native apps are unavailable:** no partition qualifies — in practice a NucleoOS installed by M5Launcher
+before 0.8.4: installing a newer image from the Launcher creates `nucleo_nap` (448 KB more flash; the Launcher
+offers to free space when there is not enough). An owner can also create a LittleFS/SPIFFS partition labelled
+`nucleo_nap`, 128 KB or more, in the Launcher's partitioner. The Store shows the native store as unavailable,
+says how to get it, and shows the web store as usual.
 
 ## Security model
 
@@ -248,14 +290,14 @@ Home, right after ANIMA, so the way back is one step away. Turning an option off
   pushed yet; the engine is host-tested), Poker (built in on this firmware), the store-side unload when
   switching between two native apps.
 
-**ABI level 7 (2026-10-29): the cartridge from internal flash.** `nucleo_rom_map(path, &size, progress, user)` /
+**ABI level 8 (2026-11-04): the cartridge from internal flash.** (Built on the emulators branch as level 7 on 2026-10-29; renumbered 8 because the released level 7, firmware 0.8.5, is the network and secrets.) `nucleo_rom_map(path, &size, progress, user)` /
 `nucleo_rom_unmap()` (`firmware/components/nucleo_app/nucleo_romstore.c`). A file too big for RAM is copied once
 into the OTA slot the device is not running and mapped through the MMU: the module reads it like RAM, through the
 CPU's data cache, instead of a page cache filled from the SD card. Only on our own partition layout (never under
 M5Launcher, whose slots are other apps) and only once the running firmware is confirmed (until then the other slot
 is the way back). The slot's first 64 KB block holds a header (magic, path, size, date, FNV of the first 4 KB),
 erased first and written last; the cartridge starts at the second block. The next OTA overwrites the copy; the next
-game copies again. Modules built for level 7 need firmware 7.
+game copies again. Modules built for level 8 need a firmware with level 8.
 
 **A module's hot code (`sdk/native/nap.ld`, no ABI change).** `__attribute__((section(".text.nap_hot")))` puts a
 function first in the module's text, its literal pool right before it, between `_nap_hot_start` and `_nap_hot_end`

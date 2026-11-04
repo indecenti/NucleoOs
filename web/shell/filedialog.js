@@ -10,10 +10,11 @@
 // Edition differences live behind /api/fs and the core file layer (nucleo-fs.js), so no app is written twice.
 
 import coreFs from './nucleo-fs.js';
+import { OS_PRIVATE } from './appbroker.js';
 
 const ROOT = '/data';
-// Folders of the OS itself, never offered: the key vault, the agent, every app's private corner.
-const HIDDEN = new Set(['/data/anima', '/data/agent', '/data/apps', '/data/store-apps']);
+// Folders of the OS itself, never offered (the same list the broker refuses to store apps).
+const HIDDEN = new Set(OS_PRIVATE);
 export const OPEN_MAX_BYTES = 64 * 1024 * 1024;
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -125,16 +126,22 @@ export function createFileDialog({ t, fs = coreFs, remember, recall } = {}) {
         const f = listEl.querySelector('.fd-item.focus');
         if (f) f.scrollIntoView({ block: 'nearest' });
       }
+      // The newest navigation wins: a slow listing of a folder left meanwhile never paints over the one shown now
+      // (Open would then pick a file of the wrong folder).
+      let nav = 0;
       async function go(next) {
         if (!browsable(next)) return;
+        const mine = ++nav;
         busy = true; refreshOk();
         listEl.setAttribute('aria-busy', 'true');
         try {
           const got = await list(next);
+          if (mine !== nav || closed) return;
           got.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : a.type === 'dir' ? -1 : 1));
           entries = got; dir = next; deviceOk = true; picked.clear(); focusIdx = -1; say('');
           if (remember) remember(dirKey, dir);
         } catch {
+          if (mine !== nav || closed) return;
           if (next !== ROOT) { busy = false; return go(ROOT); }
           entries = []; deviceOk = false;
         }

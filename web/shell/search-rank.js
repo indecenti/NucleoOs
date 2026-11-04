@@ -2,7 +2,7 @@
 // search-rank.js — the pure ranking rules behind the OS search box (taskbar + Start menu).
 //
 // Split out of shell.js on purpose: like shortcuts.js and boot-fetch.js, this is decision logic with
-// no DOM and no fetch, so it is unit-tested on the host (tools/shell-search-rank.test.mjs) instead of
+// no DOM and no fetch, so it is unit-tested on the host (tests/suite/shell-search-rank.test.mjs) instead of
 // being verified by hand in a browser. shell.js owns the rendering and the side effects; this file
 // only answers "does it match, and how well".
 //

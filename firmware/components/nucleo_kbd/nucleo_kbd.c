@@ -80,15 +80,15 @@ static inline bool is_shift_xy(int x, int y) { return x == 1 && y == 2; }
 static inline bool is_mod_xy(int x, int y)
 { return (x == 0 && y == 2) || (x == 0 && y == 3) || (x == 1 && y == 3) || (x == 2 && y == 3); }
 
-// Map a modifier key position to an NK_MOD_* bit. Best-effort labelling (the matrix only tells
-// us a key is a non-printing modifier, not which one) — the USB Keyboard app shows the live state
-// so a wrong guess is a one-line fix here. Verify with the keyboard diagnostic on real hardware.
+// Map a modifier key position to an NK_MOD_* bit, as printed on the keys: row 2 starts with Fn then
+// Aa (Shift), row 3 with Ctrl, Opt, Alt. (The first guess had Fn/Ctrl and Opt/Alt the other way round;
+// checked on the ADV 2026-11-04 with the VNC app's modifier chips.)
 static uint8_t mod_for_xy(int x, int y)
 {
-    if (x == 0 && y == 2) return NK_MOD_CTRL;
-    if (x == 0 && y == 3) return NK_MOD_FN;
-    if (x == 1 && y == 3) return NK_MOD_ALT;
-    if (x == 2 && y == 3) return NK_MOD_GUI;
+    if (x == 0 && y == 2) return NK_MOD_FN;
+    if (x == 0 && y == 3) return NK_MOD_CTRL;
+    if (x == 1 && y == 3) return NK_MOD_GUI;
+    if (x == 2 && y == 3) return NK_MOD_ALT;
     return 0;
 }
 

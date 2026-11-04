@@ -6,7 +6,67 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.8.5] — 2026-11-04
+
+### Added
+- **Native apps can connect to your PC, when they say so.** Native app ABI level 7: `nucleo_tcp`, TCP client
+  connections the system opens for an app whose signed store record grants the `net` permission (the Store shows
+  "network, to the PCs you pick" before installing), and `nucleo_secret`, per-app secrets in internal flash. First
+  user: the Remote desktop (VNC) app in the Native C store. No raw sockets for apps, ever.
+- **Raw touch pointer for apps** (`nucleo_touch_raw`): press, move and lift with coordinates, for apps that run
+  their own gestures (drag, long press, a wheel strip).
+- **Store apps look like the built-in ones on the original Cardputer.** ABI 7 also gives native apps the system's
+  compact list and title (`app_ui_title`, `app_ui_list`) and the screen readback without a second screen, so an
+  app can save a screenshot of the Cardputer's own display.
+
 ### Changed
+- **ANIMA answers with the model you chose**, and the model names in the web OS are readable (web OS ff8f257).
+
+### Fixed
+- **Fn, Ctrl, Opt and Alt now are the keys printed on them.** Fn and Ctrl were swapped, and so were Opt and Alt: an
+  app's "Fn+…" shortcut answered to Ctrl. Every app that uses them (SSH, ANIMA, Keydeck, the emulators, Fn+P) now
+  follows the labels.
+
+## [0.8.4] — 2026-11-01
+
+### Added
+- **Choose your time zone.** Settings ▸ Time zone on the device (54 zones, from Honolulu to Auckland, with
+  daylight saving) and a "Time and time zone" section in the web Settings. It applies at once and in every app.
+  Until you choose one, the first paired browser's zone is used; before, every device showed Italian time.
+
+### Fixed
+- **The clock no longer goes back hours when you open an app.** Apps that start in their own boot (Music, Radio,
+  games…) restarted the device and reset the clock to the last internet sync; without Wi-Fi it stayed wrong.
+  The saved time is now used only when the clock is really unset, after the device was switched off.
+- **Presence** always said "clear": it got no Wi-Fi measurements to work on. Measured and tuned on the ADV.
+- **The Native C store works under M5Launcher.** It was greyed out there: native apps run from a flash region
+  the Launcher's partition table did not have. The region is now a labelled partition, `nucleo_nap`, that
+  M5Launcher creates when it installs NucleoOS (448 KB of flash). Already running NucleoOS from the Launcher?
+  Install the new `.bin` from the Launcher once; until then the Store says so. Stand-alone installs are unchanged.
+
+## [0.8.3] — 2026-10-30
+
+### Changed
+- **Start, closer to a desktop OS.** Below Pinned and Recommended, a "Categories" section shows one card per
+  category (four icons, its name and how many apps); a card opens All apps on that category. Right-click an app to
+  move it to another category, or back to the one the app names; the choice follows you on every browser.
+- **One category list for built-in and store apps.** The store's words (office, network, learn, security…) now
+  map to Start's categories, so a store app lands where the Store shows it instead of "Other"; the Store filters by
+  category and shows it on every card. Two new categories: Learning and Security.
+- **The power and account menus** in Start: Lock, Sign out where accounts exist, Restart only where the device can.
+
+### Fixed
+- **The language you pick sticks.** Choosing a language on a page that was already showing it (for example in
+  Italian before anything was chosen) did not reach the OS: the system and ANIMA stayed in English.
+- **ANIMA's context inspector** had no background and square corners (two undefined styles).
+
+## [0.8.2] — 2026-10-29
+
+### Changed
+- **Web OS 1.0** (the shared NucleoOS web OS): a first desktop with only File Commander, Recycle Bin, ANIMA and
+  Help; Start lists every app by category, with a Settings button and a power menu; a file deleted on the desktop
+  goes to the Recycle Bin; the setup wizard shows where apps are and the Store; Help carries its manual and the
+  Terminal's command pages in five languages, only for what this device can do; ANIMA's game forge works again.
 - **Games gallery, HyperSpin style.** The Games tile opens a two-level gallery: first the systems (native games,
   then NES, Game Boy, Game Boy Color, Master System and Game Gear, each shown when its emulator is installed and its
   folder in `/data/ROMs` has cartridges), then their titles, sorted, on a title wheel with live search, the game's
@@ -28,6 +88,10 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   panel, no card read, no Cardputer), each step sliding the titles through the fixed pill with the emulators' 4 ms
   tick; when it stops (160 ms) the picture, caption, position and the Cardputer's details follow in one frame. Frames
   draw only what falls in the strip being composed; the details card is composed off screen.
+- **Quicker to open and to answer.** The card walk runs once per boot and, once an index exists, only in 5 ms slices
+  after 0.8 s without a key; the index also lists each folder's screenshots, so opening a console reads one file and
+  no folder; screenshots are no longer converted ahead (a conversion could hold the next key ~0.2 s), console photos and
+  native covers only 1.5 s after the last key; one wheel tick per frame.
 - **Remembers.** The selection lands on the system and the game played last ("last played" mark on the wheel and on
   the details card).
 - **Sounds.** Short, quiet interface sounds (Kenney "Interface Sounds", CC0) for turning the wheel, opening a system,
@@ -37,9 +101,21 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 - Consoles are shown by their mark and their name (no makers). Their photos are cut out on the PC from the public-domain
   originals (soft edges, the studio white unmixed from them; `tools/gen-gallery-art.py`, 25 KB for five consoles) and
   stand straight on the theme's background, no tile; the left picture is a little smaller.
-- The native games have pictures too: their entry is a pocket computer painted locally (Qwen-Image) and cut out like the
-  consoles, and 13 native games ship a default cover on the SD pack (`data/GameShots/<id>.png`: each game's own screen
+- The native games have pictures too: their entry is the Cardputer itself (M5Stack's product photo, the one the
+  NucleoOS site shows) cut out like the consoles, and 13 native games ship a default cover on the SD pack (`data/GameShots/<id>.png`: each game's own screen
   rendered on the PC from its source; a cover captured on the device still wins).
+- The selection's whole title has a line of its own across the panel, above the picture and the wheel; one too long
+  for it scrolls (a pause, then round), redrawn alone; under the picture, its caption and what it is.
+- One screensaver rule for the launcher and the Games gallery: after the time set in Settings > Display >
+  Screensaver, its style ("off" = the screen sleeps and frees its 32 KB, the others open the screensaver). The launcher
+  used to go dark after a fixed 30 s instead, before the chosen screensaver could start.
+- The left picture is narrower and the wheel wider (narrower console marks, a flatter curve): whole titles read; the
+  selected one drops to the smaller font rather than being cut; a list shorter than the wheel shows each title once.
+- The screensaver speaks the five languages (its date too: it was always English), and so does the Cardputer's
+  "on the second screen" line of every app.
+- Fixed: the picture on the left sometimes kept the previous title's (the stop frame was taken by the turn path).
+- Fixed: after the screensaver the gallery is redrawn whole; with two screens the Cardputer plays the screensaver
+  chosen in Settings too (it showed a "running" note).
 - When the wheel stops only the left column and the position are redrawn; the pictures of the titles around the
   selection (and the consoles' photos) are made ahead while the player is still; a slow frame logs where it went.
 - Pictures and marks are unpacked with the inflater's state in the shared canvas (no 11 KB block to find on the

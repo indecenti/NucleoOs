@@ -37,5 +37,6 @@
   "err_list_dir": "Impossibile elencare la cartella {name} (errore {status}).",
   "err_read_src": "Impossibile leggere {name} (errore {status}).",
   "err_save_archive": "Impossibile salvare {name} (errore {status}).",
-  "confirm_overwrite": { "one": "{count} file esiste già e verrà sovrascritto:\n{names}\n\nEstrarre comunque?", "other": "{count} file esistono già e verranno sovrascritti:\n{names}\n\nEstrarre comunque?" }
+  "confirm_overwrite": { "one": "{count} file esiste già e verrà sovrascritto:\n{names}\n\nEstrarre comunque?", "other": "{count} file esistono già e verranno sovrascritti:\n{names}\n\nEstrarre comunque?" },
+  "format_label": "Formato:"
 }

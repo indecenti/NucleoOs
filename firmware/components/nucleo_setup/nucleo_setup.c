@@ -18,6 +18,7 @@
 #include "cJSON.h"
 #include "nvs.h"           // factory reset: esp_wifi's own namespace when the driver is not up
 #include "setup_store.h"   // three-tier config persistence; SD mirror without secrets (host-tested by `npm run setupstore:test`)
+#include "clock_zones.h"   // time-zone table (host-tested by `npm run clockzones:test`)
 #include "ap_creds.h"      // hotspot credential lifecycle incl. the deliberate open choice (host-tested, same gate)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -128,9 +129,51 @@ static SemaphoreHandle_t s_scan_lock;
 #define NTP_SERVER_2  "time.cloudflare.com"
 #define NTP_SERVER_3  "time.google.com"
 #define NTP_SERVER_4  "time.apple.com"
-#define DEFAULT_TZ  "CET-1CEST,M3.5.0,M10.5.0/3"   // POSIX TZ for Europe/Rome (with DST)
 static bool s_sntp_inited;
 static volatile bool s_time_synced;    // flips true once the first NTP reply lands
+
+// ---- time zone ----------------------------------------------------------------
+// The zone lives in its own NVS namespace, NOT in setup.json: it must be known at the very top of EVERY boot
+// (Solo, BLE, USB-web, first boot) before anything draws a clock, and those boots never load the setup
+// document. Unset = Europe/Rome, the zone every device shipped with. "user" marks an explicit choice
+// (Settings or the web OS): a browser's reported zone is adopted automatically only while it is 0.
+#define CLOCK_NVS_NS   "nclock"
+static int  s_tz = -1;          // index into clock_zones; -1 until nucleo_setup_clock_init()
+static bool s_tz_user;          // the zone was chosen explicitly
+
+static void clock_tz_apply(void)
+{
+    if (s_tz < 0) s_tz = clock_zone_default();
+    setenv("TZ", clock_zone_at(s_tz)->posix, 1);
+    tzset();
+}
+
+static void clock_tz_load(void)
+{
+    s_tz = clock_zone_default(); s_tz_user = false;
+    nvs_handle_t h;
+    if (nvs_open(CLOCK_NVS_NS, NVS_READONLY, &h) != ESP_OK) return;   // never set: the default zone
+    char id[48]; size_t n = sizeof(id); uint8_t user = 0;
+    if (nvs_get_str(h, "tz", id, &n) == ESP_OK) {
+        int i = clock_zone_find(id);
+        if (i >= 0) s_tz = i;
+        else ESP_LOGW(TAG, "saved time zone '%s' unknown to this firmware: using %s", id, clock_zone_at(s_tz)->id);
+    }
+    if (nvs_get_u8(h, "user", &user) == ESP_OK) s_tz_user = user != 0;
+    nvs_close(h);
+}
+
+static bool clock_tz_save(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(CLOCK_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return false;
+    esp_err_t e = nvs_set_str(h, "tz", clock_zone_at(s_tz)->id);
+    if (e == ESP_OK) e = nvs_set_u8(h, "user", s_tz_user ? 1 : 0);
+    if (e == ESP_OK) e = nvs_commit(h);
+    nvs_close(h);
+    if (e != ESP_OK) ESP_LOGE(TAG, "time zone not persisted: %s", esp_err_to_name(e));
+    return e == ESP_OK;
+}
 
 
 static void on_time_sync(struct timeval *tv)
@@ -155,8 +198,7 @@ static void on_time_sync(struct timeval *tv)
 static void start_sntp(void)
 {
     if (s_sntp_inited) { esp_sntp_restart(); return; }
-    setenv("TZ", DEFAULT_TZ, 1);
-    tzset();
+    clock_tz_apply();   // normally done at boot already (nucleo_setup_clock_init); cheap and idempotent
     // The MULTIPLE macro takes exactly (count, list); the server list MUST be wrapped in
     // ESP_SNTP_SERVER_LIST() so its commas stay inside one macro argument. The array it builds is
     // sized by CONFIG_LWIP_SNTP_MAX_SERVERS (=4, pinned in sdkconfig.defaults so a config regen
@@ -168,7 +210,7 @@ static void start_sntp(void)
     esp_err_t err = esp_netif_sntp_init(&cfg);
     if (err != ESP_OK) { ESP_LOGE(TAG, "SNTP init failed: %s", esp_err_to_name(err)); return; }
     s_sntp_inited = true;
-    ESP_LOGI(TAG, "SNTP started (4 servers), TZ=%s", DEFAULT_TZ);
+    ESP_LOGI(TAG, "SNTP started (4 servers), TZ=%s", clock_zone_at(s_tz)->id);
 }
 
 // Keep the STA link alive and track the live IP. Without auto-reconnect on disconnect a
@@ -931,6 +973,11 @@ bool nucleo_setup_factory_reset(void)
     bool ok = setup_store_seal();                // ...and every later save is refused until reboot
     ok = setup_store_erase(&SETUP_DOC) && ok;
     ok = setup_store_erase(&NETS_DOC) && ok;
+    {   // the chosen time zone goes too (the wizard's next run starts from the default zone)
+        nvs_handle_t h;
+        if (nvs_open(CLOCK_NVS_NS, NVS_READWRITE, &h) == ESP_OK) { nvs_erase_all(h); nvs_commit(h); nvs_close(h); }
+        s_tz = clock_zone_default(); s_tz_user = false;
+    }
     s_net_n = 0; s_net_seq = 0; s_nets_loaded = true; s_complete = false;   // RAM matches the erased store
     if (s_wifi_ready) {
         // esp_wifi_restore() is the driver's own reset (what ESP-IDF's wifi_prov_mgr_reset_provisioning()
@@ -1176,7 +1223,11 @@ void nucleo_setup_suspend(void)
 // device shows a reasonable time even before it connects (or if NTP is unreachable).
 static void restore_saved_time(void)
 {
-    if (s_time_synced) return;
+    // The system clock survives a software reset (esp_restart keeps the RTC timer and the boot-time offset),
+    // and every Solo app launch IS a reset. Restoring then would rewind a valid clock to the last NTP sync —
+    // hours back — and a Solo boot without Wi-Fi never syncs again: "the time breaks every time I open an
+    // app". Only a clock that is really unset (power-on, < 2022) takes the saved approximation.
+    if (s_time_synced || time(NULL) > 1640000000) return;
     char *buf = setup_store_slurp(NUCLEO_SD_MOUNT "/system/time.json");
     if (!buf) return;
     const char *p = strstr(buf, "\"t\":");
@@ -1203,17 +1254,62 @@ void nucleo_setup_set_time(time_t t)
     ESP_LOGI(TAG, "Clock set from browser push: %lu", (unsigned long)t);
 }
 
+// Boot: the zone first (so even a Solo/BLE boot with no Wi-Fi shows local time), then the saved clock
+// approximation if the clock is unset. Call right after NVS and the SD are up, before any UI shows a time.
+void nucleo_setup_clock_init(void)
+{
+    clock_tz_load();
+    clock_tz_apply();
+    restore_saved_time();
+    ESP_LOGI(TAG, "clock: zone %s%s", clock_zone_at(s_tz)->id, s_tz_user ? " (chosen)" : "");
+}
+
+int nucleo_setup_tz_count(void) { return clock_zone_count(); }
+const char *nucleo_setup_tz_id_at(int i)    { const clock_zone_t *z = clock_zone_at(i); return z ? z->id : ""; }
+const char *nucleo_setup_tz_label_at(int i) { const clock_zone_t *z = clock_zone_at(i); return z ? z->label : ""; }
+int  nucleo_setup_tz_index(void) { if (s_tz < 0) clock_tz_load(); return s_tz; }
+const char *nucleo_setup_tz_id(void) { return nucleo_setup_tz_id_at(nucleo_setup_tz_index()); }
+bool nucleo_setup_tz_user_set(void) { return s_tz_user; }
+
+bool nucleo_setup_set_tz_index(int i, bool user)
+{
+    if (!clock_zone_at(i)) return false;
+    if (s_tz < 0) clock_tz_load();
+    if (!user && s_tz_user) return false;            // an automatic source never overrides the user's choice
+    bool changed = i != s_tz || (user && !s_tz_user);
+    s_tz = i; s_tz_user = s_tz_user || user;
+    clock_tz_apply();                                 // the epoch is untouched: only the wall clock moves
+    if (changed) { clock_tz_save(); ESP_LOGI(TAG, "time zone -> %s (%s)", clock_zone_at(i)->id, user ? "user" : "auto"); }
+    return true;
+}
+
+bool nucleo_setup_set_tz(const char *iana_id, bool user)
+{
+    return nucleo_setup_set_tz_index(clock_zone_find(iana_id), user);
+}
+
+// Offset of local time from UTC right now, in minutes (DST included).
+int nucleo_setup_tz_offset_min(void)
+{
+    time_t t = time(NULL);
+    struct tm lt, gt;
+    localtime_r(&t, &lt); gmtime_r(&t, &gt);
+    int d = lt.tm_yday - gt.tm_yday;
+    if (lt.tm_year != gt.tm_year) d = lt.tm_year > gt.tm_year ? 1 : -1;   // across New Year
+    return d * 1440 + (lt.tm_hour - gt.tm_hour) * 60 + (lt.tm_min - gt.tm_min);
+}
+
 // Set the device clock MANUALLY (on-device Settings > SYS > Data/ora, or a browser). Unlike
 // nucleo_setup_set_time() this ALWAYS applies — the user is deliberately overriding, typically because
 // the device is offline and NTP will never land. The five fields are LOCAL wall-clock time in the device
-// zone (Europe/Rome); TZ is set so mktime() converts them to the correct epoch (and honours DST). Marks
+// zone (Settings > Time zone); TZ is set so mktime() converts them to the correct epoch (and honours DST). Marks
 // the clock "synced" so every app drops the "waiting for NTP" placeholder, and persists to the same file
 // the NTP sync writes so an offline reboot restores this instead of falling back to 1970.
 void nucleo_setup_set_datetime(int year, int mon, int day, int hour, int min)
 {
     if (year < 2020 || year > 2099 || mon < 1 || mon > 12 || day < 1 || day > 31 ||
         hour < 0 || hour > 23 || min < 0 || min > 59) return;
-    setenv("TZ", DEFAULT_TZ, 1); tzset();          // interpret the fields in the device's local zone
+    clock_tz_apply();                               // interpret the fields in the device's local zone
     struct tm tm = {0};
     tm.tm_year = year - 1900; tm.tm_mon = mon - 1; tm.tm_mday = day;
     tm.tm_hour = hour; tm.tm_min = min; tm.tm_sec = 0; tm.tm_isdst = -1;

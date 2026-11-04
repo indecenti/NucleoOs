@@ -27,6 +27,9 @@ Notes:
 - If you add a new third-party dependency, list it here with its license and keep its notices.
 - The Games gallery's interface sounds (`gamefront_sfx.h`) and the audio library in `assets/audio/` are by Kenney
   (kenney.nl), CC0 (public domain).
+- The Games gallery's console photos (`gamefront_art.h`) are Evan-Amos's public-domain photos (Wikimedia Commons); the
+  native games' entry is M5Stack's official Cardputer product photo, (c) M5Stack Technology Co., Ltd., used to show the
+  hardware NucleoOS runs on (as on the NucleoOS site), not covered by the NucleoOS license.
 - This file is informational, not legal advice. When in doubt, consult each component's LICENSE.
 - The Cardputer / Cardputer ADV product photos used in the README (`docs/screenshots/hardware.png`)
   are © M5Stack, sourced from their official product listings, used here to identify the compatible

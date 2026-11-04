@@ -37,5 +37,6 @@
   "err_list_dir": "Couldn't list the folder {name} (error {status}).",
   "err_read_src": "Couldn't read {name} (error {status}).",
   "err_save_archive": "Couldn't save {name} (error {status}).",
-  "confirm_overwrite": { "one": "{count} file already exists and will be overwritten:\n{names}\n\nExtract anyway?", "other": "{count} files already exist and will be overwritten:\n{names}\n\nExtract anyway?" }
+  "confirm_overwrite": { "one": "{count} file already exists and will be overwritten:\n{names}\n\nExtract anyway?", "other": "{count} files already exist and will be overwritten:\n{names}\n\nExtract anyway?" },
+  "format_label": "Format:"
 }

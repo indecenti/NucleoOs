@@ -1,3 +1,4 @@
+#include "clock_zones.h"   // Settings ▸ Time zone scenes
 #include <direct.h>   // _mkdir: the Video scenes lay out sd/data/Videos
 // ui-host scene driver: builds the REAL launcher tree from the real app registry, drives the REAL
 // renderer (launcher_render.cpp) into the in-memory 240x135 display, and dumps every scene as a
@@ -248,10 +249,15 @@ extern bool g_host_onboarding;                       // settings_stubs.cpp
 extern bool g_host_sd_needed;
 extern int  g_host_sdc_status;
 extern "C" void nucleo_settings_onboard(void);
+extern "C" bool nucleo_setup_set_tz_index(int i, bool user);   // settings_stubs.cpp
 static const Scene SETTINGS[] = {
     { "root",      [] { app_open("wifi"); app_draw(); } },
     { "root-row4", [] { app_open("wifi"); down(4); app_draw(); } },
     { "root-end",  [] { app_open("wifi"); app_key(NK_UP); app_draw(); } },
+    // Time zone: the longest zone label, as a plain row and focused (chip = live UTC offset + cities).
+    { "tz-long",    [] { nucleo_setup_set_tz_index(clock_zone_find("America/Bogota"), true); app_open("wifi"); app_key(NK_UP); app_draw(); } },
+    { "tz-half",    [] { nucleo_setup_set_tz_index(clock_zone_find("Asia/Kolkata"), true); app_open("wifi"); app_key(NK_UP); app_key(NK_UP); app_key(NK_UP); app_draw(); } },
+    { "tz-focus",   [] { nucleo_setup_set_tz_index(clock_zone_find("America/Bogota"), true); app_open("wifi"); app_key(NK_UP); app_key(NK_UP); app_key(NK_UP); app_draw(); } },
     // First boot: Settings opens on Nearby networks; Esc means "use the hotspot". Then the join password.
     { "onboard",      [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); app_draw(); } },
     { "onboard-pass", [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa2026"); app_draw(); } },
@@ -417,7 +423,7 @@ static void native_open() { store_choose(); app_key(NK_CHAR, '1'); }
 static const Scene STORE[] = {
     { "choose",    [] { store_choose(); app_draw(); } },
     { "choose-web",[] { store_choose(); down(1); app_draw(); } },
-    { "choose-nonative", [] { g_host_native_abi = 0; store_choose(); app_key(NK_CHAR, '1'); app_draw(); g_host_native_abi = 1; } },
+    { "choose-nonative", [] { g_host_native_abi = 0; g_host_guest = true; store_choose(); app_key(NK_CHAR, '1'); app_draw(); g_host_native_abi = 1; g_host_guest = false; } },   // M5Launcher, NucleoOS installed before 0.8.4
     { "native",    [] { native_open(); app_draw(); } },
     { "native-app",[] { native_open(); app_key(NK_ENTER); app_draw(); } },
     { "native-app-uninstall", [] { native_open(); app_key(NK_ENTER); app_key(NK_RIGHT); app_draw(); } },   // RIGHT focuses Uninstall

@@ -12,7 +12,7 @@
 //   • Chrome Local Network Access: private-IP → loopback is not gated today; `targetAddressSpace:'loopback'`
 //     is passed anyway (ignored by browsers that don't know it) so a future gate prompts instead of failing.
 //
-// Pure / I/O-injected (fetch, AbortSignal) → host-tested in tools/shell-ai-engines.test.mjs.
+// Pure / I/O-injected (fetch, AbortSignal) → host-tested in tests/suite/shell-ai-engines.test.mjs.
 
 export const DEFAULT_SERVERS = [
   { id: 'ollama', kind: 'ollama', name: 'Ollama', base: 'http://localhost:11434' },

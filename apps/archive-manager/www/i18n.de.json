@@ -37,5 +37,6 @@
   "err_list_dir": "Der Ordner {name} konnte nicht aufgelistet werden (Fehler {status}).",
   "err_read_src": "{name} konnte nicht gelesen werden (Fehler {status}).",
   "err_save_archive": "{name} konnte nicht gespeichert werden (Fehler {status}).",
-  "confirm_overwrite": { "one": "{count} Datei existiert bereits und wird überschrieben:\n{names}\n\nTrotzdem entpacken?", "other": "{count} Dateien existieren bereits und werden überschrieben:\n{names}\n\nTrotzdem entpacken?" }
+  "confirm_overwrite": { "one": "{count} Datei existiert bereits und wird überschrieben:\n{names}\n\nTrotzdem entpacken?", "other": "{count} Dateien existieren bereits und werden überschrieben:\n{names}\n\nTrotzdem entpacken?" },
+  "format_label": "Format:"
 }

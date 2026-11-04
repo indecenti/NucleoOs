@@ -13,7 +13,10 @@ name: Release
 #   3. verify  — prove the release assets are reachable and that the web-flasher site (Pages) has
 #                actually caught up to this tag, so the in-shell / native updater won't be told
 #                "release not aligned yet".
-# No secrets beyond the automatic GITHUB_TOKEN; nothing non-distributable is in the repo.
+#   4. announce — post the short changelog to the community Discord's #announcements
+#                (tools/release-announce.mjs). Never fails the release.
+# Secrets: the automatic GITHUB_TOKEN, plus DISCORD_RELEASE_WEBHOOK for `announce` only (unset: no post).
+# Nothing non-distributable is in the repo.
 on:
   push:
     tags: ['v*']
@@ -203,3 +206,25 @@ jobs:
           done
           echo "::error::Pages did not align to ${{ github.ref_name }} within ~6 min — check the Pages workflow"
           exit 1
+
+  # 4) Tell the community, only once the release is proven installable. A Discord hiccup must not turn a
+  #    published release red, and without the secret (forks) the script posts nothing.
+  announce:
+    needs: verify
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            CHANGELOG.md
+            tools/release-announce.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Post to Discord #announcements
+        env:
+          DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+        run: node tools/release-announce.mjs "${{ github.ref_name }}" --post

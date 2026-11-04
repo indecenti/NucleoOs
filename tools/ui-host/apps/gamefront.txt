@@ -15,6 +15,7 @@
 @sd data/ROMs/gb/Links%20Awakening%20(USA,%20Europe)%20(Rev%202).gb x
 @sdfile data/ROMs/gb/.snaps/Deadeus.gb.snp apps/fixtures/test.snp
 @sd data/ROMs/gbc/Pokemon%20-%20Crystal%20Version%20(USA).gbc x
+@sd data/ROMs/gbc/The%20Legend%20of%20Zelda%20-%20Oracle%20of%20Seasons%20and%20Oracle%20of%20Ages%20(Europe).gbc x
 @sd data/ROMs/gg/Waternet.gg x
 @sd data/ROMs/gg/Tunnel.gg x
 @sd data/ROMs/sms/River%20Strike.sms x
@@ -43,3 +44,5 @@ back D ENTER BACK
 search c:g c:a
 last D D ENTER D D ENTER
 nes D ENTER
+long_title D D D ENTER D
+long_scroll D D D ENTER D tick:12

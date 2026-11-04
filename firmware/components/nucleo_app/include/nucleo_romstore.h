@@ -17,7 +17,7 @@
 //                                                  the same file (path, size, date, first 4 KB) maps at once.
 //   nucleo_rom_unmap()                             the mapping goes; the copy stays for next time.
 //
-// One mapping at a time. Exported to store modules at ABI level 7.
+// One mapping at a time. Exported to store modules at ABI level 8.
 #pragma once
 #include <stddef.h>
 #include <stdint.h>

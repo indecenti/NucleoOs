@@ -85,7 +85,7 @@
       height: 28px;
       border-radius: 8px;
       background: var(--accent-gradient);
-      box-shadow: 0 0 15px var(--accent-shadow);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
       display: grid;
       place-items: center;
       color: #fff;
@@ -142,6 +142,15 @@
     }
 
     /* Bilingual Switch */
+    .doc-body { line-height: 1.6; font-size: 14px; }
+    .doc-body h3 { font-size: 17.5px; font-weight: 600; margin: 22px 0 6px; }
+    .doc-body p { margin: 8px 0; }
+    .doc-body ul { margin: 6px 0 10px; padding-left: 20px; }
+    .doc-body li { margin: 3px 0; }
+    .doc-body code { font: 12px/1.4 ui-monospace, Consolas, monospace; padding: 1px 6px; border-radius: 5px;
+      border: 1px solid var(--border, rgba(127,127,127,.3)); border-bottom-width: 2px; white-space: nowrap; }
+    .doc-src { font-size: 12px; opacity: .65; margin-top: 18px; }
+    .sidebar-item .doc-ic { display: inline-block; width: 1.4em; }
     .lang-switch {
       display: flex;
       background: var(--glass);
@@ -167,7 +176,7 @@
     .lang-switch button.active {
       background: var(--accent-gradient);
       color: #fff;
-      box-shadow: 0 2px 6px var(--accent-shadow);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
     }
 
     /* Main Container layout */
@@ -541,13 +550,13 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      box-shadow: 0 4px 12px var(--accent-shadow);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
       transition: all 0.2s;
     }
 
     .exec-btn:hover {
       transform: translateY(-1px);
-      box-shadow: 0 6px 18px var(--accent-shadow);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
     }
 
     /* Try it out button (Mini Swagger) */
@@ -565,13 +574,13 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      box-shadow: 0 4px 12px var(--accent-shadow);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
       transition: all 0.2s;
     }
 
     .try-btn:hover {
       transform: translateY(-1px);
-      box-shadow: 0 6px 18px var(--accent-shadow);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
     }
 
     .try-btn:active {
@@ -699,6 +708,9 @@
       <div class="lang-switch" id="lang-switch">
         <button data-lang="it" class="active">IT</button>
         <button data-lang="en">EN</button>
+        <button data-lang="es">ES</button>
+        <button data-lang="fr">FR</button>
+        <button data-lang="de">DE</button>
       </div>
     </div>
   </header>
@@ -735,6 +747,7 @@
         </svg>
         <h2 id="welcome-title" data-i18n="welcome_title">NucleoOS Help</h2>
         <p id="welcome-desc" data-i18n="welcome_desc">Seleziona un argomento dalla barra laterale o usa la barra di ricerca per esplorare le guide e le funzionalità di sistema.</p>
+        <p id="welcome-src" class="doc-src" hidden></p>
       </div>
     </main>
   </div>
@@ -743,6 +756,7 @@
     import I18N from '/nucleo-i18n.js';
     import fs from '/nucleo-fs.js';
     import os from '/nucleo-shell.js';
+    import Caps from '/nucleo-caps.js';
     const t = await I18N.init('help');   // core + this app's catalog for the active OS language
 
     // `lang` follows the OS language (the engine owns it). It still drives which it/en sub-object of
@@ -757,42 +771,81 @@
     // Helper per leggere file JSON sul filesystem del dispositivo
     const readJSON = (path) => fs.readJSON(path, null).catch(() => null);
 
-    // Carica l'elenco dei manuali leggendo la directory /system/registry/manual/
-    async function fetchManuals() {
-      let entries = [];
-      try {
-        entries = (await fs.list('/system/registry/manual')).filter(e => e.name.endsWith('.info'));
-      } catch {}
-
-      // Fallback statico offline per compatibilità locale o durante lo sviluppo
-      if (entries.length === 0) {
-        const fallbackIds = [
-          "ls", "cd", "pwd", "cat", "cp", "mv", "mkdir", "touch", "rm", "echo", "open", "grep",
-          "find", "wc", "head", "tail", "df", "uptime", "ping", "curl", "wget", "sleep", "env",
-          "export", "history", "uname", "status", "free", "date", "theme", "clear", "man",
-          "dmesg", "reboot", "desktop", "anima", "shortcuts", "web_api", "app_runtimes",
-          "event_bus", "security_auth", "storage_layout"
-        ];
-        entries = fallbackIds.map(id => ({ name: id + '.info' }));
+    // The user manual is written in git (docs/user/) and built into this web OS (tools/gen_help.py →
+    // /help/<lang>.json): it is the one for the version installed here, in the five languages. A topic is shown
+    // only where it applies: the device has the capabilities it names and the app it is about.
+    const docCache = new Map();
+    async function loadDocs(l) {
+      if (!docCache.has(l)) docCache.set(l, fetch('/help/' + l + '.json').then((r) => (r.ok ? r.json() : null)).catch(() => null));
+      return (await docCache.get(l)) || (l !== 'en' ? loadDocs('en') : null);
+    }
+    let applies = () => true;
+    async function deviceFilter() {
+      const apps = await fetch('/api/apps', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))
+        .then((d) => (d && Array.isArray(d.apps) ? new Set(d.apps.filter((a) => a && a.enabled !== false).map((a) => a.id)) : null))
+        .catch(() => null);
+      const need = new Set();
+      const all = await loadDocs('en');
+      for (const tp of [...((all && all.topics) || []), ...((all && all.commands) || [])]) {
+        for (const c of [...(tp.requires || []), ...(tp.any || []), ...(tp.unless || [])]) need.add(c);
       }
+      const have = new Map(await Promise.all([...need].map(async (c) => [c, await Caps.has(c).catch(() => false)])));
+      applies = (tp) => (!tp.app || !apps || apps.has(tp.app))
+        && (tp.requires || []).every((c) => have.get(c))
+        && (!tp.any || !tp.any.length || tp.any.some((c) => have.get(c)))
+        && !(tp.unless || []).some((c) => have.get(c));
+    }
+    // Records of the manual, built per language on demand: the same ids in every language, so a page stays
+    // open across a language change.
+    // The Terminal's commands come from the same manual, with the same rule: a command whose capability the device
+    // lacks has no page here (the Terminal answers "not available on this device" for it).
+    async function docRecords() {
+      const d = await loadDocs(lang);
+      const topics = ((d && d.topics) || []).filter(applies).map((tp, i) => ({
+        id: 'doc:' + tp.id, category: 'guide', doc: true, order: i, icon: tp.icon || '',
+        [lang]: { title: tp.title, description: tp.md, md: tp.md },
+      }));
+      const commands = ((d && d.commands) || []).filter(applies).map((c) => ({
+        id: c.id, category: c.category,
+        [lang]: { title: c.title, synopsis: c.synopsis, description: c.description, details: c.details || '' },
+      }));
+      return [...topics, ...commands];
+    }
 
-      const list = [];
-      for (const e of entries) {
-        const id = e.name.replace('.info', '');
-        const fileContent = await readJSON('/system/registry/manual/' + e.name);
-        if (fileContent) {
-          list.push(fileContent);
-        } else {
-          // Record finto per compatibilità offline se fallisce la lettura file singolo
-          list.push({
-            id,
-            category: ['desktop', 'anima', 'shortcuts', 'web_api', 'app_runtimes', 'event_bus', 'security_auth', 'storage_layout'].includes(id) ? 'guide' : 'terminal',
-            it: { title: id, synopsis: id, description: 'Voce offline. Raggiungi il dispositivo per dettagli.' },
-            en: { title: id, synopsis: id, description: 'Offline entry. Connect to device for details.' }
-          });
-        }
+    // The manual's Markdown: headings, lists, paragraphs, **bold** and `keys`. Escaped first, so the text is
+    // only ever text.
+    function mdToHtml(md) {
+      const inline = (x) => h(x).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
+      const out = [];
+      let list = false;
+      for (const line of String(md).split('\n')) {
+        const li = /^- (.*)$/.exec(line);
+        if (!li && list) { out.push('</ul>'); list = false; }
+        if (li) { if (!list) { out.push('<ul>'); list = true; } out.push('<li>' + inline(li[1]) + '</li>'); }
+        else if (line.startsWith('## ')) out.push('<h3>' + inline(line.slice(3)) + '</h3>');
+        else if (line.trim()) out.push('<p>' + inline(line) + '</p>');
       }
-      return list;
+      if (list) out.push('</ul>');
+      return out.join('');
+    }
+    function renderDocCard(manual, data, content) {
+      content.innerHTML = `<div class="help-card"><div class="card-header"><div class="card-meta">
+        <span class="category">${h(t('label_guides'))}</span><h2>${h(data.title)}</h2></div></div>
+        <div class="doc-body">${mdToHtml(data.md)}</div>${srcLine ? `<p class="doc-src">${h(srcLine)}</p>` : ''}</div>`;
+    }
+
+    // Which manual this is: the web OS build and the device's system version (build.json is written by tools/build.py).
+    let srcLine = '';
+    async function sourceLine() {
+      const [b, st] = await Promise.all([
+        fetch('/build.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        os.status().catch(() => null),
+      ]);
+      const build = b && b.commit ? b.commit.slice(0, 7) : '';
+      const version = (st && st.version) || '';
+      srcLine = build || version ? t('doc_source', { build: build || '—', version: version || '—' }) : '';
+      const el = document.getElementById('welcome-src');
+      if (el) { el.textContent = srcLine; el.hidden = !srcLine; }
     }
 
     // Manual records are DATA: synopses like "cat <file>" must reach the card as text. Interpolated raw,
@@ -1159,7 +1212,9 @@
       const content = document.getElementById('content');
       const data = manual[lang] || manual.en;
 
-      if (manual.category === 'api') {
+      if (manual.doc) {
+        renderDocCard(manual, data, content);
+      } else if (manual.category === 'api') {
         renderApiCard(manual, data, content);
       } else {
         renderStandardCard(manual, data, content);
@@ -1190,8 +1245,8 @@
 
         if (query) {
           const id = m.id.toLowerCase();
-          const title = data.title.toLowerCase();
-          const desc = data.description.toLowerCase();
+          const title = String(data.title || '').toLowerCase();
+          const desc = String(data.description || '').toLowerCase();
           const details = (data.details || '').toLowerCase();
           const path = (m.path || '').toLowerCase();
 
@@ -1218,7 +1273,7 @@
       if (query) {
         results.sort((a, b) => b.score - a.score);
       } else {
-        results.sort((a, b) => a.m.id.localeCompare(b.m.id));
+        results.sort((a, b) => (a.m.doc ? a.m.order : 1e6) - (b.m.doc ? b.m.order : 1e6) || a.m.id.localeCompare(b.m.id));
       }
 
       results.forEach(res => {
@@ -1238,6 +1293,10 @@
           const pathSpan = document.createElement('span');
           pathSpan.textContent = ' ' + m.path;
           li.appendChild(pathSpan);
+        } else if (m.category === 'guide') {
+          const d = m[lang] || m.en || {};
+          if (m.icon) { const ic = document.createElement('span'); ic.className = 'doc-ic'; ic.textContent = m.icon; li.appendChild(ic); }
+          li.appendChild(document.createTextNode(d.title || m.id));
         } else {
           li.textContent = m.id;
         }
@@ -1347,11 +1406,9 @@
         apiSpecifications = spec;
       }
 
-      manualsList = await fetchManuals();
-      
-      // Accoda le specifiche API virtuali nel manuale globale
-      manualsList = manualsList.concat(apiSpecifications);
-      
+      await deviceFilter();
+      sourceLine();
+      manualsList = [...(await docRecords()), ...apiSpecifications];
       renderSidebar();
 
       // Configura l'albero della barra laterale accordion
@@ -1394,9 +1451,11 @@
 
       // Cambio lingua OS-wide (da questi pulsanti o da Impostazioni): riallinea e ridisegna le parti
       // costruite imperativamente (la chrome [data-i18n] la ridipinge già l'engine).
-      I18N.onChange(() => {
+      I18N.onChange(async () => {
         syncLangFromOS();
-        if (activeManual) renderManualCard(activeManual);
+        manualsList = [...(await docRecords()), ...apiSpecifications];
+        sourceLine();
+        if (activeManual) renderManualCard(manualsList.find((m) => m.id === activeManual.id) || activeManual);
         renderSidebar(document.getElementById('search').value);
       });
 

@@ -46,7 +46,7 @@ authenticated. JavaScript can't read the cookie (HttpOnly), which limits XSS tok
 | `/api/wifi/scan`, `/api/wifi/known`, `/api/wifi/join`, `/api/wifi/forget` | |
 | `/api/ir/*`, `/api/gpio/*`, `/api/link/*`, `/api/fido/*` (peripherals) | |
 | `/api/diag`, `/api/logs`, `/api/heap`, `/api/cpu`, `/proc/*` (diagnostics) | |
-| `/api/lang` **POST**, `/api/tts` **POST**, `/api/time/set` (writes) | `/api/lang` GET, `/api/tts` GET (read-only status) |
+| `/api/lang` **POST**, `/api/tts` **POST**, `/api/time/set`, `/api/time`, `/api/time/zone` (clock + zone) | `/api/lang` GET, `/api/tts` GET (read-only status) |
 | `/api/voice/*`, `/api/anima/verify`, display/app control routes | |
 | `/api/unpair` (revoke sessions) | |
 

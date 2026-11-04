@@ -5,10 +5,10 @@
     .align 4
     .global nap_abi_level
 nap_abi_level:
-    .word 7
+    .word 8
     .global nap_exports_count
 nap_exports_count:
-    .word 267
+    .word 288
     .global nap_exports
 nap_exports:
     .word .Lnap_n0, THEME_ACC
@@ -18,266 +18,287 @@ nap_exports:
     .word .Lnap_n4, THEME_INK
     .word .Lnap_n5, THEME_LINE
     .word .Lnap_n6, THEME_MUTED
-    .word .Lnap_n7, _Z14game_text_openPKc
-    .word .Lnap_n8, _Z14nucleo_app_gfxv
-    .word .Lnap_n9, _Z15game_text_closev
-    .word .Lnap_n10, _Z18nucleo_app_set_gfxPN4lgfx2v19LovyanGFXE
-    .word .Lnap_n11, _Z21nucleo_screen_releasev
-    .word .Lnap_n12, _Z22nucleo_app_is_bufferedv
-    .word .Lnap_n13, _Z9game_textPKcS0_
-    .word .Lnap_n14, _ZN2lg3barEiiiiit
-    .word .Lnap_n15, _ZN2lg3fitEPcjPKci
-    .word .Lnap_n16, _ZN2lg3tapEicPiS0_
-    .word .Lnap_n17, _ZN2lg4cardEv
-    .word .Lnap_n18, _ZN2lg4fontEi
-    .word .Lnap_n19, _ZN2lg4gameEPFvvEPFviiEPKct
-    .word .Lnap_n20, _ZN2lg4listEiiiiiiiPiPFviiiiibtPvES1_t
-    .word .Lnap_n21, _ZN2lg4tabsEiPKPKciitS1_
-    .word .Lnap_n22, _ZN2lg4wrapEPKciiiii
-    .word .Lnap_n23, _ZN2lg5fieldEiiii
-    .word .Lnap_n24, _ZN2lg5frameEPFvPvES0_iib
-    .word .Lnap_n25, _ZN2lg5panelEiiiit
-    .word .Lnap_n26, _ZN2lg6buttonEiiiiPKcttic
-    .word .Lnap_n27, _ZN2lg6headerEPKcS1_tii
-    .word .Lnap_n28, _ZN2lg7messageEiiiiPKcS1_t
-    .word .Lnap_n29, _ZN2lg7row_tapEiciiPi
-    .word .Lnap_n30, _ZN2lg8row_textEiiiibtPKcS1_t
-    .word .Lnap_n31, _ZN2lg9comp_headEPKct
-    .word .Lnap_n32, _ZN2lg9comp_keysEPKc
-    .word .Lnap_n33, _ZN2lg9text_listEiiiiiiPiPFPKciPvES5_PFtiS3_ES3_ti
-    .word .Lnap_n34, _ZN3gui10text_widthEPKci
-    .word .Lnap_n35, _ZN3gui3mixEtti
-    .word .Lnap_n36, _ZN3gui3rgbEiii
-    .word .Lnap_n37, _ZN3gui4menuERKNS_4MenuEPKPKciiit
-    .word .Lnap_n38, _ZN3gui4textEPKciiiitt
-    .word .Lnap_n39, _ZN3gui5panelEiiiitt
-    .word .Lnap_n40, _ZN3gui5titleEPKcS1_t
-    .word .Lnap_n41, _ZN3gui6dialogEPKcS1_S1_S1_t
-    .word .Lnap_n42, _ZN3gui8menu_keyERNS_4MenuEii
-    .word .Lnap_n43, _ZN3gui9menu_tickERNS_4MenuEi
-    .word .Lnap_n44, _ZN3gui9vgradientEiiiitt
-    .word .Lnap_n45, _ZN4lgfx2v111pixelcopy_tC1EPKvNS0_13color_depth_tES4_bS3_m
-    .word .Lnap_n46, _ZN4lgfx2v112Panel_Sprite12createSpriteEllPNS0_12color_conv_tEb
-    .word .Lnap_n47, _ZN4lgfx2v112Panel_Sprite12deleteSpriteEv
-    .word .Lnap_n48, _ZN4lgfx2v112Panel_Sprite13setColorDepthENS0_13color_depth_tE
-    .word .Lnap_n49, _ZN4lgfx2v112SpriteBuffer5resetEjNS0_16AllocationSourceE
-    .word .Lnap_n50, _ZN4lgfx2v112SpriteBuffer7releaseEv
-    .word .Lnap_n51, _ZN4lgfx2v15fonts17FreeSansBold9pt7bE
-    .word .Lnap_n52, _ZN4lgfx2v15fonts18FreeSansBold12pt7bE
-    .word .Lnap_n53, _ZN4lgfx2v15fonts5Font0E
-    .word .Lnap_n54, _ZN4lgfx2v15fonts5Font2E
-    .word .Lnap_n55, _ZN4lgfx2v18LGFXBase10drawCircleElll
-    .word .Lnap_n56, _ZN4lgfx2v18LGFXBase10fillCircleElll
-    .word .Lnap_n57, _ZN4lgfx2v18LGFXBase11drawEllipseEllll
-    .word .Lnap_n58, _ZN4lgfx2v18LGFXBase11draw_stringEPKcllNS0_9textdatum11textdatum_tEPKNS0_5IFontE
-    .word .Lnap_n59, _ZN4lgfx2v18LGFXBase11fillEllipseEllll
-    .word .Lnap_n60, _ZN4lgfx2v18LGFXBase11getClipRectEPlS2_S2_S2_
-    .word .Lnap_n61, _ZN4lgfx2v18LGFXBase11setClipRectEllll
-    .word .Lnap_n62, _ZN4lgfx2v18LGFXBase11setRotationEj
-    .word .Lnap_n63, _ZN4lgfx2v18LGFXBase12drawTriangleEllllll
-    .word .Lnap_n64, _ZN4lgfx2v18LGFXBase12fillTriangleEllllll
-    .word .Lnap_n65, _ZN4lgfx2v18LGFXBase13clearClipRectEv
-    .word .Lnap_n66, _ZN4lgfx2v18LGFXBase13drawFastHLineElll
-    .word .Lnap_n67, _ZN4lgfx2v18LGFXBase13drawFastVLineElll
-    .word .Lnap_n68, _ZN4lgfx2v18LGFXBase13drawRoundRectElllll
-    .word .Lnap_n69, _ZN4lgfx2v18LGFXBase13fillRoundRectElllll
-    .word .Lnap_n70, _ZN4lgfx2v18LGFXBase14drawEllipseArcEllllllff
-    .word .Lnap_n71, _ZN4lgfx2v18LGFXBase14draw_wedgelineEffffffm
-    .word .Lnap_n72, _ZN4lgfx2v18LGFXBase14fillEllipseArcEllllllff
-    .word .Lnap_n73, _ZN4lgfx2v18LGFXBase19fillSmoothRoundRectElllll
-    .word .Lnap_n74, _ZN4lgfx2v18LGFXBase5writeEh
-    .word .Lnap_n75, _ZN4lgfx2v18LGFXBase6printfEPKcz
-    .word .Lnap_n76, _ZN4lgfx2v18LGFXBase7setFontEPKNS0_5IFontE
-    .word .Lnap_n77, _ZN4lgfx2v18LGFXBase8drawLineEllll
-    .word .Lnap_n78, _ZN4lgfx2v18LGFXBase8drawRectEllll
-    .word .Lnap_n79, _ZN4lgfx2v18LGFXBase8fillRectEllll
-    .word .Lnap_n80, _ZN4lgfx2v18LGFXBase9pushImageEllllPNS0_11pixelcopy_tEb
-    .word .Lnap_n81, _ZN4lgfx2v18LGFXBase9textWidthEPKcPKNS0_5IFontE
-    .word .Lnap_n82, _ZNK4lgfx2v112SpriteBuffer7use_dmaEv
-    .word .Lnap_n83, _ZSt7nothrow
-    .word .Lnap_n84, _ZTVN4lgfx2v112Panel_SpriteE
-    .word .Lnap_n85, _ZdaPv
-    .word .Lnap_n86, _ZdlPv
-    .word .Lnap_n87, _ZdlPvj
-    .word .Lnap_n88, _Znaj
-    .word .Lnap_n89, _Znwj
-    .word .Lnap_n90, _ZnwjRKSt9nothrow_t
-    .word .Lnap_n91, __bswapsi2
-    .word .Lnap_n92, __cxa_guard_acquire
-    .word .Lnap_n93, __cxa_guard_release
-    .word .Lnap_n94, __divdi3
-    .word .Lnap_n95, __divsf3
-    .word .Lnap_n96, __fixdfsi
-    .word .Lnap_n97, __fixsfdi
-    .word .Lnap_n98, __fixunsdfsi
-    .word .Lnap_n99, __floatdisf
-    .word .Lnap_n100, __gedf2
-    .word .Lnap_n101, __moddi3
-    .word .Lnap_n102, __popcountsi2
-    .word .Lnap_n103, _ctype_
-    .word .Lnap_n104, abs
-    .word .Lnap_n105, acosf
-    .word .Lnap_n106, asinf
-    .word .Lnap_n107, atan2f
-    .word .Lnap_n108, atoi
-    .word .Lnap_n109, cJSON_Delete
-    .word .Lnap_n110, cJSON_GetArrayItem
-    .word .Lnap_n111, cJSON_GetArraySize
-    .word .Lnap_n112, cJSON_GetObjectItem
-    .word .Lnap_n113, cJSON_IsArray
-    .word .Lnap_n114, cJSON_IsNumber
-    .word .Lnap_n115, cJSON_Parse
-    .word .Lnap_n116, calloc
-    .word .Lnap_n117, ceilf
-    .word .Lnap_n118, closedir
-    .word .Lnap_n119, cosf
-    .word .Lnap_n120, esp_log_timestamp
-    .word .Lnap_n121, esp_log_write
-    .word .Lnap_n122, esp_random
-    .word .Lnap_n123, esp_task_wdt_reset
-    .word .Lnap_n124, esp_timer_get_time
-    .word .Lnap_n125, expf
-    .word .Lnap_n126, fabsf
-    .word .Lnap_n127, fclose
-    .word .Lnap_n128, fflush
-    .word .Lnap_n129, fgetc
-    .word .Lnap_n130, fgets
-    .word .Lnap_n131, floorf
-    .word .Lnap_n132, fmaxf
-    .word .Lnap_n133, fminf
-    .word .Lnap_n134, fmodf
-    .word .Lnap_n135, fopen
-    .word .Lnap_n136, fprintf
-    .word .Lnap_n137, fputc
-    .word .Lnap_n138, fputs
-    .word .Lnap_n139, fread
-    .word .Lnap_n140, free
-    .word .Lnap_n141, fseek
-    .word .Lnap_n142, ftell
-    .word .Lnap_n143, fwrite
-    .word .Lnap_n144, heap_caps_get_free_size
-    .word .Lnap_n145, heap_caps_get_largest_free_block
-    .word .Lnap_n146, heap_caps_malloc
-    .word .Lnap_n147, localtime_r
-    .word .Lnap_n148, log10f
-    .word .Lnap_n149, logf
-    .word .Lnap_n150, lroundf
-    .word .Lnap_n151, malloc
-    .word .Lnap_n152, memchr
-    .word .Lnap_n153, memcmp
-    .word .Lnap_n154, memcpy
-    .word .Lnap_n155, memmove
-    .word .Lnap_n156, memset
-    .word .Lnap_n157, mkdir
-    .word .Lnap_n158, nucleo_anima_solo_active
-    .word .Lnap_n159, nucleo_app_brightness
-    .word .Lnap_n160, nucleo_app_content_height
-    .word .Lnap_n161, nucleo_app_content_top
-    .word .Lnap_n162, nucleo_app_exit
-    .word .Lnap_n163, nucleo_app_force_repaint
-    .word .Lnap_n164, nucleo_native_capture_register
-    .word .Lnap_n165, nucleo_app_release_buffers
-    .word .Lnap_n166, nucleo_app_request_draw
-    .word .Lnap_n167, nucleo_app_set_back_handler
-    .word .Lnap_n168, nucleo_app_set_direct_draw
-    .word .Lnap_n169, nucleo_app_set_fullscreen
-    .word .Lnap_n170, nucleo_app_set_hint
-    .word .Lnap_n171, nucleo_app_set_keep_awake
-    .word .Lnap_n172, nucleo_app_set_poll_handler
-    .word .Lnap_n173, nucleo_app_set_ptt_handler
-    .word .Lnap_n174, nucleo_app_set_tab_handler
-    .word .Lnap_n175, nucleo_app_take_open_file
-    .word .Lnap_n176, nucleo_app_two_screens
-    .word .Lnap_n177, nucleo_audio_is_muted
-    .word .Lnap_n178, nucleo_audio_is_playing
-    .word .Lnap_n179, nucleo_audio_pcm_close
-    .word .Lnap_n180, nucleo_audio_pcm_open
-    .word .Lnap_n181, nucleo_audio_pcm_open_ex
-    .word .Lnap_n182, nucleo_audio_pcm_write
-    .word .Lnap_n183, nucleo_audio_play
-    .word .Lnap_n184, nucleo_audio_set_volume
-    .word .Lnap_n185, nucleo_audio_stop
-    .word .Lnap_n186, nucleo_audio_tone
-    .word .Lnap_n187, nucleo_audio_volume
-    .word .Lnap_n188, nucleo_ble_radio_present
-    .word .Lnap_n189, nucleo_cowork_run
-    .word .Lnap_n190, nucleo_cowork_stop
-    .word .Lnap_n191, nucleo_cowork_wait
-    .word .Lnap_n192, nucleo_exclusive_active
-    .word .Lnap_n193, nucleo_exclusive_exit
-    .word .Lnap_n194, nucleo_extdisp_hud_overlay
-    .word .Lnap_n195, nucleo_extdisp_internal_gfx
-    .word .Lnap_n196, nucleo_imu_energy
-    .word .Lnap_n197, nucleo_imu_gravity_screen
-    .word .Lnap_n198, nucleo_imu_motion
-    .word .Lnap_n199, nucleo_imu_present
-    .word .Lnap_n200, nucleo_imu_recenter
-    .word .Lnap_n201, nucleo_imu_sample
-    .word .Lnap_n202, nucleo_imu_tilt
-    .word .Lnap_n203, nucleo_kbd_char_down
-    .word .Lnap_n204, nucleo_kbd_mods
-    .word .Lnap_n205, nucleo_kbd_read
-    .word .Lnap_n206, nucleo_power_battery_pct
-    .word .Lnap_n207, nucleo_power_perf_begin
-    .word .Lnap_n208, nucleo_power_perf_end
-    .word .Lnap_n209, nucleo_prefs_save
-    .word .Lnap_n210, nucleo_rom_map
-    .word .Lnap_n211, nucleo_rom_unmap
-    .word .Lnap_n212, nucleo_setup_mode
-    .word .Lnap_n213, nucleo_surface_large
-    .word .Lnap_n214, nucleo_surface_large_ok
-    .word .Lnap_n215, nucleo_surface_set_large
-    .word .Lnap_n216, nucleo_touch_add
-    .word .Lnap_n217, nucleo_touch_add_pad
-    .word .Lnap_n218, nucleo_touch_add_scroll
-    .word .Lnap_n219, nucleo_touch_clear
-    .word .Lnap_n220, nucleo_touch_commit
-    .word .Lnap_n221, nucleo_tr5
-    .word .Lnap_n222, nucleo_ui_is_adv
-    .word .Lnap_n223, opendir
-    .word .Lnap_n224, pnet_channel
-    .word .Lnap_n225, pnet_name
-    .word .Lnap_n226, pnet_recv
-    .word .Lnap_n227, pnet_send
-    .word .Lnap_n228, pnet_start
-    .word .Lnap_n229, pnet_stop
-    .word .Lnap_n230, powf
-    .word .Lnap_n231, qsort
-    .word .Lnap_n232, readdir
-    .word .Lnap_n233, remove
-    .word .Lnap_n234, rename
-    .word .Lnap_n235, rewind
-    .word .Lnap_n236, roundf
-    .word .Lnap_n237, sinf
-    .word .Lnap_n238, snprintf
-    .word .Lnap_n239, sqrtf
-    .word .Lnap_n240, sscanf
-    .word .Lnap_n241, stat
-    .word .Lnap_n242, strcasecmp
-    .word .Lnap_n243, strcasestr
-    .word .Lnap_n244, strcat
-    .word .Lnap_n245, strchr
-    .word .Lnap_n246, strcmp
-    .word .Lnap_n247, strcpy
-    .word .Lnap_n248, strlen
-    .word .Lnap_n249, strncasecmp
-    .word .Lnap_n250, strncat
-    .word .Lnap_n251, strncmp
-    .word .Lnap_n252, strncpy
-    .word .Lnap_n253, strrchr
-    .word .Lnap_n254, strstr
-    .word .Lnap_n255, strtof
-    .word .Lnap_n256, strtol
-    .word .Lnap_n257, strtoul
-    .word .Lnap_n258, tanf
-    .word .Lnap_n259, time
-    .word .Lnap_n260, tinfl_decompress
-    .word .Lnap_n261, tolower
-    .word .Lnap_n262, toupper
-    .word .Lnap_n263, unlink
-    .word .Lnap_n264, vTaskDelay
-    .word .Lnap_n265, vfprintf
-    .word .Lnap_n266, vsnprintf
+    .word .Lnap_n7, _Z11app_ui_listiiiiPFPKciPvES3_PFtiS1_ES1_
+    .word .Lnap_n8, _Z12app_ui_titlePKctS0_
+    .word .Lnap_n9, _Z14game_text_openPKc
+    .word .Lnap_n10, _Z14nucleo_app_gfxv
+    .word .Lnap_n11, _Z15game_text_closev
+    .word .Lnap_n12, _Z18nucleo_app_set_gfxPN4lgfx2v19LovyanGFXE
+    .word .Lnap_n13, _Z21nucleo_screen_releasev
+    .word .Lnap_n14, _Z22nucleo_app_is_bufferedv
+    .word .Lnap_n15, _Z9game_textPKcS0_
+    .word .Lnap_n16, _ZN2lg13settings_listEiiiiiiiPiPFviPNS_7SettingEPvES3_t
+    .word .Lnap_n17, _ZN2lg3barEiiiiit
+    .word .Lnap_n18, _ZN2lg3fitEPcjPKci
+    .word .Lnap_n19, _ZN2lg3tapEicPiS0_
+    .word .Lnap_n20, _ZN2lg4cardEv
+    .word .Lnap_n21, _ZN2lg4fontEi
+    .word .Lnap_n22, _ZN2lg4gameEPFvvEPFviiEPKct
+    .word .Lnap_n23, _ZN2lg4listEiiiiiiiPiPFviiiiibtPvES1_t
+    .word .Lnap_n24, _ZN2lg4tabsEiPKPKciitS1_
+    .word .Lnap_n25, _ZN2lg4wrapEPKciiiii
+    .word .Lnap_n26, _ZN2lg5fieldEiiii
+    .word .Lnap_n27, _ZN2lg5frameEPFvPvES0_iib
+    .word .Lnap_n28, _ZN2lg5panelEiiiit
+    .word .Lnap_n29, _ZN2lg6buttonEiiiiPKcttic
+    .word .Lnap_n30, _ZN2lg6headerEPKcS1_tii
+    .word .Lnap_n31, _ZN2lg7messageEiiiiPKcS1_t
+    .word .Lnap_n32, _ZN2lg7row_tapEiciiPi
+    .word .Lnap_n33, _ZN2lg8row_textEiiiibtPKcS1_t
+    .word .Lnap_n34, _ZN2lg9comp_headEPKct
+    .word .Lnap_n35, _ZN2lg9comp_keysEPKc
+    .word .Lnap_n36, _ZN2lg9text_listEiiiiiiPiPFPKciPvES5_PFtiS3_ES3_ti
+    .word .Lnap_n37, _ZN3gui10text_widthEPKci
+    .word .Lnap_n38, _ZN3gui3mixEtti
+    .word .Lnap_n39, _ZN3gui3rgbEiii
+    .word .Lnap_n40, _ZN3gui4menuERKNS_4MenuEPKPKciiit
+    .word .Lnap_n41, _ZN3gui4textEPKciiiitt
+    .word .Lnap_n42, _ZN3gui5panelEiiiitt
+    .word .Lnap_n43, _ZN3gui5titleEPKcS1_t
+    .word .Lnap_n44, _ZN3gui6dialogEPKcS1_S1_S1_t
+    .word .Lnap_n45, _ZN3gui8menu_keyERNS_4MenuEii
+    .word .Lnap_n46, _ZN3gui9menu_tickERNS_4MenuEi
+    .word .Lnap_n47, _ZN3gui9vgradientEiiiitt
+    .word .Lnap_n48, _ZN4lgfx2v111pixelcopy_tC1EPKvNS0_13color_depth_tES4_bS3_m
+    .word .Lnap_n49, _ZN4lgfx2v112Panel_Sprite12createSpriteEllPNS0_12color_conv_tEb
+    .word .Lnap_n50, _ZN4lgfx2v112Panel_Sprite12deleteSpriteEv
+    .word .Lnap_n51, _ZN4lgfx2v112Panel_Sprite13setColorDepthENS0_13color_depth_tE
+    .word .Lnap_n52, _ZN4lgfx2v112SpriteBuffer5resetEjNS0_16AllocationSourceE
+    .word .Lnap_n53, _ZN4lgfx2v112SpriteBuffer7releaseEv
+    .word .Lnap_n54, _ZN4lgfx2v15fonts17FreeSansBold9pt7bE
+    .word .Lnap_n55, _ZN4lgfx2v15fonts18FreeSansBold12pt7bE
+    .word .Lnap_n56, _ZN4lgfx2v15fonts5Font0E
+    .word .Lnap_n57, _ZN4lgfx2v15fonts5Font2E
+    .word .Lnap_n58, _ZN4lgfx2v18LGFXBase10drawCircleElll
+    .word .Lnap_n59, _ZN4lgfx2v18LGFXBase10fillCircleElll
+    .word .Lnap_n60, _ZN4lgfx2v18LGFXBase11drawEllipseEllll
+    .word .Lnap_n61, _ZN4lgfx2v18LGFXBase11draw_stringEPKcllNS0_9textdatum11textdatum_tEPKNS0_5IFontE
+    .word .Lnap_n62, _ZN4lgfx2v18LGFXBase11fillEllipseEllll
+    .word .Lnap_n63, _ZN4lgfx2v18LGFXBase11getClipRectEPlS2_S2_S2_
+    .word .Lnap_n64, _ZN4lgfx2v18LGFXBase11setClipRectEllll
+    .word .Lnap_n65, _ZN4lgfx2v18LGFXBase11setRotationEj
+    .word .Lnap_n66, _ZN4lgfx2v18LGFXBase12drawTriangleEllllll
+    .word .Lnap_n67, _ZN4lgfx2v18LGFXBase12fillTriangleEllllll
+    .word .Lnap_n68, _ZN4lgfx2v18LGFXBase13clearClipRectEv
+    .word .Lnap_n69, _ZN4lgfx2v18LGFXBase13drawFastHLineElll
+    .word .Lnap_n70, _ZN4lgfx2v18LGFXBase13drawFastVLineElll
+    .word .Lnap_n71, _ZN4lgfx2v18LGFXBase13drawRoundRectElllll
+    .word .Lnap_n72, _ZN4lgfx2v18LGFXBase13fillRoundRectElllll
+    .word .Lnap_n73, _ZN4lgfx2v18LGFXBase14drawEllipseArcEllllllff
+    .word .Lnap_n74, _ZN4lgfx2v18LGFXBase14draw_wedgelineEffffffm
+    .word .Lnap_n75, _ZN4lgfx2v18LGFXBase14fillEllipseArcEllllllff
+    .word .Lnap_n76, _ZN4lgfx2v18LGFXBase19fillSmoothRoundRectElllll
+    .word .Lnap_n77, _ZN4lgfx2v18LGFXBase5writeEh
+    .word .Lnap_n78, _ZN4lgfx2v18LGFXBase6printfEPKcz
+    .word .Lnap_n79, _ZN4lgfx2v18LGFXBase7setFontEPKNS0_5IFontE
+    .word .Lnap_n80, _ZN4lgfx2v18LGFXBase8drawLineEllll
+    .word .Lnap_n81, _ZN4lgfx2v18LGFXBase8drawRectEllll
+    .word .Lnap_n82, _ZN4lgfx2v18LGFXBase8fillRectEllll
+    .word .Lnap_n83, _ZN4lgfx2v18LGFXBase9pushImageEllllPNS0_11pixelcopy_tEb
+    .word .Lnap_n84, _ZN4lgfx2v18LGFXBase9textWidthEPKcPKNS0_5IFontE
+    .word .Lnap_n85, _ZNK4lgfx2v112SpriteBuffer7use_dmaEv
+    .word .Lnap_n86, _ZSt7nothrow
+    .word .Lnap_n87, _ZTVN4lgfx2v112Panel_SpriteE
+    .word .Lnap_n88, _ZdaPv
+    .word .Lnap_n89, _ZdlPv
+    .word .Lnap_n90, _ZdlPvj
+    .word .Lnap_n91, _Znaj
+    .word .Lnap_n92, _Znwj
+    .word .Lnap_n93, _ZnwjRKSt9nothrow_t
+    .word .Lnap_n94, __bswapsi2
+    .word .Lnap_n95, __cxa_guard_acquire
+    .word .Lnap_n96, __cxa_guard_release
+    .word .Lnap_n97, __divdi3
+    .word .Lnap_n98, __divsf3
+    .word .Lnap_n99, __fixdfsi
+    .word .Lnap_n100, __fixsfdi
+    .word .Lnap_n101, __fixunsdfsi
+    .word .Lnap_n102, __floatdisf
+    .word .Lnap_n103, __gedf2
+    .word .Lnap_n104, __lshrdi3
+    .word .Lnap_n105, __moddi3
+    .word .Lnap_n106, __popcountsi2
+    .word .Lnap_n107, _ctype_
+    .word .Lnap_n108, abs
+    .word .Lnap_n109, acosf
+    .word .Lnap_n110, asinf
+    .word .Lnap_n111, atan2f
+    .word .Lnap_n112, atoi
+    .word .Lnap_n113, cJSON_Delete
+    .word .Lnap_n114, cJSON_GetArrayItem
+    .word .Lnap_n115, cJSON_GetArraySize
+    .word .Lnap_n116, cJSON_GetObjectItem
+    .word .Lnap_n117, cJSON_IsArray
+    .word .Lnap_n118, cJSON_IsNumber
+    .word .Lnap_n119, cJSON_IsString
+    .word .Lnap_n120, cJSON_IsTrue
+    .word .Lnap_n121, cJSON_Parse
+    .word .Lnap_n122, calloc
+    .word .Lnap_n123, ceilf
+    .word .Lnap_n124, closedir
+    .word .Lnap_n125, cosf
+    .word .Lnap_n126, esp_log_timestamp
+    .word .Lnap_n127, esp_log_write
+    .word .Lnap_n128, esp_random
+    .word .Lnap_n129, esp_task_wdt_reset
+    .word .Lnap_n130, esp_timer_get_time
+    .word .Lnap_n131, expf
+    .word .Lnap_n132, fabsf
+    .word .Lnap_n133, fclose
+    .word .Lnap_n134, fflush
+    .word .Lnap_n135, fgetc
+    .word .Lnap_n136, fgets
+    .word .Lnap_n137, floorf
+    .word .Lnap_n138, fmaxf
+    .word .Lnap_n139, fminf
+    .word .Lnap_n140, fmodf
+    .word .Lnap_n141, fopen
+    .word .Lnap_n142, fprintf
+    .word .Lnap_n143, fputc
+    .word .Lnap_n144, fputs
+    .word .Lnap_n145, fread
+    .word .Lnap_n146, free
+    .word .Lnap_n147, fseek
+    .word .Lnap_n148, ftell
+    .word .Lnap_n149, fwrite
+    .word .Lnap_n150, heap_caps_get_free_size
+    .word .Lnap_n151, heap_caps_get_largest_free_block
+    .word .Lnap_n152, heap_caps_malloc
+    .word .Lnap_n153, localtime_r
+    .word .Lnap_n154, log10f
+    .word .Lnap_n155, logf
+    .word .Lnap_n156, lroundf
+    .word .Lnap_n157, malloc
+    .word .Lnap_n158, memchr
+    .word .Lnap_n159, memcmp
+    .word .Lnap_n160, memcpy
+    .word .Lnap_n161, memmove
+    .word .Lnap_n162, memset
+    .word .Lnap_n163, mkdir
+    .word .Lnap_n164, nucleo_anima_solo_active
+    .word .Lnap_n165, nucleo_app_brightness
+    .word .Lnap_n166, nucleo_app_content_height
+    .word .Lnap_n167, nucleo_app_content_top
+    .word .Lnap_n168, nucleo_app_exit
+    .word .Lnap_n169, nucleo_app_force_repaint
+    .word .Lnap_n170, nucleo_native_capture_register
+    .word .Lnap_n171, nucleo_app_release_buffers
+    .word .Lnap_n172, nucleo_app_request_draw
+    .word .Lnap_n173, nucleo_app_set_back_handler
+    .word .Lnap_n174, nucleo_app_set_direct_draw
+    .word .Lnap_n175, nucleo_app_set_fullscreen
+    .word .Lnap_n176, nucleo_app_set_hint
+    .word .Lnap_n177, nucleo_app_set_keep_awake
+    .word .Lnap_n178, nucleo_app_set_poll_handler
+    .word .Lnap_n179, nucleo_app_set_ptt_handler
+    .word .Lnap_n180, nucleo_app_set_tab_handler
+    .word .Lnap_n181, nucleo_app_take_open_file
+    .word .Lnap_n182, nucleo_app_two_screens
+    .word .Lnap_n183, nucleo_audio_is_muted
+    .word .Lnap_n184, nucleo_audio_is_playing
+    .word .Lnap_n185, nucleo_audio_pcm_close
+    .word .Lnap_n186, nucleo_audio_pcm_open
+    .word .Lnap_n187, nucleo_audio_pcm_open_ex
+    .word .Lnap_n188, nucleo_audio_pcm_write
+    .word .Lnap_n189, nucleo_audio_play
+    .word .Lnap_n190, nucleo_audio_set_volume
+    .word .Lnap_n191, nucleo_audio_stop
+    .word .Lnap_n192, nucleo_audio_tone
+    .word .Lnap_n193, nucleo_audio_volume
+    .word .Lnap_n194, nucleo_ble_radio_present
+    .word .Lnap_n195, nucleo_cowork_run
+    .word .Lnap_n196, nucleo_cowork_stop
+    .word .Lnap_n197, nucleo_cowork_wait
+    .word .Lnap_n198, nucleo_exclusive_active
+    .word .Lnap_n199, nucleo_exclusive_exit
+    .word .Lnap_n200, nucleo_extdisp_hud_overlay
+    .word .Lnap_n201, nucleo_extdisp_internal_gfx
+    .word .Lnap_n202, nucleo_extdisp_screen_row
+    .word .Lnap_n203, nucleo_extdisp_screen_size
+    .word .Lnap_n204, nucleo_imu_energy
+    .word .Lnap_n205, nucleo_imu_gravity_screen
+    .word .Lnap_n206, nucleo_imu_motion
+    .word .Lnap_n207, nucleo_imu_present
+    .word .Lnap_n208, nucleo_imu_recenter
+    .word .Lnap_n209, nucleo_imu_sample
+    .word .Lnap_n210, nucleo_imu_tilt
+    .word .Lnap_n211, nucleo_kbd_char_down
+    .word .Lnap_n212, nucleo_kbd_mods
+    .word .Lnap_n213, nucleo_kbd_read
+    .word .Lnap_n214, nucleo_power_battery_pct
+    .word .Lnap_n215, nucleo_power_perf_begin
+    .word .Lnap_n216, nucleo_power_perf_end
+    .word .Lnap_n217, nucleo_prefs_save
+    .word .Lnap_n218, nucleo_rom_map
+    .word .Lnap_n219, nucleo_rom_unmap
+    .word .Lnap_n220, nucleo_secret_get
+    .word .Lnap_n221, nucleo_secret_set
+    .word .Lnap_n222, nucleo_setup_mode
+    .word .Lnap_n223, nucleo_surface_large
+    .word .Lnap_n224, nucleo_surface_large_ok
+    .word .Lnap_n225, nucleo_surface_set_large
+    .word .Lnap_n226, nucleo_tcp_close
+    .word .Lnap_n227, nucleo_tcp_connect
+    .word .Lnap_n228, nucleo_tcp_network_up
+    .word .Lnap_n229, nucleo_tcp_readable
+    .word .Lnap_n230, nucleo_tcp_recv
+    .word .Lnap_n231, nucleo_tcp_send
+    .word .Lnap_n232, nucleo_touch_add
+    .word .Lnap_n233, nucleo_touch_add_pad
+    .word .Lnap_n234, nucleo_touch_add_scroll
+    .word .Lnap_n235, nucleo_touch_clear
+    .word .Lnap_n236, nucleo_touch_commit
+    .word .Lnap_n237, nucleo_touch_last
+    .word .Lnap_n238, nucleo_touch_raw
+    .word .Lnap_n239, nucleo_touch_raw_read
+    .word .Lnap_n240, nucleo_tr5
+    .word .Lnap_n241, nucleo_ui_is_adv
+    .word .Lnap_n242, nucleo_ui_panel_size
+    .word .Lnap_n243, nucleo_ui_read_row
+    .word .Lnap_n244, opendir
+    .word .Lnap_n245, pnet_channel
+    .word .Lnap_n246, pnet_name
+    .word .Lnap_n247, pnet_recv
+    .word .Lnap_n248, pnet_send
+    .word .Lnap_n249, pnet_start
+    .word .Lnap_n250, pnet_stop
+    .word .Lnap_n251, powf
+    .word .Lnap_n252, qsort
+    .word .Lnap_n253, readdir
+    .word .Lnap_n254, remove
+    .word .Lnap_n255, rename
+    .word .Lnap_n256, rewind
+    .word .Lnap_n257, roundf
+    .word .Lnap_n258, sinf
+    .word .Lnap_n259, snprintf
+    .word .Lnap_n260, sqrtf
+    .word .Lnap_n261, sscanf
+    .word .Lnap_n262, stat
+    .word .Lnap_n263, strcasecmp
+    .word .Lnap_n264, strcasestr
+    .word .Lnap_n265, strcat
+    .word .Lnap_n266, strchr
+    .word .Lnap_n267, strcmp
+    .word .Lnap_n268, strcpy
+    .word .Lnap_n269, strlen
+    .word .Lnap_n270, strncasecmp
+    .word .Lnap_n271, strncat
+    .word .Lnap_n272, strncmp
+    .word .Lnap_n273, strncpy
+    .word .Lnap_n274, strrchr
+    .word .Lnap_n275, strstr
+    .word .Lnap_n276, strtof
+    .word .Lnap_n277, strtol
+    .word .Lnap_n278, strtoul
+    .word .Lnap_n279, tanf
+    .word .Lnap_n280, time
+    .word .Lnap_n281, tinfl_decompress
+    .word .Lnap_n282, tolower
+    .word .Lnap_n283, toupper
+    .word .Lnap_n284, unlink
+    .word .Lnap_n285, vTaskDelay
+    .word .Lnap_n286, vfprintf
+    .word .Lnap_n287, vsnprintf
 
     .section .rodata.nap_export_names, "aMS", @progbits, 1
 .Lnap_n0: .asciz "THEME_ACC"
@@ -287,263 +308,284 @@ nap_exports:
 .Lnap_n4: .asciz "THEME_INK"
 .Lnap_n5: .asciz "THEME_LINE"
 .Lnap_n6: .asciz "THEME_MUTED"
-.Lnap_n7: .asciz "_Z14game_text_openPKc"
-.Lnap_n8: .asciz "_Z14nucleo_app_gfxv"
-.Lnap_n9: .asciz "_Z15game_text_closev"
-.Lnap_n10: .asciz "_Z18nucleo_app_set_gfxPN4lgfx2v19LovyanGFXE"
-.Lnap_n11: .asciz "_Z21nucleo_screen_releasev"
-.Lnap_n12: .asciz "_Z22nucleo_app_is_bufferedv"
-.Lnap_n13: .asciz "_Z9game_textPKcS0_"
-.Lnap_n14: .asciz "_ZN2lg3barEiiiiit"
-.Lnap_n15: .asciz "_ZN2lg3fitEPcjPKci"
-.Lnap_n16: .asciz "_ZN2lg3tapEicPiS0_"
-.Lnap_n17: .asciz "_ZN2lg4cardEv"
-.Lnap_n18: .asciz "_ZN2lg4fontEi"
-.Lnap_n19: .asciz "_ZN2lg4gameEPFvvEPFviiEPKct"
-.Lnap_n20: .asciz "_ZN2lg4listEiiiiiiiPiPFviiiiibtPvES1_t"
-.Lnap_n21: .asciz "_ZN2lg4tabsEiPKPKciitS1_"
-.Lnap_n22: .asciz "_ZN2lg4wrapEPKciiiii"
-.Lnap_n23: .asciz "_ZN2lg5fieldEiiii"
-.Lnap_n24: .asciz "_ZN2lg5frameEPFvPvES0_iib"
-.Lnap_n25: .asciz "_ZN2lg5panelEiiiit"
-.Lnap_n26: .asciz "_ZN2lg6buttonEiiiiPKcttic"
-.Lnap_n27: .asciz "_ZN2lg6headerEPKcS1_tii"
-.Lnap_n28: .asciz "_ZN2lg7messageEiiiiPKcS1_t"
-.Lnap_n29: .asciz "_ZN2lg7row_tapEiciiPi"
-.Lnap_n30: .asciz "_ZN2lg8row_textEiiiibtPKcS1_t"
-.Lnap_n31: .asciz "_ZN2lg9comp_headEPKct"
-.Lnap_n32: .asciz "_ZN2lg9comp_keysEPKc"
-.Lnap_n33: .asciz "_ZN2lg9text_listEiiiiiiPiPFPKciPvES5_PFtiS3_ES3_ti"
-.Lnap_n34: .asciz "_ZN3gui10text_widthEPKci"
-.Lnap_n35: .asciz "_ZN3gui3mixEtti"
-.Lnap_n36: .asciz "_ZN3gui3rgbEiii"
-.Lnap_n37: .asciz "_ZN3gui4menuERKNS_4MenuEPKPKciiit"
-.Lnap_n38: .asciz "_ZN3gui4textEPKciiiitt"
-.Lnap_n39: .asciz "_ZN3gui5panelEiiiitt"
-.Lnap_n40: .asciz "_ZN3gui5titleEPKcS1_t"
-.Lnap_n41: .asciz "_ZN3gui6dialogEPKcS1_S1_S1_t"
-.Lnap_n42: .asciz "_ZN3gui8menu_keyERNS_4MenuEii"
-.Lnap_n43: .asciz "_ZN3gui9menu_tickERNS_4MenuEi"
-.Lnap_n44: .asciz "_ZN3gui9vgradientEiiiitt"
-.Lnap_n45: .asciz "_ZN4lgfx2v111pixelcopy_tC1EPKvNS0_13color_depth_tES4_bS3_m"
-.Lnap_n46: .asciz "_ZN4lgfx2v112Panel_Sprite12createSpriteEllPNS0_12color_conv_tEb"
-.Lnap_n47: .asciz "_ZN4lgfx2v112Panel_Sprite12deleteSpriteEv"
-.Lnap_n48: .asciz "_ZN4lgfx2v112Panel_Sprite13setColorDepthENS0_13color_depth_tE"
-.Lnap_n49: .asciz "_ZN4lgfx2v112SpriteBuffer5resetEjNS0_16AllocationSourceE"
-.Lnap_n50: .asciz "_ZN4lgfx2v112SpriteBuffer7releaseEv"
-.Lnap_n51: .asciz "_ZN4lgfx2v15fonts17FreeSansBold9pt7bE"
-.Lnap_n52: .asciz "_ZN4lgfx2v15fonts18FreeSansBold12pt7bE"
-.Lnap_n53: .asciz "_ZN4lgfx2v15fonts5Font0E"
-.Lnap_n54: .asciz "_ZN4lgfx2v15fonts5Font2E"
-.Lnap_n55: .asciz "_ZN4lgfx2v18LGFXBase10drawCircleElll"
-.Lnap_n56: .asciz "_ZN4lgfx2v18LGFXBase10fillCircleElll"
-.Lnap_n57: .asciz "_ZN4lgfx2v18LGFXBase11drawEllipseEllll"
-.Lnap_n58: .asciz "_ZN4lgfx2v18LGFXBase11draw_stringEPKcllNS0_9textdatum11textdatum_tEPKNS0_5IFontE"
-.Lnap_n59: .asciz "_ZN4lgfx2v18LGFXBase11fillEllipseEllll"
-.Lnap_n60: .asciz "_ZN4lgfx2v18LGFXBase11getClipRectEPlS2_S2_S2_"
-.Lnap_n61: .asciz "_ZN4lgfx2v18LGFXBase11setClipRectEllll"
-.Lnap_n62: .asciz "_ZN4lgfx2v18LGFXBase11setRotationEj"
-.Lnap_n63: .asciz "_ZN4lgfx2v18LGFXBase12drawTriangleEllllll"
-.Lnap_n64: .asciz "_ZN4lgfx2v18LGFXBase12fillTriangleEllllll"
-.Lnap_n65: .asciz "_ZN4lgfx2v18LGFXBase13clearClipRectEv"
-.Lnap_n66: .asciz "_ZN4lgfx2v18LGFXBase13drawFastHLineElll"
-.Lnap_n67: .asciz "_ZN4lgfx2v18LGFXBase13drawFastVLineElll"
-.Lnap_n68: .asciz "_ZN4lgfx2v18LGFXBase13drawRoundRectElllll"
-.Lnap_n69: .asciz "_ZN4lgfx2v18LGFXBase13fillRoundRectElllll"
-.Lnap_n70: .asciz "_ZN4lgfx2v18LGFXBase14drawEllipseArcEllllllff"
-.Lnap_n71: .asciz "_ZN4lgfx2v18LGFXBase14draw_wedgelineEffffffm"
-.Lnap_n72: .asciz "_ZN4lgfx2v18LGFXBase14fillEllipseArcEllllllff"
-.Lnap_n73: .asciz "_ZN4lgfx2v18LGFXBase19fillSmoothRoundRectElllll"
-.Lnap_n74: .asciz "_ZN4lgfx2v18LGFXBase5writeEh"
-.Lnap_n75: .asciz "_ZN4lgfx2v18LGFXBase6printfEPKcz"
-.Lnap_n76: .asciz "_ZN4lgfx2v18LGFXBase7setFontEPKNS0_5IFontE"
-.Lnap_n77: .asciz "_ZN4lgfx2v18LGFXBase8drawLineEllll"
-.Lnap_n78: .asciz "_ZN4lgfx2v18LGFXBase8drawRectEllll"
-.Lnap_n79: .asciz "_ZN4lgfx2v18LGFXBase8fillRectEllll"
-.Lnap_n80: .asciz "_ZN4lgfx2v18LGFXBase9pushImageEllllPNS0_11pixelcopy_tEb"
-.Lnap_n81: .asciz "_ZN4lgfx2v18LGFXBase9textWidthEPKcPKNS0_5IFontE"
-.Lnap_n82: .asciz "_ZNK4lgfx2v112SpriteBuffer7use_dmaEv"
-.Lnap_n83: .asciz "_ZSt7nothrow"
-.Lnap_n84: .asciz "_ZTVN4lgfx2v112Panel_SpriteE"
-.Lnap_n85: .asciz "_ZdaPv"
-.Lnap_n86: .asciz "_ZdlPv"
-.Lnap_n87: .asciz "_ZdlPvj"
-.Lnap_n88: .asciz "_Znaj"
-.Lnap_n89: .asciz "_Znwj"
-.Lnap_n90: .asciz "_ZnwjRKSt9nothrow_t"
-.Lnap_n91: .asciz "__bswapsi2"
-.Lnap_n92: .asciz "__cxa_guard_acquire"
-.Lnap_n93: .asciz "__cxa_guard_release"
-.Lnap_n94: .asciz "__divdi3"
-.Lnap_n95: .asciz "__divsf3"
-.Lnap_n96: .asciz "__fixdfsi"
-.Lnap_n97: .asciz "__fixsfdi"
-.Lnap_n98: .asciz "__fixunsdfsi"
-.Lnap_n99: .asciz "__floatdisf"
-.Lnap_n100: .asciz "__gedf2"
-.Lnap_n101: .asciz "__moddi3"
-.Lnap_n102: .asciz "__popcountsi2"
-.Lnap_n103: .asciz "_ctype_"
-.Lnap_n104: .asciz "abs"
-.Lnap_n105: .asciz "acosf"
-.Lnap_n106: .asciz "asinf"
-.Lnap_n107: .asciz "atan2f"
-.Lnap_n108: .asciz "atoi"
-.Lnap_n109: .asciz "cJSON_Delete"
-.Lnap_n110: .asciz "cJSON_GetArrayItem"
-.Lnap_n111: .asciz "cJSON_GetArraySize"
-.Lnap_n112: .asciz "cJSON_GetObjectItem"
-.Lnap_n113: .asciz "cJSON_IsArray"
-.Lnap_n114: .asciz "cJSON_IsNumber"
-.Lnap_n115: .asciz "cJSON_Parse"
-.Lnap_n116: .asciz "calloc"
-.Lnap_n117: .asciz "ceilf"
-.Lnap_n118: .asciz "closedir"
-.Lnap_n119: .asciz "cosf"
-.Lnap_n120: .asciz "esp_log_timestamp"
-.Lnap_n121: .asciz "esp_log_write"
-.Lnap_n122: .asciz "esp_random"
-.Lnap_n123: .asciz "esp_task_wdt_reset"
-.Lnap_n124: .asciz "esp_timer_get_time"
-.Lnap_n125: .asciz "expf"
-.Lnap_n126: .asciz "fabsf"
-.Lnap_n127: .asciz "fclose"
-.Lnap_n128: .asciz "fflush"
-.Lnap_n129: .asciz "fgetc"
-.Lnap_n130: .asciz "fgets"
-.Lnap_n131: .asciz "floorf"
-.Lnap_n132: .asciz "fmaxf"
-.Lnap_n133: .asciz "fminf"
-.Lnap_n134: .asciz "fmodf"
-.Lnap_n135: .asciz "fopen"
-.Lnap_n136: .asciz "fprintf"
-.Lnap_n137: .asciz "fputc"
-.Lnap_n138: .asciz "fputs"
-.Lnap_n139: .asciz "fread"
-.Lnap_n140: .asciz "free"
-.Lnap_n141: .asciz "fseek"
-.Lnap_n142: .asciz "ftell"
-.Lnap_n143: .asciz "fwrite"
-.Lnap_n144: .asciz "heap_caps_get_free_size"
-.Lnap_n145: .asciz "heap_caps_get_largest_free_block"
-.Lnap_n146: .asciz "heap_caps_malloc"
-.Lnap_n147: .asciz "localtime_r"
-.Lnap_n148: .asciz "log10f"
-.Lnap_n149: .asciz "logf"
-.Lnap_n150: .asciz "lroundf"
-.Lnap_n151: .asciz "malloc"
-.Lnap_n152: .asciz "memchr"
-.Lnap_n153: .asciz "memcmp"
-.Lnap_n154: .asciz "memcpy"
-.Lnap_n155: .asciz "memmove"
-.Lnap_n156: .asciz "memset"
-.Lnap_n157: .asciz "mkdir"
-.Lnap_n158: .asciz "nucleo_anima_solo_active"
-.Lnap_n159: .asciz "nucleo_app_brightness"
-.Lnap_n160: .asciz "nucleo_app_content_height"
-.Lnap_n161: .asciz "nucleo_app_content_top"
-.Lnap_n162: .asciz "nucleo_app_exit"
-.Lnap_n163: .asciz "nucleo_app_force_repaint"
-.Lnap_n164: .asciz "nucleo_app_register"
-.Lnap_n165: .asciz "nucleo_app_release_buffers"
-.Lnap_n166: .asciz "nucleo_app_request_draw"
-.Lnap_n167: .asciz "nucleo_app_set_back_handler"
-.Lnap_n168: .asciz "nucleo_app_set_direct_draw"
-.Lnap_n169: .asciz "nucleo_app_set_fullscreen"
-.Lnap_n170: .asciz "nucleo_app_set_hint"
-.Lnap_n171: .asciz "nucleo_app_set_keep_awake"
-.Lnap_n172: .asciz "nucleo_app_set_poll_handler"
-.Lnap_n173: .asciz "nucleo_app_set_ptt_handler"
-.Lnap_n174: .asciz "nucleo_app_set_tab_handler"
-.Lnap_n175: .asciz "nucleo_app_take_open_file"
-.Lnap_n176: .asciz "nucleo_app_two_screens"
-.Lnap_n177: .asciz "nucleo_audio_is_muted"
-.Lnap_n178: .asciz "nucleo_audio_is_playing"
-.Lnap_n179: .asciz "nucleo_audio_pcm_close"
-.Lnap_n180: .asciz "nucleo_audio_pcm_open"
-.Lnap_n181: .asciz "nucleo_audio_pcm_open_ex"
-.Lnap_n182: .asciz "nucleo_audio_pcm_write"
-.Lnap_n183: .asciz "nucleo_audio_play"
-.Lnap_n184: .asciz "nucleo_audio_set_volume"
-.Lnap_n185: .asciz "nucleo_audio_stop"
-.Lnap_n186: .asciz "nucleo_audio_tone"
-.Lnap_n187: .asciz "nucleo_audio_volume"
-.Lnap_n188: .asciz "nucleo_ble_radio_present"
-.Lnap_n189: .asciz "nucleo_cowork_run"
-.Lnap_n190: .asciz "nucleo_cowork_stop"
-.Lnap_n191: .asciz "nucleo_cowork_wait"
-.Lnap_n192: .asciz "nucleo_exclusive_active"
-.Lnap_n193: .asciz "nucleo_exclusive_exit"
-.Lnap_n194: .asciz "nucleo_extdisp_hud_overlay"
-.Lnap_n195: .asciz "nucleo_extdisp_internal_gfx"
-.Lnap_n196: .asciz "nucleo_imu_energy"
-.Lnap_n197: .asciz "nucleo_imu_gravity_screen"
-.Lnap_n198: .asciz "nucleo_imu_motion"
-.Lnap_n199: .asciz "nucleo_imu_present"
-.Lnap_n200: .asciz "nucleo_imu_recenter"
-.Lnap_n201: .asciz "nucleo_imu_sample"
-.Lnap_n202: .asciz "nucleo_imu_tilt"
-.Lnap_n203: .asciz "nucleo_kbd_char_down"
-.Lnap_n204: .asciz "nucleo_kbd_mods"
-.Lnap_n205: .asciz "nucleo_kbd_read"
-.Lnap_n206: .asciz "nucleo_power_battery_pct"
-.Lnap_n207: .asciz "nucleo_power_perf_begin"
-.Lnap_n208: .asciz "nucleo_power_perf_end"
-.Lnap_n209: .asciz "nucleo_prefs_save"
-.Lnap_n210: .asciz "nucleo_rom_map"
-.Lnap_n211: .asciz "nucleo_rom_unmap"
-.Lnap_n212: .asciz "nucleo_setup_mode"
-.Lnap_n213: .asciz "nucleo_surface_large"
-.Lnap_n214: .asciz "nucleo_surface_large_ok"
-.Lnap_n215: .asciz "nucleo_surface_set_large"
-.Lnap_n216: .asciz "nucleo_touch_add"
-.Lnap_n217: .asciz "nucleo_touch_add_pad"
-.Lnap_n218: .asciz "nucleo_touch_add_scroll"
-.Lnap_n219: .asciz "nucleo_touch_clear"
-.Lnap_n220: .asciz "nucleo_touch_commit"
-.Lnap_n221: .asciz "nucleo_tr5"
-.Lnap_n222: .asciz "nucleo_ui_is_adv"
-.Lnap_n223: .asciz "opendir"
-.Lnap_n224: .asciz "pnet_channel"
-.Lnap_n225: .asciz "pnet_name"
-.Lnap_n226: .asciz "pnet_recv"
-.Lnap_n227: .asciz "pnet_send"
-.Lnap_n228: .asciz "pnet_start"
-.Lnap_n229: .asciz "pnet_stop"
-.Lnap_n230: .asciz "powf"
-.Lnap_n231: .asciz "qsort"
-.Lnap_n232: .asciz "readdir"
-.Lnap_n233: .asciz "remove"
-.Lnap_n234: .asciz "rename"
-.Lnap_n235: .asciz "rewind"
-.Lnap_n236: .asciz "roundf"
-.Lnap_n237: .asciz "sinf"
-.Lnap_n238: .asciz "snprintf"
-.Lnap_n239: .asciz "sqrtf"
-.Lnap_n240: .asciz "sscanf"
-.Lnap_n241: .asciz "stat"
-.Lnap_n242: .asciz "strcasecmp"
-.Lnap_n243: .asciz "strcasestr"
-.Lnap_n244: .asciz "strcat"
-.Lnap_n245: .asciz "strchr"
-.Lnap_n246: .asciz "strcmp"
-.Lnap_n247: .asciz "strcpy"
-.Lnap_n248: .asciz "strlen"
-.Lnap_n249: .asciz "strncasecmp"
-.Lnap_n250: .asciz "strncat"
-.Lnap_n251: .asciz "strncmp"
-.Lnap_n252: .asciz "strncpy"
-.Lnap_n253: .asciz "strrchr"
-.Lnap_n254: .asciz "strstr"
-.Lnap_n255: .asciz "strtof"
-.Lnap_n256: .asciz "strtol"
-.Lnap_n257: .asciz "strtoul"
-.Lnap_n258: .asciz "tanf"
-.Lnap_n259: .asciz "time"
-.Lnap_n260: .asciz "tinfl_decompress"
-.Lnap_n261: .asciz "tolower"
-.Lnap_n262: .asciz "toupper"
-.Lnap_n263: .asciz "unlink"
-.Lnap_n264: .asciz "vTaskDelay"
-.Lnap_n265: .asciz "vfprintf"
-.Lnap_n266: .asciz "vsnprintf"
+.Lnap_n7: .asciz "_Z11app_ui_listiiiiPFPKciPvES3_PFtiS1_ES1_"
+.Lnap_n8: .asciz "_Z12app_ui_titlePKctS0_"
+.Lnap_n9: .asciz "_Z14game_text_openPKc"
+.Lnap_n10: .asciz "_Z14nucleo_app_gfxv"
+.Lnap_n11: .asciz "_Z15game_text_closev"
+.Lnap_n12: .asciz "_Z18nucleo_app_set_gfxPN4lgfx2v19LovyanGFXE"
+.Lnap_n13: .asciz "_Z21nucleo_screen_releasev"
+.Lnap_n14: .asciz "_Z22nucleo_app_is_bufferedv"
+.Lnap_n15: .asciz "_Z9game_textPKcS0_"
+.Lnap_n16: .asciz "_ZN2lg13settings_listEiiiiiiiPiPFviPNS_7SettingEPvES3_t"
+.Lnap_n17: .asciz "_ZN2lg3barEiiiiit"
+.Lnap_n18: .asciz "_ZN2lg3fitEPcjPKci"
+.Lnap_n19: .asciz "_ZN2lg3tapEicPiS0_"
+.Lnap_n20: .asciz "_ZN2lg4cardEv"
+.Lnap_n21: .asciz "_ZN2lg4fontEi"
+.Lnap_n22: .asciz "_ZN2lg4gameEPFvvEPFviiEPKct"
+.Lnap_n23: .asciz "_ZN2lg4listEiiiiiiiPiPFviiiiibtPvES1_t"
+.Lnap_n24: .asciz "_ZN2lg4tabsEiPKPKciitS1_"
+.Lnap_n25: .asciz "_ZN2lg4wrapEPKciiiii"
+.Lnap_n26: .asciz "_ZN2lg5fieldEiiii"
+.Lnap_n27: .asciz "_ZN2lg5frameEPFvPvES0_iib"
+.Lnap_n28: .asciz "_ZN2lg5panelEiiiit"
+.Lnap_n29: .asciz "_ZN2lg6buttonEiiiiPKcttic"
+.Lnap_n30: .asciz "_ZN2lg6headerEPKcS1_tii"
+.Lnap_n31: .asciz "_ZN2lg7messageEiiiiPKcS1_t"
+.Lnap_n32: .asciz "_ZN2lg7row_tapEiciiPi"
+.Lnap_n33: .asciz "_ZN2lg8row_textEiiiibtPKcS1_t"
+.Lnap_n34: .asciz "_ZN2lg9comp_headEPKct"
+.Lnap_n35: .asciz "_ZN2lg9comp_keysEPKc"
+.Lnap_n36: .asciz "_ZN2lg9text_listEiiiiiiPiPFPKciPvES5_PFtiS3_ES3_ti"
+.Lnap_n37: .asciz "_ZN3gui10text_widthEPKci"
+.Lnap_n38: .asciz "_ZN3gui3mixEtti"
+.Lnap_n39: .asciz "_ZN3gui3rgbEiii"
+.Lnap_n40: .asciz "_ZN3gui4menuERKNS_4MenuEPKPKciiit"
+.Lnap_n41: .asciz "_ZN3gui4textEPKciiiitt"
+.Lnap_n42: .asciz "_ZN3gui5panelEiiiitt"
+.Lnap_n43: .asciz "_ZN3gui5titleEPKcS1_t"
+.Lnap_n44: .asciz "_ZN3gui6dialogEPKcS1_S1_S1_t"
+.Lnap_n45: .asciz "_ZN3gui8menu_keyERNS_4MenuEii"
+.Lnap_n46: .asciz "_ZN3gui9menu_tickERNS_4MenuEi"
+.Lnap_n47: .asciz "_ZN3gui9vgradientEiiiitt"
+.Lnap_n48: .asciz "_ZN4lgfx2v111pixelcopy_tC1EPKvNS0_13color_depth_tES4_bS3_m"
+.Lnap_n49: .asciz "_ZN4lgfx2v112Panel_Sprite12createSpriteEllPNS0_12color_conv_tEb"
+.Lnap_n50: .asciz "_ZN4lgfx2v112Panel_Sprite12deleteSpriteEv"
+.Lnap_n51: .asciz "_ZN4lgfx2v112Panel_Sprite13setColorDepthENS0_13color_depth_tE"
+.Lnap_n52: .asciz "_ZN4lgfx2v112SpriteBuffer5resetEjNS0_16AllocationSourceE"
+.Lnap_n53: .asciz "_ZN4lgfx2v112SpriteBuffer7releaseEv"
+.Lnap_n54: .asciz "_ZN4lgfx2v15fonts17FreeSansBold9pt7bE"
+.Lnap_n55: .asciz "_ZN4lgfx2v15fonts18FreeSansBold12pt7bE"
+.Lnap_n56: .asciz "_ZN4lgfx2v15fonts5Font0E"
+.Lnap_n57: .asciz "_ZN4lgfx2v15fonts5Font2E"
+.Lnap_n58: .asciz "_ZN4lgfx2v18LGFXBase10drawCircleElll"
+.Lnap_n59: .asciz "_ZN4lgfx2v18LGFXBase10fillCircleElll"
+.Lnap_n60: .asciz "_ZN4lgfx2v18LGFXBase11drawEllipseEllll"
+.Lnap_n61: .asciz "_ZN4lgfx2v18LGFXBase11draw_stringEPKcllNS0_9textdatum11textdatum_tEPKNS0_5IFontE"
+.Lnap_n62: .asciz "_ZN4lgfx2v18LGFXBase11fillEllipseEllll"
+.Lnap_n63: .asciz "_ZN4lgfx2v18LGFXBase11getClipRectEPlS2_S2_S2_"
+.Lnap_n64: .asciz "_ZN4lgfx2v18LGFXBase11setClipRectEllll"
+.Lnap_n65: .asciz "_ZN4lgfx2v18LGFXBase11setRotationEj"
+.Lnap_n66: .asciz "_ZN4lgfx2v18LGFXBase12drawTriangleEllllll"
+.Lnap_n67: .asciz "_ZN4lgfx2v18LGFXBase12fillTriangleEllllll"
+.Lnap_n68: .asciz "_ZN4lgfx2v18LGFXBase13clearClipRectEv"
+.Lnap_n69: .asciz "_ZN4lgfx2v18LGFXBase13drawFastHLineElll"
+.Lnap_n70: .asciz "_ZN4lgfx2v18LGFXBase13drawFastVLineElll"
+.Lnap_n71: .asciz "_ZN4lgfx2v18LGFXBase13drawRoundRectElllll"
+.Lnap_n72: .asciz "_ZN4lgfx2v18LGFXBase13fillRoundRectElllll"
+.Lnap_n73: .asciz "_ZN4lgfx2v18LGFXBase14drawEllipseArcEllllllff"
+.Lnap_n74: .asciz "_ZN4lgfx2v18LGFXBase14draw_wedgelineEffffffm"
+.Lnap_n75: .asciz "_ZN4lgfx2v18LGFXBase14fillEllipseArcEllllllff"
+.Lnap_n76: .asciz "_ZN4lgfx2v18LGFXBase19fillSmoothRoundRectElllll"
+.Lnap_n77: .asciz "_ZN4lgfx2v18LGFXBase5writeEh"
+.Lnap_n78: .asciz "_ZN4lgfx2v18LGFXBase6printfEPKcz"
+.Lnap_n79: .asciz "_ZN4lgfx2v18LGFXBase7setFontEPKNS0_5IFontE"
+.Lnap_n80: .asciz "_ZN4lgfx2v18LGFXBase8drawLineEllll"
+.Lnap_n81: .asciz "_ZN4lgfx2v18LGFXBase8drawRectEllll"
+.Lnap_n82: .asciz "_ZN4lgfx2v18LGFXBase8fillRectEllll"
+.Lnap_n83: .asciz "_ZN4lgfx2v18LGFXBase9pushImageEllllPNS0_11pixelcopy_tEb"
+.Lnap_n84: .asciz "_ZN4lgfx2v18LGFXBase9textWidthEPKcPKNS0_5IFontE"
+.Lnap_n85: .asciz "_ZNK4lgfx2v112SpriteBuffer7use_dmaEv"
+.Lnap_n86: .asciz "_ZSt7nothrow"
+.Lnap_n87: .asciz "_ZTVN4lgfx2v112Panel_SpriteE"
+.Lnap_n88: .asciz "_ZdaPv"
+.Lnap_n89: .asciz "_ZdlPv"
+.Lnap_n90: .asciz "_ZdlPvj"
+.Lnap_n91: .asciz "_Znaj"
+.Lnap_n92: .asciz "_Znwj"
+.Lnap_n93: .asciz "_ZnwjRKSt9nothrow_t"
+.Lnap_n94: .asciz "__bswapsi2"
+.Lnap_n95: .asciz "__cxa_guard_acquire"
+.Lnap_n96: .asciz "__cxa_guard_release"
+.Lnap_n97: .asciz "__divdi3"
+.Lnap_n98: .asciz "__divsf3"
+.Lnap_n99: .asciz "__fixdfsi"
+.Lnap_n100: .asciz "__fixsfdi"
+.Lnap_n101: .asciz "__fixunsdfsi"
+.Lnap_n102: .asciz "__floatdisf"
+.Lnap_n103: .asciz "__gedf2"
+.Lnap_n104: .asciz "__lshrdi3"
+.Lnap_n105: .asciz "__moddi3"
+.Lnap_n106: .asciz "__popcountsi2"
+.Lnap_n107: .asciz "_ctype_"
+.Lnap_n108: .asciz "abs"
+.Lnap_n109: .asciz "acosf"
+.Lnap_n110: .asciz "asinf"
+.Lnap_n111: .asciz "atan2f"
+.Lnap_n112: .asciz "atoi"
+.Lnap_n113: .asciz "cJSON_Delete"
+.Lnap_n114: .asciz "cJSON_GetArrayItem"
+.Lnap_n115: .asciz "cJSON_GetArraySize"
+.Lnap_n116: .asciz "cJSON_GetObjectItem"
+.Lnap_n117: .asciz "cJSON_IsArray"
+.Lnap_n118: .asciz "cJSON_IsNumber"
+.Lnap_n119: .asciz "cJSON_IsString"
+.Lnap_n120: .asciz "cJSON_IsTrue"
+.Lnap_n121: .asciz "cJSON_Parse"
+.Lnap_n122: .asciz "calloc"
+.Lnap_n123: .asciz "ceilf"
+.Lnap_n124: .asciz "closedir"
+.Lnap_n125: .asciz "cosf"
+.Lnap_n126: .asciz "esp_log_timestamp"
+.Lnap_n127: .asciz "esp_log_write"
+.Lnap_n128: .asciz "esp_random"
+.Lnap_n129: .asciz "esp_task_wdt_reset"
+.Lnap_n130: .asciz "esp_timer_get_time"
+.Lnap_n131: .asciz "expf"
+.Lnap_n132: .asciz "fabsf"
+.Lnap_n133: .asciz "fclose"
+.Lnap_n134: .asciz "fflush"
+.Lnap_n135: .asciz "fgetc"
+.Lnap_n136: .asciz "fgets"
+.Lnap_n137: .asciz "floorf"
+.Lnap_n138: .asciz "fmaxf"
+.Lnap_n139: .asciz "fminf"
+.Lnap_n140: .asciz "fmodf"
+.Lnap_n141: .asciz "fopen"
+.Lnap_n142: .asciz "fprintf"
+.Lnap_n143: .asciz "fputc"
+.Lnap_n144: .asciz "fputs"
+.Lnap_n145: .asciz "fread"
+.Lnap_n146: .asciz "free"
+.Lnap_n147: .asciz "fseek"
+.Lnap_n148: .asciz "ftell"
+.Lnap_n149: .asciz "fwrite"
+.Lnap_n150: .asciz "heap_caps_get_free_size"
+.Lnap_n151: .asciz "heap_caps_get_largest_free_block"
+.Lnap_n152: .asciz "heap_caps_malloc"
+.Lnap_n153: .asciz "localtime_r"
+.Lnap_n154: .asciz "log10f"
+.Lnap_n155: .asciz "logf"
+.Lnap_n156: .asciz "lroundf"
+.Lnap_n157: .asciz "malloc"
+.Lnap_n158: .asciz "memchr"
+.Lnap_n159: .asciz "memcmp"
+.Lnap_n160: .asciz "memcpy"
+.Lnap_n161: .asciz "memmove"
+.Lnap_n162: .asciz "memset"
+.Lnap_n163: .asciz "mkdir"
+.Lnap_n164: .asciz "nucleo_anima_solo_active"
+.Lnap_n165: .asciz "nucleo_app_brightness"
+.Lnap_n166: .asciz "nucleo_app_content_height"
+.Lnap_n167: .asciz "nucleo_app_content_top"
+.Lnap_n168: .asciz "nucleo_app_exit"
+.Lnap_n169: .asciz "nucleo_app_force_repaint"
+.Lnap_n170: .asciz "nucleo_app_register"
+.Lnap_n171: .asciz "nucleo_app_release_buffers"
+.Lnap_n172: .asciz "nucleo_app_request_draw"
+.Lnap_n173: .asciz "nucleo_app_set_back_handler"
+.Lnap_n174: .asciz "nucleo_app_set_direct_draw"
+.Lnap_n175: .asciz "nucleo_app_set_fullscreen"
+.Lnap_n176: .asciz "nucleo_app_set_hint"
+.Lnap_n177: .asciz "nucleo_app_set_keep_awake"
+.Lnap_n178: .asciz "nucleo_app_set_poll_handler"
+.Lnap_n179: .asciz "nucleo_app_set_ptt_handler"
+.Lnap_n180: .asciz "nucleo_app_set_tab_handler"
+.Lnap_n181: .asciz "nucleo_app_take_open_file"
+.Lnap_n182: .asciz "nucleo_app_two_screens"
+.Lnap_n183: .asciz "nucleo_audio_is_muted"
+.Lnap_n184: .asciz "nucleo_audio_is_playing"
+.Lnap_n185: .asciz "nucleo_audio_pcm_close"
+.Lnap_n186: .asciz "nucleo_audio_pcm_open"
+.Lnap_n187: .asciz "nucleo_audio_pcm_open_ex"
+.Lnap_n188: .asciz "nucleo_audio_pcm_write"
+.Lnap_n189: .asciz "nucleo_audio_play"
+.Lnap_n190: .asciz "nucleo_audio_set_volume"
+.Lnap_n191: .asciz "nucleo_audio_stop"
+.Lnap_n192: .asciz "nucleo_audio_tone"
+.Lnap_n193: .asciz "nucleo_audio_volume"
+.Lnap_n194: .asciz "nucleo_ble_radio_present"
+.Lnap_n195: .asciz "nucleo_cowork_run"
+.Lnap_n196: .asciz "nucleo_cowork_stop"
+.Lnap_n197: .asciz "nucleo_cowork_wait"
+.Lnap_n198: .asciz "nucleo_exclusive_active"
+.Lnap_n199: .asciz "nucleo_exclusive_exit"
+.Lnap_n200: .asciz "nucleo_extdisp_hud_overlay"
+.Lnap_n201: .asciz "nucleo_extdisp_internal_gfx"
+.Lnap_n202: .asciz "nucleo_extdisp_screen_row"
+.Lnap_n203: .asciz "nucleo_extdisp_screen_size"
+.Lnap_n204: .asciz "nucleo_imu_energy"
+.Lnap_n205: .asciz "nucleo_imu_gravity_screen"
+.Lnap_n206: .asciz "nucleo_imu_motion"
+.Lnap_n207: .asciz "nucleo_imu_present"
+.Lnap_n208: .asciz "nucleo_imu_recenter"
+.Lnap_n209: .asciz "nucleo_imu_sample"
+.Lnap_n210: .asciz "nucleo_imu_tilt"
+.Lnap_n211: .asciz "nucleo_kbd_char_down"
+.Lnap_n212: .asciz "nucleo_kbd_mods"
+.Lnap_n213: .asciz "nucleo_kbd_read"
+.Lnap_n214: .asciz "nucleo_power_battery_pct"
+.Lnap_n215: .asciz "nucleo_power_perf_begin"
+.Lnap_n216: .asciz "nucleo_power_perf_end"
+.Lnap_n217: .asciz "nucleo_prefs_save"
+.Lnap_n218: .asciz "nucleo_rom_map"
+.Lnap_n219: .asciz "nucleo_rom_unmap"
+.Lnap_n220: .asciz "nucleo_secret_get"
+.Lnap_n221: .asciz "nucleo_secret_set"
+.Lnap_n222: .asciz "nucleo_setup_mode"
+.Lnap_n223: .asciz "nucleo_surface_large"
+.Lnap_n224: .asciz "nucleo_surface_large_ok"
+.Lnap_n225: .asciz "nucleo_surface_set_large"
+.Lnap_n226: .asciz "nucleo_tcp_close"
+.Lnap_n227: .asciz "nucleo_tcp_connect"
+.Lnap_n228: .asciz "nucleo_tcp_network_up"
+.Lnap_n229: .asciz "nucleo_tcp_readable"
+.Lnap_n230: .asciz "nucleo_tcp_recv"
+.Lnap_n231: .asciz "nucleo_tcp_send"
+.Lnap_n232: .asciz "nucleo_touch_add"
+.Lnap_n233: .asciz "nucleo_touch_add_pad"
+.Lnap_n234: .asciz "nucleo_touch_add_scroll"
+.Lnap_n235: .asciz "nucleo_touch_clear"
+.Lnap_n236: .asciz "nucleo_touch_commit"
+.Lnap_n237: .asciz "nucleo_touch_last"
+.Lnap_n238: .asciz "nucleo_touch_raw"
+.Lnap_n239: .asciz "nucleo_touch_raw_read"
+.Lnap_n240: .asciz "nucleo_tr5"
+.Lnap_n241: .asciz "nucleo_ui_is_adv"
+.Lnap_n242: .asciz "nucleo_ui_panel_size"
+.Lnap_n243: .asciz "nucleo_ui_read_row"
+.Lnap_n244: .asciz "opendir"
+.Lnap_n245: .asciz "pnet_channel"
+.Lnap_n246: .asciz "pnet_name"
+.Lnap_n247: .asciz "pnet_recv"
+.Lnap_n248: .asciz "pnet_send"
+.Lnap_n249: .asciz "pnet_start"
+.Lnap_n250: .asciz "pnet_stop"
+.Lnap_n251: .asciz "powf"
+.Lnap_n252: .asciz "qsort"
+.Lnap_n253: .asciz "readdir"
+.Lnap_n254: .asciz "remove"
+.Lnap_n255: .asciz "rename"
+.Lnap_n256: .asciz "rewind"
+.Lnap_n257: .asciz "roundf"
+.Lnap_n258: .asciz "sinf"
+.Lnap_n259: .asciz "snprintf"
+.Lnap_n260: .asciz "sqrtf"
+.Lnap_n261: .asciz "sscanf"
+.Lnap_n262: .asciz "stat"
+.Lnap_n263: .asciz "strcasecmp"
+.Lnap_n264: .asciz "strcasestr"
+.Lnap_n265: .asciz "strcat"
+.Lnap_n266: .asciz "strchr"
+.Lnap_n267: .asciz "strcmp"
+.Lnap_n268: .asciz "strcpy"
+.Lnap_n269: .asciz "strlen"
+.Lnap_n270: .asciz "strncasecmp"
+.Lnap_n271: .asciz "strncat"
+.Lnap_n272: .asciz "strncmp"
+.Lnap_n273: .asciz "strncpy"
+.Lnap_n274: .asciz "strrchr"
+.Lnap_n275: .asciz "strstr"
+.Lnap_n276: .asciz "strtof"
+.Lnap_n277: .asciz "strtol"
+.Lnap_n278: .asciz "strtoul"
+.Lnap_n279: .asciz "tanf"
+.Lnap_n280: .asciz "time"
+.Lnap_n281: .asciz "tinfl_decompress"
+.Lnap_n282: .asciz "tolower"
+.Lnap_n283: .asciz "toupper"
+.Lnap_n284: .asciz "unlink"
+.Lnap_n285: .asciz "vTaskDelay"
+.Lnap_n286: .asciz "vfprintf"
+.Lnap_n287: .asciz "vsnprintf"

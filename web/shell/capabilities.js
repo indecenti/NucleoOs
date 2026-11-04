@@ -9,7 +9,7 @@
 // partly wrong) ways. This module measures, diagnoses once, and describes the fix per browser.
 //
 // The pure parts (browser detection, diagnosis, fix description, adapter classification) take plain
-// inputs and are host-tested (tools/shell-capabilities.test.mjs); probeCapabilities() is the only
+// inputs and are host-tested (tests/suite/shell-capabilities.test.mjs); probeCapabilities() is the only
 // browser-touching function, plus the optional DOM helper renderCapabilityHelp().
 
 // ── pure: which browser, and where its "treat this http origin as secure" switch lives ─────────────

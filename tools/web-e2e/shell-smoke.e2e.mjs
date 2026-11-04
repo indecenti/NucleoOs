@@ -39,7 +39,12 @@ async function assertLang(page, lang, when) {
 }
 
 // 2026-09-30, shell only (no saved windows): 38–42 requests in all five languages, one folder listing (the Desktop).
-const BOOT_BUDGET = { requests: 60, peakInFlight: 6, fsLists: 2 };
+// 2026-10-29, web OS 1.0 on the core layers: 56 on an everyday boot. The first boot of a fresh card (this one) also
+// sets the desktop up once: its folder, and one atomic save of ui-state.json through nucleo-fs.js (mkdir, two listings
+// of /system/config, write, two moves, read-back, delete): 66–74, landing inside or outside the quiet window by timing
+// (CI read 55–58 one day, 68–70 the next). The budget covers that setup; the listing budget counts the folders under
+// /data, which is what it guards (a boot lists the Desktop, never crawls the user's files).
+const BOOT_BUDGET = { requests: 80, peakInFlight: 6, dataLists: 2 };
 
 test('shell smoke — every app opens cleanly in every language', { skip: !findChrome() && 'no Chrome/Edge installed', concurrency: true }, async (t) => {
   // One browser per language: pages sharing a headless browser get background-throttled and run
@@ -62,8 +67,9 @@ test('shell smoke — every app opens cleanly in every language', { skip: !findC
       assert.ok(boot.total <= BOOT_BUDGET.requests, `[${lang}] cold boot sent ${boot.total} requests to the device (budget ${BOOT_BUDGET.requests})`);
       assert.ok(boot.peak <= BOOT_BUDGET.peakInFlight, `[${lang}] cold boot kept ${boot.peak} requests in flight (budget ${BOOT_BUDGET.peakInFlight})`);
       // The search index is built on the first SEARCH, never at boot: a boot lists the Desktop folder, not /data.
-      const lists = (boot.byPath && boot.byPath['/api/fs/list']) || 0;
-      assert.ok(lists <= BOOT_BUDGET.fsLists, `[${lang}] cold boot listed ${lists} folders on the device (budget ${BOOT_BUDGET.fsLists}: the Desktop, not a crawl of /data)`);
+      const listed = Object.entries(boot.lists || {}).filter(([d]) => d === '/data' || d.startsWith('/data/'));
+      const lists = listed.reduce((n, [, c]) => n + c, 0);
+      assert.ok(lists <= BOOT_BUDGET.dataLists, `[${lang}] cold boot listed ${lists} folders of /data (budget ${BOOT_BUDGET.dataLists}: the Desktop, not a crawl of /data): ${listed.map(([d]) => d).join(', ')}`);
 
       await assertLang(page, lang, 'after boot');
       const names = await appRows(page);

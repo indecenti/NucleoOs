@@ -11,6 +11,9 @@
 //   5. M5Launcher's merged-image installer can take our image: it finds the app at ota_0 and carries
 //      the `cfg` LittleFS partition across WITH its label (nucleo_storage mounts it by label).
 //   6. The table parser is strict: bad magic, erased flash and the MD5 row end it.
+//   7. Native apps get a scratch region everywhere we can own one: `nucleo_nap` in the shipped table (before
+//      `cfg`, so the Launcher keeps linking `cfg`), the old `coredump` on stand-alone units flashed before it,
+//      the Launcher-recreated `nucleo_nap` at any 4 KB alignment - and NEVER the Launcher's own coredump.
 #include "guest_policy.h"
 #include <stdio.h>
 #include <string.h>
@@ -64,6 +67,13 @@ int main(int argc, char **argv)
     for (int i = 0; i < plan.n_data; i++)
         if (!strcmp(plan.data_label[i], "cfg") && plan.data_subtype[i] == GUEST_PT_SUB_SPIFFS) cfg_kept = true;
     CHECK(cfg_kept, "Launcher installer carries `cfg` across with its label");
+    int nap_at = -1, cfg_at = -1;
+    for (int i = 0; i < plan.n_data; i++) {
+        if (!strcmp(plan.data_label[i], GUEST_NAP_LABEL) && plan.data_subtype[i] == GUEST_PT_SUB_LITTLEFS) nap_at = i;
+        if (!strcmp(plan.data_label[i], "cfg")) cfg_at = i;
+    }
+    CHECK(nap_at >= 0, "Launcher installer carries `nucleo_nap` (LittleFS) across with its label");
+    CHECK(nap_at >= 0 && nap_at < cfg_at, "`nucleo_nap` comes before `cfg` (the Launcher links the last one)");
 
     // ── 2: a table as M5Launcher writes it (support_files/custom_8Mb2.csv + two installed apps) ─────
     uint8_t lt[GUEST_PT_MAX_BYTES];
@@ -140,6 +150,51 @@ int main(int argc, char **argv)
         };
         CHECK(!guest_layout_is_own(swapped, 2, 0x020000), "labels and subtypes must agree");
         CHECK(!guest_layout_is_own(NULL, 2, 0), "NULL parts -> not own");
+    }
+
+    // ── 7: the native-app scratch region ─────────────────────────────────────────────────────────
+    {
+        const uint32_t PG = 0x10000, MAX = 0x40000;
+        guest_span_t sp;
+        const guest_part_t *o0 = find(op, on, "ota_0"), *nap = find(op, on, GUEST_NAP_LABEL);
+        CHECK(nap && nap->type == GUEST_PT_TYPE_DATA && nap->size >= 2 * PG, "shipped table has `nucleo_nap`, 128 KB+");
+        CHECK(guest_native_scratch(op, on, o0 && guest_layout_is_own(op, on, o0->offset), PG, MAX, &sp) &&
+              !strcmp(op[sp.index].label, GUEST_NAP_LABEL) && sp.skip == 0 && sp.size == MAX,
+              "shipped table -> all 256 KB of `nucleo_nap`");
+        // A stand-alone unit flashed before 0.8.4 keeps its table across OTA: the old coredump row.
+        guest_part_t old[] = {
+            { GUEST_PT_TYPE_APP,  GUEST_PT_SUB_OTA_0,     0x020000, 0x380000, "ota_0" },
+            { GUEST_PT_TYPE_APP,  GUEST_PT_SUB_OTA_0 + 1, 0x3a0000, 0x380000, "ota_1" },
+            { GUEST_PT_TYPE_DATA, GUEST_PT_SUB_COREDUMP,  0x720000, 0x040000, "coredump" },
+            { GUEST_PT_TYPE_DATA, GUEST_PT_SUB_SPIFFS,    0x760000, 0x0a0000, "cfg" },
+        };
+        CHECK(guest_native_scratch(old, 4, guest_layout_is_own(old, 4, 0x020000), PG, MAX, &sp) &&
+              sp.index == 2 && sp.skip == 0 && sp.size == MAX, "pre-0.8.4 stand-alone -> its coredump, unchanged");
+        // Under M5Launcher before the reinstall: only the Launcher's 64 KB coredump -> nothing (and never it).
+        CHECK(!guest_native_scratch(hp, hn, false, PG, MAX, &sp), "Launcher table without `nucleo_nap` -> none");
+        guest_part_t bigcd[] = { { GUEST_PT_TYPE_DATA, GUEST_PT_SUB_COREDUMP, 0x180000, 0x80000, "coredump" } };
+        CHECK(!guest_native_scratch(bigcd, 1, false, PG, MAX, &sp), "a hosted coredump is never ours, even a big one");
+        // After the reinstall: the Launcher made it 448 KB at a 4 KB boundary -> the aligned 256 KB inside.
+        guest_part_t lnap[] = {
+            { GUEST_PT_TYPE_APP,  GUEST_PT_SUB_TEST,      0x010000, 0x150000, "app0" },
+            { GUEST_PT_TYPE_DATA, GUEST_PT_SUB_COREDUMP,  0x160000, 0x010000, "coredump" },
+            { GUEST_PT_TYPE_APP,  GUEST_PT_SUB_OTA_0,     0x170000, 0x310000, "nucleo" },
+            { GUEST_PT_TYPE_DATA, GUEST_PT_SUB_LITTLEFS,  0x483000, 0x070000, GUEST_NAP_LABEL },
+            { GUEST_PT_TYPE_DATA, GUEST_PT_SUB_SPIFFS,    0x4f3000, 0x070000, "cfg" },
+        };
+        CHECK(guest_native_scratch(lnap, 5, guest_layout_is_own(lnap, 5, 0x170000), PG, MAX, &sp) &&
+              sp.index == 3 && sp.skip == 0xD000 && sp.size == MAX && (lnap[3].offset + sp.skip) % PG == 0,
+              "Launcher `nucleo_nap` at 4 KB -> 64 KB-aligned 256 KB inside it");
+        // A hand-made partition (Launcher partitioner) of 128 KB at a bad boundary leaves < 2 pages: refused.
+        guest_part_t tiny[] = { { GUEST_PT_TYPE_DATA, GUEST_PT_SUB_SPIFFS, 0x201000, 0x20000, GUEST_NAP_LABEL } };
+        CHECK(!guest_native_scratch(tiny, 1, false, PG, MAX, &sp), "128 KB off a page boundary -> refused (one page left)");
+        guest_part_t ok128[] = { { GUEST_PT_TYPE_DATA, GUEST_PT_SUB_SPIFFS, 0x200000, 0x20000, GUEST_NAP_LABEL } };
+        CHECK(guest_native_scratch(ok128, 1, false, PG, MAX, &sp) && sp.size == 2 * PG, "128 KB on a page boundary -> two pages");
+        guest_part_t edge[] = { { GUEST_PT_TYPE_DATA, GUEST_PT_SUB_LITTLEFS, 0xFFFF0000u, 0x20000, GUEST_NAP_LABEL } };
+        CHECK(guest_native_scratch(edge, 1, false, PG, MAX, &sp) && sp.skip == 0 && sp.size == 2 * PG,
+              "a partition at the top of the address space does not wrap around");
+        CHECK(!guest_native_scratch(NULL, 1, true, PG, MAX, &sp) && !guest_native_scratch(old, 4, true, 0x3000, MAX, &sp),
+              "NULL parts or a page that is not a power of two -> none");
     }
 
     printf("guest-policy: %d/%d passed%s\n", g_total - g_fail, g_total, g_fail ? "  (FAILURES)" : "");

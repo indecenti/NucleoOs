@@ -37,5 +37,6 @@
   "err_list_dir": "Impossible de lister le dossier {name} (erreur {status}).",
   "err_read_src": "Impossible de lire {name} (erreur {status}).",
   "err_save_archive": "Impossible d'enregistrer {name} (erreur {status}).",
-  "confirm_overwrite": { "one": "{count} fichier existe déjà et sera écrasé :\n{names}\n\nExtraire quand même ?", "other": "{count} fichiers existent déjà et seront écrasés :\n{names}\n\nExtraire quand même ?" }
+  "confirm_overwrite": { "one": "{count} fichier existe déjà et sera écrasé :\n{names}\n\nExtraire quand même ?", "other": "{count} fichiers existent déjà et seront écrasés :\n{names}\n\nExtraire quand même ?" },
+  "format_label": "Format :"
 }

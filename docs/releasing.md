@@ -202,6 +202,11 @@ The tag triggers `.github/workflows/release.yml`, a **three-stage, each-gates-th
    `tools/sd-payload.test.mjs`.
 3. **verify** — fails the run unless the release assets are reachable *and* the web-flasher site
    (Pages) has actually caught up: `version.json` == this tag, with the OTA image + checksums live.
+4. **announce** — posts the version's CHANGELOG headlines (one line per entry, under Discord's 2000
+   characters) to the community Discord's `#announcements` through the `DISCORD_RELEASE_WEBHOOK`
+   repository secret (`tools/release-announce.mjs`; preview with `node tools/release-announce.mjs vX.Y.Z`).
+   No secret, no post; a Discord error never turns the release red. Write the CHANGELOG entries with a
+   bold lead sentence: that sentence is what the community reads.
 
 **Why the explicit Pages dispatch:** a Release created by `GITHUB_TOKEN` does **not** fire another
 workflow's `release: published` trigger (GitHub blocks token-created events from chaining). So

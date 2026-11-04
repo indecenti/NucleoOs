@@ -37,5 +37,6 @@
   "err_list_dir": "No se pudo listar la carpeta {name} (error {status}).",
   "err_read_src": "No se pudo leer {name} (error {status}).",
   "err_save_archive": "No se pudo guardar {name} (error {status}).",
-  "confirm_overwrite": { "one": "{count} archivo ya existe y se sobrescribirá:\n{names}\n\n¿Extraer de todos modos?", "other": "{count} archivos ya existen y se sobrescribirán:\n{names}\n\n¿Extraer de todos modos?" }
+  "confirm_overwrite": { "one": "{count} archivo ya existe y se sobrescribirá:\n{names}\n\n¿Extraer de todos modos?", "other": "{count} archivos ya existen y se sobrescribirán:\n{names}\n\n¿Extraer de todos modos?" },
+  "format_label": "Formato:"
 }

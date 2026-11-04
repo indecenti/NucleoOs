@@ -86,11 +86,21 @@ test('authenticator: the codes on screen are the RFC 6238 codes for each account
   });
 
   await t.test('clicking an account copies exactly the code shown (no grouping space)', async () => {
-    await freeze(page, T);
-    const sent = await page.eval(`(async () => {
+    // The code goes to the OS clipboard, which is the shell's: the app runs in a window of a page that stands in for
+    // the shell (same origin, as on the device) and the test reads what the app hands it.
+    const host = await openApp(browser, sim);
+    const sent = await host.eval(`(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      document.body.replaceChildren();
       const got = []; addEventListener('message', (e) => { if (e.data && e.data.type === 'clipboard-write') got.push(e.data.data); });
-      [...document.querySelectorAll('#list .tok')].find((el) => el.querySelector('.iss').textContent === 'RFC-SHA1').click();
-      await new Promise((r) => setTimeout(r, 300));
+      const f = document.createElement('iframe'); f.src = '/apps/authenticator/'; document.body.append(f);
+      await new Promise((r) => { f.onload = r; });
+      const w = f.contentWindow;
+      for (let i = 0; i < 150 && w.document.querySelectorAll('#list .tok').length < 5; i++) await sleep(100);
+      w.Date.now = () => ${T * 1000};
+      const s = w.document.getElementById('search'); s.value = ''; s.dispatchEvent(new w.Event('input'));
+      [...w.document.querySelectorAll('#list .tok')].find((el) => el.querySelector('.iss').textContent === 'RFC-SHA1').click();
+      await sleep(300);
       return got;
     })()`);
     assert.deepEqual(sent, ['07081804']);

@@ -8,7 +8,9 @@ user's own language preference — that's a personal setting, not a repo rule.)
 ## Hard constraints — design for the worst case
 - **RAM:** ~512 KB SRAM, **no PSRAM**. Runtime heap is ~18 KB; the real bottleneck is
   fragmentation (httpd + L1 + workers), not CPU. Never load heavy data on the device —
-  push it to the browser client. See `docs/memory-budget.md`.
+  push it to the browser client. That ~18 KB is the **full OS**: an `NX_SOLO` app reboots into
+  its own Solo boot with ~65–90 KB free (~32 KB contiguous, room for one TLS session) — size
+  heavy native apps for that. See `docs/memory-budget.md` ("Two RAM regimes").
 - **Battery:** ~120 mAh — energy is a first-class resource.
 - **Storage:** microSD (system in flash, content on SD).
 

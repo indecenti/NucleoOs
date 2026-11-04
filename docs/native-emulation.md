@@ -575,7 +575,7 @@ Profile on the ADV (Aero Blasters, 100 s): HuC6280 10.3 ms, VDC on this core 1.4
 other core 2.2, PSG + speaker 2.2 ms a frame; idle skipped 60%. Next: the HuC6280's dispatch (MAME's function
 table) as one switch like the NES's A6.
 
-**The cartridge from internal flash (ABI 7, 1.2).** Street Fighter II stayed at 13-20 fps however the cache was
+**The cartridge from internal flash (ABI 8, 1.2).** Street Fighter II stayed at 13-20 fps however the cache was
 tuned: the card costs ~3-5 ms a read on the ADV (its panel shares the SPI bus) and a 2.5 MB HuCard read through
 48 KB of RAM cannot avoid it. PCE-Go and the other ESP32 emulators answer that with PSRAM, which the Cardputer has
 not. What it has is 8 MB of flash, read through the MMU and the 32 KB data cache, and an OTA slot that nothing needs

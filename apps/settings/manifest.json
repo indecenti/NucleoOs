@@ -1,8 +1,9 @@
 {
   "id": "settings",
   "name": "Settings",
-  "version": "0.2.3",
-  "version_code": 3,
+  "icon": "/apps/settings/icon.svg",
+  "version": "0.2.4",
+  "version_code": 4,
   "description": "Configure device, network, power, UI and security; edit file associations.",
   "category": "system",
   "entry_service": "settings_main",

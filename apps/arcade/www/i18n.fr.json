@@ -61,5 +61,20 @@
   "p_sram_loaded": "Sauvegarde chargée depuis la carte SD",
   "p_sram_unread": "Impossible de lire la sauvegarde sur la carte SD : l’enregistrement sur la SD est suspendu pour ne pas l’écraser.",
   "p_rom_corrupt": "Fichier ROM corrompu : archive zip tronquée.",
-  "p_start_failed": "Échec du démarrage"
+  "p_start_failed": "Échec du démarrage",
+  "scrape": "Images",
+  "scrape_none": "Chaque jeu a déjà son image.",
+  "scrape_offline": "Une connexion internet est nécessaire pour télécharger les images.",
+  "scrape_progress": "Images : {done} sur {total}…",
+  "scrape_done": "Images trouvées pour {found} jeux sur {total}, enregistrées sur la carte : l’appareil les affiche aussi.",
+  "add_roms_btn": "Ajouter des jeux",
+  "drop_here": "Déposez les jeux ici : chacun va dans le dossier de sa console",
+  "upload_progress": "Copie {i} sur {n} : {pct} %",
+  "upload_done": "{n} jeux copiés dans les dossiers de leurs consoles.",
+  "upload_skipped": "{n} copiés ; {skipped} mis de côté ({names}) : ouvrez d’abord la bonne console et déposez-les là.",
+  "play_device": "Jouer sur l’appareil, avec son propre émulateur",
+  "play_device_short": "Appareil",
+  "play_device_started": "Le jeu démarre sur l’appareil : son réseau se coupe jusqu’à ce que vous quittiez le jeu.",
+  "play_device_failed": "L’appareil n’a pas d’émulateur pour ce jeu (installez-le depuis le Store).",
+  "lib_unsaved": "La bibliothèque sur la carte est illisible : l’étoile n’a pas été enregistrée."
 }

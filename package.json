@@ -1,6 +1,6 @@
 {
   "name": "nucleoos",
-  "version": "0.8.1",
+  "version": "0.8.5",
   "description": "NucleoOS — web-native appliance OS for the M5Stack Cardputer.",
   "type": "module",
   "private": true,
@@ -35,6 +35,7 @@
     "fwsig:test": "node tools/anima-host/fwsig-check.mjs",
     "m5burner:kit": "python tools/m5burner-kit.py",
     "setupstore:test": "node tools/anima-host/setup-store-check.mjs",
+    "clockzones:test": "node tools/anima-host/clock-zones-check.mjs",
     "update:test": "node tools/anima-host/update-check.mjs",
     "guest:test": "node tools/anima-host/guest-check.mjs",
     "authslot:test": "node tools/anima-host/authslot-check.mjs",
@@ -59,6 +60,7 @@
     "probe:test": "node tools/anima-host/probe-check.mjs",
     "eapol:test": "node tools/anima-host/eapol-check.mjs",
     "portalclone:test": "node tools/anima-host/portalclone-check.mjs",
+    "evilportal:test": "node tools/anima-host/evilportal-fingerprint-check.mjs",
     "ducky:test": "node tools/anima-host/ducky-check.mjs",
     "take:test": "node tools/anima-host/take-check.mjs",
     "fido:test": "node tools/anima-host/fido-check.mjs",

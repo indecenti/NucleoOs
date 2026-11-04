@@ -3,6 +3,8 @@
 // No dependencies. Apps are hosted in an <iframe> pointed at their web route.
 // Real-OS extras: per-app geometry memory (via a provider the shell wires up) and
 // Windows-11-style snapping — drag to edges/corners, or use the Snap Layouts flyout.
+import { brokerToken, withToken } from './appbroker.js';
+
 const layer = document.getElementById('windows');
 let z = 10;
 // A window may be PINNED above a fixed z (the blocking model installer floats above its OS-wide scrim).
@@ -106,9 +108,10 @@ export function isSandboxed(app) { return !!(app && (app.created_by === 'agent' 
 const trustPending = (app) => !!(app && app.trust === 'pending');
 
 export function frameHtml(app, src) {
-  const sandbox = isSandboxed(app) ? ' sandbox="allow-scripts allow-forms allow-modals"' : '';
+  const token = isSandboxed(app) ? brokerToken() : '';
+  const sandbox = token ? ` sandbox="allow-scripts allow-forms allow-modals" data-nb="${token}"` : '';
   return app && app.route
-    ? `<iframe src="${attr(src)}"${sandbox} title="${attr(labelFor(app))}" allow="${attr(allowAttr(app))}"></iframe>`
+    ? `<iframe src="${attr(withToken(src, token))}"${sandbox} title="${attr(labelFor(app))}" allow="${attr(allowAttr(app))}"></iframe>`
     : `<div class="placeholder">${glyph(app)}<br><br>${attr(app && labelFor(app))}<br><small>${attr(tr('win_no_route'))}</small></div>`;
 }
 
@@ -317,7 +320,7 @@ export function open(app, query, opts = {}) {
     // Navigate ONLY when the caller asked for something (a file, a query, an explicit reload). A bare
     // re-open — a Start/taskbar click, open-app without a query — used to reassign the plain route, which
     // RELOADS the app: Notepad lost its unsaved text just because the user clicked its icon again.
-    if (iframe && src && (query || opts.reload)) { frameLoading(w); iframe.src = src; }
+    if (iframe && src && (query || opts.reload)) { frameLoading(w); iframe.src = withToken(src, iframe.dataset.nb || ''); }
     // A DEFERRED window has no iframe yet, so setting .src silently did nothing and it later
     // materialised its OLD pending URL: double-clicking a file with that app minimised opened
     // yesterday's document, with no error to explain it. Retarget the pending load instead.

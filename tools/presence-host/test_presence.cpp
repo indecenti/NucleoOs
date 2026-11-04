@@ -46,6 +46,38 @@ static void run(pd_state_t *s, float secs, float motion)
     }
 }
 
+// What the radio really delivers: a static multipath channel, a random phase offset and slope on every packet
+// (CFO, timing), a few % of AGC jitter, int8 noise. `motion` = strength of one moving reflector (a body);
+// 0.25 changes each tone by ~8%, a person crossing a few metres from the link.
+static float s_chan[64];
+static void frame_real(pd_state_t *s, float motion, float t)
+{
+    int8_t b[128] = {};
+    float off = rnd() * 6.2832f, slope = (rnd() - 0.5f) * 0.3f, g = 1 + (rnd() - 0.5f) * 0.1f;
+    for (int i = 0; i < 64; i++) {
+        int k = i < 32 ? i : i - 64;
+        if (k == 0 || k > 26 || k < -26) continue;
+        float ph = k * 0.25f + t * 6.0f;
+        float re = s_chan[i] + motion * 6 * cosf(ph), im = 0.3f * s_chan[i] + motion * 6 * sinf(ph);
+        float a = sqrtf(re * re + im * im) * g + (rnd() - 0.5f) * 0.8f, p = atan2f(im, re) + off + slope * k;
+        b[2 * i] = (int8_t)lrintf(a * sinf(p));
+        b[2 * i + 1] = (int8_t)lrintf(a * cosf(p));
+    }
+    pd_feed(s, b, sizeof b, (int8_t)-55, false);
+}
+
+// Count the steps with presence over `secs` of real-like radio at 50 frames/s, stepping at 12.5 Hz.
+static int run_real(pd_state_t *s, float secs, float motion)
+{
+    int pres = 0;
+    for (int i = 0; i < (int)(secs * 50); i++) {
+        frame_real(s, motion, s_now / 1000.0f);
+        s_now += 20;
+        if ((i & 3) == 3) { pd_step(s, s_now); pres += s->present; }
+    }
+    return pres;
+}
+
 // Two links side by side (router + Faro), each with its own motion.
 static void run2(pd_state_t *a, float ma, pd_state_t *b, float mb, float secs)
 {
@@ -100,11 +132,36 @@ static void detector_tests(void)
     CHECK(s.n_ev == 1 && s.ev[0].end_ms == 0, "an episode opens");
     run(&s, 5, 0);
     CHECK(s.present && !s.moving, "stops: presence coasts");
-    run(&s, 7, 0);
+    run(&s, 8, 0);                                     // the 10 s hold + the 2 s window draining
     CHECK(!s.present, "clear after the 10 s hold");
     CHECK(s.ev[0].end_ms != 0 && s.ev[0].peak > 0, "the episode closes with a peak");
     pd_calibrate(&s, s_now);
     CHECK(s.phase == PD_CALIB && !s.present, "recalibrate drops presence");
+
+    // Real-like CSI (the "always clear" bug: the old per-frame scalars missed a body that moves every tone).
+    for (int i = 0; i < 64; i++) s_chan[i] = 18 + 6 * sinf(i * 0.37f) + 3 * cosf(i * 1.1f);
+    pd_init(&s, 0.35f, s_now);
+    run_real(&s, 7, 0);
+    CHECK(run_real(&s, 60, 0) == 0, "real CSI, empty room: clear for 60 s");
+    run_real(&s, 1, 0.25f);
+    CHECK(run_real(&s, 10, 0.25f) == 125, "real CSI, a body crossing: present the whole time");
+    run_real(&s, 15, 0);
+    CHECK(!s.present, "real CSI: clear again once the room is still");
+    // Measured on the ADV: calibrated with the user still next to it, the empty room then sat at 4x that level.
+    pd_calibrate(&s, s_now);
+    run_real(&s, 7, 0);
+    float lo = s.lo;
+    for (int i = 0; i < 64; i++) s_chan[i] *= 0.5f;   // weaker channel: int8 noise -> a higher steady level
+    run_real(&s, 140, 0);                              // the calibration's floor bucket ages out after 2 min
+    CHECK(s.lo > lo * 1.5f && run_real(&s, 30, 0) == 0, "real CSI: a steadier, noisier empty room becomes the baseline");
+    run_real(&s, 1, 0.5f);
+    CHECK(run_real(&s, 5, 0.5f) > 50, "real CSI: then someone walking in still shows");
+    // Measured on the ADV: three people about the room for minutes, high peaks with short still dips between.
+    int pres = 0, steps = 0;
+    for (int i = 0; i < 35; i++) { pres += run_real(&s, 5, 0.6f); pres += run_real(&s, 2, 0); steps += 7 * 50 / 4; }
+    CHECK(pres >= steps * 95 / 100, "real CSI: people moving about for 4 min stay present (the floor does not chase them)");
+    run_real(&s, 15, 0);
+    CHECK(!s.present, "real CSI: clear again once the room is still");
     CHECK(fabsf(pd_distance_m(-40) - 1) < 0.01f && pd_distance_m(-95) == 30, "RSSI distance model");
     CHECK(pd_quality(-50, 25) == 100 && pd_quality(-90, 25) == 0 && pd_quality(-50, 2) == 10, "quality");
 }

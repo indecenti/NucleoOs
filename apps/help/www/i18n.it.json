@@ -2,11 +2,11 @@
   "_lang": "it",
   "title": "Manuale di Sistema",
   "search_ph": "Cerca nel manuale…",
-  "label_guides": "Guide di Sistema",
-  "label_commands": "Comandi Terminale",
+  "label_guides": "Guide",
+  "label_commands": "Comandi del terminale",
   "label_api": "API Web HTTP",
-  "label_guides_count": "Guide di Sistema ({count})",
-  "label_commands_count": "Comandi Terminale ({count})",
+  "label_guides_count": "Guide ({count})",
+  "label_commands_count": "Comandi del terminale ({count})",
   "label_api_count": "API Web HTTP ({count})",
   "welcome_title": "Aiuto di Sistema",
   "welcome_desc": "Seleziona un argomento dalla barra laterale o usa la barra di ricerca per esplorare le guide e le funzionalità di sistema.",
@@ -31,5 +31,6 @@
   "conn_note": "Nota: Verifica se il server di NucleoOS è online o se il client ha i permessi CORS abilitati.",
   "empty_response": "(Risposta vuota)",
   "read_error": "Errore di lettura: {msg}",
-  "no_results": "Nessun risultato trovato"
+  "no_results": "Nessun risultato trovato",
+  "doc_source": "Manuale della versione installata su questo dispositivo: web OS {build} · sistema {version}"
 }

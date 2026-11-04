@@ -66,7 +66,7 @@ extern "C" bool         nucleo_store_app_is_native(const char *id);   // store_a
 #define PATHMAX    160
 #define FILT       16
 #define SCAN_DEPTH 5           // folders below the card's root the walk goes into
-#define RESCAN_US  (10LL * 60 * 1000000)   // the gallery opened this long after the last walk walks again
+#define SCAN_IDLE_US 800000      // the walk runs only after this long without a key (it never slows the wheel)
 
 // ── what is in the gallery ──────────────────────────────────────────────────────────────────────────
 // Native games: their play modes and a one-line blurb (shown beside the picture and on the companion).
@@ -164,6 +164,8 @@ static char    s_launch[PATHMAX + 24];     // the cartridge GF_LAUNCH asks for (
 static bool    s_restore;                  // gamefront_open() comes back on the RTC snapshot (gamefront_take_return)
 static bool    s_opened;                   // opened at least once since boot
 static uint32_t s_cover_ready;             // native games whose cover file is known to be made (bit per s_nat slot)
+static bool    s_have_index;               // an index of the card is there to list from
+static int64_t s_input_at;                 // the last key
 static int     s_H;                        // the screen's height (inside a frame d.height() is the strip's)
 
 // A console's cartridges while its titles are shown: ONE heap block sized to what it holds — names and folders packed
@@ -285,20 +287,25 @@ static int sys_of(const char *name)            // by extension; -2 = a zip, look
     return -1;
 }
 
-// The index: "GIX1 <cartridges> <hash>", then for each folder that has some "D <folder>" and one line per cartridge,
-// "<system digit> <file>". Text, so a person can read it, and read here a line at a time (no RAM).
+// The index: "GIX2 <cartridges> <hash>", then for each folder that has some "D <folder>" and one line per cartridge,
+// "<system digit> <file>", and after them "P <file>" for each screenshot in its .snaps (<rom>.pic / <rom>.snp): so
+// opening a console never lists a .snaps folder. Text, so a person can read it, and read a line at a time (no RAM).
+static FILE *idx_open(int *count, uint32_t *hash);
+static bool idx_ok(void) { FILE *f = idx_open(nullptr, nullptr); if (f) fclose(f); return f != nullptr; }
 static FILE *idx_open(int *count, uint32_t *hash)
 {
     FILE *f = fopen(INDEX, "r");
     if (!f) return nullptr;
+    setvbuf(f, nullptr, _IOFBF, 1024);             // read a line at a time from 1 KB blocks, not 128-byte ones
     char hd[48];
     unsigned c = 0, h = 0;
-    if (!fgets(hd, sizeof hd, f) || sscanf(hd, "GIX1 %u %u", &c, &h) != 2) { fclose(f); return nullptr; }
+    if (!fgets(hd, sizeof hd, f) || sscanf(hd, "GIX2 %u %u", &c, &h) != 2) { fclose(f); return nullptr; }
     if (count) *count = (int)c;
     if (hash) *hash = h;
     return f;
 }
-// The next cartridge: its system and name, in line (valid until the next call); dir keeps the current folder.
+// The next cartridge (its system) or screenshot (sys -1), its file name in line (valid until the next call); dir keeps
+// the current folder.
 static bool idx_next(FILE *f, char *line, size_t ln, char *dir, size_t dn, int *sys, const char **name)
 {
     while (fgets(line, (int)ln, f)) {
@@ -306,6 +313,7 @@ static bool idx_next(FILE *f, char *line, size_t ln, char *dir, size_t dn, int *
         while (l && (line[l - 1] == '\n' || line[l - 1] == '\r')) line[--l] = '\0';
         if (l > 2 && line[0] == 'D' && line[1] == ' ') { snprintf(dir, dn, "%s", line + 2); continue; }
         if (l > 2 && line[0] >= '0' && line[0] < '0' + NSYS && line[1] == ' ') { *sys = line[0] - '0'; *name = line + 2; return true; }
+        if (l > 2 && line[0] == 'P' && line[1] == ' ') { *sys = -1; *name = line + 2; return true; }
     }
     return false;
 }
@@ -319,6 +327,7 @@ static struct {
     int plen[SCAN_DEPTH + 1];       // the path's length at each level
     char path[PATHMAX];
     bool dir_out;                   // the current folder's "D" line is written
+    bool had[SCAN_DEPTH + 1];       // the folder at each level has cartridges (its .snaps is listed when it ends)
     FILE *out;
     int found;
     uint32_t hash;
@@ -345,10 +354,11 @@ static void scan_start(void)
     s_scan.out = fopen(INDEX ".tmp", "w");
     s_scan.dp[0] = s_scan.out ? opendir(NUCLEO_SD_MOUNT) : nullptr;
     if (!s_scan.dp[0]) { if (s_scan.out) fclose(s_scan.out); s_scan.out = nullptr; remove(INDEX ".tmp"); return; }
-    fputs("GIX1 0000000000 0000000000\n", s_scan.out);   // the real counts are written over it at the end
+    fputs("GIX2 0000000000 0000000000\n", s_scan.out);   // the real counts are written over it at the end
     snprintf(s_scan.path, sizeof s_scan.path, "%s", NUCLEO_SD_MOUNT);
     s_scan.plen[0] = (int)strlen(s_scan.path);
     s_scan.depth = 0; s_scan.found = 0; s_scan.hash = 2166136261u; s_scan.dir_out = false;
+    memset(s_scan.had, 0, sizeof s_scan.had);
     s_scan.on = true;
 }
 // Folders the walk leaves alone: the system's own, the apps', the web OS, and the gallery's caches.
@@ -381,8 +391,26 @@ static int scan_step(int64_t budget)
     const int64_t until = esp_timer_get_time() + budget;
     while (esp_timer_get_time() < until) {
         struct dirent *e = readdir(s_scan.dp[s_scan.depth]);
-        if (!e) {                                       // this folder is done: up a level
+        if (!e) {                                       // this folder is done: its screenshots, then up a level
             closedir(s_scan.dp[s_scan.depth]); s_scan.dp[s_scan.depth] = nullptr;
+            if (s_scan.had[s_scan.depth]) {
+                const int pl = s_scan.plen[s_scan.depth];
+                snprintf(s_scan.path + pl, PATHMAX - pl, "/.snaps");
+                DIR *sp = opendir(s_scan.path);
+                s_scan.path[pl] = '\0';
+                if (sp) {
+                    fprintf(s_scan.out, "D %s\n", s_scan.path);
+                    struct dirent *x;
+                    while ((x = readdir(sp)) != NULL) {
+                        const size_t xl = strlen(x->d_name);
+                        if (xl < 5 || (strcasecmp(x->d_name + xl - 4, ".pic") && strcasecmp(x->d_name + xl - 4, ".snp"))) continue;
+                        fprintf(s_scan.out, "P %s\n", x->d_name);
+                        s_scan.hash = fnv(x->d_name, s_scan.hash);
+                    }
+                    closedir(sp);
+                }
+                s_scan.had[s_scan.depth] = false;
+            }
             if (s_scan.depth == 0) break;
             s_scan.depth--;
             s_scan.path[s_scan.plen[s_scan.depth]] = '\0';
@@ -399,6 +427,7 @@ static int scan_step(int64_t budget)
                 if (sub) {                              // into it
                     s_scan.dp[++s_scan.depth] = sub;
                     s_scan.plen[s_scan.depth] = (int)strlen(s_scan.path);
+                    s_scan.had[s_scan.depth] = false;
                     s_scan.dir_out = false;
                     continue;
                 }
@@ -411,6 +440,7 @@ static int scan_step(int64_t budget)
         if (sys < 0) continue;
         if (!s_scan.dir_out) { fprintf(s_scan.out, "D %s\n", s_scan.path); s_scan.hash = fnv(s_scan.path, s_scan.hash); s_scan.dir_out = true; }
         fprintf(s_scan.out, "%d %s\n", sys, e->d_name);
+        s_scan.had[s_scan.depth] = true;
         s_scan.hash = fnv(e->d_name, s_scan.hash + (uint32_t)sys);
         s_scan.found++;
     }
@@ -418,7 +448,7 @@ static int scan_step(int64_t budget)
     if (s_scan.dp[0]) return 0;                         // more to walk
     // The walk is complete: its header, then it replaces the index if anything differs.
     fseek(s_scan.out, 0, SEEK_SET);
-    fprintf(s_scan.out, "GIX1 %010u %010u", (unsigned)s_scan.found, (unsigned)s_scan.hash);
+    fprintf(s_scan.out, "GIX2 %010u %010u", (unsigned)s_scan.found, (unsigned)s_scan.hash);
     const bool ok = fclose(s_scan.out) == 0;
     s_scan.out = nullptr;
     s_scan.on = false; s_scan.done = true; s_scan.at = esp_timer_get_time();
@@ -437,41 +467,8 @@ static int cmp_nat(const void *a, const void *b)
 
 static void shelf_free(void) { free(s_sh); s_sh = nullptr; }
 
-// Which cartridges have a picture: ONE listing of each folder's .snaps, matched by name hash. Looking each one up
-// instead would cost a full scan of that folder for every cartridge without a screenshot.
-static void snaps_scan(Shelf *sh)
-{
-    memset(sh->snap, 0, sh->n);
-    uint32_t *h = sh->n ? (uint32_t *)malloc((size_t)sh->n * 4) : nullptr;   // the names' hashes, for the listings only
-    if (!h) return;
-    for (int i = 0; i < sh->n; i++) h[i] = fnv(sh->pool + sh->off[i]);
-    for (int i = 0; i < sh->n; i++) {
-        bool seen = false;                              // each folder once
-        for (int j = 0; j < i && !seen; j++) seen = sh->dir[j] == sh->dir[i];
-        if (seen) continue;
-        char p[PATHMAX + 8];
-        snprintf(p, sizeof p, "%s/.snaps", sh->pool + sh->dir[i]);
-        DIR *dp = opendir(p);
-        if (!dp) continue;
-        struct dirent *e;
-        unsigned cnt = 0;
-        while ((e = readdir(dp)) != NULL) {
-            if ((++cnt & 63) == 0) esp_task_wdt_reset();
-            const size_t len = strlen(e->d_name);
-            if (len < 5) continue;
-            const char *ext = e->d_name + len - 4;
-            const uint8_t bit = !strcasecmp(ext, ".pic") ? SN_PIC : !strcasecmp(ext, ".snp") ? SN_SNP : 0;
-            if (!bit) continue;
-            const uint32_t k = fnvn(e->d_name, len - 4);
-            for (int j = i; j < sh->n; j++) if (sh->dir[j] == sh->dir[i] && h[j] == k) { sh->snap[j] |= bit; break; }
-        }
-        closedir(dp);
-    }
-    free(h);
-}
-
 // The open console's cartridges whose name contains `filt`, from the index, into a new shelf sized to fit.
-struct Gather { uint16_t off[MAXR], dir[MAXR]; char pool[POOL]; int n, used; };
+struct Gather { uint16_t off[MAXR], dir[MAXR]; uint32_t hash[MAXR]; uint8_t snap[MAXR]; char pool[POOL]; int n, used; };
 static bool shelf_build(const char *filt)
 {
     int count = 0;
@@ -488,6 +485,14 @@ static bool shelf_build(const char *filt)
         char last_dir[PATHMAX] = "";
         while (idx_next(f, line, sizeof line, dir, sizeof dir, &sys, &name)) {
             if ((++seen & 255) == 0) esp_task_wdt_reset();
+            if (sys < 0) {                              // a screenshot: whose, in this folder?
+                const size_t pl = strlen(name);
+                const uint8_t bit = !strcasecmp(name + pl - 4, ".pic") ? SN_PIC : SN_SNP;
+                const uint32_t k = fnvn(name, pl - 4);
+                for (int i = g->n - 1; i >= 0; i--)
+                    if (g->hash[i] == k && !strcmp(g->pool + g->dir[i], dir)) { g->snap[i] |= bit; break; }
+                continue;
+            }
             if (sys != s_group || !contains(name, filt)) continue;
             total++;
             const int nl = (int)strlen(name) + 1;
@@ -499,7 +504,8 @@ static bool shelf_build(const char *filt)
             }
             if (dir_at < 0 || g->n >= MAXR || g->used + nl > POOL) continue;
             memcpy(g->pool + g->used, name, nl);
-            g->off[g->n] = (uint16_t)g->used; g->dir[g->n] = (uint16_t)dir_at; g->n++;
+            g->off[g->n] = (uint16_t)g->used; g->dir[g->n] = (uint16_t)dir_at;
+            g->hash[g->n] = fnv(name); g->snap[g->n] = 0; g->n++;
             g->used += nl;
         }
         fclose(f);
@@ -523,13 +529,12 @@ static bool shelf_build(const char *filt)
         sh->view = sh->dir + n;
         sh->snap = (uint8_t *)(sh->view + n);
         sh->pool = (char *)(sh->snap + n);
-        for (int i = 0; i < n; i++) { sh->off[i] = g->off[ord[i]]; sh->dir[i] = g->dir[ord[i]]; }
+        for (int i = 0; i < n; i++) { sh->off[i] = g->off[ord[i]]; sh->dir[i] = g->dir[ord[i]]; sh->snap[i] = g->snap[ord[i]]; }
         memcpy(sh->pool, g->pool, g->used);
     }
     free(ord);
     free(g);
     if (!sh) return false;
-    snaps_scan(sh);
     shelf_free();
     s_sh = sh;
     return true;
@@ -682,7 +687,8 @@ static void turn(int dir)
     s_turn_t0 = dir ? now : 0; s_turn_dir = dir;
     s_settle_at = now + SETTLE_US;
     s_full = false;                                // this key moves the wheel only
-    nucleo_audio_tone(2600, 4, 12);                // the wheel's click (the emulators' own)
+    static int64_t s_tick;                         // the wheel's click (the emulators' own): one per frame at most
+    if (now - s_tick > 60000) { s_tick = now; nucleo_audio_tone(2600, 4, 12); }
 }
 static int turn_offset(int pill_h)
 {
@@ -733,8 +739,11 @@ static void relist(void)
 
 static void pic_forget(void);
 static void marks_free(void);
+static bool s_settle_frame;                        // the next render: what changes when the wheel stops (left column)
 void gamefront_open(void)
 {
+    // Back from anything (a game, the screensaver): the whole gallery and the companion, never a leftover turn frame.
+    s_full = true; s_turn_t0 = 0; s_settle_at = 0; s_settle_frame = false;
     s_cover_ready = 0;
     last_load();
     systems_build();
@@ -764,23 +773,31 @@ void gamefront_open(void)
     refilter();
     if (want) select_key(want);
     // Look for cartridges: the first time this boot, when there is no index, or after a while.
-    struct stat st;
-    const bool have = stat(INDEX, &st) == 0;
-    if (!have || !s_scan.done || esp_timer_get_time() - s_scan.at > RESCAN_US) scan_start();
+    { struct stat ist; s_have_index = stat(INDEX, &ist) == 0 && idx_ok(); }
+    if (!s_scan.done) scan_start();               // once per boot: the card may have changed while it was off
 }
 
-static bool s_settle_frame;                        // the next render: what changes when the wheel stops (left column)
-static int64_t s_input_at;                         // the last key
 static bool prefetch_one(void);
+#define MQ_US 40000                                // the scrolling title's step (see paint_title)
+static int64_t s_mq_last;
+static bool    s_mq_long;                          // the title does not fit its line: it scrolls
+static bool    s_mq_frame;                         // the next render: the title line only
 bool gamefront_step(void)
 {
-    const int r = scan_step(s_turn_t0 ? 4000 : 15000);   // a turning wheel gets the CPU first
+    // The walk: freely while there is no index yet (nothing to browse); else in 5 ms slices, only when the player has been
+    // still for a while - it never takes time from a turn, a stop or a key.
+    const int64_t t = esp_timer_get_time();
+    const bool fresh = s_scan.on && !s_have_index;
+    const int r = fresh ? scan_step(15000)
+                : (s_scan.on && !s_turn_t0 && !s_settle_at && t - s_input_at > SCAN_IDLE_US) ? scan_step(5000) : 0;
+    if (r) s_have_index = true;
     if (r == 2) { relist(); pic_forget(); }
     if (r != 0) { s_full = true; return true; }    // the walk ended: its indicator goes, the lists may have changed
     if (s_turn_t0) return true;                    // the turn's next frame (the wheel only)
     const int64_t now = esp_timer_get_time();
     if (s_settle_at && now >= s_settle_at) { s_settle_at = 0; s_settle_frame = true; return true; }   // stopped
-    if (!s_settle_at && !s_scan.on && now - s_input_at > 350000) prefetch_one();
+    if (!s_settle_at && !s_scan.on && now - s_input_at > 1500000) prefetch_one();   // well after the last key
+    if (s_mq_long && !s_settle_at && d.width() >= 300 && now - s_mq_last >= MQ_US) { s_mq_frame = true; return true; }
     return false;
 }
 bool gamefront_scanning(void) { return s_scan.on; }
@@ -1027,13 +1044,14 @@ static bool snap_pic(const char *dir, const char *rom, uint8_t have)
 {
     char path[PATHMAX + 48];
     snprintf(path, sizeof path, "%s/.snaps/%s.pic", dir, rom);
-    if ((have & SN_PIC) && pic_open(path, false, 0, 0)) return true;
+    if ((have & (SN_PIC | SN_SNP)) && pic_open(path, false, 0, 0)) return true;   // also one made since the walk
     return (have & SN_SNP) && snap_make(dir, rom) && pic_open(path, false, 0, 0);
 }
 
-// Pictures made AHEAD, while the player is still: the console photos of the systems, and the screenshots of the titles
-// around the selection (nearest first), one per call, so that stopping on them reads a ready file. A cartridge's
-// screenshot is ~100-300 ms to make (inflate + write) - here, never while the wheel turns or a key was just pressed.
+// Pictures made AHEAD, well after the last key: the console photos of the systems and the covers of the native games
+// around the selection, one per call (each is made once per card). A cartridge's screenshot is not: making one takes
+// ~100-300 ms that a key pressed meanwhile would wait for - it is made when the wheel stops on it (once), or comes
+// ready from tools/fetch-rom-snaps.py.
 static bool cover_pic(int k, int bw, int bh, bool open = true);
 static bool prefetch_one(void)
 {
@@ -1050,26 +1068,16 @@ static bool prefetch_one(void)
         return false;
     }
     if (s_level == 1 && s_group == NATIVE) {         // the covers of the games around the selection
-        const bool big = d.width() >= 300;
         for (int dist = 0; dist <= 4 && dist < s_n; dist++)
             for (int side = 0; side < 2; side++) {
                 const int k = s_ix[((s_sel + (side ? -dist : dist)) % s_n + s_n) % s_n];
                 if (!s_nat_cover[k] || (s_cover_ready & (1u << k))) continue;
                 s_cover_ready |= 1u << k;          // made, or not makeable: either way not again this visit
-                cover_pic(k, big ? 128 : 112, big ? 72 : 63, false);
+                cover_pic(k, 112, 63, false);
                 return true;
             }
         return false;
     }
-    if (!on_roms() || !s_sh || !s_n) return false;
-    for (int dist = 1; dist <= 6 && dist < s_n; dist++)
-        for (int side = 0; side < 2; side++) {
-            const int i = ((s_sel + (side ? -dist : dist)) % s_n + s_n) % s_n;
-            uint8_t &have = s_sh->snap[s_sh->view[i]];
-            if (!(have & SN_SNP) || (have & SN_PIC)) continue;
-            have = snap_make(rom_dir(i), rom_name(i)) ? (uint8_t)(have | SN_PIC) : 0;
-            return true;
-        }
     return false;
 }
 
@@ -1158,7 +1166,7 @@ static void pic_prepare(bool big)
     } else if (s_group == NATIVE) {
         const int k = s_ix[s_sel];
         snprintf(s_pic.poster, sizeof s_pic.poster, "%s", nucleo_app_at(s_nat[k])->id);
-        file = cover_pic(k, big ? 128 : 112, big ? 72 : 63);
+        file = cover_pic(k, 112, 63);
     } else {
         snprintf(s_pic.poster, sizeof s_pic.poster, "%s", SYS[s_group].app);
         uint8_t &have = s_sh->snap[s_sh->view[s_sel]];
@@ -1239,7 +1247,7 @@ static void caption(char *out, size_t n)
 static const char *subtitle(void)
 {
     if (!s_n || s_level != 0 || s_grp[s_ix[s_sel]] != NATIVE) return nullptr;
-    return TR5("Integrati e dallo Store", "Built in and from the Store", "Integrados y de la Store", "Integres et du Store", "Eingebaut und aus dem Store");
+    return TR5("Integrati + Store", "Built in + Store", "Integrados + Store", "Integres + Store", "Eingebaut + Store");
 }
 static const char *blurb(void)
 {
@@ -1273,6 +1281,7 @@ static const char *level_title(void)
     if (s_level == 0) return TR5("Giochi", "Games", "Juegos", "Jeux", "Spiele");
     return group_title(s_group);
 }
+static const char *search_word(void) { return TR5("Cerca", "Search", "Buscar", "Chercher", "Suchen"); }
 static const char *search_hint(void) { return TR5("Scrivi per cercare", "Type to search", "Escribe para buscar", "Tapez pour chercher", "Tippen zum Suchen"); }
 static void count_text(char *out, size_t n)
 {
@@ -1328,7 +1337,7 @@ static int wheel_icon(int i, int x, int cy, bool mid, void *)
 }
 
 // ── the screens ─────────────────────────────────────────────────────────────────────────────────────
-static const unsigned char WHEEL_BIG[SLOTS_BIG] = { 21, 23, 25, 32, 25, 23, 21 };
+static const unsigned char WHEEL_BIG[SLOTS_BIG] = { 18, 20, 22, 28, 22, 20, 18 };   // 148 rows, below the title line
 static const unsigned char WHEEL_SMALL[SLOTS_SMALL] = { 19, 21, 27, 21, 19 };
 
 // The header's right side: a pulsing "searching" dot while the card is walked.
@@ -1337,9 +1346,14 @@ static const char *header_right(void)
     return s_scan.on ? TR5("cerco...", "searching...", "buscando...", "recherche...", "suche...") : nullptr;
 }
 
-// The panel, 320x240: header with Back, search, then the picture and the title on the left and the wheel on the right.
-#define WX 168                                     // the wheel's left edge
+// The panel, 320x240: header with Back, search, the whole title on a line of its own, then the picture on the left and
+// the wheel on the right.
+#define WX 128                                     // the wheel's left edge
+#define TY (lg::HEAD + 36)                         // the title line, the panel's whole width
+#define TH 26
+#define TOP (TY + TH)                              // the picture and the wheel
 static void paint_left(void *);
+static void paint_title(void *);
 static void paint_big(void *)
 {
     const int W = d.width(), H = s_H;
@@ -1347,30 +1361,31 @@ static void paint_big(void *)
     char cnt[24]; count_text(cnt, sizeof cnt);
     int32_t cx0, cy0, cw0, ch0;
     d.getClipRect(&cx0, &cy0, &cw0, &ch0);
-    const int top = lg::HEAD + 36, bh = H - top;
-    if (cy0 < top) {                               // only the strips that hold the header and the search draw them
+    const int top = TOP, bh = H - top;
+    if (cy0 < TY) {                                // only the strips that hold the header and the search draw them
         lg::header(level_title(), header_right(), acc_of(s_level ? s_group : NATIVE), NK_BACK);
         lg::search(0, lg::HEAD, W, 36, s_filter, search_hint(), cnt, s_total > s_n ? (unsigned short)C_YELLOW : (unsigned short)MUTED, acc);
     } else nucleo_touch_add(0, 0, 96, lg::HEAD + 2, NK_BACK, 0);   // the header's Back, as lg::header registers it
-    d.fillRect(0, top, W, bh, BG);
-    if (!s_n) { lg::message(0, top, W, bh, empty_line(), empty_sub(), MUTED); return; }
+    d.fillRect(0, TY, W, H - TY, BG);
+    if (!s_n) { lg::message(0, TY, W, H - TY, empty_line(), empty_sub(), MUTED); return; }
+    paint_title(nullptr);
     paint_left(nullptr);
     const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon, s_off };
     lg::wheel(WX, top, W - WX, bh, wl);
 }
 
-// The left column below the search: the picture, the caption, the title. Also a frame of its own (lg::frame_rect at
-// x 0) when the wheel stops: only this and the position change then.
+// The left column below the title line: the picture, the caption and a line about it. Also a frame of its own
+// (lg::frame_rect at x 0) when the wheel stops: only this, the title and the position change then.
 static void paint_left(void *)
 {
-    const int H = s_H, top = lg::HEAD + 36;
+    const int H = s_H, top = TOP;
     const unsigned short acc = acc_now();
     d.fillRect(0, top, WX, H - top, BG);
-    const int tw = 136, tx = (WX - tw) / 2, ph = 102;   // the picture's place
+    const int tw = 118, tx = (WX - tw) / 2, ph = 98;    // the picture's place
     draw_pic(tx, top + 2, tw, ph, acc);
     nucleo_touch_add(tx, top + 2, tw, ph, NK_ENTER, 0);   // the picture opens the selection too
     char cap[64]; caption(cap, sizeof cap);
-    int ly = top + ph + 5;
+    int ly = top + ph + 6;
     lg::font(0);
     char fitted[64];
     int cx = tx + 2;
@@ -1382,11 +1397,47 @@ static void paint_left(void *)
         lg::fit(fitted, sizeof fitted, cap, tx + tw - cx);
         d.setTextColor(acc, BG); d.drawString(fitted, cx, ly);
     }
-    ly += 21;
-    const char *sub = subtitle();
-    lg::font(1); d.setTextColor(FG, BG);
-    const int lines = lg::wrap(title_of(s_sel), tx + 2, ly, WX - tx - 6, 19, sub ? 1 : (H - ly >= 58 ? 3 : 2));
-    if (sub) { lg::font(0); d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, WX - tx - 6); d.drawString(fitted, tx + 2, ly + lines * 19 + 1); }
+    ly += 20;
+    const char *more = subtitle();                 // a system: what it holds; a native game: what it is
+    if (!more) more = blurb();
+    if (more) { d.setTextColor(MUTED, BG); lg::wrap(more, tx + 2, ly, WX - tx - 4, 15, (H - ly) / 15); }
+}
+
+// The title line: the selection's whole name across the panel; one too long for it scrolls (a pause at its start,
+// then round at MQ_SPEED px/s), redrawn alone (lg::frame_rect, 320x26) every MQ_US while the wheel is still.
+#define MQ_HOLD  1500000
+#define MQ_SPEED 30
+#define MQ_GAP   48
+static uint32_t s_mq_key;                          // the title on the line, and since when
+static int64_t  s_mq_t0;
+static uint32_t title_key(void) { return s_n ? key_of(s_sel) ^ (uint32_t)(s_level << 24) ^ (uint32_t)((s_group + 2) << 20) : 0; }
+static void paint_title(void *)
+{
+    d.fillRect(0, TY, 320, TH, BG);
+    if (!s_n) { s_mq_long = false; return; }
+    const int64_t now = esp_timer_get_time();
+    const uint32_t key = title_key();
+    if (key != s_mq_key) { s_mq_key = key; s_mq_t0 = now; }
+    s_mq_last = now;
+    d.fillRoundRect(8, TY + 5, 4, TH - 10, 2, acc_now());
+    const char *t = title_of(s_sel);
+    lg::font(1);
+    const int x0 = 18, avail = 320 - x0 - 8, w = d.textWidth(t);
+    s_mq_long = w > avail;
+    d.setTextColor(FG, BG); d.setTextDatum(middle_left);
+    if (!s_mq_long) { d.drawString(t, x0, TY + TH / 2); d.setTextDatum(top_left); return; }
+    const int64_t per = (int64_t)(w + MQ_GAP) * 1000000 / MQ_SPEED, ph = (now - s_mq_t0) % (MQ_HOLD + per);
+    const int off = ph < MQ_HOLD ? 0 : (int)((ph - MQ_HOLD) * MQ_SPEED / 1000000);
+    int32_t cx, cy, cw, ch;
+    d.getClipRect(&cx, &cy, &cw, &ch);
+    const int y0 = TY > cy ? TY : cy, y1 = TY + TH < cy + ch ? TY + TH : cy + ch;
+    if (y1 > y0) {                                 // the line's own clip, inside the strip's
+        d.setClipRect(x0, y0, avail, y1 - y0);
+        d.drawString(t, x0 - off, TY + TH / 2);
+        d.drawString(t, x0 - off + w + MQ_GAP, TY + TH / 2);
+        d.setClipRect(cx, cy, cw, ch);
+    }
+    d.setTextDatum(top_left);
 }
 static void paint_search(void *)
 {
@@ -1397,21 +1448,21 @@ static void paint_search(void *)
 // The wheel alone, in its own rectangle (lg::frame_rect: x is relative to WX), while it turns.
 static void paint_wheel_big(void *)
 {
-    const int top = lg::HEAD + 36;
+    const int top = TOP;
     const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc_now(), C_LAST, wheel_icon, s_off };
     lg::wheel(0, top, 320 - WX, s_H - top, wl);
 }
 
 // The Cardputer alone, 240x135: the picture with its caption and the whole title on the left; the search and a
 // five-title wheel on the right.
-#define CX 122
+#define CX 118
 static void paint_small(void *)
 {
     const int W = d.width(), H = s_H;
     const unsigned short acc = acc_now();
     d.fillRect(0, 0, W, H, BG);
     char cnt[24]; count_text(cnt, sizeof cnt);
-    lg::search(CX, 0, W - CX, 22, s_filter, s_scan.on ? header_right() : TR5("Cerca", "Search", "Buscar", "Chercher", "Suchen"), nullptr, MUTED, acc);
+    lg::search(CX, 0, W - CX, 22, s_filter, s_scan.on ? header_right() : search_word(), nullptr, MUTED, acc);
     if (!s_n) {
         lg::message(0, 22, W, H - 22, empty_line(), empty_sub(), MUTED);
         return;
@@ -1496,8 +1547,8 @@ static void paint_companion(void *)
     d.fillRect(0, 0, 240, 135, BG);                    // the whole screen: every row of the frame is pushed
     int y = lg::comp_head(level_title(), acc_of(s_level ? s_group : NATIVE));
     if (s_flen) {                                      // the search, while there is one
-        d.setFont(&fonts::Font2); d.setTextColor(MUTED, BG); d.drawString(TR5("Cerca", "Search", "Buscar", "Cherche", "Suche"), 8, y);
-        const int lx = 14 + d.textWidth(TR5("Cerca", "Search", "Buscar", "Cherche", "Suche"));
+        d.setFont(&fonts::Font2); d.setTextColor(MUTED, BG); d.drawString(search_word(), 8, y);
+        const int lx = 14 + d.textWidth(search_word());
         const char *q = s_filter;
         while (*q && d.textWidth(q) > 220 - lx) q++;
         d.setTextColor(FG, BG); d.drawString(q, lx, y);
@@ -1561,10 +1612,15 @@ void gamefront_render(void)
     s_H = d.height();
     s_full = false;
     s_off = turn_offset(big ? WHEEL_BIG[SLOTS_BIG / 2] : WHEEL_SMALL[SLOTS_SMALL / 2]);
-    if (!full && s_n) {                            // the wheel turning: its rectangle only (the committed touch targets stay)
+    const bool mq = s_mq_frame;
+    s_mq_frame = false;
+    if (!full && s_n && !s_settle_frame) {         // the wheel turning: its rectangle only (the committed touch targets stay)
         nucleo_touch_clear();                      // ...the wheel's own registrations go nowhere
-        const bool ok = big ? lg::frame_rect(paint_wheel_big, nullptr, WX, lg::HEAD + 36, 320 - WX, s_H - lg::HEAD - 36, true)
-                            : lg::frame_rect(paint_wheel_small, nullptr, CX, 22, 240 - CX, s_H - 22, true);
+        bool ok = true;
+        if (big && (mq || title_key() != s_mq_key))   // the new title at once, or the scrolling one's next step
+            ok = lg::frame_rect(paint_title, nullptr, 0, TY, 320, TH, true);
+        if (ok && !mq) ok = big ? lg::frame_rect(paint_wheel_big, nullptr, WX, TOP, 320 - WX, s_H - TOP, true)
+                                : lg::frame_rect(paint_wheel_small, nullptr, CX, 22, 240 - CX, s_H - 22, true);
         if (ok) return;
         s_settle_at = 0;                           // no canvas: the whole frame instead
     }
@@ -1577,8 +1633,8 @@ void gamefront_render(void)
     const int64_t t1 = esp_timer_get_time();
     bool drawn = false;
     if (settle) {                                  // the wheel stopped: the picture, the caption, the title, the position
-        const int top = lg::HEAD + 36;
-        drawn = lg::frame_rect(paint_left, nullptr, 0, top, WX, s_H - top, true)
+        drawn = lg::frame_rect(paint_left, nullptr, 0, TOP, WX, s_H - TOP, true)
+             && lg::frame_rect(paint_title, nullptr, 0, TY, 320, TH, true)
              && lg::frame_rect(paint_search, nullptr, 0, lg::HEAD, 320, 36, true);
     }
     if (!drawn) {

@@ -78,6 +78,25 @@ typedef struct {
 
 void guest_launcher_plan(const guest_part_t *parts, int n, guest_install_plan_t *plan);
 
+// The flash region native apps run from (docs/native-apps.md "Scratch region"). Two sources, in this order:
+//   - a `coredump` partition, ONLY on our own layout (stand-alone units flashed before the table named it
+//     `nucleo_nap`; under M5Launcher the coredump is the Launcher's own, 64 KB, never ours to write);
+//   - the data partition labelled GUEST_NAP_LABEL: what our table ships, and what M5Launcher recreates by
+//     label when it installs us (an empty LittleFS row becomes 448 KB at 4 KB alignment).
+// The span is the part of that partition the MMU can map: from the first `page`-aligned address, a whole
+// number of pages, at most `max` bytes, at least two pages. False when no partition qualifies.
+#define GUEST_PT_SUB_COREDUMP    0x03
+#define GUEST_NAP_LABEL          "nucleo_nap"
+
+typedef struct {
+    int      index;              // into parts[]
+    uint32_t skip;               // bytes from the partition start to the span
+    uint32_t size;               // span length
+} guest_span_t;
+
+bool guest_native_scratch(const guest_part_t *parts, int n, bool own_layout, uint32_t page, uint32_t max,
+                          guest_span_t *out);
+
 #ifdef __cplusplus
 }
 #endif

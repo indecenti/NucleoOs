@@ -2,11 +2,11 @@
   "_lang": "en",
   "title": "System Manual",
   "search_ph": "Search manual…",
-  "label_guides": "System Guides",
-  "label_commands": "Terminal Commands",
+  "label_guides": "Guides",
+  "label_commands": "Terminal commands",
   "label_api": "Web API HTTP",
-  "label_guides_count": "System Guides ({count})",
-  "label_commands_count": "Terminal Commands ({count})",
+  "label_guides_count": "Guides ({count})",
+  "label_commands_count": "Terminal commands ({count})",
   "label_api_count": "Web API HTTP ({count})",
   "welcome_title": "System Help",
   "welcome_desc": "Select a topic from the sidebar or use the search bar to explore the system guides and features.",
@@ -31,5 +31,6 @@
   "conn_note": "Note: Check whether the NucleoOS server is online or whether the client has CORS permissions enabled.",
   "empty_response": "(Empty response)",
   "read_error": "Read error: {msg}",
-  "no_results": "No results found"
+  "no_results": "No results found",
+  "doc_source": "Manual for the version installed on this device: web OS {build} · system {version}"
 }

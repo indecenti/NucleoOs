@@ -709,8 +709,8 @@
     .ctxm-gauge i.warn{background:var(--warn)} .ctxm-gauge i.hot{background:var(--err)}
     .ctxm-body{overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:12px}
     .ctxm-sec h5{margin:0 0 5px;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--dim)}
-    .ctxm-facts{white-space:pre-wrap;font-size:12px;color:var(--muted);background:var(--card-tint);border:1px solid var(--line2);border-radius:var(--r-md);padding:8px 10px;font-family:var(--mono,monospace)}
-    .ctxm-msg{border:1px solid var(--line2);border-radius:var(--r-md);padding:6px 9px;margin-bottom:6px;background:var(--card-tint)}
+    .ctxm-facts{white-space:pre-wrap;font-size:12px;color:var(--muted);background:var(--card-tint);border:1px solid var(--line2);border-radius:var(--r);padding:8px 10px;font-family:var(--mono,monospace)}
+    .ctxm-msg{border:1px solid var(--line2);border-radius:var(--r);padding:6px 9px;margin-bottom:6px;background:var(--card-tint)}
     .ctxm-msg .mh{display:flex;gap:8px;font-size:10px;color:var(--dim);margin-bottom:3px} .ctxm-msg .mh .rl{font-weight:700;letter-spacing:.4px;text-transform:uppercase}
     .ctxm-msg.user .rl{color:var(--spark)} .ctxm-msg.assistant .rl{color:var(--muted)} .ctxm-msg.system .rl{color:var(--warn)} .ctxm-msg.system{background:transparent} .ctxm-msg.ph{opacity:.6;border-style:dashed}
     .ctxm-msg .mt{font-size:12px;color:var(--text);white-space:pre-wrap;max-height:84px;overflow:hidden}
@@ -894,7 +894,7 @@
               </div>
               <div class="set-field" id="set-ttsspeed-field" hidden>
                 <div class="f-tx"><label id="s-ttsspeed">Velocità voce del dispositivo</label><span class="f-sub" data-i18n data-it="Quanto velocemente il dispositivo legge ad alta voce (voce on-device)." data-en="How fast the device reads aloud (on-device voice).">Quanto velocemente il dispositivo legge ad alta voce (voce on-device).</span></div>
-                <div class="f-ctl"><input type="range" id="set-ttsspeed" min="70" max="160" step="5" value="110" style="width:160px;accent-color:var(--acc)"><span class="f-sub" id="set-ttsspeed-val" style="min-width:42px;text-align:right">110%</span></div>
+                <div class="f-ctl"><input type="range" id="set-ttsspeed" min="70" max="160" step="5" value="110" style="width:160px;accent-color:var(--accent)"><span class="f-sub" id="set-ttsspeed-val" style="min-width:42px;text-align:right">110%</span></div>
               </div>
               <div class="set-field">
                 <div class="f-tx"><label id="s-webvoice">Voce browser</label><span class="f-sub" data-i18n data-it="Leggi le risposte ad alta voce con la voce del browser (anche online e lunghe)." data-en="Read replies aloud with the browser voice (also online/long replies).">Leggi le risposte ad alta voce con la voce del browser.</span></div>
@@ -3760,6 +3760,7 @@
         btns:[ { label:c.open||TR('Gioca qui', 'Play here'), onClick:()=>{ handoffApp('console', 'game='+encodeURIComponent(c.arg)); } },
                { label:TR('Sulla console', 'On the console'), onClick:()=>devicePlay(c.arg) } ] };
       if(c.kind==='app') return { icon:'▦', status:'info', title:c.title||c.arg, sub:c.sub||'', btn:t.openApp, onClick:()=>handoffApp(c.arg) };
+      if(c.kind==='myapp') return { icon:c.op==='remove'?'⌫':'▦', status:'info', title:c.title||'', sub:c.sub||'', btns:myAppButtons(c) };
       if(c.kind==='action' && c.arg==='cheats-fetch') return { icon:'⬇', status:'info', title:c.title||'', sub:c.sub||'',
         btns:[ { label:c.btn||TR('Scarica', 'Download'), onClick:()=>cheatsFetch() } ] };
       if(c.kind==='action' && c.arg==='pc-helper') return { icon:'⇄', status:'info', title:c.title||'', sub:c.sub||'',
@@ -4362,6 +4363,71 @@
         setTimeout(()=>URL.revokeObjectURL(a.href), 30000);
         return L5({it:'scaricato: aprilo', en:'downloaded: open it', es:'descargado: ábrelo', fr:'téléchargé : ouvre-le', de:'geladen: öffnen'});
       }catch{ return L5({it:'non riuscito', en:'failed', es:'no se pudo', fr:'échec', de:'fehlgeschlagen'}); }
+    }
+    // ===========================================================================
+    // THE PERSON'S OWN APPS (/nucleo-myapps.js, docs/myapps.md): "scrivi un'app che…" -> the model writes one page
+    // (or, without a model, the built-in hello world), the core reviews it, ANIMA shows it with the code, and only
+    // the person's "Install and open" writes it to their folder, adds it to Start and opens it. "rimuovi l'app …"
+    // takes one of THEIR apps away (to the Recycle Bin). The core module may be missing on an older shell: no skill.
+    // ===========================================================================
+    let _ma, _maP; const _maMade = new Map();
+    function myAppsMod(){ return _ma ? Promise.resolve(_ma) : (_maP ||= import('/nucleo-myapps.js').then(m=>(_ma=m))); }
+    async function myAppPlan(q){ try{ return (await myAppsMod()).default.plan(q); }catch{ return null; } }
+    const MT = (k, v) => I18N.t(k, v, 'anima');   // the core catalog under ANIMA's own (the table ANIMA built; core alone where it did not)
+    // The model that writes the page: a model server on this PC first (nothing leaves it: the console's PC models, then
+    // the local engines of Settings › AI), else the online key — never in Private. null = none: the built-in app.
+    async function myAppLLM(){
+      const res = await pcScan(false).catch(()=>null);
+      if(res && res.best){ const m = await pcMod();
+        return async (system, user, o)=>({ model:res.best.model.id, text: await m.pcChat((u,x)=>fetch(u,x), res.best.srv, res.best.model.id, { system, messages:[{role:'user',content:user}], maxTokens:o.maxTokens, temperature:0.2, ctx:8192 }) }); }
+      const E = await enginesMod().catch(()=>null), cfg = E && E.loadLocalConfig();
+      if(cfg && cfg.enabled && (await E.liveServers({ config:cfg }).catch(()=>[])).some((s)=>s.status==='ok' && s.models.length && (!isPrivate() || E.isLoopback(s.base))))
+        return async (system, user, o)=>{
+          const r = await E.localComplete('chat', { messages:[{role:'system',content:system},{role:'user',content:user}], temperature:0.2, maxTokens:o.maxTokens, numCtx:8192, loopbackOnly:isPrivate(), config:cfg });
+          if(!r) throw Object.assign(new Error('no model'), { code:'no-model' });
+          return { text:r.text, model:String((r.engine && r.engine.model) || '').split('/').pop() };
+        };
+      if(isPrivate()) return null;
+      await ensureKeyLoaded();
+      if(keyCfg && keyCfg.key && !curProv().proxy) return async (system, user, o)=>({ model:keyCfg.model||keyCfg.provider, text: await AI.cloudChat(keyCfg, { system, messages:[{role:'user',content:user}], maxTokens:o.maxTokens, temperature:0.2 }) });
+      return null;
+    }
+    // A JavaScript parser for the review, when Code Runner ships one (acorn): a page that does not parse is not offered.
+    let _maParse;
+    async function myAppSyntax(){
+      if(_maParse === undefined){ try{ const a = await import('/apps/code-runner/vendor/acorn.mjs');
+        _maParse = (code, o)=>{ try{ a.parse(code, { ecmaVersion:'latest', sourceType:o && o.module ? 'module' : 'script', allowAwaitOutsideFunction:true }); return { ok:true }; }catch(e){ return { ok:false, error:String(e && e.message || e) }; } };
+      }catch{ _maParse = null; } }
+      return _maParse || undefined;
+    }
+    async function myAppAsk(q, plan, think){
+      const M = (await myAppsMod()).default;
+      const x = { tier:'command', action:'answer', intent:'myapp', domain:'local', confidence:90, local:true, skill:true, trace:'ANIMA · '+MT('myapps_trace') };
+      if(plan.op==='remove'){
+        const a = await M.find(plan.name); if(!a) return null;         // not one of theirs: the rest of ANIMA answers
+        const name = (a.names && a.names[lang]) || a.name;
+        return Object.assign(x, { reply:MT('myapps_remove_ask', { name }), cards:[{ kind:'myapp', op:'remove', id:a.id, title:name, sub:MT('myapps_card_mine') }] });
+      }
+      const made = await M.make(plan.request, { llm: await myAppLLM(), lang, checkSyntax: await myAppSyntax(), onStep:(k)=>{ think && think.note(MT('myapps_step_'+k)); } });
+      if(made.source==='model') x.domain = 'online';
+      const d = M.describe(made, { t:MT, lang });
+      if(!d.card) return Object.assign(x, { confidence:60, reply:d.reply });
+      const ref = 'm' + Date.now().toString(36); _maMade.set(ref, made);
+      return Object.assign(x, { reply:d.reply, cards:[Object.assign(d.card, { ref })] });
+    }
+    // The buttons of a my-app card. Install: only what the person saw, from memory (a card restored from the history
+    // has nothing to install: "ask me again"); then the shell re-reads the apps and opens it.
+    function myAppButtons(c){
+      const shellApps = ()=>{ try{ window.parent.postMessage({ type:'apps-changed' }, location.origin); }catch{} };
+      if(c.op==='remove') return [ { label:MT('myapps_remove_btn'), onClick:async()=>{ try{ await (await myAppsMod()).default.remove(c.id); shellApps(); return MT('myapps_removed'); }
+        catch(e){ return MT('myapps_failed', { error:(e && e.code) || '?' }); } } } ];
+      return [ { label:MT('myapps_install_open'), onClick:async()=>{
+        const made = _maMade.get(c.ref); if(!made) return MT('myapps_expired');
+        try{ const M = (await myAppsMod()).default;
+          const r = await M.install(made.pkg, { id:made.id, update:!!made.existing, checkSyntax: await myAppSyntax() });
+          _maMade.delete(c.ref); shellApps(); handoffApp(r.id, '');
+          return MT(r.updated ? 'myapps_updated' : 'myapps_installed');
+        }catch(e){ return MT('myapps_failed', { error:(e && e.code) || '?' }); } } } ];
     }
     // ===========================================================================
     // LA FUCINA DEI GIOCHI (local/love-forge.js): "crea un gioco …" -> un gioco LÖVE per la console, scritto
@@ -5045,12 +5111,10 @@
       const wsx=_wsx || await wsContext(q);   // reuse the caller's workspace context when provided (no redundant device reads)
       const consoleCtx=await consoleFactsFor(false);   // la console viva (gioco aperto, recenti, batteria) come DATI per il modello
       const wsRoot=(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : undefined;
-      // MULTI-MODEL: hard turns (code / long-form) go to the STRONGEST configured model across all keys
-      // (Opus / 70B / Gemini-Pro); simple chat stays on the user's active model — no surprise, no latency.
-      // Per-subtask cross-provider fan-out (planning vs reasoning vs voice/image) lands in the agentic loop.
+      // The model chosen in Settings ▸ AI answers every turn: no routing to a stronger, cheaper or other provider's
+      // model behind the user's back. `hard` only sets the tier withAutoModel uses if that model was retired.
       const hard = ctxkit.wantsCode(q) || ctxkit.wantsLong(q);
-      let route = keyCfg;
-      if(hard){ try{ const r=AI.routeFor({difficulty:'hard'}, keyCfg.keys||{}, keyCfg); if(r&&r.key) route=r; }catch{} }
+      const route = keyCfg;
       const callWith=async(cfg)=>{
         const a=ctxkit.assemble({ history, user:q, mode:'only', provider:cfg.provider, model:cfg.model, lang, device:await deviceFacts(),   // now: contextkit's localised date + time + weekday
 
@@ -5062,11 +5126,7 @@
       catch(e){
         if(streamed || (_turnSig && _turnSig.aborted)) throw e;   // stopped, or half an answer is on screen: no silent retry
         noteAiErr(e, route);
-        // PROVIDER FALLBACK: on a definite failure, retry on the next-best configured provider BEFORE the
-        // caller degrades to WebLLM/offline (online means real LLM only). Only if a DIFFERENT key exists.
-        let fb=null; try{ fb=AI.routeFor({difficulty:hard?'hard':'fast', exclude:[route.provider]}, keyCfg.keys||{}, keyCfg); }catch{}
-        if(fb && fb.key && fb.provider!==route.provider){ txt = await callWith(fb); route=fb; }
-        else throw e;
+        throw e;                                                    // the caller says what failed; no silent switch of provider
       }
       if(!txt) return null;
       const used = _lastCloudModel || route.model;
@@ -5209,7 +5269,8 @@
       // instance runtime.js already loaded, so no extra fetch; mirrored as a floor if it ever fails to load.
       let ALWAYS=null; try{ ALWAYS=(await import('/apps/agent/agent-tools.js')).ALWAYS_CONFIRM; }catch{}
       if(!ALWAYS || typeof ALWAYS.has!=='function') ALWAYS=new Set(['delete_file','publish_app','manage_app']);
-      const cfg=pcCfg || { provider:keyCfg.provider, key:keyCfg.key, base:keyCfg.base, model:keyCfg.model, version:keyCfg.version, geminiTier:keyCfg.geminiTier };
+      // fixed: the chosen model does every role (planning, work, hard parts); other keys only for what it can't do
+      const cfg=pcCfg || { provider:keyCfg.provider, key:keyCfg.key, base:keyCfg.base, model:keyCfg.model, version:keyCfg.version, geminiTier:keyCfg.geminiTier, fixed:true };
       const root=(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : '/data/agent';
       const ui={
         status:(m)=>{ try{ _agentThink && _agentThink.note('⚙ '+m); }catch{} },
@@ -5354,8 +5415,10 @@
     async function ask(q){
       q=(q||'').trim(); if(!q || busy) return;
       if(q[0]==='/' && handleSlash(q)) return;
+      // "scrivi un'app che…" / "rimuovi l'app …": the person's own apps (myAppAsk), never a file intent.
+      const myPlan = await myAppPlan(q);
       // workspace file agent: a clear file intent runs here (the "hands"); else fall through to ANIMA.
-      const fintent = parseFileIntent(q);
+      const fintent = myPlan ? null : parseFileIntent(q);
       // A write whose CONTENT must be generated ("crea index.html con un orologio") goes to the agent when one can
       // run (cloud key with agents, or a model on this PC): composeContent would ask the Cardputer's offline brain
       // to write it — heavy for the device and never a real page. Literal ops stay on the instant path.
@@ -5385,11 +5448,12 @@
       let r; const _t0=Date.now();   // pipeline latency: measured across the whole brain resolution (incl. fallbacks)
       _turnLocal=null; _turnDevice=null; _turnDevErr=''; _turnAiErr=null; _lastCloudModel=''; _turnForceAgent=false;
       try{
+      if(myPlan){ try{ r = await myAppAsk(q, myPlan, think); }catch{ r = null; } }
       // THE CONSOLE first (Handheld only — hasConsole()): "quanta batteria ho", "gioca a zelda", "manca il bios?" have a
       // true answer on the device that no model knows (strict rules: null = not a console question); then the LÖVE forge
       // ("crea un gioco …" / "nel gioco aggiungi …"), the PC-models status ("che modelli ho sul PC?") and, when the user
       // put them first (Settings → Engine), the PC models.
-      if(await hasConsole()){
+      if(!r && await hasConsole()){
         try{ r = await (await skillsMod()).consoleSkill(q, lang, skillApi()); }catch{ r = null; }
         if(!r && !sig.aborted){ const fw = forgeWanted(q); if(fw){ try{ r = await forgeAsk(q, fw, think); }catch{ r = null; } } }
         if(!r && !sig.aborted && PC_Q.test(q)){ try{ r = await pcStatusReply(); }catch{ r = null; } }
@@ -6371,7 +6435,7 @@
       keyCfg.provider=c.provider||keyCfg.provider; keyCfg.base=c.base||p.base; keyCfg.model=c.model||p.def;
       keyCfg.key=c.key||''; keyCfg.version=c.version||p.version; keyCfg.exec=c.exec||keyCfg.exec||'browser';
       keyCfg.geminiTier=c.geminiTier||keyCfg.geminiTier; if(c.keys) keyCfg.keys=c.keys; }
-    async function loadKey(){ try{ const c=await AI.readTeacher(); if(c && !c.unpaired){ keyHydrated=true; adoptKeyCfg(c); } }catch(e){} }
+    async function loadKey(){ try{ const c=await AI.readTeacher(); if(c && !c.unpaired){ keyHydrated=true; adoptKeyCfg(c); } }catch(e){} try{ paintSub(); }catch{} }
     async function ensureKeyLoaded(){ if(keyHydrated) return; try{ await loadKey(); }catch(e){} }   // hydrate keyCfg on first online use (independent of opening Settings)
     // Mount the shared key manager into the Settings drawer (once). Its onChange keeps keyCfg in sync so the
     // online pipeline / agents see edits immediately, without this app owning any provider/vault logic.
@@ -6380,7 +6444,7 @@
       const el=$('ai-keys-mount'); if(!el || _keyKm || _keyMounting) return;
       _keyMounting=true;
       try{ const { mountKeyManager }=await import('/ai-keys.js');
-        _keyKm=mountKeyManager(el, { variant:'compact', lang, onChange(c){ keyHydrated=true; adoptKeyCfg(c); try{ renderForgeReadiness(); }catch{} } });
+        _keyKm=mountKeyManager(el, { variant:'compact', lang, onChange(c){ keyHydrated=true; adoptKeyCfg(c); try{ renderForgeReadiness(); paintSub(); }catch{} } });
       }catch(e){ el.innerHTML='<div class="keystat">'+(TR('Gestore chiavi non disponibile.', 'Key manager unavailable.'))+'</div>'; }
       _keyMounting=false;
     }
@@ -6585,13 +6649,22 @@
     }, 500);
 
     // ---- apply state to the DOM ----------------------------------------------
+    // The header says which model answers: with a key, Auto starts from the model chosen in Settings ▸ AI (the
+    // answer's own tag says which engine really answered); Private, or no key, keep the plain subtitle.
+    function paintSub(){
+      const el=$('sub'); if(!el) return;
+      let on=false; try{ on=!isPrivate() && keyHydrated && !!keyCfg.key && !!keyCfg.model; }catch{}   // safe before the key state exists
+      if(on){
+        el.textContent=(curProv().label||keyCfg.provider)+' · '+AI.modelName(keyCfg.provider, keyCfg.model).name; el.title=keyCfg.model; return; }
+      el.textContent=L(isPrivate()?'modeSubPrivate':'modeSubAuto'); el.removeAttribute('title');
+    }
     function applyAll(){
       const t=UI[lang];
       document.documentElement.lang=lang;
       document.documentElement.setAttribute('data-theme',theme);
       document.documentElement.style.setProperty('--fs',fsize+'px');
       document.body.classList.toggle('nodetails',detMode==='0');
-      $('sub').textContent=L(isPrivate()?'modeSubPrivate':'modeSubAuto');
+      paintSub();
       input.placeholder=t.placeholder;
       $('h-appear').textContent=t.appearance; $('h-general').textContent=t.general; $('h-engine').textContent=t.engine; $('h-conv').textContent=t.conv;
       $('tab-appear').textContent=t.appearance; $('tab-general').textContent=t.general; $('tab-engine').textContent=t.engine;
@@ -7042,6 +7115,7 @@
     idle(()=>edgeMountIfCached(), 300);   // the WASM brain is a rung of every ladder now - warm it if cached
     wsLoad(); wsReflect();   // restore the persisted workspace (localStorage + fs.setRoot, no socket) IN the boot tick so file-intent routing + the label are correct from the first frame
     idle(wsBoot, 500);       // defer only the DEVICE reads (refreshTree /api/fs/list + the workspace.json fallback) off the boot burst
+    idle(()=>{ if(!isPrivate()) ensureKeyLoaded(); }, 1200);   // one small read of the key file, so the header names the model before the first question
     idle(sessSdLoad, 900);   // conversations started in another browser (the SD copy) — merged by id, off the boot burst
     idle(replayPending, 3000);   // personal facts taught here while the Cardputer was away -> hand them to their owner
     // Local brain freshness: one cheap check (fs listings) after the boot burst, then at most every 10 min on return.

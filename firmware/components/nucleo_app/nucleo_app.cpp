@@ -53,6 +53,7 @@ extern "C" {
 #include "app_gfx.h"
 #include "nucleo_surface.h"     // large (external 320x240) vs compact surface for the launcher home
 #include "nucleo_touch.h"       // touch targets: apps mark what a tap on the external panel means
+#include "nucleo_tcp.h"         // apps' TCP connections: closed with the app
 #include "nucleo_extdisp.h"     // /api/screen?display=ext: the external panel, rebuilt from the internal one
 
 // Network info (resolved at link; declared here for the stub screen, no component dep).
@@ -498,6 +499,7 @@ extern "C" void nucleo_register_screensaver(void);    // app_screensaver.cpp —
 extern "C" bool nucleo_screensaver_should_activate(int64_t idle_ms);  // app_screensaver.cpp hook per main loop
 extern "C" void nucleo_screensaver_set_trigger(void);
 extern "C" int  nucleo_screensaver_timeout_s(void);                  // the display power manager's timeout (0 = never)                 // app_screensaver.cpp hook per main loop
+extern "C" int  nucleo_screensaver_mode(void);                       // its style: 0 screen off, 1 clock, 2 stars, 3 fire
 extern "C" bool nucleo_ui_is_adv(void);               // Cardputer ADV? (M5GFX board detect — robust, independent of IMU init)
 
 // Registration order defines BOTH the category order in the root menu (first app of a category seen
@@ -1023,6 +1025,8 @@ static void close_app(void)
     s_app_back = nullptr; s_app_direct = false; // ...Back returns to close, drawing back to buffered
     if (s_app_fullscreen) { s_app_fullscreen = false; s_hint_dirty = true; } // restore the footer on app close
     s_app_keep_awake = false;
+    nucleo_touch_raw(false);                    // ...the panel's touch back to targets and gestures
+    nucleo_tcp_close_all();                     // ...and no connection outlives the app that opened it
     s_app_ptt = nullptr;                        // ...GO-hold returns to the voice recognizer
     s_app_poll = nullptr;                       // ...no live app polling once back at the launcher
     launcher_render_reset_hint_colors();        // restore the default dark footer for the launcher
@@ -1275,10 +1279,6 @@ static bool s_mdns_off  = false;            // mDNS stopped while the OS shell i
 // s_disp_sleep is declared up with s_disp_off (top of file) so the httpd/esp_timer display paths can read it.
 static bool s_voice_dark = false;           // PTT low-power capture: backlight 0 + canvas freed for the voice session
 #define SCREEN_OFF_MS  4000                  // idle (no on-device key) before the panel sleeps ("a few seconds")
-#define IDLE_SERVE_MS  30000                 // NO web client: idle at the launcher this long -> free the 32 KB canvas
-                                             // anyway so httpd ALWAYS has heap to serve (web OS / OTA / API). On this
-                                             // PSRAM-less chip the held canvas was starving httpd (OTA /api/pair timed
-                                             // out). Longer than SCREEN_OFF_MS so a glance isn't cut short; any key wakes.
 #define G0_HOLD_MS     350                   // GO held past this = Push-to-Talk; below = a torch tap
 
 // While the OS web shell is connected the device's offline L1 brain stands down — ALWAYS, regardless of
@@ -1659,10 +1659,10 @@ static void exit_remote(void)
 }
 
 // ---- idle screen-off --------------------------------------------------------------------------
-// ONLY while a web client is driving the device (s_remote): after SCREEN_OFF_MS with no on-device key,
-// blank the backlight AND free the 32 KB framebuffer (the single biggest RAM win on this PSRAM-less
-// chip) — handing that block to the web OS that actually needs it while nobody looks at the panel.
-// With NO client connected the panel never sleeps. Any key wakes it; so does the client going away
+// Blank the backlight AND free the 32 KB framebuffer (the single biggest RAM win on this PSRAM-less chip): while a
+// web client is driving the device (s_remote) after SCREEN_OFF_MS with no on-device key, handing that block to the
+// web OS; without one, at the launcher or in the Games gallery, when the screensaver set in Settings is "off" and
+// its time has passed. Any key wakes it; so does the client going away
 // (handled in the run loop). Independent of the web /api/display path (s_disp_off): we never fight a
 // client that is deliberately holding the screen dark.
 static void display_sleep(void)
@@ -1689,6 +1689,7 @@ static void display_wake(void)
     if (!s_app_direct && !s_remote) for (int i = 0; i < 6 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
     nucleo_app_set_brightness(s_brightness);     // restore the user's stored brightness
     d.fillScreen(BG);
+    if (s_gamefront) gamefront_invalidate();       // the gallery: the whole of it, on both screens
     s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true; s_remote_force = true;  // force a full repaint
     nucleo_event_publish("system.display", "{\"on\":true}");
 }
@@ -1994,6 +1995,20 @@ void nucleo_app_run(void)
             if (!s_sdc_remind_at) s_sdc_remind_at = now + 10000;
             else if (now >= s_sdc_remind_at) s_sdc_remind_at = sdc_boot_reminder() ? -1 : now + 10000;
         }
+        // Once a day, a minute into the launcher's screensaver: the release check and the Store's catalog, on the
+        // screen canvas lent for the TLS handshake (nucleo_update.c). Only there: nobody is looking, and nothing
+        // allocates into the hole the canvas leaves (the games gallery's pictures did, and the canvas could not
+        // come back). Meanwhile everything draws direct.
+        const nucleo_app_def_t *bg_a = active_def();
+        const bool bg_saver = bg_a && bg_a->id && !strcmp(bg_a->id, "screensaver");
+        switch (nucleo_update_bg_tick(bg_saver && !s_remote && !s_solo_active && now - last_act > 60000)) {
+        case UPD_BG_LEND: nucleo_screen_hold(true); break;
+        case UPD_BG_RETURN:
+            nucleo_screen_hold(false);
+            if (!s_app_direct && !s_remote) for (int i = 0; i < 6 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
+            nucleo_app_force_repaint();
+            break;
+        }
         // A blocking modal (video playback, file dialogs) owns the keyboard without passing through here:
         // a long gap since the last iteration means the user was busy in it, so count it as activity —
         // else the idle screen-off/saver would fire the instant the modal returns.
@@ -2041,7 +2056,7 @@ void nucleo_app_run(void)
         // and INDEPENDENT of the auto-handoff UX toggle. A web-OS shell connecting to this no-PSRAM device MUST
         // hand serving to the lean server-Solo, or httpd serves the shell's asset+API storm on the fragmented
         // full-OS heap and OOM-reboots (the exact bug this feature closes). Two reasons it can't live lower down:
-        //   • the device is most often IDLE-ASLEEP (IDLE_SERVE_MS) exactly when the user first opens the web UI,
+        //   • the device is most often IDLE-ASLEEP (the screensaver "off") exactly when the user first opens the web UI,
         //     and the s_disp_sleep branch below `continue`s before any lower check would run;
         //   • the reboot is a hard requirement, not a preference, so it must ignore nucleo_remote_enabled()
         //     (the "Auto handoff" toggle) — which only governs the watch-face UX below. The manual Web Client
@@ -2081,15 +2096,10 @@ void nucleo_app_run(void)
         // ...also blank immediately (not after the SCREEN_OFF_MS idle) when the webfs raises a heap request: a
         // heavy asset (Vosk lib/model) is being pulled and needs the 32 KB canvas back NOW. take_*()
         // consumes the one-shot flag; all the same guards apply (only while remote, no torch/PTT/etc.).
-        // Free the 32 KB canvas at idle so httpd ALWAYS has the contiguous heap to serve. Two triggers:
-        //   • a web client is connected (s_remote): blank after SCREEN_OFF_MS — the canvas goes to the web OS;
-        //   • NO client, sitting idle at the launcher (no app open): blank after the longer IDLE_SERVE_MS so a
-        //     headless/server device keeps serving heap free. This is the fix for "OTA /api/pair times out": with
-        //     the canvas held the heap-starved ADV had no block to serve the pairing handshake, so the flash never
-        //     started. Freeing it gives httpd ~+32 KB. Any key/G0 wakes (display_wake re-acquires the canvas).
+        // Free the 32 KB canvas while a web client is connected (s_remote): blank after SCREEN_OFF_MS, the canvas goes
+        // to the web OS. Without a client the screen follows Settings > Display > Screensaver, below.
         bool blank_for_client = s_remote && (nucleo_webfs_take_heap_request() || now - last_act >= SCREEN_OFF_MS);
-        bool blank_for_serve  = !s_remote && s_active == -1 && !s_gamefront && (now - last_act >= IDLE_SERVE_MS);
-        if ((blank_for_client || blank_for_serve) &&
+        if (blank_for_client &&
             !s_disp_off && !s_torch && !s_voice_dark && !nucleo_voice_is_listening()) {
             display_sleep();
             continue;
@@ -2100,16 +2110,21 @@ void nucleo_app_run(void)
         if (s_active == -1 && !s_gamefront && nucleo_setup_onboarding() && now - s_ob_try >= 2000) {
             s_ob_try = now; nucleo_settings_onboard(); nucleo_app_launch_id("wifi"); last_act = now;
         }
-        // Local screensaver: triggers from the launcher (no app open), without a remote client.
-        // Also works from GameFront: s_gamefront is cleared before launching it (otherwise the
-        // gamefront>foreground-app render branch stops on_draw from running) and s_gf_return=true
-        // ensures we return to the carousel once the saver closes.
-        // Any key inside the screensaver app resets last_act (via on_key) and closes the saver.
-        if (s_active == -1 && !s_remote && !s_torch && !s_voice_dark && !s_disp_sleep &&
+        // The screensaver, one rule for the launcher and the Games gallery (no app open, no web client): after the
+        // time set in Settings > Display > Screensaver (0 = never), its style: "off" puts the screen to sleep (backlight
+        // 0 and the 32 KB canvas freed, so httpd always has heap to serve: OTA, pairing, the web OS); any other style
+        // opens the screensaver app on it. Leaving it returns to where the player was (s_gf_return for the gallery;
+        // s_gamefront is cleared first, else the gallery's render branch would keep the saver from drawing). Inside an
+        // app the display power manager (pm_hook) turns the screen off after the same time: a running app is not covered.
+        if (s_active == -1 && !s_remote && !s_torch && !s_voice_dark && !s_disp_sleep && !s_disp_off &&
             nucleo_screensaver_should_activate(now - last_act)) {
-            nucleo_screensaver_set_trigger();
-            if (s_gamefront) { s_gamefront = false; s_gf_return = true; }
-            nucleo_app_launch_id("screensaver");
+            if (nucleo_screensaver_mode() == 0) {
+                if (!nucleo_voice_is_listening()) { display_sleep(); continue; }
+            } else {
+                nucleo_screensaver_set_trigger();
+                if (s_gamefront) { s_gamefront = false; s_gf_return = true; }
+                nucleo_app_launch_id("screensaver");
+            }
             last_act = now;  // reset so it doesn't re-trigger immediately after
         }
         // PTT low-power capture finished: the voice engine has captured, recognized, and played the

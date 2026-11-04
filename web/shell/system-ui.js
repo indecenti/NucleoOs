@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
 // system-ui.js — OS-chrome extras that make the shell feel like a real desktop OS:
 //   • Night light  — a warm veil over the whole console (per-browser, like brightness/eco)
-//   • Lock screen  — a privacy veil with clock + date (Ctrl+Alt+L / Action Center). It is a
-//     presentation lock, NOT an auth boundary: the device's pairing cookie stays valid, so we
-//     honestly unlock on any input instead of pretending a PIN protects the session.
+//   • Lock screen  — clock + date (Ctrl+Alt+L / Action Center / Start). Behind a hosting server's sign-in
+//     (capability host.session) it is a REAL lock: the server stops serving the OS until a passkey of this
+//     person signs again (nucleo-host.js), and the veil opens only after that. Elsewhere it is a presentation
+//     lock, NOT an auth boundary (the device's pairing cookie stays valid), so it honestly opens on any input
+//     instead of pretending a PIN protects the session.
 //   • Shortcuts overlay — the keyboard cheat-sheet every desktop OS ships
 //   • Widgets — taskbar weather pill + a flyout fed ONLY from data already in the browser
 //     (the Weather app's localStorage cache, the shell's last /api/status snapshot, recents):
@@ -11,6 +13,7 @@
 // Everything here is browser-side; the Cardputer is never touched. Loaded eagerly by shell.js
 // (tiny), i18n through the 'shell' namespace.
 import I18N from './nucleo-i18n.js';
+import Host from './nucleo-host.js';
 
 const t = I18N.scope('shell');
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -27,19 +30,42 @@ function applyNight(on) {
 function toggleNight() { applyNight(!nightOn()); return nightOn(); }
 
 // ─── Lock screen ─────────────────────────────────────────────────────────────
-let lockEl = null, lockTimer = null, locked = false, lockedAt = 0;
+let lockEl = null, lockTimer = null, locked = false, lockedAt = 0, secure = false;
 function lockMarkup() {
   const el = document.createElement('div');
   el.id = 'lock-screen'; el.className = 'hidden';
+  el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
   el.innerHTML =
     '<div class="lk-center">' +
       '<div class="lk-time">--:--</div>' +
       '<div class="lk-date"></div>' +
       '<div class="lk-dev"></div>' +
       `<div class="lk-hint">${esc(t('lock_hint'))}</div>` +
+      `<button type="button" class="lk-unlock" hidden>${esc(t('lock_unlock'))}</button>` +
+      '<div class="lk-msg" role="status" aria-live="polite"></div>' +
     '</div>';
+  el.querySelector('.lk-unlock').addEventListener('click', secureUnlock);
   document.body.appendChild(el);
   return el;
+}
+// The real unlock: the passkey signs, the server opens, then the veil goes.
+let unlocking = false;
+async function secureUnlock() {
+  if (unlocking || !lockEl) return;
+  unlocking = true;
+  const btn = lockEl.querySelector('.lk-unlock'), msg = lockEl.querySelector('.lk-msg');
+  btn.disabled = true; msg.textContent = t('lock_unlocking');
+  try {
+    await Host.unlock();
+    msg.textContent = '';
+    unlock(true);
+  } catch (e) {
+    if (e && e.status === 401) { location.reload(); return; }       // the session is over: the server's sign-in page
+    if (e && e.status === 409) { msg.textContent = ''; unlock(true); return; }   // already open (another tab)
+    msg.textContent = t(e && e.name === 'NotAllowedError' ? 'lock_cancelled' : 'lock_refused');
+  } finally {
+    btn.disabled = false; unlocking = false;
+  }
 }
 function lockTick() {
   if (!lockEl) return;
@@ -48,21 +74,35 @@ function lockTick() {
     String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   lockEl.querySelector('.lk-date').textContent = I18N.fmtDate(d, { weekday: 'long', day: 'numeric', month: 'long' });
 }
-function lock() {
+// lock(): behind a hosting server's sign-in the server locks first (if it cannot, the session is over: reload, and
+// its sign-in page takes over); `already` = the server says it is locked (a reload while locked).
+async function lock(already = false) {
   if (locked) return;
   // Pull focus out of any app iframe first — otherwise a keydown while an app was focused would go
   // to that iframe, not the shell's unlock listener (the pointerdown path still works either way).
   try { const ae = document.activeElement; if (ae && ae.tagName === 'IFRAME') ae.blur(); window.focus(); } catch {}
+  const hosted = await Host.available();
+  if (hosted && !already) {
+    try { await Host.lock(); } catch { location.reload(); return; }
+  }
+  secure = hosted;
   if (!lockEl) lockEl = lockMarkup();
-  lockEl.querySelector('.lk-hint').textContent = t('lock_hint');
-  lockEl.querySelector('.lk-dev').textContent = (document.getElementById('sm-device') || {}).textContent || 'NucleoOS';
+  const s = hosted ? await Host.session() : null;
+  lockEl.classList.toggle('lk-secure', secure);
+  lockEl.querySelector('.lk-hint').textContent = t(secure ? 'lock_secure_hint' : 'lock_hint');
+  lockEl.querySelector('.lk-dev').textContent = (s && s.user && s.user.name) ||
+    (document.getElementById('sm-device') || {}).textContent || 'NucleoOS';
+  lockEl.querySelector('.lk-unlock').hidden = !secure;
+  lockEl.querySelector('.lk-msg').textContent = '';
   lockTick();
   lockTimer = setInterval(lockTick, 20000);
   lockEl.classList.remove('hidden', 'lk-out');
   locked = true; lockedAt = Date.now();
+  if (secure) setTimeout(() => { const b = lockEl.querySelector('.lk-unlock'); if (b) b.focus(); }, 50);
 }
-function unlock() {
-  if (!locked || !lockEl) return;
+// A secure veil opens only through secureUnlock (`real`).
+function unlock(real = false) {
+  if (!locked || !lockEl || (secure && !real)) return;
   clearInterval(lockTimer); lockTimer = null;
   locked = false;
   lockEl.classList.add('lk-out');                       // slide-up reveal, then hide
@@ -72,6 +112,13 @@ function unlock() {
 // the veil or type into an app. A ~400 ms arm delay eats the keyup of the locking shortcut.
 function onLockInput(e) {
   if (!locked) return;
+  if (secure) {
+    // Only the veil's own button works: nothing under it can be clicked or typed into.
+    if (lockEl && lockEl.contains(e.target)) return;
+    e.preventDefault(); e.stopPropagation();
+    if (e.type === 'keydown') { const b = lockEl && lockEl.querySelector('.lk-unlock'); if (b) b.focus(); }
+    return;
+  }
   if (Date.now() - lockedAt < 400) { e.preventDefault(); e.stopPropagation(); return; }
   e.preventDefault(); e.stopPropagation();
   unlock();

@@ -15,7 +15,7 @@
 //                   using the browser's same-origin `storage` event (fires in all iframes but the
 //                   setter) plus an in-document event for same-frame subscribers.
 //  • HONEST       — a missing key falls back lang→base(en)→key and is never a blank; the i18n gate
-//                   (tools/i18n-check.mjs) keeps catalogs in parity so that fallback rarely fires.
+//                   (tests/i18n-shape.test.mjs, tests/suite/app-i18n-keys.test.mjs) keeps catalogs in parity so that fallback rarely fires.
 //  • DEVICE-CHEAP — all of this runs in the browser; the Cardputer only serves small static JSON.
 //
 // Quick start (in an app):
@@ -317,11 +317,17 @@ const I18N = {
 
   // Switch the OS language. Persists to the runtime key (which fires `storage` in every other
   // same-origin iframe → they repaint), updates this document, asks the shell to persist it to
-  // settings.json, and repaints here. Pass the same value twice = no-op.
+  // settings.json, and repaints here. A no-op only when the language is already the OS's: this
+  // document may show it without the OS having it (a page written in Italian, `<html lang="it">`,
+  // reads as Italian while nothing is chosen yet) — then the choice must still reach the OS.
   async setLang(code) {
-    const l = normalize(code); if (!l || l === activeLang) return;
+    const l = normalize(code); if (!l) return;
+    let stored = null;
+    try { stored = normalize(localStorage.getItem(RUNTIME_KEY)); } catch {}
+    if (l === activeLang && l === stored) return;
     try { localStorage.setItem(RUNTIME_KEY, l); } catch {}
-    await applyNewLang(l);
+    if (l !== activeLang) await applyNewLang(l);
+    else syncDocAttrs();
     // Persist to the canonical store. The shell listens for this and writes settings.json once.
     try {
       const msg = { type: 'set-language', lang: l };

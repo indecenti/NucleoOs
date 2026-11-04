@@ -60,5 +60,20 @@
   "p_sram_loaded": "Game save loaded from the SD card",
   "p_sram_unread": "Couldn’t read this game’s save on the SD card — saving to the SD is paused so it isn’t overwritten.",
   "p_rom_corrupt": "Corrupt ROM file: truncated zip archive.",
-  "p_start_failed": "Start failed"
+  "p_start_failed": "Start failed",
+  "scrape": "Pictures",
+  "scrape_none": "Every game already has its picture.",
+  "scrape_offline": "An internet connection is needed to fetch the pictures.",
+  "scrape_progress": "Pictures: {done} of {total}…",
+  "scrape_done": "Pictures found for {found} of {total} games, saved on the card: the device shows them too.",
+  "add_roms_btn": "Add games",
+  "drop_here": "Drop the games here: each goes to its console’s folder",
+  "upload_progress": "Copying {i} of {n}: {pct}%",
+  "upload_done": "{n} games copied to their consoles’ folders.",
+  "upload_skipped": "{n} copied; {skipped} left aside ({names}): open the right console first and drop them there.",
+  "play_device": "Play on the device, with its own emulator",
+  "play_device_short": "Device",
+  "play_device_started": "The game starts on the device: its network goes off until you leave the game.",
+  "play_device_failed": "The device has no emulator for this game (install it from the Store).",
+  "lib_unsaved": "The library on the card cannot be read: the star was not saved."
 }

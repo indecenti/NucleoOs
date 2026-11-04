@@ -13,7 +13,7 @@
 #include "nucleo_board.h"
 #include "nucleo_audio.h"   // raw PCM sink: the APU produces its own samples, we hand them to I2S
 #include "emu_audio.h"
-#include "emu_romstore.h"     // the cartridge from internal flash (ABI level 7)      // ...through the speaker stage (DC block, low-pass, soft knee)
+#include "emu_romstore.h"     // the cartridge from internal flash (ABI level 8)      // ...through the speaker stage (DC block, low-pass, soft knee)
 #include "esp_log.h"
 #include "esp_attr.h"       // IRAM_ATTR: keep the innermost callbacks out of the flash cache
 #include "esp_heap_caps.h"

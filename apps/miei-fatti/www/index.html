@@ -555,7 +555,9 @@
     if(d){ state={ schema:2, profile:{name:'',age:'',city:'',job:'',email:'',birthday:''}, facts:[], rels:[], ...d };
       state.profile={name:'',age:'',city:'',job:'',email:'',birthday:'',...(d.profile||{})}; state.rels=Array.isArray(d.rels)?d.rels:[]; }
     seq=[...state.facts,...state.rels].reduce((m,x)=>Math.max(m,(x.id|0)+1),1); }
-  async function init(){ await loadLangSetting(); await loadStrings('en'); if(lang()!=='en') await loadStrings(lang()); await load(); applyStrings(); loadProfileInputs();
+  // The buttons answer from the first paint: the first read can take seconds on a busy device, and a click made
+  // meanwhile must still count. Every edit goes through canEdit(), which re-reads before it writes.
+  async function init(){ await loadLangSetting(); await loadStrings('en'); if(lang()!=='en') await loadStrings(lang()); applyStrings();
     $('seg').addEventListener('click',(e)=>{ const b=e.target.closest('button[data-mode]'); if(b) setMode(b.dataset.mode); });
     $('cat').addEventListener('change',()=>{ applyPlaceholders(); renderPreview(); });
     $('subj').addEventListener('input',renderPreview); $('val').addEventListener('input',renderPreview);
@@ -571,6 +573,7 @@
     $('reteach').addEventListener('click',reteachAll); $('verifyall').addEventListener('click',verifyAll);
     $('saveprof').addEventListener('click',saveProfile); $('askprof').addEventListener('click',askProfile);
     $('subj').focus();
+    await load(); render(); loadProfileInputs();
   }
   init();
 

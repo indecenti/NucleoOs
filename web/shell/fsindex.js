@@ -12,7 +12,7 @@
 //   • bounded (depth + total directory reads) to stay kind to the ESP32 and its SD card.
 //
 // Everything here is framework-free and self-contained; the shell calls init() at boot, warm() + search()
-// from the search UI, invalidate() on fs.changed. Host-tested in tools/shell-fsindex.test.mjs.
+// from the search UI, invalidate() on fs.changed. Host-tested in tests/suite/shell-fsindex.test.mjs.
 
 import fs from './nucleo-fs.js';
 

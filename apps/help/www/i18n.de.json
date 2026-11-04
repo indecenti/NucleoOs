@@ -2,10 +2,10 @@
   "_lang": "de",
   "title": "Systemhandbuch",
   "search_ph": "Handbuch durchsuchen…",
-  "label_guides": "Systemanleitungen",
+  "label_guides": "Anleitungen",
   "label_commands": "Terminalbefehle",
   "label_api": "Web-API HTTP",
-  "label_guides_count": "Systemanleitungen ({count})",
+  "label_guides_count": "Anleitungen ({count})",
   "label_commands_count": "Terminalbefehle ({count})",
   "label_api_count": "Web-API HTTP ({count})",
   "welcome_title": "Systemhilfe",
@@ -31,5 +31,6 @@
   "conn_note": "Hinweis: Prüfe, ob der NucleoOS-Server online ist oder ob der Client die CORS-Berechtigungen aktiviert hat.",
   "empty_response": "(Leere Antwort)",
   "read_error": "Lesefehler: {msg}",
-  "no_results": "Keine Ergebnisse gefunden"
+  "no_results": "Keine Ergebnisse gefunden",
+  "doc_source": "Handbuch der auf diesem Gerät installierten Version: Web-OS {build} · System {version}"
 }

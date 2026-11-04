@@ -124,83 +124,27 @@
     import I18N from '/nucleo-i18n.js';
     import fs from '/nucleo-fs.js';
     import os from '/nucleo-shell.js';
+    import zip, { messageKey } from '/nucleo-zip.js';
     const t = await I18N.init('dos-importer');
 
     const DEST_DIR = '/data/DOS';
     const RUNNABLE = /\.(exe|com|bat)$/i;
     const $ = (id) => document.getElementById(id);
-    const enc = new TextEncoder(), dec = new TextDecoder();
+    const enc = new TextEncoder();
     const fmt = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? (b / 1024).toFixed(0) + ' KB' : b + ' B';
 
     let state = { files: [], isBundle: false, bundleBytes: null };  // files: [{name, data:Uint8Array}]
     let titleKey = 'files_program';  // current #title key, re-rendered on live language change
 
-    // ---- CRC-32 + ZIP "store" writer (mirrors tools/make-jsdos.mjs, in the browser) ----
-    const CRC = (() => { const t = new Uint32Array(256);
-      for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
-    function crc32(u8) { let c = 0xffffffff; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
-
-    function buildJsdos(entries) {
-      const sorted = [...entries].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-      const locals = [], central = []; let offset = 0;
-      for (const { name, data } of sorted) {
-        const nb = enc.encode(name); const crc = crc32(data);
-        const lh = new DataView(new ArrayBuffer(30));
-        lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(8, 0, true);
-        lh.setUint16(10, 0, true); lh.setUint16(12, 0x21, true);
-        lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
-        lh.setUint16(26, nb.length, true); lh.setUint16(28, 0, true);
-        locals.push(new Uint8Array(lh.buffer), nb, data);
-        const ch = new DataView(new ArrayBuffer(46));
-        ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
-        ch.setUint16(12, 0, true); ch.setUint16(14, 0x21, true);
-        ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
-        ch.setUint16(28, nb.length, true); ch.setUint32(42, offset, true);
-        central.push(new Uint8Array(ch.buffer), nb);
-        offset += 30 + nb.length + data.length;
-      }
-      const localBuf = concat(locals), centralBuf = concat(central);
-      const end = new DataView(new ArrayBuffer(22));
-      end.setUint32(0, 0x06054b50, true); end.setUint16(8, sorted.length, true); end.setUint16(10, sorted.length, true);
-      end.setUint32(12, centralBuf.length, true); end.setUint32(16, localBuf.length, true);
-      return concat([localBuf, centralBuf, new Uint8Array(end.buffer)]);
-    }
-    function concat(arrs) { let n = 0; for (const a of arrs) n += a.length; const o = new Uint8Array(n); let p = 0; for (const a of arrs) { o.set(a, p); p += a.length; } return o; }
-
-    // ---- minimal ZIP reader (store + deflate) for dropped .zip / .jsdos ----
+    // ---- .jsdos bundles are ZIP archives: the OS's own reader/writer (shell/nucleo-zip.js) ----
+    // Stored (no deflate), sorted names: the same bundle tools/make-jsdos.mjs writes.
+    const buildJsdos = (entries) => zip.create([...entries].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)), { level: 'store' });
     async function unzip(u8) {
-      const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
-      let p = u8.length - 22;
-      while (p >= 0 && dv.getUint32(p, true) !== 0x06054b50) p--;
-      if (p < 0) throw new Error(t('err_not_zip'));
-      const count = dv.getUint16(p + 10, true); let cd = dv.getUint32(p + 16, true);
       const out = [];
-      for (let i = 0; i < count; i++) {
-        if (dv.getUint32(cd, true) !== 0x02014b50) break;
-        const method = dv.getUint16(cd + 10, true);
-        const csize = dv.getUint32(cd + 20, true);
-        const nlen = dv.getUint16(cd + 28, true), elen = dv.getUint16(cd + 30, true), clen = dv.getUint16(cd + 32, true);
-        const lho = dv.getUint32(cd + 42, true);
-        const name = dec.decode(u8.subarray(cd + 46, cd + 46 + nlen));
-        const lnlen = dv.getUint16(lho + 26, true), lelen = dv.getUint16(lho + 28, true);
-        const start = lho + 30 + lnlen + lelen;
-        const comp = u8.subarray(start, start + csize);
-        if (!name.endsWith('/')) {
-          let data;
-          if (method === 0) data = comp.slice();
-          else if (method === 8) data = await inflateRaw(comp);
-          else throw new Error(t('err_unsupported_comp', { name }));
-          out.push({ name, data });
-        }
-        cd += 46 + nlen + elen + clen;
-      }
+      for await (const e of zip.entries(u8)) if (!e.dir && !e.skipped) out.push({ name: e.name, data: e.data });
       return out;
     }
-    async function inflateRaw(u8) {
-      if (typeof DecompressionStream !== 'function') throw new Error(t('err_no_unzip'));
-      const stream = new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-      return new Uint8Array(await new Response(stream).arrayBuffer());
-    }
+    const zipText = (e) => { const k = messageKey(e); return k ? t(k) : e.message; };
 
     // ---- dosbox.conf generator (mirrors tools/add-dos.mjs) ----
     function runParts(full) { const dir = full.includes('/') ? full.slice(0, full.lastIndexOf('/')) : '';
@@ -258,7 +202,7 @@
       if (files.length === 1 && /\.zip$/i.test(files[0].name)) {
         setStatus('busy', t('st_unzipping'));
         try { const inner = await unzip(files[0].data); state = { files: inner, isBundle: false, bundleBytes: null }; showConfig(sanitize(files[0].name), inner, false); setStatus('', ''); }
-        catch (e) { setStatus('err', e.message); }
+        catch (e) { setStatus('err', zipText(e)); }
         return;
       }
       if (!files.length) { setStatus('err', t('err_no_files')); return; }
@@ -323,9 +267,9 @@
         else {
           const entries = state.files.filter((f) => !f.name.toLowerCase().startsWith('.jsdos/')).slice();
           entries.push({ name: '.jsdos/dosbox.conf', data: enc.encode(genConf()) });
-          bytes = buildJsdos(entries);
+          bytes = await buildJsdos(entries);
         }
-      } catch (e) { setStatus('err', t('err_build_failed', { msg: e.message })); return; }
+      } catch (e) { setStatus('err', t('err_build_failed', { msg: zipText(e) })); return; }
 
       $('install').disabled = true; setStatus('busy', t('st_installing', { size: fmt(bytes.length) }));
       try {

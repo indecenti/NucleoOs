@@ -2,10 +2,10 @@
   "_lang": "fr",
   "title": "Manuel du système",
   "search_ph": "Rechercher dans le manuel…",
-  "label_guides": "Guides du système",
+  "label_guides": "Guides",
   "label_commands": "Commandes du terminal",
   "label_api": "API web HTTP",
-  "label_guides_count": "Guides du système ({count})",
+  "label_guides_count": "Guides ({count})",
   "label_commands_count": "Commandes du terminal ({count})",
   "label_api_count": "API web HTTP ({count})",
   "welcome_title": "Aide du système",
@@ -31,5 +31,6 @@
   "conn_note": "Remarque : vérifiez si le serveur NucleoOS est en ligne ou si le client dispose des autorisations CORS activées.",
   "empty_response": "(Réponse vide)",
   "read_error": "Erreur de lecture : {msg}",
-  "no_results": "Aucun résultat trouvé"
+  "no_results": "Aucun résultat trouvé",
+  "doc_source": "Manuel de la version installée sur cet appareil : web OS {build} · système {version}"
 }

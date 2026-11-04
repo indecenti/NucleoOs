@@ -21,6 +21,7 @@ void       nucleo_app_set_gfx(LovyanGFX *g);  // NULL restores the real display
 // hand the contiguous block to the codec, then it re-acquires lazily (timed retry in the getter).
 M5Canvas *nucleo_screen(void);            // shared back-buffer, or NULL while OOM (draw direct)
 bool      nucleo_screen_acquire(void);    // explicit (re)allocate — always attempts
+void      nucleo_screen_hold(bool on);    // lend it to a network job: no re-acquire until unheld
 void      nucleo_screen_release(void);    // FREES the 32 KB canvas (deleteSprite); re-acquired lazily
 M5Canvas *nucleo_screen_wide(int w);      // the same bytes seen w px wide (fewer rows), or NULL — no allocation
 

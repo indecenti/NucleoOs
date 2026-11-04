@@ -18,6 +18,7 @@
      "device.tts",
      "device.voice",
      "diag",
+     "downloads.companion",
      "games.native-save",
      "mail.smtp",
      "net.proxy",
@@ -45,6 +46,7 @@
      "device.tts",
      "device.voice",
      "diag",
+     "downloads.companion",
      "games.native-save",
      "mail.smtp",
      "net.proxy",
@@ -72,6 +74,7 @@
      "device.tts",
      "device.voice",
      "diag",
+     "downloads.companion",
      "games.native-save",
      "mail.smtp",
      "net.proxy",
@@ -100,6 +103,7 @@
      "device.tts",
      "device.voice",
      "diag",
+     "downloads.companion",
      "games.native-save",
      "mail.smtp",
      "net.proxy",
@@ -115,7 +119,7 @@
     ]
    },
    {
-    "after": "0.7.5",
+    "since": "0.8.0",
     "caps": [
      "ai.relay",
      "anima.device",
@@ -130,6 +134,7 @@
      "device.tts",
      "device.voice",
      "diag",
+     "downloads.companion",
      "fs.append",
      "games.native-save",
      "mail.smtp",
@@ -142,6 +147,39 @@
      "seat.single",
      "settings.boot",
      "time.set",
+     "wifi.manage"
+    ]
+   },
+   {
+    "after": "0.8.3",
+    "caps": [
+     "ai.relay",
+     "anima.device",
+     "anima.l1",
+     "apps.nap",
+     "device.display",
+     "device.fido",
+     "device.gpio",
+     "device.ir",
+     "device.link",
+     "device.mic",
+     "device.tts",
+     "device.voice",
+     "diag",
+     "downloads.companion",
+     "fs.append",
+     "games.native-save",
+     "mail.smtp",
+     "net.proxy",
+     "ota",
+     "ota.firmware",
+     "pairing.sessions",
+     "power",
+     "runtime.service",
+     "seat.single",
+     "settings.boot",
+     "time.set",
+     "time.zone",
      "wifi.manage"
     ]
    }
@@ -280,11 +318,13 @@
    {
     "since": "0.0.0",
     "caps": [
+     "ai.server",
      "fs.copy",
      "fs.mounts",
      "fs.stat",
      "games.library",
-     "games.roms"
+     "games.roms",
+     "host.session"
     ]
    }
   ]

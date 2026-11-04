@@ -1,5 +1,5 @@
-# NucleoOS native app ABI, level 7 = level 6 + the cartridge from internal flash (nucleo_romstore: a ROM copied once
-# into the spare OTA slot and mapped, read like RAM instead of from the SD card). Same rules as v1.txt.
+# NucleoOS native app ABI, level 7 = level 6 + the network an app may have (nucleo_tcp: TCP client connections the system
+# opens for an app with the "net" permission), its secrets (nucleo_secret), the raw touch pointer, the Cardputer's screen readback (also without a second screen) and the compact list (app_ui). Same rules as v1.txt.
 THEME_BG
 THEME_DIM
 THEME_FG
@@ -265,5 +265,24 @@ nucleo_app_take_open_file
 nucleo_cowork_run
 nucleo_cowork_wait
 nucleo_cowork_stop
-nucleo_rom_map
-nucleo_rom_unmap
+nucleo_tcp_network_up
+nucleo_tcp_connect
+nucleo_tcp_send
+nucleo_tcp_recv
+nucleo_tcp_readable
+nucleo_tcp_close
+nucleo_secret_set
+nucleo_secret_get
+nucleo_touch_raw
+nucleo_touch_raw_read
+nucleo_extdisp_screen_size
+nucleo_extdisp_screen_row
+nucleo_touch_last
+_ZN2lg13settings_listEiiiiiiiPiPFviPNS_7SettingEPvES3_t          # lg::settings_list(int, int, int, int, int, int, int, int*, void (*)(int, lg::Setting*, void*), void*, unsigned short)
+cJSON_IsString
+cJSON_IsTrue
+__lshrdi3
+_Z12app_ui_titlePKctS0_                                       # app_ui_title(char const*, unsigned short, char const*)
+_Z11app_ui_listiiiiPFPKciPvES3_PFtiS1_ES1_                     # app_ui_list(int, int, int, int, char const* (*)(int, void*), char const* (*)(int, void*), unsigned short (*)(int, void*), void*)
+nucleo_ui_panel_size
+nucleo_ui_read_row

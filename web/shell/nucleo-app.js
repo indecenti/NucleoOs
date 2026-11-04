@@ -32,6 +32,16 @@
 
   var LOCALES = { it: 'it-IT', en: 'en-US', es: 'es-ES', fr: 'fr-FR', de: 'de-DE' };
   var inShell = window.parent !== window;
+  // The broker token the shell put in this frame's URL (wm.js brokerToken): sent with every call, then removed from
+  // the address so the app's own code and its links never carry it.
+  var brokerToken = '';
+  (function () {
+    var m = /(^#|&)nucleo-broker=([0-9a-f]{32})/.exec(location.hash || '');
+    if (!m) return;
+    brokerToken = m[2];
+    var rest = location.hash.replace(m[0], m[1] === '#' ? '#' : '').replace(/^#&/, '#');
+    try { history.replaceState(history.state, '', location.pathname + location.search + (rest === '#' ? '' : rest)); } catch (e) {}
+  })();
   var seq = 0;
   var pending = {};
   var strings = {};
@@ -60,7 +70,7 @@
       var id = 'na' + (++seq) + '.' + Date.now().toString(36);
       var timer = setTimeout(function () { delete pending[id]; resolve({ ok: false, error: 'timeout' }); }, timeoutMs || 10000);
       pending[id] = { resolve: resolve, timer: timer };
-      window.parent.postMessage({ type: 'nucleo.broker', id: id, method: method, args: args || {} }, '*');
+      window.parent.postMessage({ type: 'nucleo.broker', id: id, method: method, args: args || {}, nb: brokerToken }, '*');
     });
   }
 

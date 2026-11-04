@@ -1,5 +1,5 @@
 // emu_romstore — the cartridge from internal flash, for the cores (firmware nucleo_app/include/nucleo_romstore.h,
-// ABI level 7), declared here: nucleo_emu sits below nucleo_app in the component graph.
+// ABI level 8), declared here: nucleo_emu sits below nucleo_app in the component graph.
 //
 // A core first tries the whole cartridge in RAM (when it fits with room to spare), then nucleo_rom_map (copied once
 // into the spare OTA slot, then mapped and read like RAM), and only then its page cache from the SD card.

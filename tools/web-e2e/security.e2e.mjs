@@ -17,6 +17,11 @@ test('shell trust boundary', { skip: !findChrome() && 'no Chrome/Edge installed'
     '/data/Desktop/evil.lnk': { schema: 1, type: 'url', target: 'javascript:window.top.__pwned=3', label: 'EvilLink' },
     '/data/Desktop/data.lnk': { schema: 1, type: 'url', target: 'data:text/html,<script>top.__pwned=4</script>', label: 'DataLink' },
     '/data/Desktop/good.lnk': { schema: 1, type: 'url', target: '/apps/notepad/', label: 'GoodLink' },
+    // The sandboxed probe below, as a page of its own: a srcdoc frame inherits the shell's Content-Security-Policy,
+    // which refuses inline scripts, so the probe would never run (the policy working, not the broker).
+    '/data/probe.html': '<script>addEventListener("message",(e)=>{if(e.data&&e.data.type==="clipboard-data")parent.postMessage({__probe:"leak:"+JSON.stringify(e.data.item)},"*")});' +
+      'parent.postMessage({type:"clipboard-read"},"*");parent.postMessage({type:"open-app",id:"settings"},"*");' +
+      'parent.postMessage({type:"set-language",lang:"de"},"*");setTimeout(()=>parent.postMessage({__probe:"done"},"*"),900);</script>',
   } });
   const browser = await launchBrowser({ args: [HOST_RULES] });
   t.after(async () => { await browser.close(); await sim.stop(); });
@@ -66,9 +71,7 @@ test('shell trust boundary', { skip: !findChrome() && 'no Chrome/Edge installed'
       window.addEventListener('message', onMsg);
       const f = document.createElement('iframe');
       f.setAttribute('sandbox', 'allow-scripts');       // opaque origin, like an agent-written app
-      f.srcdoc = '<script>addEventListener("message",(e)=>{if(e.data&&e.data.type==="clipboard-data")parent.postMessage({__probe:"leak:"+JSON.stringify(e.data.item)},"*")});' +
-        'parent.postMessage({type:"clipboard-read"},"*");parent.postMessage({type:"open-app",id:"settings"},"*");' +
-        'parent.postMessage({type:"set-language",lang:"de"},"*");setTimeout(()=>parent.postMessage({__probe:"done"},"*"),900);<\\/script>';
+      f.src = '/api/fs/read?path=' + encodeURIComponent('/data/probe.html');
       document.body.appendChild(f);
       await new Promise((r) => setTimeout(r, 1500));
       window.removeEventListener('message', onMsg); f.remove();

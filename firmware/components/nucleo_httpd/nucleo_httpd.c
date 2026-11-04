@@ -32,6 +32,7 @@
 #include <strings.h>   // strcasecmp/strncasecmp (SSRF host classification)
 #include <ctype.h>
 #include <sys/stat.h>
+#include <dirent.h>    // DIR/opendir/readdir — /api/evilportal/templates lists SD portals
 #include <time.h>
 #include "esp_log.h"
 #include "esp_http_server.h"
@@ -238,6 +239,8 @@ static esp_err_t status_get(httpd_req_t *req)
     cJSON_AddStringToObject(net, "ip", nucleo_setup_ip());
     cJSON_AddBoolToObject(net, "time_synced", nucleo_setup_time_synced());
     cJSON_AddNumberToObject(net, "time", (double)time(NULL));     // epoch seconds (UTC)
+    cJSON_AddStringToObject(net, "tz", nucleo_setup_tz_id());     // IANA zone the device shows local time in
+    cJSON_AddNumberToObject(net, "tz_offset", nucleo_setup_tz_offset_min());   // minutes east of UTC, DST included
 
     // OTA snapshot so the Updates app can show the running slot + image state.
     cJSON *ota = cJSON_AddObjectToObject(root, "ota");
@@ -2676,13 +2679,14 @@ static void on_sock_close(httpd_handle_t hd, int sockfd)
     close(sockfd);
 }
 
-// POST /api/time/set {"ts":1749500000}
+// POST /api/time/set {"ts":1749500000, "tz":"Europe/Madrid"}
 // Browser pushes its clock to the device when NTP hasn't synced yet (captive portal, no internet).
-// No auth required: wrong time is low-risk and NTP will override it as soon as internet is available.
+// Optional "tz" (Intl.DateTimeFormat().resolvedOptions().timeZone) is adopted only while the user has never
+// chosen a zone — so a device bought abroad shows local time after the first paired browser visit.
 static esp_err_t time_set_post(httpd_req_t *req)
 {
     NUCLEO_AUTH_GUARD(req);   // writes the device clock; a skewed clock breaks TLS cert validity + alarms/calendar -> paired only
-    char body[48];
+    char body[128];
     int n = httpd_req_recv(req, body, sizeof(body) - 1);
     if (n <= 0) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no body"); return ESP_FAIL; }
     body[n] = '\0';
@@ -2690,6 +2694,8 @@ static esp_err_t time_set_post(httpd_req_t *req)
     if (!j) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json"); return ESP_FAIL; }
     cJSON *ts = cJSON_GetObjectItemCaseSensitive(j, "ts");
     time_t t = cJSON_IsNumber(ts) ? (time_t)(long long)cJSON_GetNumberValue(ts) : 0;
+    cJSON *tz = cJSON_GetObjectItemCaseSensitive(j, "tz");
+    if (t > 0 && cJSON_IsString(tz)) nucleo_setup_set_tz(tz->valuestring, false);   // no-op once the user chose
     cJSON_Delete(j);
     if (t <= 0) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing ts"); return ESP_FAIL; }
     nucleo_setup_set_time(t);
@@ -2698,6 +2704,234 @@ static esp_err_t time_set_post(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_sendstr(req, buf);
+    return ESP_OK;
+}
+
+// GET /api/time -> {"time","synced","tz","tz_user","tz_offset","zones":[{"id","label"}]}
+// POST /api/time/zone {"tz":"America/Bogota"} -> the user's explicit choice (same as Settings ▸ Time zone).
+// Unknown ids are refused (400) instead of guessed: a wrong rule would silently skew the clock.
+static esp_err_t time_get(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    cJSON *r = cJSON_CreateObject();
+    if (!r) { httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom"); return ESP_FAIL; }
+    cJSON_AddNumberToObject(r, "time", (double)time(NULL));
+    cJSON_AddBoolToObject(r, "synced", nucleo_setup_time_synced());
+    cJSON_AddStringToObject(r, "tz", nucleo_setup_tz_id());
+    cJSON_AddBoolToObject(r, "tz_user", nucleo_setup_tz_user_set());
+    cJSON_AddNumberToObject(r, "tz_offset", nucleo_setup_tz_offset_min());
+    cJSON *zs = cJSON_AddArrayToObject(r, "zones");
+    for (int i = 0; zs && i < nucleo_setup_tz_count(); i++) {
+        cJSON *z = cJSON_CreateObject();
+        if (!z) break;
+        cJSON_AddStringToObject(z, "id", nucleo_setup_tz_id_at(i));
+        cJSON_AddStringToObject(z, "label", nucleo_setup_tz_label_at(i));
+        cJSON_AddItemToArray(zs, z);
+    }
+    char *out = cJSON_PrintUnformatted(r);
+    cJSON_Delete(r);
+    if (!out) { httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom"); return ESP_FAIL; }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, out);
+    free(out);
+    return ESP_OK;
+}
+
+static esp_err_t time_zone_post(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    char body[96];
+    int n = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (n <= 0) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no body"); return ESP_FAIL; }
+    body[n] = ' ';
+    cJSON *j = cJSON_Parse(body);
+    cJSON *tz = j ? cJSON_GetObjectItemCaseSensitive(j, "tz") : NULL;
+    bool ok = cJSON_IsString(tz) && nucleo_setup_set_tz(tz->valuestring, true);
+    cJSON_Delete(j);
+    if (!ok) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "unknown tz"); return ESP_FAIL; }
+    char buf[96];
+    snprintf(buf, sizeof(buf), "{\"ok\":true,\"tz\":\"%s\",\"tz_offset\":%d}", nucleo_setup_tz_id(), nucleo_setup_tz_offset_min());
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, buf);
+    return ESP_OK;
+}
+
+// ── Evil Portal templates: AI-generated or hand-crafted login clones kept on SD ─────────────────
+// The main httpd runs ONLY when the portal is idle (the engine stops us during NX_SOLO), so this
+// endpoint is for pre-arming the templates. The operator's browser calls their LAN LLM (Ollama,
+// LM Studio, llama.cpp) with the SKILL prompt from .claude/skills/nucleo-evilportal-ai/, then POSTs
+// the generated HTML here. RAM discipline: body streams to SD in a 1 KB stack buffer — never a
+// full-body alloc. Hard cap 32 KB (matches engine's load_template clamp).
+//   GET    /api/evilportal/templates                 -> {"items":[{"name":"xx","bytes":N}, ...]}
+//   POST   /api/evilportal/templates?name=<name>     body = HTML; name = [A-Za-z0-9._-], no "/" or ".."
+//   DELETE /api/evilportal/templates?name=<name>
+// Writes/deletes are session-paired; the list is also paired (template names reveal targeting intent).
+#define EP_TEMPLATES_DIR NUCLEO_SD_MOUNT "/evilportal/portals"
+#define EP_TEMPLATE_MAX  32768                                 // mirrors load_template()'s cap
+
+// Validate a template basename: no path traversal, printable, bounded. Returns false on reject.
+static bool ep_valid_name(const char *s)
+{
+    if (!s || !s[0]) return false;
+    size_t n = strlen(s);
+    if (n < 1 || n > 48) return false;
+    for (size_t i = 0; i < n; i++) {
+        char c = s[i];
+        bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+               || c == '-' || c == '_' || c == '.';
+        if (!ok) return false;
+    }
+    if (strstr(s, "..") || s[0] == '.') return false;          // reject .., leading dot (dotfiles)
+    return true;
+}
+
+static esp_err_t evilportal_templates_get(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+    DIR *dp = opendir(EP_TEMPLATES_DIR);
+    httpd_resp_send_chunk(req, "{\"items\":[", HTTPD_RESP_USE_STRLEN);
+    if (dp) {
+        struct dirent *e; bool first = true; char line[128];
+        while ((e = readdir(dp))) {
+            const char *dot = strrchr(e->d_name, '.');
+            if (!dot || strcasecmp(dot, ".html") != 0) continue;
+            size_t nlen = strlen(e->d_name);
+            if (nlen > 48) continue;
+            char path[320]; snprintf(path, sizeof path, "%s/%s", EP_TEMPLATES_DIR, e->d_name);
+            struct stat st; long sz = 0;
+            if (stat(path, &st) == 0) sz = (long)st.st_size;
+            int n = snprintf(line, sizeof line, "%s{\"name\":\"%s\",\"bytes\":%ld}",
+                             first ? "" : ",", e->d_name, sz);
+            if (n > 0) httpd_resp_send_chunk(req, line, n);
+            first = false;
+        }
+        closedir(dp);
+    }
+    httpd_resp_send_chunk(req, "]}", 2);
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+// Extract ?name=<v> into out[]. Returns true on success. Minimal — no decode: ep_valid_name()
+// rejects anything that would need one.
+static bool ep_query_name(httpd_req_t *req, char *out, size_t outsz)
+{
+    char q[96]; int ql = httpd_req_get_url_query_len(req);
+    if (ql <= 0 || ql >= (int)sizeof q) return false;
+    if (httpd_req_get_url_query_str(req, q, sizeof q) != ESP_OK) return false;
+    if (httpd_query_key_value(q, "name", out, outsz) != ESP_OK) return false;
+    return ep_valid_name(out);
+}
+
+static esp_err_t evilportal_templates_post(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    httpd_resp_set_type(req, "application/json");
+    char name[64] = "";
+    if (!ep_query_name(req, name, sizeof name)) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_sendstr(req, "{\"error\":\"name\"}");
+        return ESP_OK;
+    }
+    // Append .html if missing so the engine picker finds it.
+    size_t nl = strlen(name);
+    if (nl < 5 || strcasecmp(name + nl - 5, ".html") != 0) {
+        if (nl + 5 >= sizeof name) { httpd_resp_set_status(req, "400 Bad Request"); httpd_resp_sendstr(req, "{\"error\":\"name_too_long\"}"); return ESP_OK; }
+        strcat(name, ".html");
+    }
+    int clen = req->content_len;
+    if (clen <= 32 || clen > EP_TEMPLATE_MAX) {
+        httpd_resp_set_status(req, "413 Payload Too Large");
+        httpd_resp_sendstr(req, "{\"error\":\"size\",\"min\":32,\"max\":32768}");
+        return ESP_OK;
+    }
+    mkdir(NUCLEO_SD_MOUNT "/evilportal", 0775);
+    mkdir(EP_TEMPLATES_DIR, 0775);
+    char path[320]; snprintf(path, sizeof path, "%s/%s.part", EP_TEMPLATES_DIR, name);
+    char fin[320];  snprintf(fin,  sizeof fin,  "%s/%s",      EP_TEMPLATES_DIR, name);
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_sendstr(req, "{\"error\":\"fs\"}");
+        return ESP_OK;
+    }
+    // STREAM the body: a 1 KB stack buffer, never the whole template in heap. First chunk also
+    // sniffs for an HTML-ish start so a text/javascript/binary body is refused early.
+    char buf[1024];
+    int got = 0, total = 0, r; bool html_ok = false;
+    while (total < clen && (r = httpd_req_recv(req, buf, (int)sizeof buf)) > 0) {
+        if (!html_ok) {
+            // scan the first chunk for '<' as the first non-space byte -> looks like HTML
+            for (int i = 0; i < r; i++) {
+                char c = buf[i];
+                if (c == ' ' || c == '\r' || c == '\n' || c == '\t') continue;
+                html_ok = (c == '<');
+                break;
+            }
+            if (!html_ok) {
+                fclose(f); remove(path);
+                httpd_resp_set_status(req, "415 Unsupported Media Type");
+                httpd_resp_sendstr(req, "{\"error\":\"not_html\"}");
+                return ESP_OK;
+            }
+        }
+        if (fwrite(buf, 1, r, f) != (size_t)r) {
+            fclose(f); remove(path);
+            httpd_resp_set_status(req, "500 Internal Server Error");
+            httpd_resp_sendstr(req, "{\"error\":\"write\"}");
+            return ESP_OK;
+        }
+        total += r; got = r;
+    }
+    (void)got;
+    fclose(f);
+    if (total != clen) { remove(path); httpd_resp_set_status(req, "400 Bad Request"); httpd_resp_sendstr(req, "{\"error\":\"short\"}"); return ESP_OK; }
+    // Atomic swap: rename only when the write finished cleanly.
+    remove(fin);
+    if (rename(path, fin) != 0) {
+        remove(path);
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_sendstr(req, "{\"error\":\"rename\"}");
+        return ESP_OK;
+    }
+    char reply[160]; snprintf(reply, sizeof reply, "{\"ok\":true,\"name\":\"%s\",\"bytes\":%d}", name, total);
+    httpd_resp_sendstr(req, reply);
+    return ESP_OK;
+}
+
+static esp_err_t evilportal_templates_delete(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    httpd_resp_set_type(req, "application/json");
+    char name[64] = "";
+    if (!ep_query_name(req, name, sizeof name)) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_sendstr(req, "{\"error\":\"name\"}");
+        return ESP_OK;
+    }
+    size_t nl = strlen(name);
+    if (nl < 5 || strcasecmp(name + nl - 5, ".html") != 0) {
+        if (nl + 5 >= sizeof name) { httpd_resp_set_status(req, "400 Bad Request"); httpd_resp_sendstr(req, "{\"error\":\"name_too_long\"}"); return ESP_OK; }
+        strcat(name, ".html");
+    }
+    char fin[320]; snprintf(fin, sizeof fin, "%s/%s", EP_TEMPLATES_DIR, name);
+    int rc = remove(fin);
+    char reply[80]; snprintf(reply, sizeof reply, "{\"ok\":%s}", rc == 0 ? "true" : "false");
+    if (rc != 0) httpd_resp_set_status(req, "404 Not Found");
+    httpd_resp_sendstr(req, reply);
+    return ESP_OK;
+}
+
+static esp_err_t evilportal_templates_handler(httpd_req_t *req)
+{
+    if (req->method == HTTP_GET)    return evilportal_templates_get(req);
+    if (req->method == HTTP_POST)   return evilportal_templates_post(req);
+    if (req->method == HTTP_DELETE) return evilportal_templates_delete(req);
+    httpd_resp_set_status(req, "405 Method Not Allowed");
+    httpd_resp_sendstr(req, "{\"error\":\"method\"}");
     return ESP_OK;
 }
 
@@ -2767,7 +3001,7 @@ esp_err_t nucleo_httpd_start(void)
     // (/api/status etc.) still answered. RAM cost of the bump is tiny and one-time at httpd_start: hd_calls
     // is calloc(max, sizeof(ptr)) so the extra slots are +4 B each, plus ~24 B/handler for the ones that now
     // register. WHEN YOU ADD AN ENDPOINT: bump this past the new total, or it silently drops off the end again.
-    config.max_uri_handlers = 96;   // 77 in use (2026-07-21) + 19 headroom
+    config.max_uri_handlers = 96;   // 82 in use (2026-10-31, +2 /api/time, /api/time/zone) + 14 headroom
     config.close_fn = on_sock_close;                 // detect client disconnects immediately
     // The shell opens many parallel connections (assets + several /api/fs + /ws). lru_purge
     // recycles the oldest idle socket instead of refusing/resetting new ones — this (plus the
@@ -2876,8 +3110,21 @@ esp_err_t nucleo_httpd_start(void)
     httpd_register_uri_handler(server, &voice_always);   // /api/voice/always (persistent always-on toggle)
     httpd_register_uri_handler(server, &lang_get);        // /api/lang GET  (read OS language + generation)
     httpd_register_uri_handler(server, &lang_post);       // /api/lang POST (set OS language → native repaint + WS broadcast)
+
+    // Evil Portal AI-generated templates: GET list, POST stream-upload, DELETE remove.
+    // Streams to SD, RAM-safe. The operator's browser calls their LAN LLM (Ollama/qwen).
+    static httpd_uri_t ep_tpl_get    = { .uri = "/api/evilportal/templates", .method = HTTP_GET,    .handler = evilportal_templates_handler };
+    static httpd_uri_t ep_tpl_post   = { .uri = "/api/evilportal/templates", .method = HTTP_POST,   .handler = evilportal_templates_handler };
+    static httpd_uri_t ep_tpl_delete = { .uri = "/api/evilportal/templates", .method = HTTP_DELETE, .handler = evilportal_templates_handler };
+    httpd_register_uri_handler(server, &ep_tpl_get);
+    httpd_register_uri_handler(server, &ep_tpl_post);
+    httpd_register_uri_handler(server, &ep_tpl_delete);
     httpd_uri_t time_set = { .uri = "/api/time/set", .method = HTTP_POST, .handler = time_set_post };
     httpd_register_uri_handler(server, &time_set);        // /api/time/set (browser → device clock push)
+    httpd_uri_t time_info = { .uri = "/api/time", .method = HTTP_GET, .handler = time_get };
+    httpd_register_uri_handler(server, &time_info);       // /api/time (clock + zone + zone list)
+    httpd_uri_t time_zone = { .uri = "/api/time/zone", .method = HTTP_POST, .handler = time_zone_post };
+    httpd_register_uri_handler(server, &time_zone);       // /api/time/zone (user picks the zone)
     nucleo_auth_register(server);      // /api/pair, /api/auth/status (public; gate the rest)
     nucleo_fsapi_register(server);     // /api/fs/*
     nucleo_recorder_register(server);  // /api/rec/* (mic -> WAV on SD)

@@ -80,6 +80,19 @@ export function modelLabel(entry) {
   return entry[i] || entry[2] || entry[1] || entry[0];   // active language → en → it → id
 }
 
+// A model id by name, for lists: the localized label of a known model ({name:'Sonnet 5.5', desc:'equilibrio'}),
+// otherwise a readable Claude name from the id (claude-opus-4-1-20250805 → Opus 4.1, claude-3-5-haiku-20241022 →
+// Haiku 3.5) with the id as detail; any other id stays as it is.
+export function modelName(provider, id) {
+  const e = ((PROVIDERS[provider] || {}).models || []).find((x) => x[0] === id);
+  if (e) { const lab = String(modelLabel(e) || id), i = lab.indexOf(' · '); return { name: i > 0 ? lab.slice(0, i) : lab, desc: i > 0 ? lab.slice(i + 3) : '' }; }
+  const cap = (s) => s[0].toUpperCase() + s.slice(1);
+  let m = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/.exec(id), name = id;
+  if (m) name = cap(m[1]) + ' ' + m[2] + (m[3] ? '.' + m[3] : '');
+  else if ((m = /^claude-(\d+)(?:-(\d))?-([a-z]+)(?:-\d{8})?$/.exec(id))) name = cap(m[3]) + ' ' + m[1] + (m[2] ? '.' + m[2] : '');
+  return { name, desc: name === id ? '' : id };
+}
+
 // What each provider can actually DO. The one source of truth for "Claude can't draw/transcribe",
 // consumed by Settings' preset engine + the which-apps panel so a feature gap is shown, not hit silently.
 // image → /images/generations (only xAI grok-2-image); whisper → audio transcription (Groq/OpenAI only);

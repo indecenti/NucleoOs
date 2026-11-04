@@ -49,6 +49,9 @@ Already running [M5Launcher](https://github.com/bmorcelli/Launcher)? NucleoOS in
 3. The `.bin` is only the firmware. The web OS lives on the card: extract
    [`nucleoos-latest-sd.zip`](https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest-sd.zip)
    to the card root, or let the first‑boot wizard download it over Wi‑Fi (see below).
+4. The Native C store needs NucleoOS 0.8.4 or later installed by the Launcher: it then creates a 448 KB flash
+   partition (`nucleo_nap`) the native apps run from. On an older install the store is greyed out: install the
+   new `.bin` from the Launcher again.
 
 ### 3. esptool — command line
 Download **[`nucleoos-latest.bin`](https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest.bin)**, then with [esptool](https://github.com/espressif/esptool) (`pip install esptool`):

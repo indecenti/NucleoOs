@@ -65,6 +65,11 @@ int         nucleo_setup_channel(void);
 const char *nucleo_setup_device_name(void);
 bool        nucleo_setup_time_synced(void);
 void        nucleo_setup_set_datetime(int year, int mon, int day, int hour, int min);
+int         nucleo_setup_tz_count(void);
+int         nucleo_setup_tz_index(void);
+const char *nucleo_setup_tz_label_at(int i);
+bool        nucleo_setup_set_tz_index(int i, bool user);
+int         nucleo_setup_tz_offset_min(void);
 int         nucleo_setup_scan(void);
 int         nucleo_setup_scan_count(void);
 const char *nucleo_setup_scan_ssid(int i);
@@ -153,7 +158,7 @@ enum { K_NAV = 0, K_INFO, K_TOGGLE, K_SLIDER, K_CYCLE, K_EDIT, K_DANGER };
 enum {
     R_NONE = 0,
     R_SUGGEST,                                                                              // root chip
-    R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_EXT, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_S_DEVICE, R_S_RESET,
+    R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_EXT, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_TZ, R_S_DEVICE, R_S_RESET,
     R_X_STATE, R_X_LAYOUT, R_X_PRIMARY, R_X_FIT, R_X_MHZ, R_X_MODE, R_X_ROT, R_X_TOUCH, R_X_CAL,       // Second screen (ADV)
     R_NETS, R_SAVED, R_HANDOFF,                                                             // Wi-Fi
     R_AP_ON, R_AP_STATE, R_AP_SSID, R_AP_PASS, R_AP_ADDR,                                   // Hotspot
@@ -167,9 +172,9 @@ enum {
     R_X_BRIGHT,                                                                             // Second screen: its own backlight
 };
 
-static const uint8_t ROWS_ROOT[]    = { R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_S_DEVICE, R_S_RESET };
+static const uint8_t ROWS_ROOT[]    = { R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_TZ, R_S_DEVICE, R_S_RESET };
 // The ADV has the EXT header: its root gains "Second screen" right under Display.
-static const uint8_t ROWS_ROOT_ADV[] = { R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_EXT, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_S_DEVICE, R_S_RESET };
+static const uint8_t ROWS_ROOT_ADV[] = { R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_EXT, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_TZ, R_S_DEVICE, R_S_RESET };
 static const uint8_t ROWS_EXT[]     = { R_X_STATE, R_X_BRIGHT, R_X_LAYOUT, R_X_PRIMARY, R_X_FIT, R_X_MHZ, R_X_MODE, R_X_ROT, R_X_TOUCH, R_X_CAL, R_RESTART };
 static const uint8_t ROWS_WIFI[]    = { R_NETS, R_SAVED, R_HANDOFF };
 static const uint8_t ROWS_AP[]      = { R_AP_ON, R_AP_STATE, R_AP_SSID, R_AP_PASS, R_AP_ADDR };
@@ -592,6 +597,16 @@ static void make_row_id(uint8_t id, int num, Row &r)
             if (nucleo_setup_time_synced()) snprintf(r.sub + strlen(r.sub), sizeof r.sub - strlen(r.sub), "  NTP");
         } else { vset(r, TR5("da impostare", "not set", "sin ajustar", "non reglee", "nicht gesetzt")); r.col = WARN; }
     } break;
+    case R_TZ: {
+        // Value = the zone's first city (<= 12 chars, so the label keeps its room); chip = the live UTC offset
+        // (DST included), compact so it fits beside the cycle arrows: the choice is checkable at a glance.
+        r.label = TR5("Fuso orario", "Time zone", "Zona horaria", "Fuseau horaire", "Zeitzone"); r.glyph = UG_CLOCK; r.kind = K_CYCLE;
+        const char *cities = nucleo_setup_tz_label_at(nucleo_setup_tz_index()), *comma = strchr(cities, ',');
+        snprintf(r.val, sizeof r.val, "%.*s", comma ? (int)(comma - cities) : (int)strlen(cities), cities);
+        int off = nucleo_setup_tz_offset_min(), a = off < 0 ? -off : off;
+        if (a % 60) snprintf(r.sub, sizeof r.sub, "UTC%c%d:%02d", off < 0 ? '-' : '+', a / 60, a % 60);
+        else        snprintf(r.sub, sizeof r.sub, "UTC%c%d", off < 0 ? '-' : '+', a / 60);
+    } break;
     case R_S_DEVICE: r.label = TR5("Dispositivo", "Device", "Dispositivo", "Appareil", "Geraet"); r.glyph = UG_CHIP;
                      vset(r, nucleo_setup_device_name()); r.col = MUTED;
                      snprintf(r.sub, sizeof r.sub, "%.14s  PIN %s", nucleo_setup_device_name(), nucleo_auth_pin()); break;
@@ -870,7 +885,7 @@ static int search_scan(const char *q, uint8_t *pg_out, uint8_t *id_out, int cap)
         int pg = PAGES[p], n; const uint8_t *ids = page_rows(pg, &n);
         if (pg == PG_EXT && !nucleo_ui_is_adv()) continue;
         for (int i = 0; i < n; i++) {
-            if (pg == PG_ROOT && section_of(ids[i]) < 0 && ids[i] != R_ANIMA && ids[i] != R_LANG && ids[i] != R_DATETIME) continue;
+            if (pg == PG_ROOT && section_of(ids[i]) < 0 && ids[i] != R_ANIMA && ids[i] != R_LANG && ids[i] != R_DATETIME && ids[i] != R_TZ) continue;
             Row r; make_row_id(ids[i], i, r);
             if (ci_contains(r.label, q) || (pg != PG_ROOT && ci_contains(page_title(pg), q))) {
                 if (pg_out && hits < cap) { pg_out[hits] = (uint8_t)pg; id_out[hits] = ids[i]; }
@@ -2500,6 +2515,8 @@ static bool adjust(const Row &r, int dir)
         case R_TTS_SPEED: s_adj_us = now; s_tts_pend = nucleo_tts_speed_clamp((s_tts_pend >= 0 ? s_tts_pend : nucleo_tts_speed()) + dir * step);
                           s_prefs_dirty = true; return true;
         case R_LANG:      lang_cycle(dir);  return true;
+        case R_TZ: {      int n = nucleo_setup_tz_count();   // persists + applies live; the epoch never moves
+                          nucleo_setup_set_tz_index((nucleo_setup_tz_index() + dir + n) % n, true); return true; }
         case R_THEME:     theme_cycle(dir); return true;
         case R_ANIMA:     nucleo_anima_ui_set_online_mode((nucleo_anima_ui_online_mode() + dir + 3) % 3); return true;
         case R_SAVER_TIME:  saver_time_cycle(dir); return true;
@@ -2596,7 +2613,7 @@ static void activate(const Row &r)
                                   toast_ok(TR5("Luminosita al 40%", "Brightness set to 40%", "Brillo al 40%", "Luminosite a 40%", "Helligkeit auf 40%")); }
         else                    { s_sel[PG_WIFI] = 0; open_section(PG_WIFI); set_page(PG_NETS); }
     } break;
-    case R_LANG: case R_THEME: case R_ANIMA: case R_SAVER_TIME: case R_SAVER_STYLE: adjust(r, +1); break;
+    case R_LANG: case R_TZ: case R_THEME: case R_ANIMA: case R_SAVER_TIME: case R_SAVER_STYLE: adjust(r, +1); break;
     case R_X_MHZ: case R_X_MODE: case R_X_ROT: case R_X_LAYOUT: adjust(r, +1); break;
     case R_X_PRIMARY: case R_X_FIT: case R_X_TOUCH: toggle(r); break;
     case R_X_CAL:

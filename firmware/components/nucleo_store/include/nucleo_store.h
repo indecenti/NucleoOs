@@ -22,11 +22,15 @@ nst_op_t     nucleo_store_op(void);
 const st_state_t *nucleo_store_state(void);   // live progress / last result
 const char  *nucleo_store_error(void);        // localized one-liner for NST_FAILED ("" otherwise)
 const char  *nucleo_store_os_version(void);   // "x.y.z" of this firmware, for min_os
-// Highest native ABI level this firmware runs (0 = no native apps here: no scratch region, e.g. under M5Launcher).
+// Highest native ABI level this firmware runs (0 = no native apps here: no scratch region, e.g. a NucleoOS
+// installed by M5Launcher before 0.8.4, which has no `nucleo_nap` partition).
 uint32_t     nucleo_store_native_abi(void);
 // An installed file still matches the signed package it came from (signature with the compiled-in keys,
 // size, SHA-256). sha (optional) receives its hash. Runs on the caller's task; reads the whole file.
 bool nucleo_store_check_installed(const char *id, const char *rel, uint8_t sha[32]);
+// Installed apps of a channel the local catalog has a newer version of, that this firmware can run.
+// sig (optional): a hash of those ids and versions, 0 when there are none (said once per set, not daily).
+int nucleo_store_updates(const char *channel, uint32_t *sig);
 
 #ifdef __cplusplus
 }

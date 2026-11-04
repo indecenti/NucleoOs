@@ -28,7 +28,7 @@ bool nucleo_cowork_run(void (*fn)(void *arg), void *arg);
 void nucleo_cowork_wait(void);
 void nucleo_cowork_stop(void);
 #include "emu_audio.h"
-#include "emu_romstore.h"     // the cartridge from internal flash (ABI level 7)
+#include "emu_romstore.h"     // the cartridge from internal flash (ABI level 8)
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"

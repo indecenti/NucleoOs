@@ -61,5 +61,20 @@
   "p_sram_loaded": "Partida cargada desde la tarjeta SD",
   "p_sram_unread": "No se pudo leer la partida guardada en la SD: el guardado en la SD está en pausa para no sobrescribirla.",
   "p_rom_corrupt": "Archivo ROM dañado: archivo zip truncado.",
-  "p_start_failed": "Error al iniciar"
+  "p_start_failed": "Error al iniciar",
+  "scrape": "Imágenes",
+  "scrape_none": "Todos los juegos ya tienen su imagen.",
+  "scrape_offline": "Hace falta conexión a internet para descargar las imágenes.",
+  "scrape_progress": "Imágenes: {done} de {total}…",
+  "scrape_done": "Imágenes encontradas para {found} de {total} juegos, guardadas en la tarjeta: el dispositivo también las muestra.",
+  "add_roms_btn": "Añadir juegos",
+  "drop_here": "Suelta aquí los juegos: cada uno va a la carpeta de su consola",
+  "upload_progress": "Copiando {i} de {n}: {pct}%",
+  "upload_done": "{n} juegos copiados en las carpetas de sus consolas.",
+  "upload_skipped": "{n} copiados; {skipped} apartados ({names}): abre primero la consola correcta y suéltalos allí.",
+  "play_device": "Jugar en el dispositivo, con su propio emulador",
+  "play_device_short": "Dispositivo",
+  "play_device_started": "El juego arranca en el dispositivo: la red se apaga hasta que salgas del juego.",
+  "play_device_failed": "El dispositivo no tiene emulador para este juego (instálalo desde la Store).",
+  "lib_unsaved": "No se puede leer la biblioteca de la tarjeta: la estrella no se guardó."
 }

@@ -1,7 +1,7 @@
 // Start the device simulator (tools/serve-shell.mjs) for the browser E2E suite: a free port and a
 // throwaway COPY of the simulated SD, so a test run never dirties the tracked tools/sd-sim and several
 // instances (one per language) can run side by side.
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { cp, mkdtemp, rm, readFile, writeFile, mkdir, link, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, relative } from 'node:path';
@@ -12,9 +12,24 @@ export const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // Copy the simulated SD. The ~90 MB of ANIMA knowledge packs (*.bin) are read-only for the simulator,
 // so they are hard-linked instead of copied (fast, and immune to the transient Windows copyfile
 // failures a 90 MB copy hits under antivirus scanning); anything else is a real copy the test may mutate.
+// What git ignores under tools/sd-sim is this PC's own data (ROMs, DOS games, recordings a developer dropped in to
+// try things): a clean checkout, as on CI, has none of it. Left out of the copy, so the suites measure NucleoOS and
+// not the machine (an Arcade shelf counted 325 local games where the test seeds 4).
+const LOCAL_ONLY = (() => {
+  try {
+    const out = execFileSync('git', ['-C', REPO, 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '-z', 'tools/sd-sim'], { encoding: 'utf8' });
+    return out.split('\0').filter(Boolean).map((p) => join(REPO, p));
+  } catch { return []; }
+})();
+const localOnly = (s) => LOCAL_ONLY.some((p) => s === p.replace(/[\\/]$/, '') || s.startsWith(p));
+
 async function copySd(src, dst) {
   const big = [];
-  await cp(src, dst, { recursive: true, filter: (s) => { if (s.endsWith('.bin')) { big.push(s); return false; } return true; } });
+  await cp(src, dst, { recursive: true, filter: (s) => {
+    if (localOnly(s)) return false;
+    if (s.endsWith('.bin')) { big.push(s); return false; }
+    return true;
+  } });
   for (const s of big) {
     const d = join(dst, relative(src, s));
     await mkdir(dirname(d), { recursive: true });

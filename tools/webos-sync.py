@@ -205,6 +205,7 @@ def update(webos, allow_dirty):
             "profile": PROFILE,
             "profile_sha256": info.get("profile_sha256"),
             "build_hash": info["hash"],
+            "webos": info.get("webos"),   # { webos, core, contract }: nucleo-webos docs/versions.md
             "shell_cache": info["shell"]["cache"],
             "apps": {a["id"]: a["version"] for a in info["apps"]},
             "files": files,
