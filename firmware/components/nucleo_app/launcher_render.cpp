@@ -207,7 +207,7 @@ static const struct { const char *id, *it, *en, *es, *fr, *de; } APP_NAME_TR[] =
     { "qr",          "Codice QR",           "QR Code",        "Codigo QR",      "Code QR",          "QR-Code" },
     { "radio",       "Radio",               "Radio",          "Radio",          "Radio",            "Radio" },
     { "reactor",     "Reattore",            "Reactor",        "Reactor",        "Reacteur",         "Reaktor" },
-    { "recorder",    "Registratore vocale", "Voice Recorder", "Grabadora",      "Dictaphone",       "Rekorder" },
+    { "recorder",    "Memo vocali",         "Voice Recorder", "Grabadora",      "Dictaphone",       "Rekorder" },
     { "remote",      "Controllo remoto",    "Remote Control", "Control remoto", "Controle distant", "Fernsteuerung" },
     { "screensaver", "Salvaschermo",        "Screensaver",    "Salvapantallas", "Economiseur",      "Bildschirmschoner" },
     { "slots",       "Slot",                "Slots",          "Tragaperras",    "Machines",         "Automat" },
@@ -1092,33 +1092,31 @@ template <typename T> static void draw_eq(T *c, int ex, int ey, int w, unsigned 
 // carousel on the large surface only — the Cardputer keeps the carousel. Keyboard focus is a lit card
 // under the tile; touch just taps a tile. The grid scrolls in pixels: a key keeps the focused tile in view
 // with the smallest move, a drag moves the content itself (NUCLEO_TOUCH_VIEW_*) and leaves the focus alone,
-// rows cut by the band's edges are clipped. Inside a category the first cell is a Back tile.
+// rows cut by the band's edges are clipped. Back lives in the status bar (its pill, Esc, Del): no Back tile.
 #define GRID_COLS   4
 #define GRID_CELLW  (W / GRID_COLS)               // 80 px on the 320-wide panel
 #define GRID_RH     (LIST_BAND_H / 3)             // three whole rows fill the band (70 px under the 30 px bar)
 #define GRID_TOP    0
-#define GRID_BADGE  38                            // the icon badge (40 when focused)
+#define GRID_BADGE  36                            // the icon badge (38 when focused): leaves two label lines
 #define GRID_STEP   6                             // px the content moves per drag key
 static int s_grid_off = 0;                        // scroll offset of the grid band, in px
 static int s_grid_max = 0;                        // its largest value (content taller than the band)
 static const void *s_grid_node = nullptr;         // the menu the offset belongs to (a new one starts at the top)
 static int s_grid_sel = -1;                       // the focus the offset was last fitted to
 
-static int grid_lead(void) { return launcher_depth() > 0 ? 1 : 0; }   // cell 0 = Back inside a category
-
 // Fit the offset: a new menu starts at the top; a focus that moved brings its whole row into view. The band
 // is exactly three rows, so a key always lands on whole rows (nothing cut at the edges); a drag's offset is
 // kept as it is. Pure layout (no draw), so the touch targets land where the tiles do.
 static void grid_fit(void)
 {
-    int cells = launcher_visible_count() + grid_lead(), rows = (cells + GRID_COLS - 1) / GRID_COLS;
+    int cells = launcher_visible_count(), rows = (cells + GRID_COLS - 1) / GRID_COLS;
     int content = GRID_TOP + rows * GRID_RH;
     s_grid_max = content > LIST_BAND_H ? content - LIST_BAND_H : 0;
     const void *node = (const void *)launcher_node();
     if (node != s_grid_node) { s_grid_node = node; s_grid_off = 0; s_grid_sel = -1; }
     int sel = launcher_sel();
     if (sel != s_grid_sel) {
-        int ry = GRID_TOP + (sel + grid_lead()) / GRID_COLS * GRID_RH;
+        int ry = GRID_TOP + sel / GRID_COLS * GRID_RH;
         if (ry < s_grid_off) s_grid_off = ry;
         if (ry + GRID_RH > s_grid_off + LIST_BAND_H) s_grid_off = ry + GRID_RH - LIST_BAND_H;
         s_grid_sel = sel;
@@ -1131,7 +1129,7 @@ static void grid_fit(void)
 static int grid_first(void)
 {
     grid_fit();
-    int cell = (s_grid_off > GRID_TOP ? (s_grid_off - GRID_TOP) / GRID_RH : 0) * GRID_COLS - grid_lead();
+    int cell = (s_grid_off > GRID_TOP ? (s_grid_off - GRID_TOP) / GRID_RH : 0) * GRID_COLS;
     return cell < 0 ? 0 : cell;
 }
 
@@ -1159,59 +1157,50 @@ template <typename T> static void grid_badge(T *c, int x, int y, int s, uint16_t
     c->fillRoundRect(x + 3, y + 2, s - 6, s / 2 - 2, r - 2, mix565(col, 0xFFFF, 0.10f));   // gloss
 }
 
-// The label under a tile: one line when it fits, else two (cut at the last space that fits; a single long
-// word is split where it must). Font2, centred in the cell; the second line ends in ".." only when even two
-// lines are not enough.
+// The label under a tile: one line when it fits, else two, broken between words and balanced (the break whose
+// longer line is the shortest). A word wider than the cell is hyphenated at a syllable; the second line ends in ".."
+// only when two lines are still not enough. Font2, centred; the two lines are GRID_LINE apart (Font2's glyphs fill
+// 12 of its 16 rows, so they never touch) and sit at y and y + GRID_LINE, both inside the cell.
+#define GRID_LINE 13
 template <typename T> static void grid_label(T *c, const char *lab, int cx, int y, int maxw, uint16_t col, uint16_t bg)
 {
     c->setFont(&fonts::Font2); c->setTextSize(1); c->setTextColor(col, bg); c->setTextDatum(top_center);
-    if ((int)c->textWidth(lab) <= maxw) { c->drawString(lab, cx, y + 6); c->setTextDatum(top_left); return; }
-    char l1[24], l2[24];
-    int n = (int)strlen(lab), fit = 0, sp = 0;                       // the longest first line that fits, and its last space
-    for (int i = 1; i <= n && i < (int)sizeof l1; i++) {
+    auto tw = [&](const char *t) { return (int)c->textWidth(t); };
+    if (tw(lab) <= maxw) { c->drawString(lab, cx, y + GRID_LINE / 2); c->setTextDatum(top_left); return; }
+    char l1[28], l2[28];
+    const int n = (int)strlen(lab);
+    int brk = -1, best = 1 << 30;                                   // a space: the balanced break where both lines fit
+    for (int i = 1; i < n && i < (int)sizeof l1; i++) {
+        if (lab[i] != ' ') continue;
         snprintf(l1, sizeof l1, "%.*s", i, lab);
-        if ((int)c->textWidth(l1) > maxw) break;
-        fit = i;
-        if (lab[i] == ' ') sp = i;
+        const int a = tw(l1), b = tw(lab + i + 1), worst = a > b ? a : b;
+        if (a <= maxw && b <= maxw && worst < best) { best = worst; brk = i; }
     }
-    int brk = sp;
-    bool hyph = false;
-    if (brk) {                                                        // a space break whose rest still overflows:
-        const char *r2 = lab + brk + 1;                               // hyphenate instead, the rest fits better
-        if ((int)c->textWidth(r2) > maxw) brk = 0;
-    }
-    if (!brk) {                                                       // one long word: a hyphen at a syllable
+    if (brk > 0) {
+        snprintf(l1, sizeof l1, "%.*s", brk, lab);
+        snprintf(l2, sizeof l2, "%s", lab + brk + 1);
+    } else {                                                        // a word too wide: hyphenate it at a syllable
+        int fit = 0;
+        for (int i = 1; i <= n && i < (int)sizeof l1 - 1; i++) { snprintf(l1, sizeof l1, "%.*s-", i, lab); if (tw(l1) > maxw) break; fit = i; }
         auto vow = [](char ch) { return strchr("aeiouyAEIOUY", ch) != nullptr; };
-        for (int i = fit - 1; i >= 3 && !brk; i--) {                  // ...a vowel, then consonant + vowel
-            snprintf(l1, sizeof l1, "%.*s-", i, lab);
-            if ((int)c->textWidth(l1) <= maxw && vow(lab[i - 1]) && !vow(lab[i]) && vow(lab[i + 1]) && n - i >= 3) brk = i;
-        }
-        if (!brk) brk = fit > 1 ? fit - 1 : 1;
-        hyph = true;
+        int h = 0;
+        for (int i = fit; i >= 3 && !h; i--)                            // ...a vowel, then consonant + vowel
+            if (lab[i] && lab[i] != ' ' && lab[i - 1] != ' ' && vow(lab[i - 1]) && !vow(lab[i]) && vow(lab[i + 1]) && n - i >= 3) h = i;
+        for (int i = fit; i >= 1 && !h; i--) if (lab[i - 1] == ' ') h = i;   // ...or the last space that fits
+        if (!h) h = fit > 1 ? fit : 1;
+        const bool sp = lab[h - 1] == ' ';
+        snprintf(l1, sizeof l1, sp ? "%.*s" : "%.*s-", sp ? h - 1 : h, lab);
+        const char *rest = lab + h; while (*rest == ' ') rest++;
+        snprintf(l2, sizeof l2, "%s", rest);
     }
-    snprintf(l1, sizeof l1, hyph ? "%.*s-" : "%.*s", brk, lab);
-    const char *rest = lab + brk; while (*rest == ' ') rest++;
-    snprintf(l2, sizeof l2, "%s", rest);
-    if ((int)c->textWidth(l2) > maxw) {                               // still too long: "prefix.."
-        int k = (int)strlen(l2);
-        for (; k > 0; k--) { char t[26]; snprintf(t, sizeof t, "%.*s..", k, rest); if ((int)c->textWidth(t) <= maxw) break; }
-        snprintf(l2, sizeof l2, "%.*s..", k, rest);
+    if (tw(l2) > maxw) {                                            // still too long: "prefix.."
+        char t[28]; int k = (int)strlen(l2);
+        for (; k > 0; k--) { snprintf(t, sizeof t, "%.*s..", k, l2); if (tw(t) <= maxw) break; }
+        snprintf(t, sizeof t, "%.*s..", k, l2); snprintf(l2, sizeof l2, "%s", t);
     }
-    c->drawString(l1, cx, y - 1);
-    c->drawString(l2, cx, y + 11);
+    c->drawString(l1, cx, y);
+    c->drawString(l2, cx, y + GRID_LINE);
     c->setTextDatum(top_left);
-}
-
-// The Back tile (cell 0 inside a category): a chevron on a quiet badge, labelled like the tiles.
-template <typename T> static void grid_back_tile(T *c, int cx, int top)
-{
-    const int s = GRID_BADGE, x = cx - s / 2, y = top + 4, cy = y + s / 2 - 1;
-    grid_badge(c, x, y, s, mix565(LINE, FG, 0.18f), BG);
-    for (int k = 0; k < 4; k++) {                                   // a 4 px-thick chevron
-        c->drawLine(cx + 4 + k - 2, cy - 10, cx - 7 + k - 2, cy, FG);
-        c->drawLine(cx - 7 + k - 2, cy, cx + 4 + k - 2, cy + 10, FG);
-    }
-    grid_label(c, TR5("Indietro", "Back", "Atras", "Retour", "Zurueck"), cx, top + 43, GRID_CELLW - 6, mix565(BG, FG, 0.80f), BG);
 }
 
 
@@ -1429,15 +1418,15 @@ int launcher_render_grid_item_at(int px, int py)
     if (!lr_large() || py < LIST_TOP || py >= LIST_TOP + LIST_BAND_H) return -1;
     grid_fit();
     const int row = (py - LIST_TOP + s_grid_off - GRID_TOP) / GRID_RH, col = px / GRID_CELLW;
-    const int i = row * GRID_COLS + col - grid_lead();
+    const int i = row * GRID_COLS + col;
     return col < GRID_COLS && i >= 0 && i < launcher_visible_count() ? i : -1;
 }
 
 template <typename T> static void draw_grid(T *c, int base)
 {
     c->fillRect(0, base, W, LIST_BAND_H, BG);
-    int n = launcher_visible_count(), lead = grid_lead();
-    if (n == 0 && !lead) {
+    int n = launcher_visible_count();
+    if (n == 0) {
         const char *none = launcher_filter()[0] ? TR5("Nessun risultato", "No matches", "Sin resultados", "Aucun resultat", "Keine Treffer")
                                                  : TR5("Nessuna app", "No apps", "Ninguna app", "Aucune app", "Keine Apps");
         c->setFont(&fonts::FreeSans9pt7b); c->setTextColor(DIM, BG);
@@ -1446,7 +1435,7 @@ template <typename T> static void draw_grid(T *c, int base)
         return;
     }
     grid_fit();
-    int sel = launcher_sel(), cells = n + lead, rows = (cells + GRID_COLS - 1) / GRID_COLS;
+    int sel = launcher_sel(), cells = n, rows = (cells + GRID_COLS - 1) / GRID_COLS;
     static unsigned s_eq_frame = 0; s_eq_frame++;
     bool audio_on = nucleo_audio_is_playing() && !nucleo_audio_is_paused();
     const char *ap = audio_on ? nucleo_audio_path() : "";
@@ -1457,10 +1446,9 @@ template <typename T> static void draw_grid(T *c, int base)
         const int top = base + GRID_TOP + row * GRID_RH - s_grid_off;
         if (top + GRID_RH <= base || top >= base + LIST_BAND_H) continue;
         for (int j = 0; j < GRID_COLS; j++) {
-            const int cell = row * GRID_COLS + j, i = cell - lead;
-            if (cell >= cells) break;
+            const int i = row * GRID_COLS + j;
+            if (i >= cells) break;
             const int x0 = j * GRID_CELLW, cx = x0 + GRID_CELLW / 2;
-            if (i < 0) { grid_back_tile(c, cx, top); continue; }
             const MenuNode *it = launcher_nth_visible(i);
             if (!it) continue;
             const bool scrim = s_qm_item >= 0;                      // the quick menu is open: the grid steps back
@@ -1473,7 +1461,7 @@ template <typename T> static void draw_grid(T *c, int base)
                 c->drawRoundRect(x0 + 3, top + 1, GRID_CELLW - 6, GRID_RH - 2, 12, it->color);
                 c->drawRoundRect(x0 + 4, top + 2, GRID_CELLW - 8, GRID_RH - 4, 11, mix565(under, it->color, 0.55f));
             }
-            const int s = focus ? GRID_BADGE + 2 : GRID_BADGE, bx = cx - s / 2, by = top + (focus ? 3 : 4);
+            const int s = focus ? GRID_BADGE + 2 : GRID_BADGE, bx = cx - s / 2, by = top + (focus ? 2 : 3);
             const uint16_t badge = focus ? it->color : scrim ? mix565(BG, it->color, 0.28f) : mix565(LINE, it->color, 0.85f);
             grid_badge(c, bx, by, s, badge, under);
             const int r = s / 2, cy = by + r - 1;
@@ -1489,7 +1477,7 @@ template <typename T> static void draw_grid(T *c, int base)
             }
             if (audio_on && ((is_stream && !strcmp(it->id, "radio")) || (!is_stream && !strcmp(it->id, "music"))))
                 draw_eq(c, cx + (int)(r * 0.6f), cy + (int)(r * 0.6f), (int)(r * 0.55f), s_eq_frame);
-            grid_label(c, node_label(it), cx, top + 43, GRID_CELLW - 6, focus ? FG : mix565(BG, FG, scrim ? 0.30f : 0.78f), under);
+            grid_label(c, node_label(it), cx, top + 41, GRID_CELLW - 6, focus ? FG : mix565(BG, FG, scrim ? 0.30f : 0.78f), under);
         }
     }
     c->clearClipRect();
@@ -1609,18 +1597,17 @@ static void grid_register_touch(void)
 {
     nucleo_touch_clear();
     if (launcher_qm_active()) { qm_register_touch(); nucleo_touch_commit(); return; }
-    const int n = launcher_visible_count(), lead = grid_lead(), first = grid_first(), cells = n + lead;
+    const int n = launcher_visible_count(), inside = launcher_depth() > 0, first = grid_first(), cells = n;
     const int rows = (cells + GRID_COLS - 1) / GRID_COLS, y0 = LIST_TOP, y1 = LIST_TOP + LIST_BAND_H;
-    if (lead) nucleo_touch_add(0, 0, 64, BAR + 4, NK_BACK, 0);                             // the Back button
-    nucleo_touch_add(lead ? 64 : 0, 0, lead ? W - 64 : W, BAR, NK_TAB, 0);                  // the bar: Control Center
+    if (inside) nucleo_touch_add(0, 0, 64, BAR + 4, NK_BACK, 0);                             // the Back button
+    nucleo_touch_add(inside ? 64 : 0, 0, inside ? W - 64 : W, BAR, NK_TAB, 0);                  // the bar: Control Center
     for (int row = 0; row < rows; row++) {
         const int top = LIST_TOP + GRID_TOP + row * GRID_RH - s_grid_off;
         const int ty = top > y0 ? top : y0, by = top + GRID_RH < y1 ? top + GRID_RH : y1;
         if (by - ty < 20) continue;                                  // a sliver at the edge is not a target
         for (int j = 0; j < GRID_COLS; j++) {
-            const int cell = row * GRID_COLS + j, i = cell - lead;
-            if (cell >= cells) break;
-            if (i < 0) { nucleo_touch_add(j * GRID_CELLW, ty, GRID_CELLW, by - ty, NK_BACK, 0); continue; }
+            const int i = row * GRID_COLS + j;
+            if (i >= cells) break;
             const int slot = i - first;
             if (slot < 0 || slot >= 16) continue;                    // NUCLEO_TOUCH_ROW has 16 slots
             nucleo_touch_add(j * GRID_CELLW, ty, GRID_CELLW, by - ty, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + slot));
@@ -2348,22 +2335,25 @@ void launcher_render_control_center(void)
     s_ccs.valid = true;                                       // the screen now matches s_ccs
 }
 
-// ---- companion: the Cardputer's own panel while the launcher home lives on the external one ------------------
-// Only what is worth a glance: the time, the date, the battery, the network (name + address to reach the web
-// OS) and what is playing. Drawn straight to the panel, no buffer; launcher_render_companion_changed() keeps a
-// signature so the run loop repaints it only when one of those values moved (about once a minute).
+// ---- the companion: the Cardputer's own panel while the launcher home lives on the external one -------------
+// Not a second status bar: the panel already shows the time, the date, the battery and the network, so none of
+// that is repeated here. The keyboard is on the Cardputer, so its panel tells what the keys act on and what lies
+// behind the focus: the focused tile (its icon, name and what it does), a look inside it (a category's apps, the
+// search's hits, the track playing, where the app sits) and the keys that work right now, as key caps. Drawn
+// straight to the panel, no buffer; launcher_render_companion_changed() keeps a signature so it repaints only
+// when one of those moved (a key that moves the focus, a track that starts).
 static uint32_t companion_sig(void)
 {
-    time_t now = time(NULL); struct tm *tm = localtime(&now);
     uint32_t h = 2166136261u;
     auto mix = [&](const char *p) { while (p && *p) h = (h ^ (uint8_t)*p++) * 16777619u; h = (h ^ 0xFF) * 16777619u; };
-    char b[32];
-    snprintf(b, sizeof b, "%d:%d:%d", tm ? tm->tm_hour : -1, tm ? tm->tm_min : -1, tm ? tm->tm_yday : -1); mix(b);
-    snprintf(b, sizeof b, "%d", nucleo_power_battery_pct()); mix(b);
-    mix(nucleo_setup_mode()); mix(nucleo_setup_ssid()); mix(nucleo_setup_ip());
     bool play = nucleo_audio_is_playing() && !nucleo_audio_is_paused();
     mix(play ? nucleo_audio_path() : "-");
     mix(nucleo_i18n_lang());
+    const MenuNode *f = launcher_focused();
+    char b[64];
+    snprintf(b, sizeof b, "%p:%p:%d:%d:%d:%d", (const void *)f, (const void *)launcher_node(), launcher_depth(), launcher_visible_count(),
+             launcher_qm_active() ? 1 : 0, f && f->kind == N_APP && launcher_is_pinned(f->id) ? 1 : 0); mix(b);
+    mix(launcher_filter());
     return h;
 }
 
@@ -2377,50 +2367,128 @@ bool launcher_render_companion_changed(void)
 }
 void launcher_render_companion_invalidate(void) { s_comp_sig = 0; }
 
+// One key cap and what it does ("[enter] open") from x, on the key row; returns the x after it.
+static int comp_key(lgfx::LovyanGFX *g, int x, int y, const char *cap, const char *what)
+{
+    g->setFont(&fonts::Font0); g->setTextSize(1); g->setTextDatum(lgfx::top_left);
+    const int cw = (int)g->textWidth(cap) + 8;
+    g->fillRoundRect(x, y, cw, 13, 3, LINE);
+    g->drawFastHLine(x + 3, y + 12, cw - 6, mix565(LINE, 0x0000, 0.5f));
+    g->setTextColor(FG, LINE); g->drawString(cap, x + 4, y + 3);
+    g->setTextColor(MUTED, INK); g->drawString(what, x + cw + 3, y + 3);
+    return x + cw + 3 + (int)g->textWidth(what) + 9;
+}
+
+// A tile's badge with its glyph, s px square at (x, y).
+static void comp_tile(lgfx::LovyanGFX *g, int x, int y, int s, const MenuNode *n, uint16_t col)
+{
+    grid_badge(g, x, y, s, col, BG);
+    const char *gid = !strcmp(n->id, LAUNCHER_RECENT_ID) ? "clock" : !strcmp(n->id, LAUNCHER_SETTINGS_SEARCH_ID) ? "wifi" : n->id;
+    ui_icon(g, x + s / 2, y + s / 2 - 1, (int)(s / 2 * 0.68f + 0.5f), gid, n->icon, INK, col);
+}
+
+// A row of small tiles from x (the first `cnt` of `get`), with "+k" when more than fit; returns how many drawn.
+template <typename F> static void comp_strip(lgfx::LovyanGFX *g, int x, int y, int w, int total, F get)
+{
+    const int s = 28, step = 34, fit = (w + step - s) / step;
+    const int shown = total > fit ? fit - 1 : total;
+    for (int i = 0; i < shown; i++) { const MenuNode *n = get(i); if (n) comp_tile(g, x + i * step, y, s, n, n->color); }
+    if (total > shown) {
+        char more[8]; snprintf(more, sizeof more, "+%d", total - shown);
+        const int mx = x + shown * step;
+        g->fillRoundRect(mx, y, s, s - 2, 7, LINE);
+        g->setFont(&fonts::Font2); g->setTextColor(FG, LINE); g->setTextDatum(lgfx::middle_center);
+        g->drawString(more, mx + s / 2, y + s / 2 - 1);
+        g->setTextDatum(lgfx::top_left);
+    }
+}
+
 void launcher_render_companion(lgfx::LovyanGFX *g)
 {
-    const int w = g->width(), h = g->height();
-    time_t now = time(NULL); struct tm *tm = localtime(&now);
+    const int w = g->width(), h = g->height(), ky = h - 16;          // ky: the key row
     g->startWrite();
     g->fillScreen(BG);
-    g->setTextDatum(lgfx::top_center);
-    // The time, as big as the panel allows (7-segment, 48 px).
-    char t[8]; snprintf(t, sizeof t, "%02d:%02d", tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
-    g->setTextColor(FG, BG);
-    g->drawString(t, w / 2, 6, &fonts::Font7);
-    // Date, or what is playing (the track's file name, without folders or extension).
-    char line[40];
-    bool play = nucleo_audio_is_playing() && !nucleo_audio_is_paused();
-    if (play) {
-        const char *p = nucleo_audio_path(), *slash = strrchr(p, '/');
-        snprintf(line, sizeof line, "%s", slash ? slash + 1 : p);
-        char *dot = strrchr(line, '.'); if (dot && dot != line) *dot = 0;
-        g->setTextColor(C_GREEN, BG);
-    } else {
-        day_month(line, sizeof line, now, tm);
-        g->setTextColor(C_YELLOW, BG);
-    }
-    g->setFont(&fonts::Font2);
-    while (line[0] && (int)g->textWidth(line) > w - 12) line[strlen(line) - 1] = 0;
-    g->drawString(line, w / 2, 60, &fonts::Font2);
-    g->drawFastHLine(8, 82, w - 16, LINE);
-    // Battery left, network right; the address to reach the web OS under the network name.
     g->setTextDatum(lgfx::top_left);
-    int bp = nucleo_power_battery_pct();
-    char bt[12];
-    if (bp >= 0) snprintf(bt, sizeof bt, "%d%%", bp); else snprintf(bt, sizeof bt, "--");
-    g->setTextColor(bp >= 0 && bp < 20 ? C_RED : bp >= 0 && bp < 50 ? C_YELLOW : C_GREEN, BG);
-    g->drawString(bt, 10, 92, &fonts::Font4);
-    bool sta = !strcmp(nucleo_setup_mode(), "sta") && nucleo_setup_ip()[0];
-    g->setTextDatum(lgfx::top_right);
-    char net[24];
-    snprintf(net, sizeof net, "%.20s", sta ? nucleo_setup_ssid() : !strcmp(nucleo_setup_mode(), "ap") ? "Hotspot" : "offline");
-    g->setTextColor(sta ? FG : C_RED, BG);
-    g->drawString(net, w - 10, 90, &fonts::Font2);
-    g->setTextColor(MUTED, BG);
-    g->drawString(sta ? nucleo_setup_ip() : !strcmp(nucleo_setup_mode(), "ap") ? "192.168.4.1" : "", w - 10, 110, &fonts::Font2);
+    const MenuNode *f = launcher_focused();
+    const bool qm = launcher_qm_active(), search = launcher_filter()[0] != 0;
+    const bool play = nucleo_audio_is_playing() && !nucleo_audio_is_paused();
+
+    // ---- the focused tile: what Enter opens --------------------------------------------------------------------
+    const int s = 48, x0 = 8, y0 = 8, lx = x0 + s + 10, lw = w - lx - 6;
+    if (f) {
+        comp_tile(g, x0, y0, s, f, f->color);
+        char nm[32]; snprintf(nm, sizeof nm, "%s", node_label(f));
+        g->setFont(&fonts::Font4);
+        if ((int)g->textWidth(nm) > lw) g->setFont(&fonts::FreeSansBold9pt7b);
+        while (nm[0] && (int)g->textWidth(nm) > lw) nm[strlen(nm) - 1] = 0;
+        g->setTextColor(FG, BG); g->drawString(nm, lx, y0 + 1);
+        const char *desc = f->desc && f->desc[0] ? f->desc : "";
+        if (desc[0]) qm_wrap(g, desc, lx, y0 + 27, lw, 2, MUTED, BG);
+    } else {
+        g->setFont(&fonts::Font4); g->setTextColor(DIM, BG); g->setTextDatum(lgfx::top_center);
+        g->drawString(search ? TR5("Nessun risultato", "No matches", "Sin resultados", "Aucun resultat", "Keine Treffer")
+                             : TR5("Nessuna app", "No apps", "Ninguna app", "Aucune app", "Keine Apps"), w / 2, 24);
+        g->setTextDatum(lgfx::top_left);
+    }
+
+    // ---- a look behind the focus -------------------------------------------------------------------------------
+    const int cy = 72;                                               // the context band: cy .. ky - 4
+    g->drawFastHLine(8, cy - 5, w - 16, LINE);
+    g->setFont(&fonts::Font2); g->setTextSize(1);
+    char ln[48];
+    if (search) {                                                    // the search: how many, and the hits
+        const int n = launcher_visible_count();
+        snprintf(ln, sizeof ln, "\"%.12s\"  %d %s", launcher_filter(), n, n == 1 ? TR5("risultato", "match", "resultado", "resultat", "Treffer")
+                                                                              : TR5("risultati", "matches", "resultados", "resultats", "Treffer"));
+        g->setTextColor(C_GREEN, BG); g->drawString(ln, 8, cy);
+        if (n) comp_strip(g, 8, cy + 16, w - 16, n, [](int i) { return launcher_nth_visible(i); });
+    } else if (f && f->kind == N_MENU) {                             // a category: what is inside it
+        const int n = node_child_count(f);
+        snprintf(ln, sizeof ln, "%s  %d app", TR5("Dentro", "Inside", "Dentro", "Dedans", "Darin"), n);
+        g->setTextColor(MUTED, BG); g->drawString(ln, 8, cy);
+        if (n) comp_strip(g, 8, cy + 16, w - 16, n, [f](int i) { return f->items[i]; });
+    } else if (play) {                                               // the track playing (the panel shows no title)
+        const char *p = nucleo_audio_path(), *slash = strrchr(p, '/');
+        snprintf(ln, sizeof ln, "%s", slash ? slash + 1 : p);
+        char *dot = strrchr(ln, '.'); if (dot && dot != ln) *dot = 0;
+        g->setTextColor(MUTED, BG); g->drawString(TR5("In riproduzione", "Now playing", "Sonando", "En lecture", "Laeuft"), 8, cy);
+        g->setFont(&fonts::FreeSansBold9pt7b);
+        while (ln[0] && (int)g->textWidth(ln) > w - 16) ln[strlen(ln) - 1] = 0;
+        g->setTextColor(C_GREEN, BG); g->drawString(ln, 8, cy + 20);
+    } else if (f) {                                                  // an app: where it sits, and how to find any other
+        if (launcher_depth() > 0) snprintf(ln, sizeof ln, "%s  %d / %d", node_label(launcher_node()), launcher_sel() + 1, launcher_visible_count());
+        else snprintf(ln, sizeof ln, "Home  %d / %d", launcher_sel() + 1, launcher_visible_count());
+        g->setTextColor(MUTED, BG); g->drawString(ln, 8, cy);
+        if (launcher_is_pinned(f->id)) {
+            g->setTextDatum(lgfx::top_right); g->setTextColor(C_YELLOW, BG);
+            g->drawString(TR5("fissata in Home", "pinned to Home", "fijada en Inicio", "epinglee", "angeheftet"), w - 8, cy);
+            g->setTextDatum(lgfx::top_left);
+        }
+        g->setTextColor(DIM, BG);
+        g->drawString(TR5("Scrivi per cercare tra tutte le app", "Type to search every app", "Escribe para buscar", "Tapez pour chercher",
+                          "Tippen zum Suchen"), 8, cy + 22);
+    }
+
+    // ---- the keys that work now --------------------------------------------------------------------------------
+    g->fillRect(0, ky, w, h - ky, INK);
+    g->drawFastHLine(0, ky, w, LINE);
+    const char *ent = TR5("invio", "enter", "enter", "entree", "enter");
+    int x = 5; const int y = ky + 2;
+    if (qm) {
+        x = comp_key(g, x, y, "\x18\x19", TR5("scegli", "pick", "elegir", "choisir", "waehlen"));
+        x = comp_key(g, x, y, ent, "ok");
+        comp_key(g, x, y, "esc", TR5("chiudi", "close", "cerrar", "fermer", "zu"));
+    } else if (search) {
+        x = comp_key(g, x, y, ent, TR5("apri", "open", "abrir", "ouvrir", "oeffnen"));
+        x = comp_key(g, x, y, "del", TR5("cancella", "erase", "borrar", "effacer", "loeschen"));
+        comp_key(g, x, y, "esc", TR5("azzera", "clear", "limpiar", "vider", "leeren"));
+    } else {
+        x = comp_key(g, x, y, ent, TR5("apri", "open", "abrir", "ouvrir", "oeffnen"));
+        if (f && f->kind == N_APP) x = comp_key(g, x, y, "*", "menu");
+        if (launcher_depth() > 0) comp_key(g, x, y, "esc", TR5("indietro", "back", "atras", "retour", "zurueck"));
+        else comp_key(g, x, y, "tab", TR5("rapide", "quick", "rapido", "rapide", "schnell"));
+    }
     g->setTextDatum(lgfx::top_left);
     g->setFont(&fonts::Font0);
     g->endWrite();
-    (void)h;
 }
