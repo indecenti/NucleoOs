@@ -7,7 +7,7 @@
   "platforms": [
     "esp32s3"
   ],
-  "description": "Scambia file e comandi con dispositivi vicini (Nucleo o Bruce) via ESP-NOW.",
+  "description": "Scambia file e comandi con dispositivi vicini (Nucleo o Bruce) via radio diretta tra dispositivi.",
   "category": "connectivity",
   "runtime": "web",
   "entry_service": "none",

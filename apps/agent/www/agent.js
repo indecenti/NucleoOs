@@ -172,7 +172,7 @@ function inferProvider(j) {
 }
 function cfgFromEntry(prov, e) {
   const p = providerOf(prov);
-  return { provider: prov, base: e.base || p.base, model: e.model || p.def, key: e.key, version: e.version || p.version, geminiTier: e.geminiTier || '' };
+  return { provider: prov, base: e.base || p.base, model: e.model || p.def, key: e.key, version: e.version || p.version, geminiTier: e.geminiTier || '', effort: e.effort || '' };   // effort: Settings ▸ AI (ai.js withEffort)
 }
 function pickCfg(j) {
   j = j || {};

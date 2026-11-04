@@ -97,8 +97,8 @@
    ],
    "title": "alias - Give a long command a short name",
    "synopsis": "alias [name=command]",
-   "description": "Without arguments it lists the aliases. With name=command it defines one, saved on the card so it survives a reload. On a 56-key thumb keyboard the typing is the cost, which is what makes this worth its bytes.",
-   "details": "NAME\n  alias - Give a long command a short name\n\nSYNOPSIS\n  alias [name=command]\n\nDESCRIPTION\n  Without arguments it lists the aliases. With name=command it defines one, saved on the card so it survives a reload. On a 56-key thumb keyboard the typing is the cost, which is what makes this worth its bytes.\n\nOPTIONS\n  name=command\n    Define an alias.\n  name\n    Show one alias.\n\nDEVICE COST\n  One POST /api/fs/write when an alias changes, into the app's own folder. Nothing at all when a command runs.\n\nNOTES\n  An alias expands once, on the command word only, and an alias body containing a pipe, a redirect or ; && || is refused: a saved string must not be able to smuggle in an operator the user never typed.\n\nSEE ALSO\n  unalias(1), which(1), export(1)\n\nEXAMPLES\n  alias ll='ls /data'\n  alias errs='dmesg -l E'\n  alias"
+   "description": "Without arguments it lists the aliases. With name=command it defines one, saved on the device so it survives a reload. On a small keyboard the typing is the cost, which is what makes this worth its bytes.",
+   "details": "NAME\n  alias - Give a long command a short name\n\nSYNOPSIS\n  alias [name=command]\n\nDESCRIPTION\n  Without arguments it lists the aliases. With name=command it defines one, saved on the device so it survives a reload. On a small keyboard the typing is the cost, which is what makes this worth its bytes.\n\nOPTIONS\n  name=command\n    Define an alias.\n  name\n    Show one alias.\n\nDEVICE COST\n  One POST /api/fs/write when an alias changes, into the app's own folder. Nothing at all when a command runs.\n\nNOTES\n  An alias expands once, on the command word only, and an alias body containing a pipe, a redirect or ; && || is refused: a saved string must not be able to smuggle in an operator the user never typed.\n\nSEE ALSO\n  unalias(1), which(1), export(1)\n\nEXAMPLES\n  alias ll='ls /data'\n  alias errs='dmesg -l E'\n  alias"
   },
   {
    "id": "apps",
@@ -109,7 +109,7 @@
    "title": "apps - List the installed apps, or open one",
    "synopsis": "apps [-a]   |   apps open <id>",
    "description": "Prints one tab-separated row per installed app: id, name, whether it is enabled, and its route. With open it asks the shell to launch one.",
-   "details": "NAME\n  apps - List the installed apps, or open one\n\nSYNOPSIS\n  apps [-a]   |   apps open <id>\n\nDESCRIPTION\n  Prints one tab-separated row per installed app: id, name, whether it is enabled, and its route. With open it asks the shell to launch one.\n\nOPTIONS\n  -a\n    Include disabled apps.\n  open <id>\n    Open that app in the shell.\n\nDEVICE COST\n  One GET /api/apps, memoised for 30 s. Opening an app is a shell message, not a device call.\n\nNOTES\n  This is deliberately NOT a process list. Nothing on the device knows which windows are open, so a ps built on this endpoint would print all 46 installed apps as if they were running.\n\nSEE ALSO\n  which(1), assoc(1), open(1)\n\nEXAMPLES\n  apps\n  apps -a | grep off\n  apps open notepad"
+   "details": "NAME\n  apps - List the installed apps, or open one\n\nSYNOPSIS\n  apps [-a]   |   apps open <id>\n\nDESCRIPTION\n  Prints one tab-separated row per installed app: id, name, whether it is enabled, and its route. With open it asks the shell to launch one.\n\nOPTIONS\n  -a\n    Include disabled apps.\n  open <id>\n    Open that app in the shell.\n\nDEVICE COST\n  One GET /api/apps, memoised for 30 s. Opening an app is a shell message, not a device call.\n\nNOTES\n  This is deliberately NOT a process list. Nothing on the device knows which windows are open, so a ps built on this endpoint would print every installed app as if they were running.\n\nSEE ALSO\n  which(1), assoc(1), open(1)\n\nEXAMPLES\n  apps\n  apps -a | grep off\n  apps open notepad"
   },
   {
    "id": "assoc",
@@ -211,7 +211,7 @@
    "title": "curl - HTTP web request",
    "synopsis": "curl <url>",
    "description": "Perform an HTTP GET request to a URL and output response content.",
-   "details": "NAME\n  curl - Fetch HTTP web resource.\n\nSYNOPSIS\n  curl <url>\n\nDESCRIPTION\n  Performs an HTTP GET request and prints the response payload to the terminal stdout.\n\nOPTIONS\n  <url>\n    The target web address.\n\nSYSTEM ARCHITECTURE\n  Dispatches a GET request. Subject to CORS restrictions in simulated environments. Runs directly through the ESP-IDF Wi-Fi socket stack (LwIP) on physical devices.\n\nEXIT CODES\n  0\n    Success.\n  1\n    Network offline, CORS block, or host timeout.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  wget(1), ping(1)\n\nADVANCED EXAMPLES\n  curl ipify.org\n  curl http://example.com"
+   "details": "NAME\n  curl - Fetch HTTP web resource.\n\nSYNOPSIS\n  curl <url>\n\nDESCRIPTION\n  Performs an HTTP GET request and prints the response payload to the terminal stdout.\n\nOPTIONS\n  <url>\n    The target web address.\n\nSYSTEM ARCHITECTURE\n  Dispatches a GET request. Subject to CORS restrictions in simulated environments. On a physical device it runs directly through the device's own network stack.\n\nEXIT CODES\n  0\n    Success.\n  1\n    Network offline, CORS block, or host timeout.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nSEE ALSO\n  wget(1), ping(1)\n\nADVANCED EXAMPLES\n  curl ipify.org\n  curl http://example.com"
   },
   {
    "id": "cut",
@@ -272,7 +272,7 @@
    "title": "display - Turn the panel on or off",
    "synopsis": "display on | display off",
    "description": "Switches the physical display, and prints the brightness the device reports afterwards.",
-   "details": "NAME\n  display - Turn the panel on or off\n\nSYNOPSIS\n  display on | display off\n\nDESCRIPTION\n  Switches the physical display, and prints the brightness the device reports afterwards.\n\nOPTIONS\n  on\n    Panel on.\n  off\n    Panel off.\n\nDEVICE COST\n  One POST /api/display.\n\nNOTES\n  Needs the device.display permission. On a 120 mAh budget this is the single biggest lever there is, and until now it was only reachable through Settings.\n\nSEE ALSO\n  screen(1), status(1)\n\nEXAMPLES\n  display off\n  display on"
+   "details": "NAME\n  display - Turn the panel on or off\n\nSYNOPSIS\n  display on | display off\n\nDESCRIPTION\n  Switches the physical display, and prints the brightness the device reports afterwards.\n\nOPTIONS\n  on\n    Panel on.\n  off\n    Panel off.\n\nDEVICE COST\n  One POST /api/display.\n\nNOTES\n  Needs the device.display permission. On a battery-powered device this is the single biggest lever on battery life, and until now it was only reachable through Settings.\n\nSEE ALSO\n  screen(1), status(1)\n\nEXAMPLES\n  display off\n  display on"
   },
   {
    "id": "dmesg",
@@ -296,8 +296,8 @@
    ],
    "title": "du - Disk usage per directory, biggest first",
    "synopsis": "du [-d N] [path]",
-   "description": "Walks a subtree and adds up the size of the files in each directory, rolling children into their parents. The output is sorted by size, so the answer to \"what is eating the card\" is the first line.",
-   "details": "NAME\n  du - Disk usage per directory, biggest first\n\nSYNOPSIS\n  du [-d N] [path]\n\nDESCRIPTION\n  Walks a subtree and adds up the size of the files in each directory, rolling children into their parents. The output is sorted by size, so the answer to \"what is eating the card\" is the first line.\n\nOPTIONS\n  -d N\n    Descend at most N levels (default 2, hard maximum 6).\n  [path]\n    Where to start; the working directory by default.\n\nDEVICE COST\n  One GET /api/fs/list per directory, strictly sequential, and never more than 60 in one invocation. Ctrl+C stops it.\n\nNOTES\n  A listing costs the device a stat() per entry, so the walk is budgeted rather than complete: when it stops, it says so.\n\nSEE ALSO\n  df(1), tree(1), stat(1)\n\nEXAMPLES\n  du\n  du -d 1 /data\n  du /data | sort -n -r | head -n 5"
+   "description": "Walks a subtree and adds up the size of the files in each directory, rolling children into their parents. The output is sorted by size, so the answer to \"what is eating the storage\" is the first line.",
+   "details": "NAME\n  du - Disk usage per directory, biggest first\n\nSYNOPSIS\n  du [-d N] [path]\n\nDESCRIPTION\n  Walks a subtree and adds up the size of the files in each directory, rolling children into their parents. The output is sorted by size, so the answer to \"what is eating the storage\" is the first line.\n\nOPTIONS\n  -d N\n    Descend at most N levels (default 2, hard maximum 6).\n  [path]\n    Where to start; the working directory by default.\n\nDEVICE COST\n  One GET /api/fs/list per directory, strictly sequential, and never more than 60 in one invocation. Ctrl+C stops it.\n\nNOTES\n  A listing costs the device a stat() per entry, so the walk is budgeted rather than complete: when it stops, it says so.\n\nSEE ALSO\n  df(1), tree(1), stat(1)\n\nEXAMPLES\n  du\n  du -d 1 /data\n  du /data | sort -n -r | head -n 5"
   },
   {
    "id": "echo",
@@ -402,7 +402,7 @@
    "title": "heap - Heap detail, including fragmentation",
    "synopsis": "heap",
    "description": "Prints the internal, DMA and default heap pools with their free bytes, largest free block, minimum ever seen and fragmentation percentage, plus the HTTP server's minimum free stack.",
-   "details": "NAME\n  heap - Heap detail, including fragmentation\n\nSYNOPSIS\n  heap\n\nDESCRIPTION\n  Prints the internal, DMA and default heap pools with their free bytes, largest free block, minimum ever seen and fragmentation percentage, plus the HTTP server's minimum free stack.\n\nOPTIONS\n  This command takes no options.\n\nDEVICE COST\n  One GET /api/heap.\n\nNOTES\n  Fragmentation, not free bytes, is the documented bottleneck on this chip — and free(1) cannot show it.\n\nSEE ALSO\n  free(1), diag(1), cpu(1), watch(1)\n\nEXAMPLES\n  heap\n  watch -n 5 heap\n  heap | grep frag"
+   "details": "NAME\n  heap - Heap detail, including fragmentation\n\nSYNOPSIS\n  heap\n\nDESCRIPTION\n  Prints the internal, DMA and default heap pools with their free bytes, largest free block, minimum ever seen and fragmentation percentage, plus the HTTP server's minimum free stack.\n\nOPTIONS\n  This command takes no options.\n\nDEVICE COST\n  One GET /api/heap.\n\nNOTES\n  Fragmentation, not free bytes, is the documented bottleneck on devices of this kind — and free(1) cannot show it.\n\nSEE ALSO\n  free(1), diag(1), cpu(1), watch(1)\n\nEXAMPLES\n  heap\n  watch -n 5 heap\n  heap | grep frag"
   },
   {
    "id": "hexdump",
@@ -471,10 +471,10 @@
    "requires": [
     "device.link"
    ],
-   "title": "link - Show the ESP-NOW neighbours and the transfer state",
+   "title": "link - Show the nearby devices and the transfer state",
    "synopsis": "link peers | link status",
-   "description": "peers lists the devices this one can see over ESP-NOW, with the local name and channel; status shows whether a transfer is running and how far along it is.",
-   "details": "NAME\n  link - Show the ESP-NOW neighbours and the transfer state\n\nSYNOPSIS\n  link peers | link status\n\nDESCRIPTION\n  peers lists the devices this one can see over ESP-NOW, with the local name and channel; status shows whether a transfer is running and how far along it is.\n\nOPTIONS\n  peers\n    List the neighbours (the default).\n  status\n    Show the transfer state.\n\nDEVICE COST\n  One GET each.\n\nNOTES\n  Needs the mesh.peer permission. Read-only on purpose: sending a command to another device turns a typo into someone else's problem, and the confirmation step for that lives in the Vicino app.\n\nSEE ALSO\n  wifi(1), status(1)\n\nEXAMPLES\n  link peers\n  link status"
+   "description": "peers lists the devices this one can see over the direct device-to-device radio link, with the local name and channel; status shows whether a transfer is running and how far along it is.",
+   "details": "NAME\n  link - Show the nearby devices and the transfer state\n\nSYNOPSIS\n  link peers | link status\n\nDESCRIPTION\n  peers lists the devices this one can see over the direct device-to-device radio link, with the local name and channel; status shows whether a transfer is running and how far along it is.\n\nOPTIONS\n  peers\n    List the neighbours (the default).\n  status\n    Show the transfer state.\n\nDEVICE COST\n  One GET each.\n\nNOTES\n  Needs the mesh.peer permission. Read-only on purpose: sending a command to another device turns a typo into someone else's problem, and the confirmation step for that lives in the Vicino app.\n\nSEE ALSO\n  wifi(1), status(1)\n\nEXAMPLES\n  link peers\n  link status"
   },
   {
    "id": "ls",

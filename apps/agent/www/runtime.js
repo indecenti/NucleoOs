@@ -43,18 +43,18 @@ import { runWorkerLocal } from './local-worker.js';   // the LOCAL transport (F0
 import { smokeApp, smokeSummary, stageAppRecipe } from './app-recipe.js';   // F5: install-and-smoke on the device + app-recipe learning   // ONE intelligent queue for every device-touching call (reads pooled, writes + Gemini proxy exclusive)
 // multi-model router + capability matrix (image/whisper) for the capability tools + the shared key headers / relay rule
 // (authHeaders sends no key for a sealed-vault placeholder; viaProxy relays only Gemini — or everything on a sealed vault)
-// + the single sonnet-5 thinking rule
-import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError, whisperUrl, anthThinking, authHeaders as aiAuth, viaProxy } from '/ai.js';
+// + the one effort rule (withEffort: output_config.effort, never a `thinking` field)
+import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError, whisperUrl, withEffort, authHeaders as aiAuth, viaProxy } from '/ai.js';
 // NOTE: hardware (IR/WiFi/GPIO) is deliberately NOT a tool here. "ANIMA Code" is a general coding/
 // workspace agent (our Claude Code); device skills live INSIDE the dedicated apps (e.g. the IR Remote
 // app embeds its own scoped ANIMA skill via anima-skill.js). Centralising skills per-app cuts
 // cross-domain hallucinations and keeps this agent focused on code.
 
 export const MODELS = {
-  orchestrator: 'claude-haiku-4-5',   // cheap/fast triage + small tasks
+  orchestrator: 'claude-haiku-5-5',   // cheap/fast triage + small tasks
   worker: 'claude-sonnet-5-5',        // default doer
   hard: 'claude-opus-5-5',            // deep reasoning
-  small: 'claude-haiku-4-5',
+  small: 'claude-haiku-5-5',
 };
 const MAX_STEPS = 14;            // tool-use rounds per worker
 const MAX_PAUSE = 6;             // server-tool (web_search) continuations
@@ -99,8 +99,9 @@ async function callAnthropic(cfg, { model, system, messages, tools, toolChoice, 
   const base = (cfg.base || 'https://api.anthropic.com').replace(/\/+$/, '');
   for (let attempt = 0; attempt < 3; attempt++) {
     // Body is built FROM THE CURRENT MODEL on every attempt, so the 5xx fallback swap below can't
-    // send the old model's parameters (thinking guard included — anthThinking is the one shared rule).
-    const body = { model, max_tokens: maxTokens, messages, ...anthThinking(model) };
+    // send the old model's parameters. withEffort (ai.js) is the one shared rule: the user's effort where the model
+    // takes it, room for the thinking a 5.x model always does, and never a `thinking` field (5.x rejects "disabled").
+    const body = withEffort(cfg, { model, max_tokens: maxTokens, messages });
     // Cache the (turn-stable) system prompt so the loop's 2nd…Nth steps reuse it instead of re-billing the
     // full block each round — the seeded workspace context makes this worth it. Ignored by APIs without caching.
     if (system) body.system = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
@@ -151,9 +152,9 @@ const textOf = (content) => Array.isArray(content) ? content.filter((b) => b && 
 // language into a date locale, a third-party API language code, or a "reply in X" instruction has to
 // cover all five: the `lang === 'en' ? … : …` binary this replaces silently served ITALIAN to the
 // Spanish, French and German users — including the agent's own replies.
-const LOCALES    = { it: 'it-IT',    en: 'en-US',   es: 'es-ES',   fr: 'fr-FR',    de: 'de-DE' };
-const LANG_NAMES = { it: 'italiano', en: 'English', es: 'español', fr: 'français', de: 'Deutsch' };
-const GEO_LANGS = new Set(['it', 'en', 'es', 'fr', 'de']);
+const LOCALES    = { it: 'it-IT',    en: 'en-US',   es: 'es-ES',   fr: 'fr-FR',    de: 'de-DE',   zh: 'zh-CN' };
+const LANG_NAMES = { it: 'italiano', en: 'English', es: 'español', fr: 'français', de: 'Deutsch', zh: '简体中文 (Simplified Chinese)' };
+const GEO_LANGS = new Set(['it', 'en', 'es', 'fr', 'de', 'zh']);   // Open-Meteo geocoding names places in each
 const LIST_APPS_LINE = "• list_apps: elenca le app installate (id, nome, categoria, descrizione) — chiamalo prima di lanciare se non sei sicuro dell'id.";
 // A PC model has no list_apps (LOCAL_EXCLUDED_TOOLS): told to call it, qwen3.5:9b answered "I can't list the installed apps"
 // and listed some from memory. Its line points at the shell command that IS there.
@@ -1073,7 +1074,7 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
     // single task (default): route to the best model across all configured keys, with cross-provider fallback.
     // The reply language also rides in the user turn, in that language: a 9B model ignored the system-prompt note and
     // answered an English task in Italian (real Cardputer, 2026-10-10); it follows its own user turn far better.
-    const REPLY_IN = { en: '(Reply in English.)', es: '(Responde en español.)', fr: '(Réponds en français.)', de: '(Antworte auf Deutsch.)', it: '(Rispondi in italiano.)' };
+    const REPLY_IN = { en: '(Reply in English.)', es: '(Responde en español.)', fr: '(Réponds en français.)', de: '(Antworte auf Deutsch.)', it: '(Rispondi in italiano.)', zh: '（请用简体中文回答。）' };
     const userTurn = langNote && REPLY_IN[opts.replyLang] ? userMsg + '\n\n' + REPLY_IN[opts.replyLang] : userMsg;
     // fileTruth: a file the answer still claims but the workspace does not have is said plainly under it
     return await fileTruth(publishTruth(await runWorkerWithFallback({

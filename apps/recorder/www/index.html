@@ -230,7 +230,7 @@
   // Every user-facing label now resolves through the centralized i18n engine (t() / data-i18n).
   const sysLang = () => { const l=(localStorage.getItem('anima.lang')||'en').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; };
   // BCP-47 tag for the browser SpeechRecognition live transcript, per OS language.
-  const SR_LOCALE = { it:'it-IT', en:'en-US', es:'es-ES', fr:'fr-FR', de:'de-DE' };
+  const SR_LOCALE = { it:'it-IT', en:'en-US', es:'es-ES', fr:'fr-FR', de:'de-DE', zh:'zh-CN' };
   // Centralized i18n engine: load core + the recorder catalog for the active OS language, auto-fill
   // every [data-i18n*] element and observe the DOM for nodes added later. t(key[,vars]) resolves the
   // imperative (JS-built) strings. English is the source of truth AND the fallback floor.

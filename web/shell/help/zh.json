@@ -1,0 +1,885 @@
+{
+ "format": 1,
+ "lang": "zh",
+ "topics": [
+  {
+   "id": "desktop",
+   "title": "桌面、开始菜单和窗口",
+   "md": "桌面一开始只有几个图标：**File Commander**、**回收站**、**ANIMA** 和**帮助**。其他应用都在**开始**菜单中。\n\n## 开始\n- 任务栏左侧的按钮用来打开「开始」。打开后直接输入，即可搜索应用、文件和设置。\n- **已固定**显示你固定的应用。**所有应用**按分类列出全部应用：轻点某个分类，就只显示该分类的应用。\n- 「开始」底部有：你的名称（或设备的名称）、**设置**按钮和**电源**按钮（锁定、退出登录，以及在设备支持时重启）。\n\n## 窗口\n- 拖动标题栏可以移动窗口；把窗口拖到屏幕边缘，可以让它贴靠在那里。\n- 点按 ✕ 关闭窗口，也可以按 `Ctrl` + `W`。`Esc` 从不关闭窗口：它只关闭系统菜单和面板。\n- `Alt` + `Tab` 在窗口之间切换。\n\n## 任务栏\n打开的应用会显示在任务栏上。在「开始」中右键点击一个应用，可以把它固定到任务栏、「开始」菜单或桌面。\n",
+   "icon": "🖥️"
+  },
+  {
+   "id": "apps",
+   "title": "应用和应用商店",
+   "md": "## 应用在哪里\n所有已安装的应用都在**开始 › 所有应用**中，按分类排列：系统、效率、照片、音乐和视频、游戏、工具、网络和消息。\n\n## 把应用放到桌面\n在「开始」中右键点击（或长按）一个应用，然后选择**添加到桌面**。在同一菜单中，还可以把它从桌面移除，或固定到「开始」菜单或任务栏。\n\n## 应用商店\n从「开始」打开**应用商店**，获取更多应用。每个软件包都经过签名，系统会在安装前、并在需要时于每次打开前校验签名。应用商店只显示适合这台设备的应用。\n\n要移除从应用商店安装的应用：在「开始」中右键点击它，然后选择**卸载**。系统应用无法卸载。\n",
+   "icon": "🧩",
+   "app": "store"
+  },
+  {
+   "id": "files",
+   "title": "文件和回收站",
+   "md": "## File Commander\n**File Commander** 是文件管理器：文件夹、复制、移动、重命名、预览。打开一个文件时，它会交给与该文件类型关联的应用。\n\n## 回收站\n- 在 File Commander 或桌面上删除的文件会进入**回收站**，你可以从那里把它还原到原来的文件夹。\n- 回收站保留最近的 20 项：有新项目进来时，最早的一项会被永久删除。\n- 在 File Commander 中删除的文件夹不会经过回收站：系统会在删除前提醒你。\n- 在回收站中，你可以**还原**单个项目或**全部还原**，也可以**清空回收站**（此操作无法撤销）。\n\n回收站图标始终留在桌面上，无法移除。\n",
+   "icon": "🗂️",
+   "app": "file-commander"
+  },
+  {
+   "id": "settings",
+   "title": "设置",
+   "md": "点按「开始」底部的齿轮按钮，或从「开始 › 所有应用」中打开**设置**。\n\n- **外观**：浅色或深色主题、壁纸、图标大小。\n- **网络**：设备的网络连接（在设备可以管理连接时）。\n- **AI / 模型**：ANIMA 使用的服务商和密钥，或在浏览器中运行的模型。\n- **账户**：使用这台设备的人（在设备支持多个账户时）。\n- **更新**：已安装的版本和可用的新版本。\n- **关于**：设备、版本和存储空间。\n\n语言在「设置」中更改，整个系统和所有应用都使用同一种语言。\n",
+   "icon": "⚙️",
+   "app": "settings"
+  },
+  {
+   "id": "keyboard",
+   "title": "键盘快捷键",
+   "md": "## 系统\n- `Win`（单独按下）：打开或关闭「开始」\n- `Ctrl` + `空格`：在任何地方打开 ANIMA\n- `Alt` + `Tab`：在窗口之间切换\n- `Win` + 方向键：贴靠当前窗口\n- `Ctrl` + `Alt` + `L`：锁定屏幕\n- `Ctrl` + `W`：关闭当前窗口\n- `Ctrl` + `Shift` + `V`：剪贴板历史记录\n- `Esc`：关闭系统菜单和面板\n\n## 桌面\n- 方向键：在图标之间移动；`Enter` 打开\n- `F2`：重命名所选图标\n- `Delete`：删除所选项（文件会进入回收站）\n- `Ctrl` + `A`：全选\n\n## 文档\n- `Ctrl` + `S` 保存，`Ctrl` + `Shift` + `S` 另存为，`Ctrl` + `O` 打开，`Ctrl` + `N` 新建\n",
+   "icon": "⌨️"
+  },
+  {
+   "id": "accounts",
+   "title": "账户",
+   "md": "这台设备最多可供五个人使用，每人有自己的账户。\n\n## 每个人自己的内容\n每个人都有自己的文档、设置、桌面、回收站和云端存档。谁也看不到别人的文件。\n\n## 管理员\n第一个账户就是管理员。管理员在**设置 › 账户**中创建和删除账户、重置密码，并决定还有谁是管理员。\n\n## 登录和退出登录\n- 打开时，系统会要求输入名称和密码。\n- 退出登录：点按「开始」底部的电源按钮 › **退出登录**。\n- 管理员设置的密码，需要在首次登录时更改。\n\n连续输错几次后，登录会暂停一段时间：这样可以防止有人猜出密码。\n",
+   "icon": "👥",
+   "requires": [
+    "users.multi"
+   ]
+  },
+  {
+   "id": "cloud-archive",
+   "title": "加密云端存档",
+   "md": "File Commander 中的 **/r2** 磁盘就是你在云端的存档。\n\n- 文件在离开之前就已在浏览器中加密：云服务只能看到无法读取的数据。\n- 存档密码永远不会离开设备，而且无法找回：请妥善保管。创建存档时，你会得到一个恢复密钥。\n- 有多个账户时，每个人都有各自独立的存档。\n- 如果有人把存档回退到旧版本，系统会发现并告诉你。\n",
+   "icon": "☁️",
+   "requires": [
+    "cloud.archive"
+   ]
+  },
+  {
+   "id": "anima",
+   "title": "ANIMA",
+   "md": "**ANIMA** 是系统助手。可以从桌面打开，也可以在任何地方按 `Ctrl` + `空格` 打开。\n\n- 它能回答问题、撰写和总结文字，还能帮你打开应用和文件。\n- 它可以使用 AI 服务商和你自己的密钥（「设置 › AI / 模型」），也可以使用在浏览器中运行的模型，数据不会离开这台电脑。\n- 在做任何会更改你的文件或设备的事情之前，它都会先请你确认。\n",
+   "icon": "✨",
+   "app": "anima"
+  },
+  {
+   "id": "updates",
+   "title": "更新",
+   "md": "**设置 › 更新**会显示已安装的版本，并检查是否有新版本。有新版本时，系统会通知你，你可以在那里安装。\n\n- 一次更新会同时带来系统、内置应用和这本手册：手册描述的始终是你正在使用的版本。\n- 应用商店中的应用通过应用商店更新。\n- 你的文件和设置都保持原样。\n",
+   "icon": "⬆️",
+   "any": [
+    "ota",
+    "ota.firmware",
+    "ota.package"
+   ]
+  },
+  {
+   "id": "games",
+   "title": "游戏",
+   "md": "- **游戏库**汇集了设备上的游戏，带有封面和最近玩过的游戏。\n- 最近的游戏也会显示在「开始」顶部和任务栏的游戏按钮中。\n- 游戏存档保存在设备上。\n",
+   "icon": "🎮",
+   "requires": [
+    "games.library"
+   ]
+  },
+  {
+   "id": "terminal",
+   "title": "终端",
+   "md": "**终端**会打开一个命令行，适合熟悉命令行的人使用：命令会直接作用于文件和设备，没有应用所提供的那些保护。\n\n- 如果设备提供系统 shell，终端就会打开它：命令及其手册都来自系统。\n- 否则，终端提供 NucleoOS 自己的命令：`help` 列出所有命令，`man` 后跟命令名称可显示该命令的手册页。本手册的**终端命令**中也有同样的页面，只列出这台设备具备的命令。\n- `Ctrl` + `C` 停止正在运行的命令。\n",
+   "icon": "⌨",
+   "app": "terminal"
+  }
+ ],
+ "commands": [
+  {
+   "id": "alias",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "alias - 为长命令起一个短名称",
+   "synopsis": "alias [name=command]",
+   "description": "不带参数时列出所有别名。使用 name=command 可以定义一个别名，它保存在设备存储中，重新加载后依然有效。在按键不多的小键盘上，打字本身就是成本，这正是这个命令值得占用这几个字节的原因。",
+   "details": "名称\n  alias - 为长命令起一个短名称\n\n用法\n  alias [name=command]\n\n说明\n  不带参数时列出所有别名。使用 name=command 可以定义一个别名，它保存在设备存储中，重新加载后依然有效。在按键不多的小键盘上，打字本身就是成本，这正是这个命令值得占用这几个字节的原因。\n\n选项\n  name=command\n    定义一个别名。\n  name\n    显示一个别名。\n\n设备开销\n  别名改变时执行一次 POST /api/fs/write，写入应用自己的文件夹。运行命令时完全没有开销。\n\n注意\n  别名只展开一次，而且只作用于命令词；别名内容如果包含管道、重定向或 ; && ||，会被拒绝：保存的字符串不能偷偷带入用户从未输入过的运算符。\n\n另请参阅\n  unalias(1), which(1), export(1)\n\n示例\n  alias ll='ls /data'\n  alias errs='dmesg -l E'\n  alias"
+  },
+  {
+   "id": "apps",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "apps - 列出已安装的应用，或打开其中一个",
+   "synopsis": "apps [-a]   |   apps open <id>",
+   "description": "每个已安装的应用输出一行，字段以制表符分隔：id、名称、是否已启用以及路由。使用 open 时，请求 shell 启动一个应用。",
+   "details": "名称\n  apps - 列出已安装的应用，或打开其中一个\n\n用法\n  apps [-a]   |   apps open <id>\n\n说明\n  每个已安装的应用输出一行，字段以制表符分隔：id、名称、是否已启用以及路由。使用 open 时，请求 shell 启动一个应用。\n\n选项\n  -a\n    包括已停用的应用。\n  open <id>\n    在 shell 中打开该应用。\n\n设备开销\n  一次 GET /api/apps，结果缓存 30 秒。打开应用是发给 shell 的消息，不会调用设备。\n\n注意\n  这里刻意不是进程列表。设备上没有任何部分知道哪些窗口是打开的，所以基于这个接口做出的 ps 会把所有已安装的应用都显示为正在运行。\n\n另请参阅\n  which(1), assoc(1), open(1)\n\n示例\n  apps\n  apps -a | grep off\n  apps open notepad"
+  },
+  {
+   "id": "assoc",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "assoc - 显示 open(1) 会选用哪个应用",
+   "synopsis": "assoc [extension]",
+   "description": "输出文件关联表，或某个扩展名对应的那一项，另外还会显示没有匹配时使用的后备应用。",
+   "details": "名称\n  assoc - 显示 open(1) 会选用哪个应用\n\n用法\n  assoc [extension]\n\n说明\n  输出文件关联表，或某个扩展名对应的那一项，另外还会显示没有匹配时使用的后备应用。\n\n选项\n  [extension]\n    只显示这个扩展名，带不带点都可以。\n\n设备开销\n  一次 GET /api/associations。\n\n另请参阅\n  open(1), apps(1)\n\n示例\n  assoc\n  assoc txt\n  assoc | grep notepad"
+  },
+  {
+   "id": "base64",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "base64 - 进行 base64 编码或解码",
+   "synopsis": "base64 [-d] [file]",
+   "description": "将文件或标准输入编码为 base64，使用 -d 则解码回原样。这是让二进制数据通过文本管道或系统剪贴板的唯一方式。",
+   "details": "名称\n  base64 - 进行 base64 编码或解码\n\n用法\n  base64 [-d] [file]\n\n说明\n  将文件或标准输入编码为 base64，使用 -d 则解码回原样。这是让二进制数据通过文本管道或系统剪贴板的唯一方式。\n\n选项\n  -d\n    解码，而不是编码。\n  [file]\n    读取此文件；省略时读取标准输入。\n\n设备开销\n  指定文件时执行一次 GET /api/fs/read；在管道中则完全没有开销。\n\n注意\n  编码器按字节而不是按字符处理：浏览器内置的 btoa 只支持 latin1，会损坏所有大于 0x7F 的字节。\n\n另请参阅\n  hexdump(1), clip(1), tee(1)\n\n示例\n  base64 /data/logo.png\n  base64 /data/logo.b64 | base64 -d | tee /data/logo.png"
+  },
+  {
+   "id": "cat",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cat - 显示文件内容",
+   "synopsis": "cat [file]",
+   "description": "输出文件的文本内容，或把管道输入原样传出。",
+   "details": "名称\n  cat - 显示文件的内容。\n\n用法\n  cat [file]\n\n说明\n  从设备存储中读取文件，并以 UTF-8 文本输出，不含结尾的换行符。空文件会输出 '(empty file)'。/proc 下的路径是实时的系统节点，由设备以纯文本提供（仅限具备这些节点的设备）。不指定文件且位于管道中时（例如 'diag | cat'），cat 会把输入原样传出。一次只处理一个文件：cat 不会拼接多个文件。\n\n选项\n  [file]\n    要显示的文件路径，可以是绝对路径，也可以是相对于当前文件夹的路径。省略时，cat 输出从管道收到的内容。\n\n架构与底层\n  通过 Web OS 的文件层读取，文件层会在设备上调用 GET '/api/fs/read?path=<file>'；/proc 路径则直接向设备请求。错误信息：文件不存在时为 'no such file or directory'，此浏览器未配对时为 'not paired (401)'，设备没有响应时为 'cannot reach the file API'。\n\n返回码\n  0\n    成功。文件已读取并输出。\n  1\n    无法读取文件（文件不存在、浏览器未配对、设备无法连接或其他错误）。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  grep(1), head(1), tail(1)\n\n进阶示例\n  cat /system/config/settings.json\n  cat logs.txt"
+  },
+  {
+   "id": "cd",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cd - 更改工作目录",
+   "synopsis": "cd [path]",
+   "description": "更改终端会话的当前工作目录。",
+   "details": "名称\n  cd - 更改工作目录。\n\n用法\n  cd [path]\n\n说明\n  更改终端当前使用的路径（CWD）。未提供路径时，回到系统根目录 '/'。\n  为保证文件系统的完整性，客户端在切换路径之前，会先通过 '/api/fs/list' 对目标文件夹做一次预检。如果预检返回 404，则放弃更改路径。\n\n选项\n  [path]\n    目标文件夹的路径（例如 '..'、'/data'、'Pictures'）。\n\n架构与底层\n  更新浏览器的本地变量 'cwd' 和 'envVars.CWD'。在执行安全检查之前，相对路径会先被规范化：去掉 '.'，并解析 '..'。\n\n返回码\n  0\n    成功。目录存在，当前路径已更新。\n  1\n    目标目录不存在（预检失败）。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  ls(1), pwd(1)\n\n进阶示例\n  cd /data         # 进入 /data\n  cd ..            # 返回上一级目录\n  cd               # 将工作目录重置为根目录 /"
+  },
+  {
+   "id": "clear",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "clear - 清空屏幕缓冲区",
+   "synopsis": "clear",
+   "description": "清空终端屏幕的输出缓冲区。",
+   "details": "名称\n  clear - 清空终端屏幕。\n\n用法\n  clear\n\n说明\n  清除当前的文本输出缓冲区，并将命令提示符移回顶部。\n\n架构与底层\n  设置 'out.innerHTML = \"\"'，清理浏览器的 DOM 树。\n\n返回码\n  0\n    成功。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  history(1)\n\n进阶示例\n  clear"
+  },
+  {
+   "id": "clip",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "clip - 写入或读取系统剪贴板",
+   "synopsis": "clip   |   clip -o",
+   "description": "不带参数时，把标准输入放到剪贴板上；使用 -o 时，输出剪贴板上的内容。这是管道通往系统其他部分的出口，也是入口。",
+   "details": "名称\n  clip - 写入或读取系统剪贴板\n\n用法\n  clip   |   clip -o\n\n说明\n  不带参数时，把标准输入放到剪贴板上；使用 -o 时，输出剪贴板上的内容。这是管道通往系统其他部分的出口，也是入口。\n\n选项\n  -o\n    读取剪贴板，而不是写入。\n\n设备开销\n  设备上没有开销：剪贴板是 shell 的一项服务，由系统记住。\n\n注意\n  需要 system.clipboard 权限。\n\n另请参阅\n  tee(1), base64(1), say(1)\n\n示例\n  stat /data/notes.txt | clip\n  clip -o | wc"
+  },
+  {
+   "id": "cp",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cp - 复制文件",
+   "synopsis": "cp <source> <dest>",
+   "description": "将文件从源路径复制到目标路径。",
+   "details": "名称\n  cp - 复制文件。\n\n用法\n  cp <source> <dest>\n\n说明\n  将文件从源路径逐字节复制到目标路径。如果目标已存在，会被替换。含空格的名称需要放在双引号中。先输出 'copying <source> to <dest> ...'，然后输出 'copied successfully'。\n\n选项\n  <source>\n    要复制的原始文件路径。\n  <dest>\n    副本要创建到的目标路径。\n\n架构与底层\n  通过 Web OS 的文件层完成：文件层读取源文件并写入副本（大多数设备上使用 '/api/fs/read' 和 '/api/fs/write'）。写入是原子操作：字节先写入一个临时文件，因此如果复制失败，已有的目标文件会保持原样。可用空间放不下的副本会在开始前就被拒绝。\n\n返回码\n  0\n    成功。复制已完成。\n  1\n    复制失败：找不到源文件、空间不足、浏览器未配对或设备无法连接。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  mv(1), rm(1)\n\n进阶示例\n  cp /data/orig.txt /data/dest.txt\n  cp \"my file.txt\" \"/data/copy.txt\""
+  },
+  {
+   "id": "cpu",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "cpu - 核心数、频率、任务数和负载",
+   "synopsis": "cpu",
+   "description": "输出设备报告的处理器信息，每个字段一行 '键 值'：通常包括核心数、时钟频率、正在运行的任务或进程以及负载。具体字段取决于设备。",
+   "details": "名称\n  cpu - 核心数、频率、任务数和负载\n\n用法\n  cpu\n\n说明\n  输出设备报告的处理器信息，每个字段一行 '键 值'：通常包括核心数、时钟频率、正在运行的任务或进程以及负载。具体字段取决于设备。\n\n选项\n  此命令没有选项。\n\n设备开销\n  一次 GET /api/cpu。\n\n另请参阅\n  heap(1), diag(1), uptime(1)\n\n示例\n  cpu\n  watch -n 5 cpu"
+  },
+  {
+   "id": "curl",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "curl - HTTP 网络请求",
+   "synopsis": "curl <url>",
+   "description": "向某个 URL 发送 HTTP GET 请求，并输出响应内容。",
+   "details": "名称\n  curl - 获取 HTTP 网络资源。\n\n用法\n  curl <url>\n\n说明\n  发送 HTTP GET 请求，并把响应内容输出到终端的标准输出（stdout）。\n\n选项\n  <url>\n    目标网址。\n\n架构与底层\n  发送 GET 请求。在模拟环境中受 CORS 限制；在实体设备上，请求直接通过设备自身的 Wi-Fi 网络协议栈发出。\n\n返回码\n  0\n    成功。\n  1\n    网络离线、被 CORS 阻止或主机超时。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  wget(1), ping(1)\n\n进阶示例\n  curl ipify.org\n  curl http://example.com"
+  },
+  {
+   "id": "cut",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "cut - 从每一行中选取字段或列",
+   "synopsis": "cut -d<char> -f<list>   |   cut -c<from>-<to>",
+   "description": "只保留每一行的一部分。没有它，/proc 和设备日志的分列输出就无法通过管道处理。",
+   "details": "名称\n  cut - 从每一行中选取字段或列\n\n用法\n  cut -d<char> -f<list>   |   cut -c<from>-<to>\n\n说明\n  只保留每一行的一部分。没有它，/proc 和设备日志的分列输出就无法通过管道处理。\n\n选项\n  -d C\n    字段分隔符（默认为制表符）。\n  -f LIST\n    要保留哪些字段：1、1,3 或 2-4。\n  -c A-B\n    保留第 A 到第 B 个字符，而不是字段。\n\n设备开销\n  无。完全在浏览器端完成。\n\n另请参阅\n  grep(1), sort(1)\n\n示例\n  cat /proc/meminfo | cut -d\" \" -f1\n  apps | cut -f1"
+  },
+  {
+   "id": "date",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "date - 浏览器和设备的日期与时间",
+   "synopsis": "date [-u] [-s]",
+   "description": "显示此浏览器和设备的日期与时间，还可以设置设备时钟。",
+   "details": "名称\n  date - 浏览器和设备的日期与时间。\n\n用法\n  date [-u] [-s]\n\n说明\n  输出两个时钟：'local' 是此浏览器的时间，'device' 是设备的时钟。如果设备已通过互联网同步时钟，后面会显示 '(NTP-synced)'，否则显示 '(no NTP)'。时间以 YYYY-MM-DDTHH:MM:SS（ISO 8601）格式、按此浏览器的时区显示。如果设备没有报告时钟，第二行会显示 'device clock not reported'。\n\n选项\n  -u\n    以 UTC 显示两个时间（末尾带 Z）。\n  -s\n    用此浏览器的时钟设置设备时钟；适用于设备尚未通过 NTP 同步的情况。仅限支持此功能的设备；在有用户账户的设备上，需要管理员权限。\n\n架构与底层\n  从 GET '/api/status'（network.time 和 network.time_synced）读取设备时钟。使用 -s 时，发送 POST '/api/time/set'，内容为以秒为单位的浏览器时间。无法设置时钟的设备会回答 'date: not available on this device'。\n\n返回码\n  0\n    成功。\n  1\n    设备无法连接、浏览器未配对或时钟未设置。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  status(1), uptime(1)\n\n进阶示例\n  date\n  date -u\n  date -s"
+  },
+  {
+   "id": "df",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "df - 磁盘空间使用情况",
+   "synopsis": "df",
+   "description": "显示设备存储的总空间、已用空间和可用空间。",
+   "details": "名称\n  df - 磁盘空间使用情况。\n\n用法\n  df\n\n说明\n  以表格显示设备存储的大小、已用多少、还剩多少，各列依次为 Filesystem、Size、Used、Avail、Use% 和 Mounted on。存储显示为挂载在 /data 上。\n\n架构与底层\n  读取 GET '/api/status'（storage.total_bytes 和 storage.free_bytes）；已用空间等于总空间减去可用空间。如果设备报告没有已挂载的存储，或者没有响应，会输出 'df: storage not mounted or unreachable'。\n\n返回码\n  0\n    成功。已输出统计信息。\n  1\n    存储未挂载或设备无法连接。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  status(1), free(1)\n\n进阶示例\n  df"
+  },
+  {
+   "id": "diag",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "diag - 完整的诊断表，每行一个键",
+   "synopsis": "diag [key-prefix]",
+   "description": "把 /api/diag 报告的所有内容展开成 '键 值' 行，嵌套的键用点连接（例如 mem.free）；是/否值变为 1/0，列表变为逗号分隔的值。显示哪些内容取决于设备：通常包括内存、CPU、网络、运行时间和系统计数器。它是这组命令中最适合用管道处理的一个，也最适合交给 anima。",
+   "details": "名称\n  diag - 完整的诊断表，每行一个键\n\n用法\n  diag [key-prefix]\n\n说明\n  把 /api/diag 报告的所有内容展开成 '键 值' 行，嵌套的键用点连接（例如 mem.free）；是/否值变为 1/0，列表变为逗号分隔的值。显示哪些内容取决于设备：通常包括内存、CPU、网络、运行时间和系统计数器。它是这组命令中最适合用管道处理的一个，也最适合交给 anima。\n\n选项\n  [key-prefix]\n    只显示以此开头的键，例如 mem 或 cpu。如果没有匹配的键，会输出 'diag: no key starts with ...'。\n\n设备开销\n  一次 GET /api/diag，而不是为每个部分分别发送请求。\n\n另请参阅\n  heap(1), cpu(1), status(1), anima(1)\n\n示例\n  diag\n  diag mem\n  diag | anima \"is the memory ok?\"\n  diag | tee /data/diag.txt"
+  },
+  {
+   "id": "display",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.display"
+   ],
+   "title": "display - 打开或关闭屏幕",
+   "synopsis": "display on | display off",
+   "description": "切换实体显示屏的开关，然后输出设备随后报告的亮度。",
+   "details": "名称\n  display - 打开或关闭屏幕\n\n用法\n  display on | display off\n\n说明\n  切换实体显示屏的开关，然后输出设备随后报告的亮度。\n\n选项\n  on\n    打开屏幕。\n  off\n    关闭屏幕。\n\n设备开销\n  一次 POST /api/display。\n\n注意\n  需要 device.display 权限。在电量有限的设备上，这是最有效的省电手段，而在此之前只能通过「设置」来操作。\n\n另请参阅\n  screen(1), status(1)\n\n示例\n  display off\n  display on"
+  },
+  {
+   "id": "dmesg",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "dmesg - 输出设备的系统日志",
+   "synopsis": "dmesg [-l E|W|I|D|V]",
+   "description": "输出设备系统日志中的最近消息。",
+   "details": "名称\n  dmesg - 输出设备的系统日志。\n\n用法\n  dmesg [-l E|W|I|D|V]\n\n说明\n  获取设备系统日志中的最近消息，并原样输出。日志包含哪些内容、能追溯多久，取决于设备。\n\n选项\n  -l LEVEL\n    只请求该级别或更严重级别的消息：E（错误）、W（警告）、I（信息）、D（调试）、V（详细）。过滤由设备完成；不支持过滤的设备会返回完整日志。\n\n架构与底层\n  发送 GET '/api/logs'（指定 -l 时带上 '?level=X'）。在有用户账户的设备上，日志只对管理员开放。错误信息：'dmesg: not paired (401)'、'dmesg: failed to read logs (status N)'、'dmesg: device unreachable'。\n\n返回码\n  0\n    成功。已输出日志。\n  1\n    浏览器未配对、请求被拒绝或设备无法连接。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  status(1), reboot(1)\n\n进阶示例\n  dmesg\n  dmesg -l W\n  dmesg | grep wifi"
+  },
+  {
+   "id": "du",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "du - 按目录统计占用空间，从大到小",
+   "synopsis": "du [-d N] [path]",
+   "description": "遍历一个子树，累加每个目录中文件的大小，并把子目录计入其上级目录。输出按大小排序，所以“是什么占满了存储空间”的答案就在第一行。",
+   "details": "名称\n  du - 按目录统计占用空间，从大到小\n\n用法\n  du [-d N] [path]\n\n说明\n  遍历一个子树，累加每个目录中文件的大小，并把子目录计入其上级目录。输出按大小排序，所以“是什么占满了存储空间”的答案就在第一行。\n\n选项\n  -d N\n    最多向下 N 层（默认 2，上限 6）。\n  [path]\n    从哪里开始；默认为工作目录。\n\n设备开销\n  每个目录一次 GET /api/fs/list，严格按顺序进行，每次运行最多 60 次。按 Ctrl+C 可以停止。\n\n注意\n  列出目录时，设备要对每个条目执行一次 stat()，因此遍历有预算限制，不一定完整：中途停止时会明确告诉你。\n\n另请参阅\n  df(1), tree(1), stat(1)\n\n示例\n  du\n  du -d 1 /data\n  du /data | sort -n -r | head -n 5"
+  },
+  {
+   "id": "echo",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "echo - 输出或写入文本",
+   "synopsis": "echo [text] [> file]",
+   "description": "将文本输出到标准输出，或通过重定向写入文件。",
+   "details": "名称\n  echo - 输出并重定向消息。\n\n用法\n  echo <text>\n  echo <text> > <file>\n\n说明\n  输出一段文本。如果后面跟着重定向运算符 '>'，则把文本写入文件。\n\n选项\n  <text>\n    要输出或保存的字符串。\n  > <file>\n    输出字符串要写入的路径。\n\n架构与底层\n  命令行解析器会识别重定向符号 '>'。遇到这种情况时，会去掉外层引号，并向 '/api/fs/write?path=<file>' 发送 POST 请求。\n\n返回码\n  0\n    成功。输出或写入已完成。\n  1\n    文件系统写入错误。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  cat(1), open(1)\n\n进阶示例\n  echo Hello user\n  echo \"THEME=dark\" > /data/theme.cfg"
+  },
+  {
+   "id": "env",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "env - 显示环境变量",
+   "synopsis": "env",
+   "description": "列出 shell 会话中所有生效的环境变量。",
+   "details": "名称\n  env - 显示生效的环境变量。\n\n用法\n  env\n\n说明\n  以 'KEY=VALUE' 行的形式输出系统环境变量。\n\n架构与底层\n  读取并解析本地运行时内存对象 'envVars' 中的属性。\n\n返回码\n  0\n    成功。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  export(1)\n\n进阶示例\n  env"
+  },
+  {
+   "id": "export",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "export - 设置环境变量",
+   "synopsis": "export [NAME=value]",
+   "description": "设置或更新全局环境变量。",
+   "details": "名称\n  export - 设置环境变量。\n\n用法\n  export [VAR=value]\n\n说明\n  定义一个环境变量。不带参数时，以 'declare -x' 格式输出所有生效的变量。\n\n选项\n  [VAR=value]\n    要登记的键值对（例如 'LANG=it'）。\n\n架构与底层\n  将键和值保存到本地内存映射 'envVars' 中。以 '$' 开头的部分会由解析器求值。\n\n返回码\n  0\n    成功。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  env(1)\n\n进阶示例\n  export LANG=it\n  export PATH=/apps/bin:/system/bin\n  export"
+  },
+  {
+   "id": "find",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "find - 递归查找文件",
+   "synopsis": "find [path] -name <pattern>",
+   "description": "在某个路径下递归搜索与模式匹配的文件。",
+   "details": "名称\n  find - 递归查找文件。\n\n用法\n  find [path] -name <pattern>\n  find <pattern>\n\n说明\n  从目标目录开始遍历目录树，按名称匹配，不区分大小写。\n\n选项\n  [path]\n    起始文件夹（默认为当前 CWD）。\n  -name <pattern>\n    要匹配的文件名。\n\n架构与底层\n  向 '/api/fs/list' 递归发送异步 HTTP 请求，深入扫描子文件夹，找到路径后随即输出。\n\n返回码\n  0\n    成功。遍历已完成。\n  1\n    文件系统扫描错误。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  ls(1), grep(1)\n\n进阶示例\n  find .txt\n  find /data -name song.mp3"
+  },
+  {
+   "id": "free",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "free - 可用内存",
+   "synopsis": "free",
+   "description": "显示设备报告的可用内存。",
+   "details": "名称\n  free - 可用内存。\n\n用法\n  free\n\n说明\n  输出一行 'free heap: <size>'，即设备为其系统报告的可用内存。这只是一个数字：要查看详情和碎片情况，请在支持的设备上使用 heap(1)。如果设备没有报告该值，会输出 'free: status unavailable'。\n\n架构与底层\n  读取 GET '/api/status' 的 free_heap 字段。\n\n返回码\n  0\n    成功。\n  1\n    设备无法连接或未报告该值。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  status(1), uptime(1), heap(1)\n\n进阶示例\n  free"
+  },
+  {
+   "id": "gpio",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.gpio"
+   ],
+   "title": "gpio - 读取或写入引脚",
+   "synopsis": "gpio read <pin>   |   gpio write <pin> <0|1>",
+   "description": "原始的引脚输入/输出，仅限设备允许的引脚。超出范围的引脚会被设备拒绝并返回错误，错误信息原样显示。允许哪些引脚取决于设备。",
+   "details": "名称\n  gpio - 读取或写入引脚\n\n用法\n  gpio read <pin>   |   gpio write <pin> <0|1>\n\n说明\n  原始的引脚输入/输出，仅限设备允许的引脚。超出范围的引脚会被设备拒绝并返回错误，错误信息原样显示。允许哪些引脚取决于设备。\n\n选项\n  read PIN\n    读取引脚电平并输出 'pin PIN = VALUE'。'get' 的作用相同。\n  write PIN 0|1\n    设置电平：1 或 high 设为高电平，其他任何值都设为低电平。'set' 的作用相同。\n\n设备开销\n  每次调用向 /api/gpio 发送一个请求（读取用 GET，写入用 POST）。在有用户账户的设备上，需要管理员权限。\n\n另请参阅\n  ir(1), display(1)\n\n示例\n  gpio read 1\n  gpio write 2 1"
+  },
+  {
+   "id": "grep",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "grep - 按模式筛选行",
+   "synopsis": "grep <pattern> <file>",
+   "description": "在文件中搜索某个模式，并输出带行号的匹配行。",
+   "details": "名称\n  grep - 搜索与模式匹配的行。\n\n用法\n  grep <pattern> <file>\n\n说明\n  逐行扫描文件，查找完全一致（区分大小写）的子字符串。\n\n选项\n  <pattern>\n    要搜索的字符串。\n  <file>\n    要扫描的目标文件路径。\n\n架构与底层\n  客户端通过 GET '/api/fs/read' 获取目标内容，在本地内存中解析，用正则表达式 '\\r?\\n' 拆分行，再用 'String.prototype.includes()' 找出匹配项。输出的结果前面带有行号。\n\n返回码\n  0\n    成功。扫描已完成。\n  1\n    文件读取失败或解析异常。\n  404\n    找不到指定的文件。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  cat(1), find(1)\n\n进阶示例\n  grep SSID /system/config/settings.json\n  grep ERROR /data/logs.txt"
+  },
+  {
+   "id": "head",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "head - 显示文件的前几行",
+   "synopsis": "head [-n lines] <file>",
+   "description": "输出文件的开头部分（默认 10 行）。",
+   "details": "名称\n  head - 输出文件的前几行。\n\n用法\n  head [-n <lines>] <file>\n\n说明\n  输出文件的开头部分（默认 10 行）。\n\n选项\n  -n <lines>\n    指定要输出的确切行数（例如 '-n 5'）。\n  <file>\n    目标文件路径。\n\n架构与底层\n  通过 GET '/api/fs/read' 下载文件内容，在内存中解析各行，再用数组切片（'slice(0, n)'）取出最前面的部分。\n\n返回码\n  0\n    成功。\n  1\n    读取错误或参数格式无效。\n  404\n    找不到目标文件。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  tail(1), cat(1)\n\n进阶示例\n  head logs.txt\n  head -n 5 /data/settings.json"
+  },
+  {
+   "id": "heap",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "diag"
+   ],
+   "title": "heap - 堆内存详情，包括碎片情况",
+   "synopsis": "heap",
+   "description": "输出内部、DMA 和默认堆内存池的情况：可用字节数、最大可用块、历史最低值和碎片百分比，另外还有 HTTP 服务器的最低剩余栈空间。",
+   "details": "名称\n  heap - 堆内存详情，包括碎片情况\n\n用法\n  heap\n\n说明\n  输出内部、DMA 和默认堆内存池的情况：可用字节数、最大可用块、历史最低值和碎片百分比，另外还有 HTTP 服务器的最低剩余栈空间。\n\n选项\n  此命令没有选项。\n\n设备开销\n  一次 GET /api/heap。\n\n注意\n  在这类设备上，有据可查的瓶颈是碎片化，而不是可用字节数——而 free(1) 无法显示碎片情况。\n\n另请参阅\n  free(1), diag(1), cpu(1), watch(1)\n\n示例\n  heap\n  watch -n 5 heap\n  heap | grep frag"
+  },
+  {
+   "id": "hexdump",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "hexdump - 文件开头字节的十六进制和 ASCII",
+   "synopsis": "hexdump [-n bytes] [-s offset] <file>",
+   "description": "输出经典的十六进制转储：偏移量、十六个十六进制字节，然后是夹在两条竖线之间的可打印字符。要查看 .ir 录制文件、固件镜像或存档数据，就用它，免得 cat 把内容变成乱码。",
+   "details": "名称\n  hexdump - 文件开头字节的十六进制和 ASCII\n\n用法\n  hexdump [-n bytes] [-s offset] <file>\n\n说明\n  输出经典的十六进制转储：偏移量、十六个十六进制字节，然后是夹在两条竖线之间的可打印字符。要查看 .ir 录制文件、固件镜像或存档数据，就用它，免得 cat 把内容变成乱码。\n\n选项\n  -n N\n    要读取的字节数（默认 256，最多 4096）。\n  -s N\n    从第 N 个字节开始。\n  <file>\n    要读取的文件。\n\n设备开销\n  一次带 HTTP Range 头的 GET /api/fs/read：在支持该头的设备上，只传输请求的字节（默认 256 个），即使文件有 640 MB 也是如此。\n\n另请参阅\n  cat(1), base64(1), wc(1)\n\n示例\n  hexdump /data/remote.ir\n  hexdump -n 64 -s 512 /data/image.bin"
+  },
+  {
+   "id": "history",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "history - 命令历史记录",
+   "synopsis": "history",
+   "description": "列出当前会话中输入过的命令。",
+   "details": "名称\n  history - 命令历史记录。\n\n用法\n  history\n\n说明\n  显示当前终端会话中输入过的命令列表。\n\n架构与底层\n  从存放在 RAM 中的全局数组 'hist' 读取。队列最多保存 100 条命令。\n\n返回码\n  0\n    成功。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  clear(1)\n\n进阶示例\n  history"
+  },
+  {
+   "id": "ir",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.ir"
+   ],
+   "title": "ir - 控制红外 LED",
+   "synopsis": "ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status",
+   "description": "db 输出 GPIO、此版本能编码的协议以及 TV-B-Gone 表的大小，让你在发送任何内容之前先了解能做什么。send 发送一个已解码的代码，raw 发送一组时序。",
+   "details": "名称\n  ir - 控制红外 LED\n\n用法\n  ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status\n\n说明\n  db 输出 GPIO、此版本能编码的协议以及 TV-B-Gone 表的大小，让你在发送任何内容之前先了解能做什么。send 发送一个已解码的代码，raw 发送一组时序。\n\n选项\n  db\n    显示功能（默认）。\n  send <proto> <addr> <cmd> [rep]\n    发送一个代码。\n  raw <us,…>\n    发送以微秒为单位的原始时序。\n  tvbgone start|stop|status\n    运行 TV-B-Gone 扫描。\n\n设备开销\n  每项一个请求。\n\n注意\n  需要 device.ir 权限。这里刻意没有提供干扰器：它会从后台任务中占满整个频段，而且无法先试运行，所以它只留在「红外遥控器」应用中，那里有一个看得见的按钮可以停止它。\n\n另请参阅\n  display(1), link(1)\n\n示例\n  ir db\n  ir send nec 4 8\n  ir tvbgone status"
+  },
+  {
+   "id": "kill",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "kill - 关闭前台应用",
+   "synopsis": "kill <app-id>",
+   "description": "请求 shell 关闭某个应用窗口，释放它占用的 RAM。按 id（ps 输出的那个）指定，而不是按虚拟的 PID。",
+   "details": "名称\n  kill - 关闭前台应用\n\n用法\n  kill <app-id>\n\n说明\n  请求 shell 关闭某个应用窗口，释放它占用的 RAM。按 id（ps 输出的那个）指定，而不是按虚拟的 PID。\n\n选项\n  没有选项。\n\n设备开销\n  无——只是发给 shell 的一条消息\n\n另请参阅\n  ps(1), apps(1)\n\n示例\n  ps\n  kill notes"
+  },
+  {
+   "id": "lang",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "lang - 读取或设置系统显示语言",
+   "synopsis": "lang [it|en|fr|es|de]",
+   "description": "不带参数时，输出当前语言及其变更计数器（gen）。带参数时，为整个系统设置语言，包括设备屏幕上的原生界面。",
+   "details": "名称\n  lang - 读取或设置系统显示语言\n\n用法\n  lang [it|en|fr|es|de]\n\n说明\n  不带参数时，输出当前语言及其变更计数器（gen）。带参数时，为整个系统设置语言，包括设备屏幕上的原生界面。\n\n选项\n  [code]\n    it、en、fr、es、de 之一。\n\n设备开销\n  一次 GET 或一次 POST /api/lang。\n\n另请参阅\n  status(1), theme(1)\n\n示例\n  lang\n  lang it"
+  },
+  {
+   "id": "link",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.link"
+   ],
+   "title": "link - 显示附近的直连设备和传输状态",
+   "synopsis": "link peers | link status",
+   "description": "peers 列出这台设备通过设备间直连无线能看到的其他设备，以及本机名称和信道；status 显示是否有传输正在进行，以及进度如何。",
+   "details": "名称\n  link - 显示附近的直连设备和传输状态\n\n用法\n  link peers | link status\n\n说明\n  peers 列出这台设备通过设备间直连无线能看到的其他设备，以及本机名称和信道；status 显示是否有传输正在进行，以及进度如何。\n\n选项\n  peers\n    列出附近的设备（默认）。\n  status\n    显示传输状态。\n\n设备开销\n  每项一次 GET。\n\n注意\n  需要 mesh.peer 权限。刻意设为只读：向另一台设备发送命令时，一个输入错误就会变成别人的麻烦，而这类操作的确认步骤在「附近」应用中。\n\n另请参阅\n  wifi(1), status(1)\n\n示例\n  link peers\n  link status"
+  },
+  {
+   "id": "ls",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "ls - 列出目录内容",
+   "synopsis": "ls [path]",
+   "description": "列出当前目录或指定路径下的文件夹和文件。",
+   "details": "名称\n  ls - 列出目录内容。\n\n用法\n  ls [path]\n\n说明\n  列出设备存储中指定文件夹的条目。不指定路径时，列出当前工作目录（CWD）。\n  先列出文件夹（高亮显示，末尾带斜杠 '/'），然后是文件及其大小；每组按字母顺序排列。最后一行统计项目数；空文件夹会输出 \"(empty)\"。最多显示 200 个条目，列表更长时会加以说明。\n  在提供 /proc 的设备上，'ls /proc' 会列出包含实时系统信息的节点；可以用 cat 读取。\n\n选项\n  [path]\n    要列出的文件夹的相对或绝对路径。\n\n架构与底层\n  列表通过系统的文件层获取，文件层用 GET /api/fs/list?path=<path> 向设备请求。同一个命令在所有设备上都能使用。\n\n返回码\n  0\n    成功。文件夹存在，内容已输出。\n  1\n    文件夹不存在、设备未配对，或无法访问文件 API。\n\n遵循标准\n  与 POSIX 兼容的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  cd(1), find(1), pwd(1), tree(1), stat(1)\n\n进阶示例\n  ls               # 列出当前目录\n  ls /data         # 列出 data 文件夹的内容\n  ls ../system     # 使用指向上级目录的相对路径列出"
+  },
+  {
+   "id": "man",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "man - 在线命令手册",
+   "synopsis": "man <command>",
+   "description": "显示终端命令的手册页。",
+   "details": "名称\n  man - 在线手册页。\n\n用法\n  man <command>\n\n说明\n  显示终端命令的 UNIX 风格手册页：先是一行名称和用法，然后是说明和详细信息。\n  手册页来自系统自带的手册，与「帮助」应用显示的相同，使用系统所设的语言（意大利语、英语、西班牙语、法语、德语或简体中文）。该手册没有收录的命令，会到设备自己的手册页中查找，位置是 /system/registry/manual。不带参数时，man 会询问你要查看哪一页。\n\n选项\n  <command>\n    要显示其手册页的命令名称。\n\n架构与底层\n  先在 web OS 内置的手册中查找，然后从设备读取文件 /system/registry/manual/<command>.info。两处都没有该页时，man 输出 \"No manual entry for <command>\"。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  help(1), clear(1)\n\n进阶示例\n  man ls\n  man cd"
+  },
+  {
+   "id": "mkdir",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "mkdir - 创建文件夹",
+   "synopsis": "mkdir <dir>",
+   "description": "在指定路径新建文件夹，并一并创建缺少的上级文件夹。",
+   "details": "名称\n  mkdir - 创建文件夹。\n\n用法\n  mkdir <dir>\n\n说明\n  在设备的存储中创建该文件夹，并像 'mkdir -p' 一样创建路径上缺少的所有上级文件夹。文件夹已存在不算错误。成功时输出 \"created <path>\"。\n\n选项\n  <dir>\n    要创建的文件夹的相对路径或绝对路径。\n\n架构与底层\n  通过系统的文件层完成：对尚不存在的每一级，发送 POST /api/fs/mkdir?path=<dir>。\n\n返回码\n  0\n    成功。文件夹已创建或已存在。\n  1\n    创建失败（例如存储空间已满或为只读、权限被拒绝、设备未配对，或无法访问文件 API）。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  touch(1), rm(1), ls(1)\n\n进阶示例\n  mkdir /data/test\n  mkdir new_notes\n  mkdir /data/projects/2026/notes   # 同时创建缺少的上级文件夹"
+  },
+  {
+   "id": "mv",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "mv - 移动或重命名文件",
+   "synopsis": "mv <source> <dest>",
+   "description": "把文件从源位置移动到目标位置，或重命名文件。",
+   "details": "名称\n  mv - 移动或重命名文件。\n\n用法\n  mv <source> <dest>\n\n说明\n  把文件从源路径移动到目标路径。如果上级文件夹不变，就相当于重命名文件。\n\n选项\n  <source>\n    要移动的文件。\n  <dest>\n    目标路径。\n\n架构与底层\n  按事务顺序执行：\n  1. 通过 GET '/api/fs/read' 把源文件内容读入 RAM。\n  2. 通过 POST '/api/fs/write' 把内容写入目标位置。\n  3. 写入返回 HTTP 200 后，才向 '/api/fs/delete' 发送 POST，删除源文件。\n  这样即使写入出错，也不会丢失数据。\n\n返回码\n  0\n    成功。文件已移动。\n  1\n    写入或删除失败。\n  404\n    未找到源文件。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  cp(1), rm(1)\n\n进阶示例\n  mv old.txt new.txt\n  mv /data/temp.txt /system/config/saved.txt"
+  },
+  {
+   "id": "notify",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "notify - 向系统「通知中心」发送通知",
+   "synopsis": "notify <text>",
+   "description": "让长时间运行的 watch 在你切换到其他窗口后，也能告诉你它已经结束。",
+   "details": "名称\n  notify - 向系统「通知中心」发送通知\n\n用法\n  notify <text>\n\n说明\n  让长时间运行的 watch 在你切换到其他窗口后，也能告诉你它已经结束。\n\n选项\n  <text>\n    通知内容；省略时从标准输入读取。\n\n设备开销\n  设备上没有开销：通过 shell 的能力代理完成。\n\n注意\n  需要 system.notify 权限。\n\n另请参阅\n  watch(1), say(1)\n\n示例\n  notify \"the copy is done\""
+  },
+  {
+   "id": "open",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "open - 用默认应用打开文件",
+   "synopsis": "open <file>",
+   "description": "用关联的图形应用打开文件。",
+   "details": "名称\n  open - 用默认应用打开文件。\n\n用法\n  open <file>\n\n说明\n  打开指定的资源。桌面 shell 根据文件扩展名找到默认关联的应用，并在窗口中启动它。\n\n选项\n  <file>\n    要打开的文件路径。\n\n架构与底层\n  使用浏览器 iframe 的 'postMessage' 调用。终端向父窗口发送 '{ type: \"open-file\", path: file }'。shell 解析扩展名，读取 '/system/config/file-associations.json'，然后打开对应的应用（例如 'notepad'、'photo-viewer'）。\n\n返回码\n  0\n    成功。消息已发送给 shell。\n  1\n    无法连接 shell 宿主，或文件关联无效。\n\n遵循标准\n  NucleoOS 专有扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  echo(1)\n\n进阶示例\n  open /data/Pictures/wallpaper.png\n  open /data/document.txt"
+  },
+  {
+   "id": "ota",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "any": [
+    "ota",
+    "ota.firmware",
+    "ota.package"
+   ],
+   "title": "ota - 显示正在运行的槽位、下一个槽位和回滚状态",
+   "synopsis": "ota [status]",
+   "description": "更新前后都该看一看：正在运行的是系统的哪一份已安装副本（槽位），下一次更新会写入哪一个，当前副本的状态，以及是否开启了自动退回上一版本（回滚）。",
+   "details": "名称\n  ota - 显示正在运行的槽位、下一个槽位和回滚状态\n\n用法\n  ota [status]\n\n说明\n  更新前后都该看一看：正在运行的是系统的哪一份已安装副本（槽位），下一次更新会写入哪一个，当前副本的状态，以及是否开启了自动退回上一版本（回滚）。\n  只输出一行：running <slot>  next <slot>  state <state>  rollback on|off。设备没有报告的字段显示为 '?'。\n\n选项\n  status\n    唯一接受的参数，也是默认值。任何其他参数都会被拒绝并报错。\n\n设备开销\n  一次 GET /api/status。\n\n注意\n  这里刻意不支持安装更新：更新一写入，设备就会重启，所以从历史记录中调出一个输错的路径，只差一次按键就会变成无法撤回的更新。更新请通过系统自身的更新流程进行。\n\n另请参阅\n  status(1), reboot(1), diag(1)\n\n示例\n  ota"
+  },
+  {
+   "id": "ping",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "ping - 网络延迟诊断",
+   "synopsis": "ping [host]",
+   "description": "测量设备或某个网站主机的响应时间。",
+   "details": "名称\n  ping - 测试网络延迟。\n\n用法\n  ping [host]\n\n说明\n  依次发送 4 个 HTTP HEAD 请求，每次间隔半秒，测量往返时间（RTT）。不指定主机时测量设备本身（它的 /api/status 路由）；指定主机时通过 HTTPS 测量该网站服务器。结束时输出收到的回复数，以及最短、最长和平均时间。按 Ctrl+C 停止。\n  这不是 ICMP ping：请求从浏览器发出，所以不通过 HTTPS 应答或被浏览器拦截的主机，都算作丢失。\n\n选项\n  [host]\n    要测量的主机名或 URL（例如 'google.com'）；没写协议时自动加上 https://。省略时测量设备本身。\n\n架构与底层\n  每个请求都在浏览器中用 'performance.now()' 计时，从发出一直到收到应答，所以这个时间涵盖整个 HTTP 交互，而不只是网络传输。\n\n返回码\n  0\n    成功。至少收到一个回复。\n  1\n    4 个请求全部丢失。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  curl(1), wget(1), status(1)\n\n进阶示例\n  ping             # 测量设备本身\n  ping google.com  # 测量 google.com"
+  },
+  {
+   "id": "ps",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "ps - 以进程表的形式列出应用",
+   "synopsis": "ps",
+   "description": "显示已安装并启用的应用及其运行状态。设备只运行一个前台应用和 shell，所以这就是最接近进程列表的东西。",
+   "details": "名称\n  ps - 以进程表的形式列出应用\n\n用法\n  ps\n\n说明\n  显示已安装并启用的应用及其运行状态。设备只运行一个前台应用和 shell，所以这就是最接近进程列表的东西。\n\n选项\n  没有选项。显示的 PID 是合成的，每次列出都会重新编号：要对某个应用操作，请用它的 id 配合 kill(1)。\n\n设备开销\n  读取一次应用表，缓存 30 s\n\n另请参阅\n  kill(1), apps(1)\n\n示例\n  ps\n  ps | grep run"
+  },
+  {
+   "id": "pwd",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "pwd - 显示当前工作目录",
+   "synopsis": "pwd",
+   "description": "输出当前工作目录的绝对路径。",
+   "details": "名称\n  pwd - 显示当前工作目录。\n\n用法\n  pwd\n\n说明\n  在终端中输出当前工作目录（CWD）的绝对路径。在本地运行，不访问硬件资源。\n\n架构与底层\n  读取规范化后的运行时变量 'cwd'，直接输出到终端的 stdout 缓冲区。\n\n返回码\n  0\n    成功。路径已输出。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  cd(1), ls(1)\n\n进阶示例\n  pwd"
+  },
+  {
+   "id": "reboot",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "power"
+   ],
+   "title": "reboot - 重启设备",
+   "synopsis": "reboot",
+   "description": "请求设备重新启动。",
+   "details": "名称\n  reboot - 重启系统。\n\n用法\n  reboot\n\n说明\n  请求设备重新启动。终端先输出 \"rebooting device ...\"，再输出 \"Reboot command sent.\"；在设备重新启动完成之前，连接会中断。只在可以从这里重启的设备上可用。\n\n架构与底层\n  向 '/api/reboot' 发送 POST 请求，随后设备自行重启。\n\n返回码\n  0\n    成功。命令已发送。\n  1\n    设备拒绝了请求，或无法连接设备。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  dmesg(1), uptime(1), status(1)\n\n进阶示例\n  reboot"
+  },
+  {
+   "id": "rm",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "rm - 删除文件或文件夹",
+   "synopsis": "rm <path>",
+   "description": "永久删除文件或空文件夹，不经过「回收站」。",
+   "details": "名称\n  rm - 删除文件或文件夹。\n\n用法\n  rm <path>\n\n说明\n  从设备的存储中永久删除文件或空文件夹。删除的项目不会进入「回收站」，无法恢复。成功时输出 \"removed <path>\"。/data 文件夹本身不能删除。\n\n选项\n  <path>\n    要删除的文件或空文件夹。\n\n架构与底层\n  通过系统的文件层完成，它会发送 POST /api/fs/delete?path=<path>。仍有内容的文件夹会被设备拒绝删除。\n\n返回码\n  0\n    成功。项目已删除。\n  1\n    删除失败：项目不存在、文件夹不为空、权限被拒绝、设备未配对，或无法访问文件 API。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  cp(1), mv(1), mkdir(1)\n\n进阶示例\n  rm /data/temp_log.txt\n  rm /data/empty_dir"
+  },
+  {
+   "id": "say",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.tts"
+   ],
+   "title": "say - 用设备朗读文字",
+   "synopsis": "say [text]",
+   "description": "把文字交给语音引擎，可以作为参数，也可以来自管道。在管道中它会把文字继续往下传，所以朗读过的内容仍然可以记录下来。",
+   "details": "名称\n  say - 用设备朗读文字\n\n用法\n  say [text]\n\n说明\n  把文字交给语音引擎，可以作为参数，也可以来自管道。在管道中它会把文字继续往下传，所以朗读过的内容仍然可以记录下来。\n\n选项\n  [text]\n    要朗读的内容；省略时从标准输入读取。\n\n设备开销\n  一次 POST /api/tts。\n\n注意\n  需要 device.audio 权限。如果当前版本没有语音引擎，它会如实说明，而不是假装已经朗读。\n\n另请参阅\n  notify(1), anima(1), clip(1)\n\n示例\n  say \"the backup is finished\"\n  dmesg -l E | anima \"what is wrong?\" | say"
+  },
+  {
+   "id": "screen",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "device.display"
+   ],
+   "title": "screen - 保存屏幕上显示的内容",
+   "synopsis": "screen [-o <file>]",
+   "description": "截取设备屏幕上正在显示的内容，并保存为设备存储中的文件。其他终端都做不到这一点：它们没有可拍的屏幕。",
+   "details": "名称\n  screen - 保存屏幕上显示的内容\n\n用法\n  screen [-o <file>]\n\n说明\n  截取设备屏幕上正在显示的内容，并保存为设备存储中的文件。其他终端都做不到这一点：它们没有可拍的屏幕。\n\n选项\n  -o <file>\n    保存位置（默认为 /data/screen.bmp）。\n\n设备开销\n  一次 GET /api/screen，然后向设备的存储写入一次文件。\n\n注意\n  只适用于有自己屏幕的设备（device.display 权限）。设备不提供截屏时会回答 \"not available on this build\"（404）；\"panel size unavailable\"（503）表示屏幕还没有准备好：请打开屏幕后再试。\n\n另请参阅\n  display(1), open(1)\n\n示例\n  screen\n  screen -o /data/shot.bmp"
+  },
+  {
+   "id": "seq",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "seq - 输出一串整数",
+   "synopsis": "seq [first] last",
+   "description": "每行输出一个整数，递增或递减计数。管道中只有它能凭空产生数据。",
+   "details": "名称\n  seq - 输出一串整数\n\n用法\n  seq [first] last\n\n说明\n  每行输出一个整数，递增或递减计数。管道中只有它能凭空产生数据。\n\n选项\n  first\n    起始值（默认为 1）。\n  last\n    结束值；比 first 小时倒着计数。\n\n设备开销\n  无。完全在浏览器端运行。\n\n另请参阅\n  sort(1), uniq(1)\n\n示例\n  seq 5\n  seq 10 1"
+  },
+  {
+   "id": "sleep",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "sleep - 暂停执行",
+   "synopsis": "sleep <seconds>",
+   "description": "插入一段以秒为单位的定时延迟。",
+   "details": "名称\n  sleep - 暂停命令执行。\n\n用法\n  sleep <seconds>\n\n说明\n  插入一段定时的执行延迟。支持小数。\n\n选项\n  <seconds>\n    暂停时长，单位为秒（例如 '1.5'）。\n\n架构与底层\n  通过一个 JavaScript Promise 暂停命令执行，该 Promise 在 'setTimeout' 回调中完成。\n\n返回码\n  0\n    成功。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  reboot(1)\n\n进阶示例\n  sleep 3\n  sleep 1.5"
+  },
+  {
+   "id": "sort",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "sort - 对标准输入排序",
+   "synopsis": "sort [-r] [-n] [-u] [-k N]",
+   "description": "对来自管道的各行重新排序。",
+   "details": "名称\n  sort - 对标准输入排序\n\n用法\n  sort [-r] [-n] [-u] [-k N]\n\n说明\n  对来自管道的各行重新排序。\n\n选项\n  -r\n    倒序排列。\n  -n\n    按数值比较。\n  -u\n    去掉相邻的重复行。\n  -k N\n    按第 N 个以空白分隔的字段排序。\n\n设备开销\n  无。完全在浏览器端运行。\n\n另请参阅\n  uniq(1), cut(1), du(1)\n\n示例\n  du /data | sort -n -r\n  dmesg | sort -u"
+  },
+  {
+   "id": "stat",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "stat - 显示单个条目的类型、大小和锁定状态",
+   "synopsis": "stat <path>",
+   "description": "说明单个文件或文件夹是什么，而不必列出它所在的整个文件夹。",
+   "details": "名称\n  stat - 显示单个条目的类型、大小和锁定状态\n\n用法\n  stat <path>\n\n说明\n  说明单个文件或文件夹是什么，而不必列出它所在的整个文件夹。输出路径、类型（file 或 dir）、以字节数和易读形式表示的大小（文件夹显示 \"-\"），以及该条目是否受保护。\n\n选项\n  <path>\n    要查看的文件或文件夹。\n\n设备开销\n  在提供该接口的设备上，发送一次 GET /api/fs/stat；在其他设备上，对上级文件夹（而不是条目本身）发送一次 GET /api/fs/list，stat 再从中取出该条目。\n\n注意\n  stat 不显示修改时间：\"modified\" 一行会说明设备没有提供修改时间，而不是编造一个。\n\n另请参阅\n  ls(1), du(1), tree(1)\n\n示例\n  stat /data/notes.txt\n  stat /apps/terminal"
+  },
+  {
+   "id": "status",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "status - 系统整体诊断",
+   "synopsis": "status",
+   "description": "输出系统版本、运行时间、可用内存、存储、已安装的应用和网络状态。",
+   "details": "名称\n  status - 诊断状态。\n\n用法\n  status\n\n说明\n  显示设备概况，每行一项：系统名称和版本以及已运行的秒数、可用内存（heap）、存储（类型、可用空间和总空间）、已安装应用的数量，以及网络（时钟是否已通过 NTP 同步；如有连接，还有网络名称）。设备没有报告的项目不显示。\n\n架构与底层\n  向 '/api/status' 发送一次 GET；命令整理应答中的字段，不再发出其他请求。\n\n返回码\n  0\n    成功。\n  1\n    无法连接设备。\n\n遵循标准\n  NucleoOS 专有扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  uptime(1), free(1)\n\n进阶示例\n  status"
+  },
+  {
+   "id": "tail",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tail - 显示文件的最后几行",
+   "synopsis": "tail [-n lines] <file>",
+   "description": "输出文件的末尾部分（默认 10 行）。",
+   "details": "名称\n  tail - 输出文件的最后几行。\n\n用法\n  tail [-n <lines>] <file>\n\n说明\n  输出文件的末尾部分（默认 10 行）。\n\n选项\n  -n <lines>\n    指定要输出的确切行数（例如 '-n 5'）。\n  <file>\n    目标文件的路径。\n\n架构与底层\n  通过 GET '/api/fs/read' 下载文件内容。在内存中按行解析，并用数组切片（'slice(allLines.length - n)'）取出末尾的几行。\n\n返回码\n  0\n    成功。\n  1\n    读取错误或参数格式无效。\n  404\n    未找到目标文件。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  head(1), cat(1)\n\n进阶示例\n  tail logs.txt\n  tail -n 3 /data/net.cfg"
+  },
+  {
+   "id": "tee",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tee - 把标准输入写入文件并继续传递",
+   "synopsis": "tee <file>",
+   "description": "保存流经它的所有内容，再把同样的文字交给下一步，管道的结果因此能够留存下来。",
+   "details": "名称\n  tee - 把标准输入写入文件并继续传递\n\n用法\n  tee <file>\n\n说明\n  保存流经它的所有内容，再把同样的文字交给下一步，管道的结果因此能够留存下来。\n\n选项\n  <file>\n    写入的位置。\n\n设备开销\n  恰好一次 POST /api/fs/write。\n\n另请参阅\n  cat(1), clip(1), base64(1)\n\n示例\n  diag | tee /data/diag.txt\n  dmesg -l E | tee /data/errors.txt | wc"
+  },
+  {
+   "id": "theme",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "theme - 更改系统颜色主题",
+   "synopsis": "theme [dark|light]",
+   "description": "显示或切换系统主题（深色或浅色）。",
+   "details": "名称\n  theme - 系统主题。\n\n用法\n  theme [dark|light]\n\n说明\n  不带参数，或参数既不是 dark 也不是 light 时，输出当前主题和用法。参数为 dark 或 light 时，立即将该主题应用到「终端」，并保存到系统设置中。\n\n选项\n  [dark|light]\n    要应用的主题名称。\n\n架构与底层\n  设置页面的 'data-theme' 属性，然后读取 '/system/config/settings.json'，更新 ui.theme 项，再通过 '/api/fs/write' 写回该文件。如果保存失败，主题只在当前窗口中生效，命令会显示警告。\n\n返回码\n  0\n    成功；主题只在本地应用（并显示警告）时也是如此。\n\n遵循标准\n  NucleoOS 专有扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  status(1)\n\n进阶示例\n  theme            # 查看当前主题\n  theme light      # 切换到浅色主题\n  theme dark       # 切换到深色主题"
+  },
+  {
+   "id": "touch",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "touch - 创建空文件",
+   "synopsis": "touch <file>",
+   "description": "如果指定路径上还没有文件，就在那里新建一个空文件。",
+   "details": "名称\n  touch - 初始化空文件。\n\n用法\n  touch <file>\n\n说明\n  创建一个 0 字节的文件；路径上缺少的文件夹会一并创建。文件已存在时保持原样（内容和日期都不变），命令会说明这一点。\n\n选项\n  <file>\n    要初始化的文件路径。\n\n架构与底层\n  先检查文件是否存在（通过 '/api/fs/stat' 或文件夹列表）。只有文件不存在时，才向 '/api/fs/write' 发送内容为空的 POST，绝不覆盖。如果无法读取文件夹，它会报告错误，不写入任何内容。\n\n返回码\n  0\n    成功。文件已创建或已存在。\n  1\n    设备存储读写错误。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  mkdir(1), rm(1)\n\n进阶示例\n  touch /data/empty.txt"
+  },
+  {
+   "id": "tr",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tr - 替换或删除字符",
+   "synopsis": "tr <set1> <set2>   |   tr -d <set>",
+   "description": "把 set1 中的每个字符替换为 set2 中对应的字符，或用 -d 删除这些字符。字符集按字面处理：不支持范围和字符类，以节省设备上的字节。",
+   "details": "名称\n  tr - 替换或删除字符\n\n用法\n  tr <set1> <set2>   |   tr -d <set>\n\n说明\n  把 set1 中的每个字符替换为 set2 中对应的字符，或用 -d 删除这些字符。字符集按字面处理：不支持范围和字符类，以节省设备上的字节。\n\n选项\n  -d SET\n    删除集合中的每个字符，而不是替换。\n  如果 set2 比 set1 短，就用 set2 的最后一个字符补足其余部分。\n\n设备开销\n  无\n\n另请参阅\n  cut(1), sort(1)\n\n示例\n  echo hello | tr aeiou _\n  cat /data/f | tr -d \\r"
+  },
+  {
+   "id": "tree",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "tree - 输出目录树",
+   "synopsis": "tree [-L N] [path]",
+   "description": "输出某个路径下的子树，每深一层缩进一级，文件夹排在前面，并在末尾加斜杠标记。",
+   "details": "名称\n  tree - 输出目录树\n\n用法\n  tree [-L N] [path]\n\n说明\n  输出某个路径下的子树，每深一层缩进一级，文件夹排在前面，并在末尾加斜杠标记。\n\n选项\n  -L N\n    最多向下 N 层（默认 3，最多 6）。\n  [path]\n    起始位置；默认为工作目录。\n\n设备开销\n  与 du 相同的限量遍历：每个文件夹列出一次，依次进行，最多列出 60 次、输出 200 个条目。\n\n另请参阅\n  ls(1), du(1), find(1)\n\n示例\n  tree\n  tree -L 1 /apps\n  tree /data | grep .txt"
+  },
+  {
+   "id": "unalias",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "unalias - 删除别名",
+   "synopsis": "unalias <name>",
+   "description": "删除一个别名，并重新保存别名列表。",
+   "details": "名称\n  unalias - 删除别名\n\n用法\n  unalias <name>\n\n说明\n  删除一个别名，并重新保存别名列表。\n\n选项\n  <name>\n    要删除的别名。\n\n设备开销\n  一次 POST /api/fs/write。\n\n另请参阅\n  alias(1)\n\n示例\n  unalias ll"
+  },
+  {
+   "id": "uname",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "uname - 系统名称、版本类型和版本号",
+   "synopsis": "uname [-a]",
+   "description": "输出操作系统名称；加 -a 时还输出版本类型和版本号。",
+   "details": "名称\n  uname - 系统信息。\n\n用法\n  uname [-a]\n\n说明\n  不带选项时输出操作系统名称。使用 '-a' 时，在一行中输出名称、设备报告的版本类型标识和系统版本号。\n\n选项\n  -a\n    同时输出版本类型和版本号。\n\n架构与底层\n  从 '/api/status' 读取名称和版本号，从设备能力（'/api/system/caps'；在没有该路由的设备上由 '/api/status' 推断）读取版本类型。设备没有应答时使用默认值（NucleoOS、0.1.0），版本类型未知时不输出。\n\n返回码\n  0\n    始终如此：没有应答时，命令输出默认值。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  status(1), uptime(1)\n\n进阶示例\n  uname\n  uname -a"
+  },
+  {
+   "id": "uniq",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "uniq - 合并相邻的重复行",
+   "synopsis": "uniq [-c]",
+   "description": "把一大片相同的日志行合并成一行，可选附带计数。正是这一步让 2 KB 的 dmesg 输出缩小到可以交给 anima。",
+   "details": "名称\n  uniq - 合并相邻的重复行\n\n用法\n  uniq [-c]\n\n说明\n  把一大片相同的日志行合并成一行，可选附带计数。正是这一步让 2 KB 的 dmesg 输出缩小到可以交给 anima。\n\n选项\n  -c\n    在每行前加上它重复的次数。\n\n设备开销\n  无。完全在浏览器端运行。\n\n另请参阅\n  sort(1), grep(1), anima(1)\n\n示例\n  dmesg | sort | uniq -c | sort -n -r"
+  },
+  {
+   "id": "uptime",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "uptime - 系统运行时间",
+   "synopsis": "uptime",
+   "description": "显示设备已经运行了多久，以及还有多少可用内存。",
+   "details": "名称\n  uptime - 系统运行时间。\n\n用法\n  uptime\n\n说明\n  输出自设备上次启动以来经过的时间（时、分、秒），以及设备报告的可用内存（heap）。示例输出：up 2h 15m 4s, heap free: ...\n\n架构与底层\n  从 '/api/status' 读取 uptime_s 和 free_heap 字段。\n\n返回码\n  0\n    成功。\n  1\n    无法连接设备。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  status(1), free(1)\n\n进阶示例\n  uptime"
+  },
+  {
+   "id": "verify",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "anima.l1"
+   ],
+   "title": "verify - 依据设备内的知识核查事实",
+   "synopsis": "verify <key> <asserted> [--kind fact|numeric] [-l it|en]",
+   "description": "询问 ANIMA：某个键的断言值是得到证实、被否定还是未知，并输出它所用的依据。",
+   "details": "名称\n  verify - 依据设备内的知识核查事实\n\n用法\n  verify <key> <asserted> [--kind fact|numeric] [-l it|en]\n\n说明\n  询问 ANIMA：某个键的断言值是得到证实、被否定还是未知，并输出它所用的依据。结论和依据输出在同一行，以制表符分隔。最后一个词是断言值，前面所有的词组成键。\n\n选项\n  <key>\n    要询问的对象，例如 \"capital of france\"。\n  <asserted>\n    要核查的值。\n  --kind\n    fact 或 numeric。\n  -l\n    回答的语言（it 或 en）。\n\n设备开销\n  一次 GET /api/anima/verify。\n\n注意\n  适用于内置 ANIMA 的设备。在其他设备上，命令会以警告而不是错误的形式说明：\"not available on this device\"；路由返回 404 时则为 \"not available on this build\"。\n\n另请参阅\n  anima(1), diag(1)\n\n示例\n  verify \"capital of france\" Lyon"
+  },
+  {
+   "id": "watch",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "watch - 每隔几秒在原处重新运行命令",
+   "synopsis": "watch [-n seconds] [-c count] <command>",
+   "description": "反复运行一条命令，并在上一次的输出上原地重绘，而不是让屏幕滚动。它是观察内存碎片的显微镜：watch -n5 heap。",
+   "details": "名称\n  watch - 每隔几秒在原处重新运行命令\n\n用法\n  watch [-n seconds] [-c count] <command>\n\n说明\n  反复运行一条命令，并在上一次的输出上原地重绘，而不是让屏幕滚动。它是观察内存碎片的显微镜：watch -n5 heap。\n\n选项\n  -n S\n    每次运行之间的秒数（默认 3，不少于 2）。\n  -c N\n    运行的次数（默认 10，最多 300）。\n\n设备开销\n  每次运行的开销与内部命令相同。两次运行绝不重叠，间隔至少两秒，连续失败三次即停止。按 Ctrl+C 立即停止。\n\n注意\n  在管道中会被拒绝；wifi scan 也拒绝在 watch 中运行：循环执行会阻塞的无线电操作，会让设备掉出它自己所在的网络。\n\n另请参阅\n  heap(1), diag(1), notify(1)\n\n示例\n  watch -n 5 heap\n  watch -n 10 -c 60 status"
+  },
+  {
+   "id": "wc",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "wc - 统计单词数、行数和字节数",
+   "synopsis": "wc <file>",
+   "description": "输出文件的单词数、行数和字节数。",
+   "details": "名称\n  wc - 统计单词数、行数和字节数。\n\n用法\n  wc <file>\n\n说明\n  分析目标文件，输出行数、单词数和字节数。\n\n选项\n  <file>\n    要分析的目标文件。\n\n架构与底层\n  通过文件系统的读取接口获取数据。行数按 '\\n' 拆分得出，单词数用正则 '\\s+' 过滤得出，字节数由 JavaScript 'Blob' 的大小得出。\n\n返回码\n  0\n    成功。已输出统计结果。\n  1\n    文件系统读取错误。\n  404\n    未找到文件。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  cat(1), head(1), tail(1)\n\n进阶示例\n  wc /data/notes.txt"
+  },
+  {
+   "id": "wget",
+   "category": "system",
+   "unless": [
+    "pty"
+   ],
+   "title": "wget - 从网络下载文件",
+   "synopsis": "wget <url> [-O outfile]",
+   "description": "从 URL 下载文件，并保存到设备的存储中。",
+   "details": "名称\n  wget - 通过 HTTP 下载文件。\n\n用法\n  wget <url> [-O <destination_file>]\n\n说明\n  用 GET 请求下载资源，并写入设备的存储。不加 -O 时，文件以 URL 的最后一段（不含查询字符串）命名，没有则命名为 'downloaded_file'，保存在当前目录中。没有协议的 URL 按 https:// 处理。\n\n选项\n  <url>\n    要下载的文件的 URL。\n  -O <destination_file>\n    保存资源的文件路径。已有的文件会被替换。\n\n架构与底层\n  下载由浏览器完成，因此受浏览器的 CORS 规则约束：不允许这样访问的网站会失败，并显示 'network error or CORS blocked'。数据随后通过 POST 发送到 '/api/fs/write'；缺少的文件夹会自动创建。\n\n返回码\n  0\n    成功。已下载并写入。\n  1\n    网络错误、HTTP 响应失败或写入错误。\n\n遵循标准\n  兼容 POSIX 的 NucleoOS 扩展。\n\n作者\n  NucleoOS Core Devs.\n\n另请参阅\n  curl(1), ping(1)\n\n进阶示例\n  wget example.com/index.html\n  wget http://example.com/file.bin -O /data/file.bin"
+  },
+  {
+   "id": "which",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "title": "which - 判断一个名称是内置命令、别名还是应用",
+   "synopsis": "which <name>",
+   "description": "用一行回答「这是命令还是应用」这个问题。",
+   "details": "名称\n  which - 判断一个名称是内置命令、别名还是应用\n\n用法\n  which <name>\n\n说明\n  用一行回答「这是命令还是应用」这个问题。\n\n选项\n  <name>\n    要查找的名称。\n\n设备开销\n  一次 GET /api/apps，结果缓存 30 s，并与 apps 命令共用。\n\n另请参阅\n  apps(1), alias(1), man(1)\n\n示例\n  which ls\n  which notepad"
+  },
+  {
+   "id": "wifi",
+   "category": "terminal",
+   "unless": [
+    "pty"
+   ],
+   "requires": [
+    "wifi.manage"
+   ],
+   "title": "wifi - 扫描、连接、忘记网络及设置优先级",
+   "synopsis": "wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect",
+   "description": "在 shell 中操作无线电。scan 列出周围能收到的网络及其信号、信道和安全类型；known 列出已保存的网络，并用星号标出当前网络；其余子命令用来修改它们。",
+   "details": "名称\n  wifi - 扫描、连接、忘记网络及设置优先级\n\n用法\n  wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect\n\n说明\n  在 shell 中操作无线电。scan 列出周围能收到的网络及其信号、信道和安全类型；known 列出已保存的网络，并用星号标出当前网络；其余子命令用来修改它们。\n\n选项\n  scan\n    列出可见的网络。\n  known\n    列出已保存的网络（默认）。\n  join <ssid> [pass]\n    连接并保存。\n  forget <ssid>\n    删除已保存的网络。\n  prio <ssid> <n>\n    设置连接优先级。\n  reconnect\n    立即重新连接。\n\n设备开销\n  每个子命令一次请求。scan 是会阻塞的无线电操作，因此最多每十秒执行一次，并且在 watch 中会被拒绝。\n\n注意\n  需要 net.wifi 权限。直接在命令中输入的密码不会保存到 shell 的历史记录中。\n\n另请参阅\n  status(1), ping(1), link(1)\n\n示例\n  wifi scan\n  wifi known\n  wifi join home-wifi secret\n  wifi scan | sort -k2 -n"
+  }
+ ]
+}

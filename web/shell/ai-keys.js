@@ -28,6 +28,7 @@ import * as GPU from './webllm.js';   // browser-GPU models (WebGPU): offered wh
 const STR = {
   it: {
     checking: 'controllo…', saving: 'salvo…', testing: 'provo…', deleting: 'elimino…',
+    effhint: 'Quanto ragiona il modello prima di rispondere: più alto = più accurato, più lento e più costoso. Si cambia anche in ANIMA (◆ accanto al messaggio).', toobig: 'Il file delle impostazioni AI è pieno (4 KB): elimina una chiave che non usi più.', setsaved: 'Salvato:',
     active: 'Chiave attiva:', nokey: 'Nessuna chiave per questo provider.', noset: 'Nessuna chiave impostata.',
     typefirst: 'Scrivi prima una chiave.', notlooklike: 'Non sembra una chiave ', saveanyway: '. Salvo lo stesso?',
     saved: 'Salvata:', deleted: 'Chiave eliminata.', delActive: 'Chiave eliminata. Attivo: ',
@@ -80,6 +81,7 @@ const STR = {
   },
   en: {
     checking: 'checking…', saving: 'saving…', testing: 'testing…', deleting: 'deleting…',
+    effhint: 'How much the model thinks before answering: higher is more thorough, slower and costlier. ANIMA can change it too (◆ by the message box).', toobig: 'The AI settings file is full (4 KB): delete a key you no longer use.', setsaved: 'Saved:',
     active: 'Active key:', nokey: 'No key for this provider.', noset: 'No key set.',
     typefirst: 'Type a key first.', notlooklike: 'That does not look like a ', saveanyway: ' key. Save anyway?',
     saved: 'Saved:', deleted: 'Key deleted.', delActive: 'Key deleted. Active: ',
@@ -132,6 +134,7 @@ const STR = {
   },
   es: {
     checking: 'comprobando…', saving: 'guardando…', testing: 'probando…', deleting: 'eliminando…',
+    effhint: 'Cuánto piensa el modelo antes de responder: más alto = más preciso, más lento y más caro. También se cambia en ANIMA (◆ junto al mensaje).', toobig: 'El archivo de ajustes de IA está lleno (4 KB): elimina una clave que ya no uses.', setsaved: 'Guardado:',
     active: 'Clave activa:', nokey: 'No hay clave para este proveedor.', noset: 'Ninguna clave configurada.',
     typefirst: 'Escribe primero una clave.', notlooklike: 'No parece una clave ', saveanyway: '. ¿Guardar de todos modos?',
     saved: 'Guardada:', deleted: 'Clave eliminada.', delActive: 'Clave eliminada. Activa: ',
@@ -184,6 +187,7 @@ const STR = {
   },
   fr: {
     checking: 'vérification…', saving: 'enregistrement…', testing: 'test…', deleting: 'suppression…',
+    effhint: 'Combien le modèle réfléchit avant de répondre : plus haut = plus soigné, plus lent et plus coûteux. ANIMA peut aussi le changer (◆ à côté du message).', toobig: 'Le fichier des réglages IA est plein (4 Ko) : supprimez une clé que vous n’utilisez plus.', setsaved: 'Enregistré :',
     active: 'Clé active :', nokey: 'Aucune clé pour ce fournisseur.', noset: 'Aucune clé définie.',
     typefirst: 'Saisissez d’abord une clé.', notlooklike: 'Cela ne ressemble pas à une clé ', saveanyway: '. Enregistrer quand même ?',
     saved: 'Enregistrée :', deleted: 'Clé supprimée.', delActive: 'Clé supprimée. Active : ',
@@ -236,6 +240,7 @@ const STR = {
   },
   de: {
     checking: 'prüfe…', saving: 'speichere…', testing: 'teste…', deleting: 'lösche…',
+    effhint: 'Wie viel das Modell vor der Antwort nachdenkt: höher = gründlicher, langsamer und teurer. Auch in ANIMA änderbar (◆ neben der Nachricht).', toobig: 'Die KI-Einstellungsdatei ist voll (4 KB): lösche einen Schlüssel, den du nicht mehr nutzt.', setsaved: 'Gespeichert:',
     active: 'Aktiver Schlüssel:', nokey: 'Kein Schlüssel für diesen Anbieter.', noset: 'Kein Schlüssel festgelegt.',
     typefirst: 'Gib zuerst einen Schlüssel ein.', notlooklike: 'Das sieht nicht nach einem ', saveanyway: '-Schlüssel aus. Trotzdem speichern?',
     saved: 'Gespeichert:', deleted: 'Schlüssel gelöscht.', delActive: 'Schlüssel gelöscht. Aktiv: ',
@@ -286,7 +291,66 @@ const STR = {
     gpunote: 'Läuft auf der GPU dieses Computers: keine Cloud, keine Schlüssel. Das erste Laden lädt die Gewichte herunter (Hunderte MB, danach im Cache).',
     gpuhello: 'Sag in einem kurzen Satz Hallo.',
   },
+  zh: {
+    checking: '正在检查…', saving: '正在保存…', testing: '正在测试…', deleting: '正在删除…',
+    effhint: '模型回答前思考的程度：越高越周全，但更慢、更贵。也可以在 ANIMA 中更改（消息框旁的 ◆）。', toobig: 'AI 设置文件已满（4 KB）：请删除一个不再使用的密钥。', setsaved: '已保存：',
+    active: '当前密钥：', nokey: '此服务商没有密钥。', noset: '尚未设置密钥。',
+    typefirst: '请先输入密钥。', notlooklike: '这看起来不像 ', saveanyway: ' 密钥。仍要保存吗？',
+    saved: '已保存：', deleted: '密钥已删除。', delActive: '密钥已删除。当前：',
+    confirmDel: '要从此设备删除 ', confirmDelTail: ' 密钥吗？',
+    pair: '配对此浏览器后才能管理密钥。', pairSave: '请先配对此浏览器（设置 ▸ 配对）。',
+    cantread: '无法读取密钥。', savefail: '保存失败。', delfail: '删除失败。',
+    works: '✓ 密钥可用——', rejected: '✗ 密钥被拒绝。', typeortest: '请先输入或保存密钥。',
+    key: '密钥', model: '模型', exec: '运行位置', plan: '套餐', detect: '检测套餐',
+    browser: '浏览器', device: '设备', save: '保存', test: '测试', del: '删除',
+    note: '密钥只保存在你的设备上（SD），绝不会发送到别处或写入日志。选择「浏览器」时，密钥留在你的浏览器中并直接发送给服务商——不会占用设备资源。',
+    execBrowser: 'Web 界面直接从浏览器调用服务商：不会占用设备资源。',
+    execDevice: '由设备发起在线请求（轻量 TLS，由防内存溢出调度器管理）。',
+    paid: '付费 · 可用 Pro', free: '免费额度 · 仅 Flash', noplan: '未检测到套餐',
+    base: '服务器', refresh: '↻ 列表', listing: '正在向服务器获取模型…',
+    listed: (n) => n + ' 个可用模型', nolist: '服务器没有返回任何模型', typemodel: '模型名称（例如 llama3.2）',
+    localok: (n, m) => '✓ 服务器可访问——' + n + ' 个模型' + (m ? ' · ' + m + ' 已应答' : ''),
+    needbase: '请输入服务器地址（http://<pc>:<port>/v1）。', needmodel: '请选择或输入模型。',
+    localnote: '本地服务器：由设备中转（浏览器无法直接与 Ollama 通信）。只有服务器要求时才需要密钥。使用 Ollama 时，在电脑上运行：OLLAMA_HOST=0.0.0.0 ollama serve。',
+    netmode: '模式', nets: [['offline', '离线', '仅使用设备，不联网'], ['local', '本地', '设备 + 你网络中的 LLM 服务器，不连接互联网'],
+           ['hybrid', '混合', '先用设备，再查维基百科，最后用模型'], ['llm', 'LLM', '先用模型，设备作为备用']],
+    tg: 'Telegram：随时随地与 ANIMA 对话', tgtoken: '机器人令牌', tgsave: '连接机器人', tgon: '已启用', tgunlink: '解除聊天配对', tgforget: '移除机器人',
+    tgsteps: '1）在 Telegram 中给 @BotFather 发消息：/newbot，取一个名字，把令牌粘贴到这里。2）打开你的机器人，发送下方的命令。只有你的聊天会收到回复，其他人都会被拒绝。',
+    tgst: { none: '没有机器人', checking: '正在检查令牌…', wait: '机器人 @%b 已就绪：向机器人发送', paired: '已与 @%b 配对：随时给它发消息（主动检查的通知也会发到那里）', off: '机器人 @%b 已暂停' },
+    ws: 'ANIMA 工作区（OpenClaw 风格）', wsfile: '文件', wssave: '保存', wsex: '示例', wssaved: '已保存', wsempty: '（空：未使用）',
+    wsdesc: { 'SOUL.md': 'ANIMA 是谁：语气、价值观、界限。每次回答时都会放入模型的提示词。', 'USER.md': '你是谁：名字、习惯、偏好。会放入模型的提示词。', 'HEARTBEAT.md': '主动检查清单：ANIMA 会不时重读它，只在需要时通知你。' },
+    wsexample: {
+      'SOUL.md': '# 你是谁\n你是 ANIMA：温暖、直接、带点幽默。回答简短，除非被要求详细说明。\n绝不假装做了你没做的事。做任何不可撤销的事之前先询问。',
+      'USER.md': '# 关于我\n名字：…\n城市：…（用于天气）\n我喜欢：…\n请：叫我的名字，使用公制单位。',
+      'HEARTBEAT.md': '- 接下来 2 小时内有日程吗？提醒我是什么、在什么时候。\n- 明天上午很忙吗？今晚 20:00 后告诉我。\n- 今天有没有我让你提醒我的事？' },
+    perm: '模型操作的权限', permlv: { allow: '允许', ask: '询问', deny: '拒绝' },
+    permnames: { open_app: '打开应用', close_app: '停止音乐', set_volume: '音量', set_brightness: '亮度', add_event: '提醒/日历', create_file: '创建文件', remember: '记住信息（网页聊天中的记忆）', sh: '会改动内容的 shell 命令（rm、cp、mkdir、store install…）', write: '写入和编辑文件（应用、脚本）', rule: '创建自动化（规则）' },
+    permauto: '自主模式：设为「询问」的操作无需确认即可执行（类似 Claude Code 跳过权限）。「拒绝」仍然有效；只读命令（ls、cat、df…）从不询问。',
+    permnote: '「询问」：ANIMA 提出操作并等待你同意。适用于模型决定的操作；你自己下达的命令仍直接执行。',
+    hb: '主动检查', hbev: [[0, '关'], [15, '每 15 分钟'], [30, '每 30 分钟'], [60, '每小时']], hbnext: (n) => n < 0 ? '没有检查清单（请编写 HEARTBEAT.md）' : `${n} 分钟后进行下一次`,
+    wake: '免提语音', wakeon: '监听唤醒词', wakeword: '唤醒词', wakesens: '灵敏度', sens: ['低', '正常', '高'],
+    wakest: { off: '已关闭', listening: '正在监听', heard: '已听到：正在接收问题', paused: '已暂停', unavailable: '不可用' },
+    wakehint: (w) => `说「${w}」，然后说出问题：你停止说话后 ANIMA 会停止聆听并用语音回答。全部在设备上完成，无需联网。`,
+    waketrig: (n, s) => `已唤醒 ${n} 次` + (s >= 0 ? ` · 上次在 ${s < 60 ? s + ' s' : Math.round(s / 60) + ' 分钟'}前` : ''),
+    wakestt: { home: '问题由家庭服务器转写：', cloud: '问题在云端转写：', none: '未设置转写：请在下方添加家庭 Whisper 服务器，或 Groq/OpenAI 密钥' },
+    wakebuild: '此版本没有唤醒词检测：需要在固件中启用 NV_WAKE_ESP_SR（参见 components/nv_wake/Kconfig）。',
+    vis: 'ANIMA 的眼睛（视觉模型）', visph: '例如 qwen2.5vl:7b', visok: '已保存：此模型负责描述图片和截图', visoff: '无：只有支持图片的模型才能看到图片',
+    visnote: '如果聊天模型看不到图片（在 Ollama 上：ANIMA 应用中的 /caps），同一服务器上的这个模型会查看截图和照片，并向 ANIMA 描述。',
+    stt: '家庭语音转写（Whisper）', sttph: 'http://192.168.1.20:8080/inference', sttsave: '保存', sttok: '已保存：语音会优先由此服务器转写', sttoff: '无服务器：使用云端密钥（如果有）', sttbad: '必须是家庭网络地址（192.168.x.x、10.x、.local）',
+    sttnote: '家里的电脑无需云端即可转写 99 种语言的语音。whisper.cpp：whisper-server -m ggml-small.bin --host 0.0.0.0 --port 8080（地址 …/inference）；或 speaches / LocalAI（…/v1/audio/transcriptions）。',
+    gpu: '浏览器中的模型（WebGPU）', gpuprobe: '正在检查 GPU…', gpuload: '下载并加载', gpuunload: '释放 GPU',
+    gpudel: '从缓存中移除', gputest: '测试', gpuuse: '设备无法回答时在助手中使用',
+    gpunone: 'WebGPU 不可用：', gpucached: '已缓存', gpubig: '对这块 GPU 来说太大', gpuready: '✓ 已在 GPU 上就绪：',
+    gpunote: '在这台电脑的 GPU 上运行：无需云端，无需密钥。首次加载会下载权重（几百 MB，之后会缓存）。',
+    gpuhello: '用一句简短的话打个招呼。',
+  },
 };
+// A language may leave out the leading pictograph of a label: the English one is put in front.
+const LEAD = /^\p{Extended_Pictographic}️?\s*/u;
+for (const l of Object.keys(STR)) for (const k of Object.keys(STR.en)) {
+  const m = typeof STR.en[k] === 'string' && LEAD.exec(STR.en[k]), v = STR[l][k];
+  if (m && typeof v === 'string' && !LEAD.test(v)) STR[l][k] = m[0] + v;
+}
 
 // One short capability hint per provider (full variant), derived from CAPMATRIX so it never drifts.
 function capHint(p, lang) {
@@ -297,6 +361,7 @@ function capHint(p, lang) {
     es: { can: 'Puede: ', no: ' · No: ',   image: 'imágenes',  whisper: 'transcripción de voz', tools: 'herramientas del SO' },
     fr: { can: 'Peut : ', no: ' · Non : ', image: 'images',    whisper: 'transcription vocale', tools: 'outils OS' },
     de: { can: 'Kann: ',  no: ' · Nein: ', image: 'Bilder',    whisper: 'Sprachtranskription', tools: 'OS-Tools' },
+    zh: { can: '支持：',  no: ' · 不支持：', image: '图像生成', whisper: '语音转写',          tools: '系统工具' },
   };
   const s = LBL[lang] || LBL.it;
   const can = [], cant = [];
@@ -330,6 +395,8 @@ function injectCss() {
 .nkm-seg{display:inline-flex;border:1px solid var(--line,#2a2a35);border-radius:var(--r-sm,8px);overflow:hidden}
 .nkm-seg .it{cursor:pointer;padding:6px 12px;font-size:13px;color:var(--dim,#8a8a9a)}
 .nkm-seg .it.on{background:var(--accent,#9b8cff);color:var(--accent-on,#0e0e12);font-weight:600}
+.nkm-seg button.it{border:0;background:transparent;font:inherit;font-size:13px}
+.nkm-seg button.it.on{background:var(--accent,#9b8cff)}
 .nkm-btns{display:flex;gap:7px;flex-wrap:wrap}
 .nkm-btn{cursor:pointer;border:1px solid var(--line,#2a2a35);background:var(--panel,#1a1a22);color:var(--ink,#e8e8ee);
   border-radius:var(--r-sm,8px);padding:7px 12px;font:inherit;font-size:13px}
@@ -360,7 +427,11 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 
 export function mountKeyManager(container, opts = {}) {
   injectCss();
-  let lang = ['it', 'es', 'fr', 'de'].includes(opts.lang) ? opts.lang : 'en';
+  // UI languages (the tables here and in ai.js); zh is a browser-only display language, so what goes to the
+  // device (the wake-word route) uses devLang(): one of the languages the device stores, English for zh.
+  const UI_LANGS = ['it', 'es', 'fr', 'de', 'zh'];
+  let lang = UI_LANGS.includes(opts.lang) ? opts.lang : 'en';
+  const devLang = () => (lang === 'zh' ? 'en' : lang);
   const variant = opts.variant === 'compact' ? 'compact' : 'full';
   const full = variant === 'full';
   const showExec = full && opts.exec !== false;
@@ -385,6 +456,8 @@ export function mountKeyManager(container, opts = {}) {
     (full && showTier ? `<div class="nkm-row" data-el="tierrow" style="display:none"><label>${esc(t().plan)}</label><span class="nkm-badge" data-el="tier">…</span><button type="button" class="nkm-btn" data-el="detect">${esc(t().detect)}</button></div>` : '') +
     `<div class="nkm-row" data-el="baserow" style="display:none"><label>${esc(t().base)}</label><input data-el="base" type="url" autocomplete="off" spellcheck="false" placeholder="http://192.168.1.10:11434/v1"><span class="nkm-btns" data-el="presets"></span></div>` +
     `<div class="nkm-row"><label>${esc(t().model)}</label><select data-el="model"></select><input data-el="modeltxt" style="display:none" autocomplete="off" spellcheck="false" placeholder="${esc(t().typemodel)}"><button type="button" class="nkm-btn" data-el="refresh">${esc(t().refresh)}</button></div>` +
+    `<div class="nkm-row" data-el="effrow" style="display:none"><label>${esc(AI.effortLabel('label', lang))}</label><span class="nkm-seg" role="group" aria-label="${esc(AI.effortLabel('label', lang))}" data-el="eff"></span></div>` +
+    `<div class="nkm-exechint" data-el="effhint" style="display:none">${esc(t().effhint)}</div>` +
     `<div class="nkm-note" data-el="localnote" style="display:none">${esc(t().localnote)}</div>` +
     (showExec ? `<div class="nkm-row"><label>${esc(t().exec)}</label><span class="nkm-seg" data-el="exec"><span class="it" data-x="browser">${esc(t().browser)}</span><span class="it" data-x="device">${esc(t().device)}</span></span></div>` : '') +
     (showExec ? `<div class="nkm-exechint" data-el="exechint"></div>` : '') +
@@ -490,12 +563,25 @@ export function mountKeyManager(container, opts = {}) {
       }));
     }
     fillModels();
+    paintEffort();
+  }
+  // Effort (Claude): the levels the chosen model takes; hidden for a model or a provider that takes none.
+  function paintEffort() {
+    const row = $('effrow'); if (!row) return;
+    const lv = AI.effortLevels(cfg.provider, pickedModel());
+    row.style.display = lv.length ? '' : 'none';
+    if ($('effhint')) $('effhint').style.display = lv.length ? '' : 'none';
+    if (!lv.length) return;
+    const cur = AI.effortFor(cfg.provider, pickedModel(), cfg.effort);
+    $('eff').innerHTML = lv.map((l) => `<button type="button" class="it${l === cur ? ' on' : ''}" data-e="${l}" aria-pressed="${l === cur}">${esc(AI.effortLabel(l, lang))}</button>`).join('');
+    $('eff').querySelectorAll('[data-e]').forEach((b) => b.addEventListener('click', () => { cfg.effort = b.dataset.e; paintEffort(); keepSaved(); }));
   }
 
   function adopt(p) {
     const d = AI.providerOf(p), st = (cfg.keys && cfg.keys[p]) || {};
     cfg.provider = p; cfg.base = st.base || d.base; cfg.model = st.model || d.def;
     cfg.version = st.version || d.version; cfg.key = st.key || ''; cfg.keyHint = st.keyHint || ''; cfg.geminiModels = null;
+    cfg.effort = st.effort || '';
   }
   function chooseProvider(p) {
     if (!AI.PROVIDERS[p]) return;
@@ -517,9 +603,10 @@ export function mountKeyManager(container, opts = {}) {
     cfg.stt_url = c.stt_url || ''; cfg.stt_model = c.stt_model || '';
     cfg.vision_model = c.vision_model || ''; cfg.vision_base = c.vision_base || ''; cfg.vision_key = c.vision_key || '';
     cfg.vision = typeof c.vision === 'boolean' ? c.vision : null;
+    cfg.effort = c.effort || ''; cfg._extra = c._extra || {};   // _extra: fields another edition or the firmware wrote, written back untouched
     if ($('stt')) { $('stt').value = cfg.stt_url; $('sttstat').textContent = cfg.stt_url ? t().sttok : t().sttoff; }
     if ($('vismodel')) { $('vismodel').value = cfg.vision_model; $('visstat').textContent = cfg.vision_model ? t().visok : t().visoff; }
-    if (cfg.key) cfg.keys[cfg.provider] = Object.assign({ base: cfg.base, model: cfg.model, key: cfg.key, keyHint: cfg.keyHint }, cfg.provider === 'anthropic' ? { version: cfg.version } : {});
+    if (cfg.key) cfg.keys[cfg.provider] = Object.assign({}, cfg.keys[cfg.provider] || {}, { base: cfg.base, model: cfg.model, key: cfg.key, keyHint: cfg.keyHint }, cfg.provider === 'anthropic' ? { version: cfg.version } : {}, cfg.effort ? { effort: cfg.effort } : {});
     paint(); setStat((cfg.key || (prov().local && cfg.base)) ? statText() : t().noset);
     onChange(getCfg());
   }
@@ -548,9 +635,12 @@ export function mountKeyManager(container, opts = {}) {
       if (!cfg.model) { setStat(t().needmodel); return; }
       if (v) cfg.key = v;
     } else {
-      if (!v) { setStat(t().typefirst); return; }
-      if (!p.prefix.test(v) && !confirm(t().notlooklike + p.label + t().saveanyway)) return;
-      cfg.key = v; cfg.model = pickedModel();
+      // No key typed: a model / effort change keeps the key already saved for this provider (on a sealed vault that
+      // is the VAULT_KEY placeholder, written back as "" so the device keeps the real one).
+      if (!v && !cfg.key) { setStat(t().typefirst); return; }
+      if (v && !p.prefix.test(v) && !confirm(t().notlooklike + p.label + t().saveanyway)) return;
+      if (v) cfg.key = v;
+      cfg.model = pickedModel();
     }
     setStat(t().saving);
     const r = await AI.writeTeacher(cfg);
@@ -562,7 +652,21 @@ export function mountKeyManager(container, opts = {}) {
       fillChips();
       if (cfg.provider === 'google') calibrate();
     } else if (r === 'unpaired') setStat(t().pairSave);
-    else setStat(t().savefail);
+    else setStat(r === 'too_big' ? t().toobig : t().savefail);
+  }
+  // A model or effort change on a provider whose key is already saved is written at once: no Save, no key to retype.
+  async function keepSaved() {
+    const p = prov();
+    if ($('key') && $('key').value.trim()) return;                 // a key being typed is saved by Save
+    if (p.local ? !(cfg.base && pickedModel()) : !cfg.key) return;  // nothing saved yet for this provider
+    cfg.model = pickedModel();
+    const r = await AI.writeTeacher(cfg);
+    if (r === true) {
+      if (cfg.keys && cfg.keys[cfg.provider]) cfg.keys[cfg.provider] = Object.assign({}, cfg.keys[cfg.provider], { model: cfg.model }, cfg.effort ? { effort: cfg.effort } : {});
+      const e = AI.effortFor(cfg.provider, cfg.model, cfg.effort);
+      setStat(`${t().setsaved} <b>${esc(AI.modelName(cfg.provider, cfg.model).name)}</b>${e ? ' · ' + esc(AI.effortLabel('label', lang)) + ': ' + esc(AI.effortLabel(e, lang)) : ''}`);
+      onChange(getCfg());
+    } else setStat(r === 'unpaired' ? t().pairSave : r === 'too_big' ? t().toobig : t().savefail);
   }
 
   async function refreshModels() {
@@ -617,7 +721,7 @@ export function mountKeyManager(container, opts = {}) {
       if (remaining.length) {
         const np = remaining[0], e = keys[np];
         cfg.keys = keys;
-        cfg.provider = np; cfg.base = e.base; cfg.model = e.model; cfg.key = e.key; cfg.keyHint = e.keyHint || ''; cfg.version = e.version || '2023-06-01';
+        cfg.provider = np; cfg.base = e.base; cfg.model = e.model; cfg.key = e.key; cfg.keyHint = e.keyHint || ''; cfg.version = e.version || '2023-06-01'; cfg.effort = e.effort || '';
         const r = await AI.writeTeacher(cfg);
         if (r === true) { paint(); if ($('key')) $('key').value = ''; setStat(t().delActive + esc(AI.PROVIDERS[np].label)); onChange(getCfg()); return; }
         if (r === 'unpaired') { setStat(t().pairSave); return; }
@@ -631,7 +735,7 @@ export function mountKeyManager(container, opts = {}) {
     } catch { setStat(t().delfail); }
   }
 
-  function getCfg() { return { provider: cfg.provider, base: cfg.base, model: cfg.model, key: cfg.key, version: cfg.version, exec: cfg.exec, geminiTier: cfg.geminiTier, hasKey: !!cfg.key, keys: cfg.keys }; }
+  function getCfg() { return { provider: cfg.provider, base: cfg.base, model: cfg.model, key: cfg.key, version: cfg.version, exec: cfg.exec, geminiTier: cfg.geminiTier, effort: cfg.effort || '', hasKey: !!cfg.key, keys: cfg.keys }; }
 
   // ======== sections beyond the key: each appears ONLY where it is proven to work ========
   // Device sections (network mode, Telegram, workspace/heartbeat/permissions, wake word, home Whisper, vision helper)
@@ -751,7 +855,7 @@ export function mountKeyManager(container, opts = {}) {
     $('wakenote').textContent = !built ? t().wakebuild
       : (w.label ? t().wakehint(w.label) + ' ' : '') + t().wakestt[route] + (route !== 'none' ? (w.stt.where || '') : '');
   }
-  async function wakeCall(body) { const j = await devJson('/api/anima/wake?lang=' + lang, body); if (j) paintWake(j); }
+  async function wakeCall(body) { const j = await devJson('/api/anima/wake?lang=' + devLang(), body); if (j) paintWake(j); }
   function wireWake() {
     $('wakeon').addEventListener('change', () => wakeCall({ on: $('wakeon').checked }));
     $('wakeword').addEventListener('change', () => wakeCall({ word: $('wakeword').value }));
@@ -779,7 +883,7 @@ export function mountKeyManager(container, opts = {}) {
 
   async function deviceSections() {
     if (!full || !AI.sealedVault()) return;              // Cardputer / Handheld: no request, nothing shown
-    const [net, tg, hb, wake] = await Promise.all([devJson('/api/anima/net'), devJson('/api/anima/telegram'), devJson('/api/anima/hb'), devJson('/api/anima/wake?lang=' + lang)]);
+    const [net, tg, hb, wake] = await Promise.all([devJson('/api/anima/net'), devJson('/api/anima/telegram'), devJson('/api/anima/hb'), devJson('/api/anima/wake?lang=' + devLang())]);
     if (!root.isConnected) return;
     if (net && net.mode) { show('netgrp'); wireNet(); paintNet(net.mode); }
     if (tg) { show('tg'); wireTg(); paintTg(tg); }
@@ -846,7 +950,7 @@ export function mountKeyManager(container, opts = {}) {
   $('test').addEventListener('click', test);
   $('del').addEventListener('click', del);
   $('key').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
-  if ($('model')) $('model').addEventListener('change', () => { cfg.model = $('model').value; });
+  if ($('model')) $('model').addEventListener('change', () => { cfg.model = $('model').value; paintEffort(); keepSaved(); });
   if ($('detect')) $('detect').addEventListener('click', () => { setStat(t().checking); calibrate(); });
   if ($('exec')) $('exec').querySelectorAll('.it').forEach((b) => b.addEventListener('click', () => {
     cfg.exec = b.dataset.x === 'device' ? 'device' : 'browser'; paint();
@@ -859,7 +963,7 @@ export function mountKeyManager(container, opts = {}) {
 
   return {
     reload, getCfg,
-    setLang(l) { lang = ['it', 'es', 'fr', 'de'].includes(l) ? l : 'en'; /* re-render labels by rebuilding */ mountKeyManager(container, Object.assign({}, opts, { lang })); },
+    setLang(l) { lang = UI_LANGS.includes(l) ? l : 'en'; /* re-render labels by rebuilding */ mountKeyManager(container, Object.assign({}, opts, { lang })); },
     destroy() { container.innerHTML = ''; },
   };
 }

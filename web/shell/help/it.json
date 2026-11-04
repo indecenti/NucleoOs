@@ -97,8 +97,8 @@
    ],
    "title": "alias - Dà un nome breve a un comando lungo",
    "synopsis": "alias [name=command]",
-   "description": "Senza argomenti elenca gli alias. Con nome=comando ne definisce uno, salvato sulla scheda in modo che sopravviva a un ricaricamento. Su una tastiera da 56 tasti il costo è la digitazione: è questo che rende utile il comando.",
-   "details": "NOME\n  alias - Dà un nome breve a un comando lungo\n\nSINTASSI\n  alias [name=command]\n\nDESCRIZIONE\n  Senza argomenti elenca gli alias. Con nome=comando ne definisce uno, salvato sulla scheda in modo che sopravviva a un ricaricamento. Su una tastiera da 56 tasti il costo è la digitazione: è questo che rende utile il comando.\n\nOPZIONI\n  nome=comando\n    Definisce un alias.\n  nome\n    Mostra un alias.\n\nCOSTO PER IL DISPOSITIVO\n  Una POST /api/fs/write quando un alias cambia, nella cartella dell'app. Niente del tutto quando un comando viene eseguito.\n\nNOTE\n  Un alias si espande una volta sola e solo sulla parola di comando; un corpo che contiene una pipe, una redirezione o ; && || viene rifiutato: una stringa salvata non deve poter introdurre un operatore che l'utente non ha scritto.\n\nVEDERE ANCHE\n  unalias(1), which(1), export(1)\n\nESEMPI\n  alias ll='ls /data'\n  alias errs='dmesg -l E'\n  alias"
+   "description": "Senza argomenti elenca gli alias. Con nome=comando ne definisce uno, salvato sul dispositivo in modo che sopravviva a un ricaricamento. Su una tastiera piccola il costo è la digitazione: è questo che rende utile il comando.",
+   "details": "NOME\n  alias - Dà un nome breve a un comando lungo\n\nSINTASSI\n  alias [name=command]\n\nDESCRIZIONE\n  Senza argomenti elenca gli alias. Con nome=comando ne definisce uno, salvato sul dispositivo in modo che sopravviva a un ricaricamento. Su una tastiera piccola il costo è la digitazione: è questo che rende utile il comando.\n\nOPZIONI\n  nome=comando\n    Definisce un alias.\n  nome\n    Mostra un alias.\n\nCOSTO PER IL DISPOSITIVO\n  Una POST /api/fs/write quando un alias cambia, nella cartella dell'app. Niente del tutto quando un comando viene eseguito.\n\nNOTE\n  Un alias si espande una volta sola e solo sulla parola di comando; un corpo che contiene una pipe, una redirezione o ; && || viene rifiutato: una stringa salvata non deve poter introdurre un operatore che l'utente non ha scritto.\n\nVEDERE ANCHE\n  unalias(1), which(1), export(1)\n\nESEMPI\n  alias ll='ls /data'\n  alias errs='dmesg -l E'\n  alias"
   },
   {
    "id": "apps",
@@ -109,7 +109,7 @@
    "title": "apps - Elenca le app installate, o ne apre una",
    "synopsis": "apps [-a]   |   apps open <id>",
    "description": "Stampa una riga separata da tabulazioni per ogni app installata: id, nome, se è abilitata e la sua rotta. Con open chiede alla shell di avviarne una.",
-   "details": "NOME\n  apps - Elenca le app installate, o ne apre una\n\nSINTASSI\n  apps [-a]   |   apps open <id>\n\nDESCRIZIONE\n  Stampa una riga separata da tabulazioni per ogni app installata: id, nome, se è abilitata e la sua rotta. Con open chiede alla shell di avviarne una.\n\nOPZIONI\n  -a\n    Include anche le app disabilitate.\n  open <id>\n    Apre quell'app nella shell.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/apps, memorizzata per 30 s. Aprire un'app è un messaggio alla shell, non una chiamata al dispositivo.\n\nNOTE\n  Volutamente NON è un elenco di processi. Sul dispositivo nulla sa quali finestre sono aperte, quindi un ps costruito su questa rotta stamperebbe tutte le 46 app installate come se fossero in esecuzione.\n\nVEDERE ANCHE\n  which(1), assoc(1), open(1)\n\nESEMPI\n  apps\n  apps -a | grep off\n  apps open notepad"
+   "details": "NOME\n  apps - Elenca le app installate, o ne apre una\n\nSINTASSI\n  apps [-a]   |   apps open <id>\n\nDESCRIZIONE\n  Stampa una riga separata da tabulazioni per ogni app installata: id, nome, se è abilitata e la sua rotta. Con open chiede alla shell di avviarne una.\n\nOPZIONI\n  -a\n    Include anche le app disabilitate.\n  open <id>\n    Apre quell'app nella shell.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/apps, memorizzata per 30 s. Aprire un'app è un messaggio alla shell, non una chiamata al dispositivo.\n\nNOTE\n  Volutamente NON è un elenco di processi. Sul dispositivo nulla sa quali finestre sono aperte, quindi un ps costruito su questa rotta stamperebbe tutte le app installate come se fossero in esecuzione.\n\nVEDERE ANCHE\n  which(1), assoc(1), open(1)\n\nESEMPI\n  apps\n  apps -a | grep off\n  apps open notepad"
   },
   {
    "id": "assoc",
@@ -211,7 +211,7 @@
    "title": "curl - Richiesta web HTTP",
    "synopsis": "curl <url>",
    "description": "Invia una richiesta HTTP GET a un URL e stampa il corpo della risposta.",
-   "details": "NOME\n  curl - Ottieni risorsa web HTTP.\n\nSINTASSI\n  curl <url>\n\nDESCRIZIONE\n  Effettua una chiamata HTTP GET verso l'URL specificato e stampa la risposta sul terminale.\n\nOPZIONI\n  <url>\n    L'indirizzo web da contattare.\n\nARCHITETTURA E BASSO LIVELLO\n  Esegue un 'fetch' HTTP GET. Sul browser, è soggetto alle limitazioni CORS. Sul dispositivo reale, le chiamate passano direttamente dallo stack di rete Wi-Fi (LwIP) di ESP-IDF.\n\nCODICI DI RITORNO\n  0\n    Successo.\n  1\n    Rete non disponibile, errore CORS o timeout.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nVEDERE ANCHE\n  wget(1), ping(1)\n\nESEMPI AVANZATI\n  curl ipify.org\n  curl http://example.com"
+   "details": "NOME\n  curl - Ottieni risorsa web HTTP.\n\nSINTASSI\n  curl <url>\n\nDESCRIZIONE\n  Effettua una chiamata HTTP GET verso l'URL specificato e stampa la risposta sul terminale.\n\nOPZIONI\n  <url>\n    L'indirizzo web da contattare.\n\nARCHITETTURA E BASSO LIVELLO\n  Esegue un 'fetch' HTTP GET. Sul browser, è soggetto alle limitazioni CORS. Sul dispositivo reale, le chiamate passano direttamente dallo stack di rete del dispositivo stesso.\n\nCODICI DI RITORNO\n  0\n    Successo.\n  1\n    Rete non disponibile, errore CORS o timeout.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nVEDERE ANCHE\n  wget(1), ping(1)\n\nESEMPI AVANZATI\n  curl ipify.org\n  curl http://example.com"
   },
   {
    "id": "cut",
@@ -272,7 +272,7 @@
    "title": "display - Accende o spegne il pannello",
    "synopsis": "display on | display off",
    "description": "Commuta lo schermo fisico e stampa la luminosità che il dispositivo riporta dopo.",
-   "details": "NOME\n  display - Accende o spegne il pannello\n\nSINTASSI\n  display on | display off\n\nDESCRIZIONE\n  Commuta lo schermo fisico e stampa la luminosità che il dispositivo riporta dopo.\n\nOPZIONI\n  on\n    Pannello acceso.\n  off\n    Pannello spento.\n\nCOSTO PER IL DISPOSITIVO\n  Una POST /api/display.\n\nNOTE\n  Richiede il permesso device.display. Con un budget da 120 mAh è la leva più grossa che esista, e finora si raggiungeva solo dalle Impostazioni.\n\nVEDERE ANCHE\n  screen(1), status(1)\n\nESEMPI\n  display off\n  display on"
+   "details": "NOME\n  display - Accende o spegne il pannello\n\nSINTASSI\n  display on | display off\n\nDESCRIZIONE\n  Commuta lo schermo fisico e stampa la luminosità che il dispositivo riporta dopo.\n\nOPZIONI\n  on\n    Pannello acceso.\n  off\n    Pannello spento.\n\nCOSTO PER IL DISPOSITIVO\n  Una POST /api/display.\n\nNOTE\n  Richiede il permesso device.display. Su un dispositivo a batteria è la leva più grossa che esista per l'autonomia, e finora si raggiungeva solo dalle Impostazioni.\n\nVEDERE ANCHE\n  screen(1), status(1)\n\nESEMPI\n  display off\n  display on"
   },
   {
    "id": "dmesg",
@@ -296,8 +296,8 @@
    ],
    "title": "du - Spazio occupato per cartella, dal più grande",
    "synopsis": "du [-d N] [path]",
-   "description": "Percorre un sottoalbero e somma la dimensione dei file di ogni cartella, riportando i figli nei padri. Il risultato è ordinato per dimensione: la risposta a \"che cosa mi riempie la scheda\" è la prima riga.",
-   "details": "NOME\n  du - Spazio occupato per cartella, dal più grande\n\nSINTASSI\n  du [-d N] [path]\n\nDESCRIZIONE\n  Percorre un sottoalbero e somma la dimensione dei file di ogni cartella, riportando i figli nei padri. Il risultato è ordinato per dimensione: la risposta a \"che cosa mi riempie la scheda\" è la prima riga.\n\nOPZIONI\n  -d N\n    Scende al massimo di N livelli (2 di default, 6 al massimo).\n  [percorso]\n    Da dove partire; di default la cartella corrente.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/fs/list per cartella, in sequenza stretta, e mai più di 60 per invocazione. Ctrl+C la ferma.\n\nNOTE\n  Una lettura di cartella costa al dispositivo una stat() per voce, quindi la scansione ha un budget invece di essere completa: quando si ferma, lo dice.\n\nVEDERE ANCHE\n  df(1), tree(1), stat(1)\n\nESEMPI\n  du\n  du -d 1 /data\n  du /data | sort -n -r | head -n 5"
+   "description": "Percorre un sottoalbero e somma la dimensione dei file di ogni cartella, riportando i figli nei padri. Il risultato è ordinato per dimensione: la risposta a \"che cosa mi riempie lo spazio\" è la prima riga.",
+   "details": "NOME\n  du - Spazio occupato per cartella, dal più grande\n\nSINTASSI\n  du [-d N] [path]\n\nDESCRIZIONE\n  Percorre un sottoalbero e somma la dimensione dei file di ogni cartella, riportando i figli nei padri. Il risultato è ordinato per dimensione: la risposta a \"che cosa mi riempie lo spazio\" è la prima riga.\n\nOPZIONI\n  -d N\n    Scende al massimo di N livelli (2 di default, 6 al massimo).\n  [percorso]\n    Da dove partire; di default la cartella corrente.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/fs/list per cartella, in sequenza stretta, e mai più di 60 per invocazione. Ctrl+C la ferma.\n\nNOTE\n  Una lettura di cartella costa al dispositivo una stat() per voce, quindi la scansione ha un budget invece di essere completa: quando si ferma, lo dice.\n\nVEDERE ANCHE\n  df(1), tree(1), stat(1)\n\nESEMPI\n  du\n  du -d 1 /data\n  du /data | sort -n -r | head -n 5"
   },
   {
    "id": "echo",
@@ -402,7 +402,7 @@
    "title": "heap - Dettaglio dell'heap, frammentazione compresa",
    "synopsis": "heap",
    "description": "Stampa i pool interno, DMA e predefinito con byte liberi, blocco libero più grande, minimo mai visto e percentuale di frammentazione, più lo stack libero minimo del server HTTP.",
-   "details": "NOME\n  heap - Dettaglio dell'heap, frammentazione compresa\n\nSINTASSI\n  heap\n\nDESCRIZIONE\n  Stampa i pool interno, DMA e predefinito con byte liberi, blocco libero più grande, minimo mai visto e percentuale di frammentazione, più lo stack libero minimo del server HTTP.\n\nOPZIONI\n  Questo comando non ha opzioni.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/heap.\n\nNOTE\n  Il collo di bottiglia documentato su questo chip è la frammentazione, non i byte liberi — e free(1) non riesce a mostrarla.\n\nVEDERE ANCHE\n  free(1), diag(1), cpu(1), watch(1)\n\nESEMPI\n  heap\n  watch -n 5 heap\n  heap | grep frag"
+   "details": "NOME\n  heap - Dettaglio dell'heap, frammentazione compresa\n\nSINTASSI\n  heap\n\nDESCRIZIONE\n  Stampa i pool interno, DMA e predefinito con byte liberi, blocco libero più grande, minimo mai visto e percentuale di frammentazione, più lo stack libero minimo del server HTTP.\n\nOPZIONI\n  Questo comando non ha opzioni.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/heap.\n\nNOTE\n  Su dispositivi di questo tipo il collo di bottiglia documentato è la frammentazione, non i byte liberi — e free(1) non riesce a mostrarla.\n\nVEDERE ANCHE\n  free(1), diag(1), cpu(1), watch(1)\n\nESEMPI\n  heap\n  watch -n 5 heap\n  heap | grep frag"
   },
   {
    "id": "hexdump",
@@ -471,10 +471,10 @@
    "requires": [
     "device.link"
    ],
-   "title": "link - Mostra i vicini ESP-NOW e lo stato dei trasferimenti",
+   "title": "link - Mostra i dispositivi vicini e lo stato dei trasferimenti",
    "synopsis": "link peers | link status",
-   "description": "peers elenca i dispositivi che questo vede via ESP-NOW, con nome locale e canale; status dice se un trasferimento è in corso e a che punto è.",
-   "details": "NOME\n  link - Mostra i vicini ESP-NOW e lo stato dei trasferimenti\n\nSINTASSI\n  link peers | link status\n\nDESCRIZIONE\n  peers elenca i dispositivi che questo vede via ESP-NOW, con nome locale e canale; status dice se un trasferimento è in corso e a che punto è.\n\nOPZIONI\n  peers\n    Elenca i vicini (il predefinito).\n  status\n    Mostra lo stato del trasferimento.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET per ciascuno.\n\nNOTE\n  Richiede il permesso mesh.peer. Volutamente in sola lettura: mandare un comando a un altro dispositivo trasforma un errore di battitura in un problema di qualcun altro, e il passaggio di conferma per questo sta nell'app Vicino.\n\nVEDERE ANCHE\n  wifi(1), status(1)\n\nESEMPI\n  link peers\n  link status"
+   "description": "peers elenca i dispositivi che questo vede via radio diretta tra dispositivi, con nome locale e canale; status dice se un trasferimento è in corso e a che punto è.",
+   "details": "NOME\n  link - Mostra i dispositivi vicini e lo stato dei trasferimenti\n\nSINTASSI\n  link peers | link status\n\nDESCRIZIONE\n  peers elenca i dispositivi che questo vede via radio diretta tra dispositivi, con nome locale e canale; status dice se un trasferimento è in corso e a che punto è.\n\nOPZIONI\n  peers\n    Elenca i vicini (il predefinito).\n  status\n    Mostra lo stato del trasferimento.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET per ciascuno.\n\nNOTE\n  Richiede il permesso mesh.peer. Volutamente in sola lettura: mandare un comando a un altro dispositivo trasforma un errore di battitura in un problema di qualcun altro, e il passaggio di conferma per questo sta nell'app Vicino.\n\nVEDERE ANCHE\n  wifi(1), status(1)\n\nESEMPI\n  link peers\n  link status"
   },
   {
    "id": "ls",
@@ -843,7 +843,7 @@
    "title": "wc - Conteggio righe, parole e byte",
    "synopsis": "wc <file>",
    "description": "Stampa il numero di righe, parole e byte in un file.",
-   "details": "NOME\n  wc - Conta righe, parole e byte.\n\nSINTASSI\n  wc <file>\n\nDESCRIZIONE\n  Esegue un'analisi quantitativa del file stampando a schermo il numero totale di righe, parole e byte.\n\nOPZIONI\n  <file>\n    Il file da scansionare.\n\nARCHITETTURA E BASSO LIVELLO\n  Ottiene il contenuto dal chip via HTTP. Le righe sono calcolate tramite split '\\n', le parole tramite split '\\s+' (filtrando elementi vuoti) e i byte calcolando la dimensione di un oggetto 'Blob' inizializzato con il testo.\n\nCODICI DI RITORNO\n  0\n    Successo. Conteggi completati.\n  1\n    Errore di lettura.\n  404\n    File non trovato.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nVEDERE ANCHE\n  cat(1), head(1), tail(1)\n\nESEMPI AVANZATI\n  wc /data/notes.txt"
+   "details": "NOME\n  wc - Conta righe, parole e byte.\n\nSINTASSI\n  wc <file>\n\nDESCRIZIONE\n  Esegue un'analisi quantitativa del file stampando a schermo il numero totale di righe, parole e byte.\n\nOPZIONI\n  <file>\n    Il file da scansionare.\n\nARCHITETTURA E BASSO LIVELLO\n  Ottiene il contenuto tramite la rotta di lettura del file system. Le righe sono calcolate tramite split '\\n', le parole tramite split '\\s+' (filtrando elementi vuoti) e i byte calcolando la dimensione di un oggetto 'Blob' inizializzato con il testo.\n\nCODICI DI RITORNO\n  0\n    Successo. Conteggi completati.\n  1\n    Errore di lettura.\n  404\n    File non trovato.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nVEDERE ANCHE\n  cat(1), head(1), tail(1)\n\nESEMPI AVANZATI\n  wc /data/notes.txt"
   },
   {
    "id": "wget",

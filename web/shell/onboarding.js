@@ -38,6 +38,11 @@ const ACC = {
     adminSub: 'Was jetzt auf dem Gerät ist, gehört dann ihm. Weitere Konten kommen in Einstellungen ▸ Konten dazu.',
     name: 'Name', pw: 'Passwort', again: 'Passwort wiederholen', pin: 'PIN, die das Gerät zeigt', go: 'Anlegen', mismatch: 'Die beiden Passwörter stimmen nicht überein',
     weak: 'Passwort zu schwach: mindestens 8 Zeichen und keines der häufigsten', proof: 'Gib die PIN ein, die das Gerät zeigt', fail: 'Das hat nicht geklappt: versuche es erneut', taken: 'Dieser Name ist nicht möglich' },
+  zh: { title: '谁会使用这台设备？', sub: '之后可以在「设置 ▸ 账户」中更改', me: '只有我', meD: '和现在一样：无需创建账户。',
+    many: '多个人', manyD: '每个人都有自己的文件、设置和助手。', admin: '创建管理员',
+    adminSub: '设备上现有的内容都将归管理员所有。更多账户可在「设置 ▸ 账户」中添加。',
+    name: '名称', pw: '密码', again: '再次输入密码', pin: '设备上显示的 PIN', go: '创建', mismatch: '两次输入的密码不一致',
+    weak: '密码太弱：至少 8 个字符，且不能是常见密码', proof: '请输入设备上显示的 PIN', fail: '操作未成功，请重试', taken: '无法使用此名称' },
 };
 // The apps step: where the apps are, how one lands on the desktop, where more come from. Five languages, by meaning.
 const APPS = {
@@ -66,6 +71,11 @@ const APPS = {
     desk: 'Auf den Desktop', deskD: 'Rechtsklick (oder lange drücken) auf eine App in Start, dann „Zum Desktop hinzufügen“.',
     store: 'Store', storeD: 'Weitere Apps, signiert und vor jeder Installation geprüft. Mit einem Klick installiert und entfernt.',
     open: 'Am Ende den Store öffnen', opened: 'Der Store öffnet sich, wenn du fertig bist' },
+  zh: { title: '你的应用', sub: '桌面上只放最常用的：其他一切点一下就能找到',
+    start: '开始', startD: '底部的按钮会打开所有已安装的应用。直接输入即可按名称搜索。',
+    desk: '放到桌面', deskD: '在「开始」中右键点击（或长按）一个应用，然后选择「添加到桌面」。',
+    store: '应用商店', storeD: '更多应用，每次安装前都经过签名和校验。点一下即可安装或移除。',
+    open: '完成后打开应用商店', opened: '完成后将打开应用商店' },
 };
 
 // The device can have accounts and nobody has turned them on: the wizard asks, once per browser ("Only me" is
@@ -82,7 +92,7 @@ async function accountsToSet() {
 }
 
 const ONB_KEY = 'nucleo.onboarded';
-const CODES = ['it', 'en', 'es', 'fr', 'de'];
+const CODES = ['it', 'en', 'es', 'fr', 'de', 'zh'];
 // The language is the i18n engine's (window.NucleoI18N), which also knows the device's and the
 // browser's. Reading only localStorage was wrong twice: on a fresh browser the key is empty (the intro
 // came out in the wrong language), and picking the already-active language doesn't write it (setLang
@@ -93,7 +103,7 @@ const lang = () => {
   l = String(l || 'en').slice(0, 2);
   return CODES.includes(l) ? l : 'en';
 };
-// es/fr/de overlays, keyed by the ENGLISH UI string. it/en render inline via the TR ternaries below;
+// es/fr/de/zh overlays, keyed by the ENGLISH UI string. it/en render inline via the TR ternaries below;
 // TR(it, en): it→it, en→en, otherwise L10N[lang][en] (falling back to the English text if a key is missing).
 const L10N = {
   es: {
@@ -282,8 +292,78 @@ const L10N = {
     'Next →': 'Weiter →',
     'Start using NucleoOS': 'NucleoOS nutzen',
   },
+  zh: {
+    'Choose your language': '选择语言',
+    'You can change it anytime in Settings ▸ Appearance': '随时可以在「设置 ▸ 外观」中更改',
+    'Welcome to NucleoOS': '欢迎使用 NucleoOS',
+    'A web-native OS that lives on your device': '一个运行在你设备上的 Web 原生操作系统',
+    'NucleoOS turns your device into a tiny computer you drive from this browser. At its heart is <b>ANIMA</b> — an assistant whose brain runs <b>offline, on the device itself</b>.': 'NucleoOS 把你的设备变成一台小电脑，通过这个浏览器操作。它的核心是 <b>ANIMA</b>——一个大脑<b>离线运行在设备本身</b>上的助手。',
+    'Offline brain': '离线大脑',
+    'Answers, reasoning and memory — no cloud needed.': '回答、推理和记忆——无需云端。',
+    'Optional cloud': '可选云端',
+    'Add a Claude key for deeper understanding & verification.': '添加 Claude 密钥，获得更深入的理解和核实。',
+    'Your keys, your device': '你的密钥，你的设备',
+    'Keys stay on the device; cloud calls go straight from your browser.': '密钥保存在设备上；云端请求直接从你的浏览器发出。',
+    'Light on the device': '设备负担轻',
+    'The heavy AI work runs in your browser, not the chip.': '繁重的 AI 运算在你的浏览器中进行，而不是在芯片上。',
+    'Two minutes now and ANIMA is ready everywhere in the OS.': '现在花两分钟，ANIMA 就能在整个系统中随时可用。',
+    'NucleoOS is served by the device over your network — no app store. <b>Install it</b> to get a full-screen app icon and instant launch.': 'NucleoOS 由设备通过你的网络提供——无需应用商店。<b>安装它</b>，即可获得全屏应用图标并快速启动。',
+    'Keep the device on the same Wi-Fi as this computer or phone.': '让设备与这台电脑或手机连接同一个 Wi-Fi。',
+    'Desktop (Chrome/Edge): click the ⊕ / install icon in the address bar.': '电脑（Chrome/Edge）：点击地址栏中的 ⊕ / 安装图标。',
+    'iPhone/iPad (Safari): Share → “Add to Home Screen”.': 'iPhone/iPad（Safari）：分享 → 「添加到主屏幕」。',
+    'Android (Chrome): menu ⋮ → “Install app”.': 'Android（Chrome）：菜单 ⋮ → 「安装应用」。',
+    'Tip: bookmark the device IP so you can always get back to NucleoOS.': '提示：把设备的 IP 加入书签，随时都能回到 NucleoOS。',
+    'Install NucleoOS': '安装 NucleoOS',
+    'Add it like a native app': '像原生应用一样添加',
+    '⤓ Install app': '⤓ 安装应用',
+    'RECOMMENDED': '推荐',
+    'Choose your AI': '选择你的 AI',
+    'You can change this anytime in Settings ▸ AI': '随时可以在「设置 ▸ AI」中更改',
+    'Best understanding. Runs in your browser — zero load on the device.': '理解能力最强。在你的浏览器中运行——设备零负担。',
+    'Fast & free tier. OpenAI-compatible (Llama models).': '速度快，有免费额度。兼容 OpenAI（Llama 模型）。',
+    'Strong, generous free tier. Routed via the device proxy (no browser CORS).': '能力强，免费额度充足。通过设备代理转发（无浏览器 CORS 限制）。',
+    'Offline only': '仅离线',
+    'No key. ANIMA still answers from its on-device brain, weather & Wikipedia.': '无需密钥。ANIMA 仍可依靠设备上的大脑、天气和维基百科回答。',
+    'Paste a key first.': '请先粘贴密钥。',
+    'testing…': '正在测试…',
+    '✓ Key works!': '✓ 密钥可用！',
+    '✗ Key rejected.': '✗ 密钥被拒绝。',
+    'Test': '测试',
+    'Paste your key.': '请粘贴你的密钥。',
+    'That doesn’t look like a ': '这看起来不像 ',
+    ' key. Save anyway?': ' 密钥。仍要保存吗？',
+    'saving…': '正在保存…',
+    'detecting plan…': '正在检测套餐…',
+    '✓ Saved — ANIMA is ready.': '✓ 已保存——ANIMA 已就绪。',
+    'Pair this browser first.': '请先配对此浏览器。',
+    'Save failed.': '保存失败。',
+    'Save & finish': '保存并完成',
+    'Go to ': '前往 ',
+    'Open API Keys → Create Key.': '打开 API Keys → Create Key。',
+    'Copy the key (starts with sk-ant-) and paste it below.': '复制密钥（以 sk-ant- 开头），粘贴到下方。',
+    'Create an API key (starts with AIza) and paste it below.': '创建一个 API 密钥（以 AIza 开头），粘贴到下方。',
+    'The device relays the call (Google has no browser access).': '由设备转发请求（Google 不支持从浏览器直接访问）。',
+    'Create an API key (starts with gsk_) and paste it below.': '创建一个 API 密钥（以 gsk_ 开头），粘贴到下方。',
+    'Connect ': '连接 ',
+    'Your key stays on the device': '你的密钥保存在设备上',
+    'Model': '模型',
+    'Stored only on your device, never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': '仅保存在你的设备上，从不写入日志。使用 Claude 时，密钥保存在<b>你的浏览器</b>中并直接与 Anthropic 通信——不会占用设备资源。',
+    'Skip AI setup? You can do it later in Settings ▸ AI.': '跳过 AI 设置？之后可以在「设置 ▸ AI」中完成。',
+    'Set up later': '稍后设置',
+    '← Back': '← 返回',
+    'Next →': '下一步 →',
+    'Start using NucleoOS': '开始使用 NucleoOS',
+  },
 };
-const TR = (it, en) => { const l = lang(); return l === 'it' ? it : l === 'en' ? en : (L10N[l] && L10N[l][en] != null ? L10N[l][en] : en); };
+// A table may key a string by the English text without its leading pictograph: the English one is kept in front.
+const LEAD = /^(\p{Extended_Pictographic}️?\s*)(.+)$/su;
+const TR = (it, en) => {
+  const l = lang(); if (l === 'it') return it; if (l === 'en') return en;
+  const tb = L10N[l]; if (!tb) return en;
+  if (tb[en] != null) return tb[en];
+  const m = LEAD.exec(en);
+  return m && tb[m[2]] != null ? m[1] + tb[m[2]] : en;
+};
 
 // tiny DOM builder (XSS-safe: text via textContent, no innerHTML of user data)
 function h(tag, props, ...kids) {

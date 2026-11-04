@@ -1,0 +1,36 @@
+{
+  "_lang": "zh",
+  "title": "Wi-Fi 管理器",
+  "btn_auto": "自动",
+  "auto_hint": "每 25 秒自动刷新",
+  "connect": "连接",
+  "reconnect": "重新连接",
+  "forget": "忽略",
+  "password": "密码",
+  "password_keep": "密码（留空则使用已保存的密码）",
+  "saved": "已保存",
+  "saved_hint": "已保存的网络：自动重新连接",
+  "priority": "优先级",
+  "connecting": "正在连接 {ssid}…",
+  "connected_to": "已连接到 {ssid}",
+  "connect_failed": "连接失败：请检查密码",
+  "forgotten": "已忽略该网络",
+  "need_pair": "配对设备后才能管理网络",
+  "src_idle": "空闲",
+  "empty_msg": "未找到网络。<br>按 <b>扫描</b> 重新搜索。",
+  "count": {
+    "other": "{count} 个网络"
+  },
+  "count_open": {
+    "other": "{count} 个开放"
+  },
+  "ch": "信道 {ch}",
+  "sec_open": "开放",
+  "sec_open_hint": "开放网络",
+  "hidden_ssid": "（隐藏）",
+  "src_failed": "扫描失败：设备无法连接或正忙",
+  "src_need_pair": "未配对：配对此浏览器后才能扫描",
+  "src_live": "实时扫描",
+  "forget_failed": "无法忽略该网络",
+  "wifi_unavailable": "此设备不支持 Wi-Fi 管理。"
+}

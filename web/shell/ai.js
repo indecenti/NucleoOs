@@ -34,17 +34,22 @@ export const PROVIDERS = {
     label: 'Claude', base: 'https://api.anthropic.com', version: '2023-06-01',
     prefix: /^sk-ant-/, ph: 'sk-ant-…', def: 'claude-sonnet-5-5',
     // model tuples are [id, it, en, es, fr, de] — render via modelLabel() so the picker follows the OS language.
-    models: [['claude-sonnet-5-5', 'Sonnet 5.5 · equilibrio', 'Sonnet 5.5 · balanced', 'Sonnet 5.5 · equilibrado', 'Sonnet 5.5 · équilibré', 'Sonnet 5.5 · ausgewogen'], ['claude-opus-5-5', 'Opus 5.5 · massima qualità', 'Opus 5.5 · top quality', 'Opus 5.5 · máxima calidad', 'Opus 5.5 · qualité maximale', 'Opus 5.5 · höchste Qualität'], ['claude-haiku-4-5', 'Haiku 4.5 · veloce/economico', 'Haiku 4.5 · fast/cheap', 'Haiku 4.5 · rápido/económico', 'Haiku 4.5 · rapide/économique', 'Haiku 4.5 · schnell/günstig']],
+    // (a saved id missing from this list — claude-haiku-4-5, claude-sonnet-4-6… — keeps working: modelName() reads it,
+    // resolveModel() honours it while the key still serves it, and a former default follows its family forward)
+    models: [['claude-sonnet-5-5', 'Sonnet 5.5 · equilibrio', 'Sonnet 5.5 · balanced', 'Sonnet 5.5 · equilibrado', 'Sonnet 5.5 · équilibré', 'Sonnet 5.5 · ausgewogen', 'Sonnet 5.5 · 均衡'],
+      ['claude-opus-5-5', 'Opus 5.5 · massima qualità', 'Opus 5.5 · top quality', 'Opus 5.5 · máxima calidad', 'Opus 5.5 · qualité maximale', 'Opus 5.5 · höchste Qualität', 'Opus 5.5 · 最高质量'],
+      ['claude-haiku-5-5', 'Haiku 5.5 · veloce/economico', 'Haiku 5.5 · fast/cheap', 'Haiku 5.5 · rápido/económico', 'Haiku 5.5 · rapide/économique', 'Haiku 5.5 · schnell/günstig', 'Haiku 5.5 · 快速/经济'],
+      ['claude-fable-5-1', 'Fable 5.1 · il più capace (costoso)', 'Fable 5.1 · most capable (expensive)', 'Fable 5.1 · el más capaz (caro)', 'Fable 5.1 · le plus performant (coûteux)', 'Fable 5.1 · am leistungsfähigsten (teuer)', 'Fable 5.1 · 能力最强（昂贵）']],
   },
   openai: {
     label: 'Groq', base: 'https://api.groq.com/openai/v1', version: '',
     prefix: /^(gsk_|sk-)/, ph: 'gsk_…', def: 'llama-3.1-8b-instant',
-    models: [['llama-3.1-8b-instant', 'Llama 3.1 8B · veloce', 'Llama 3.1 8B · fast', 'Llama 3.1 8B · rápido', 'Llama 3.1 8B · rapide', 'Llama 3.1 8B · schnell'], ['llama-3.3-70b-versatile', 'Llama 3.3 70B · qualità', 'Llama 3.3 70B · quality', 'Llama 3.3 70B · calidad', 'Llama 3.3 70B · qualité', 'Llama 3.3 70B · Qualität']],
+    models: [['llama-3.1-8b-instant', 'Llama 3.1 8B · veloce', 'Llama 3.1 8B · fast', 'Llama 3.1 8B · rápido', 'Llama 3.1 8B · rapide', 'Llama 3.1 8B · schnell', 'Llama 3.1 8B · 快速'], ['llama-3.3-70b-versatile', 'Llama 3.3 70B · qualità', 'Llama 3.3 70B · quality', 'Llama 3.3 70B · calidad', 'Llama 3.3 70B · qualité', 'Llama 3.3 70B · Qualität', 'Llama 3.3 70B · 高质量']],
   },
   xai: {
     label: 'Grok (xAI)', base: 'https://api.x.ai/v1', version: '',
     prefix: /^xai-/, ph: 'xai-…', def: 'grok-2-latest',   // OpenAI-compatible wire (Bearer + /chat/completions)
-    models: [['grok-2-latest', 'Grok 2 · latest', 'Grok 2 · latest', 'Grok 2 · latest', 'Grok 2 · latest', 'Grok 2 · latest'], ['grok-2-1212', 'Grok 2 (1212)', 'Grok 2 (1212)', 'Grok 2 (1212)', 'Grok 2 (1212)', 'Grok 2 (1212)'], ['grok-beta', 'Grok beta', 'Grok beta', 'Grok beta', 'Grok beta', 'Grok beta']],
+    models: [['grok-2-latest', 'Grok 2 · latest', 'Grok 2 · latest', 'Grok 2 · latest', 'Grok 2 · latest', 'Grok 2 · latest', 'Grok 2 · 最新'], ['grok-2-1212', 'Grok 2 (1212)', 'Grok 2 (1212)', 'Grok 2 (1212)', 'Grok 2 (1212)', 'Grok 2 (1212)', 'Grok 2 (1212)'], ['grok-beta', 'Grok beta', 'Grok beta', 'Grok beta', 'Grok beta', 'Grok beta', 'Grok beta']],
   },
   google: {
     label: 'Gemini', base: 'https://generativelanguage.googleapis.com/v1beta/openai', version: '',
@@ -53,7 +58,7 @@ export const PROVIDERS = {
     // against the API: gemini-3.5-flash / gemini-3.1-pro do NOT exist (404). Real lineup: gemini-2.5-flash
     // (recommended, stable, free), gemini-flash-latest (always-current Flash), gemini-2.5-pro (paid quality),
     // gemini-2.5-flash-lite (cheap, weak — fine for quick lookups, NOT for careful code).
-    models: [['gemini-2.5-flash', 'Gemini 2.5 Flash · consigliato', 'Gemini 2.5 Flash · recommended', 'Gemini 2.5 Flash · recomendado', 'Gemini 2.5 Flash · recommandé', 'Gemini 2.5 Flash · empfohlen'], ['gemini-flash-latest', 'Gemini Flash · ultimo', 'Gemini Flash · latest', 'Gemini Flash · último', 'Gemini Flash · dernier', 'Gemini Flash · neueste'], ['gemini-2.5-pro', 'Gemini 2.5 Pro · qualità (a pagamento)', 'Gemini 2.5 Pro · quality (paid)', 'Gemini 2.5 Pro · calidad (de pago)', 'Gemini 2.5 Pro · qualité (payant)', 'Gemini 2.5 Pro · Qualität (kostenpflichtig)'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite · economico', 'Gemini 2.5 Flash-Lite · cheap', 'Gemini 2.5 Flash-Lite · económico', 'Gemini 2.5 Flash-Lite · économique', 'Gemini 2.5 Flash-Lite · günstig']],
+    models: [['gemini-2.5-flash', 'Gemini 2.5 Flash · consigliato', 'Gemini 2.5 Flash · recommended', 'Gemini 2.5 Flash · recomendado', 'Gemini 2.5 Flash · recommandé', 'Gemini 2.5 Flash · empfohlen', 'Gemini 2.5 Flash · 推荐'], ['gemini-flash-latest', 'Gemini Flash · ultimo', 'Gemini Flash · latest', 'Gemini Flash · último', 'Gemini Flash · dernier', 'Gemini Flash · neueste', 'Gemini Flash · 最新'], ['gemini-2.5-pro', 'Gemini 2.5 Pro · qualità (a pagamento)', 'Gemini 2.5 Pro · quality (paid)', 'Gemini 2.5 Pro · calidad (de pago)', 'Gemini 2.5 Pro · qualité (payant)', 'Gemini 2.5 Pro · Qualität (kostenpflichtig)', 'Gemini 2.5 Pro · 高质量（付费）'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite · economico', 'Gemini 2.5 Flash-Lite · cheap', 'Gemini 2.5 Flash-Lite · económico', 'Gemini 2.5 Flash-Lite · économique', 'Gemini 2.5 Flash-Lite · günstig', 'Gemini 2.5 Flash-Lite · 经济']],
   },
 };
 // A model server on the LAN: Ollama (:11434), LM Studio (:1234), llama.cpp / LocalAI (:8080), any
@@ -69,14 +74,14 @@ Object.defineProperty(PROVIDERS, 'local', { enumerable: false, value: {
   presets: [['Ollama', 11434], ['LM Studio', 1234], ['llama.cpp', 8080]],
 } });
 
-// Pick a model tuple's label for the active OS language. Tuples are [id, it, en, es, fr, de]; the live
+// Pick a model tuple's label for the active OS language. Tuples are [id, it, en, es, fr, de, zh]; the live
 // Gemini calibration builds [id, id] pairs (no descriptor) — those fall back to the id. Reads anima.lang
 // directly (no engine import) so ai.js stays usable from the Node host gates too.
 export function modelLabel(entry) {
   if (!entry) return '';
   let lang = 'en';
   try { lang = (localStorage.getItem('anima.lang') || document.documentElement.lang || 'en').slice(0, 2); } catch {}
-  const i = { it: 1, en: 2, es: 3, fr: 4, de: 5 }[lang] || 2;
+  const i = { it: 1, en: 2, es: 3, fr: 4, de: 5, zh: 6 }[lang] || 2;
   return entry[i] || entry[2] || entry[1] || entry[0];   // active language → en → it → id
 }
 
@@ -114,7 +119,7 @@ export const CAPMATRIX = {
 // by the engine; google.max=Pro is offered only when geminiTier==='paid'). Single source so a preset
 // can ask for "max"/"mid"/"fast" without re-hardcoding model strings.
 export const TIERS = {
-  anthropic: { max: 'claude-opus-5-5',          mid: 'claude-sonnet-5-5',    fast: 'claude-haiku-4-5' },
+  anthropic: { max: 'claude-opus-5-5',          mid: 'claude-sonnet-5-5',    fast: 'claude-haiku-5-5' },
   openai:    { max: 'llama-3.3-70b-versatile',  mid: 'llama-3.1-8b-instant', fast: 'llama-3.1-8b-instant' },
   xai:       { max: 'grok-2-latest',            mid: 'grok-2-latest',        fast: 'grok-2-1212' },
   google:    { max: 'gemini-2.5-pro',           mid: 'gemini-2.5-flash',     fast: 'gemini-2.5-flash-lite' },
@@ -144,7 +149,7 @@ function cfgFor(provider, entry, model, exec, tier) {
   entry = entry || {};
   // `tier` travels with the cfg: the static TIERS id is only a first guess, and withAutoModel re-picks at call
   // time for the same tier when the provider no longer serves it.
-  return { provider, base: entry.base || p.base, model: model || entry.model || p.def, key: entry.key || '', version: entry.version || p.version, exec: exec || entry.exec || 'browser', tier: tier || 'mid' };
+  return { provider, base: entry.base || p.base, model: model || entry.model || p.def, key: entry.key || '', version: entry.version || p.version, exec: exec || entry.exec || 'browser', tier: tier || 'mid', effort: entry.effort || '' };
 }
 
 // Pick the best call cfg for a subtask across all configured keys.
@@ -491,89 +496,102 @@ export async function withAutoModel(cfg, fn, opts = {}) {
   throw new AiError('model', 'no usable model', { provider: cfg.provider, model: tried[tried.length - 1] || cfg.model });
 }
 
-// One plain sentence that says WHAT went wrong and HOW to fix it, in the OS language (it/en/es/fr/de).
+// One plain sentence that says WHAT went wrong and HOW to fix it, in the OS language (it/en/es/fr/de/zh).
 const AI_ERR_TEXT = {
   auth: {
     it: 'La chiave {P} non è valida o è stata revocata. Aprila in {SET} e incolla una chiave nuova.',
     en: 'The {P} key is invalid or was revoked. Open {SET} and paste a new key.',
     es: 'La clave de {P} no es válida o fue revocada. Abre {SET} y pega una clave nueva.',
     fr: 'La clé {P} est invalide ou a été révoquée. Ouvrez {SET} et collez une nouvelle clé.',
-    de: 'Der {P}-Schlüssel ist ungültig oder wurde widerrufen. Öffne {SET} und füge einen neuen ein.' },
+    de: 'Der {P}-Schlüssel ist ungültig oder wurde widerrufen. Öffne {SET} und füge einen neuen ein.',
+    zh: '{P} 密钥无效或已被吊销。请打开「{SET}」并粘贴新的密钥。' },
   forbidden: {
     it: '{P} ha rifiutato l’accesso (permessi o area geografica della chiave). Controlla l’account {P} o scegli un altro provider in {SET}.',
     en: '{P} refused access (key permissions or region). Check your {P} account or pick another provider in {SET}.',
     es: '{P} rechazó el acceso (permisos o región de la clave). Revisa tu cuenta de {P} o elige otro proveedor en {SET}.',
     fr: '{P} a refusé l’accès (droits ou région de la clé). Vérifiez votre compte {P} ou choisissez un autre fournisseur dans {SET}.',
-    de: '{P} hat den Zugriff verweigert (Rechte oder Region des Schlüssels). Prüfe dein {P}-Konto oder wähle einen anderen Anbieter unter {SET}.' },
+    de: '{P} hat den Zugriff verweigert (Rechte oder Region des Schlüssels). Prüfe dein {P}-Konto oder wähle einen anderen Anbieter unter {SET}.',
+    zh: '{P} 拒绝了访问（密钥权限或地区限制）。请检查你的 {P} 账户，或在「{SET}」中选择其他服务商。' },
   model: {
     it: '{P} non offre più il modello «{M}» e con questa chiave non ho trovato un altro modello di chat. Controlla la chiave o scegli un altro provider in {SET}.',
     en: '{P} no longer serves the model “{M}” and I found no other chat model for this key. Check the key or pick another provider in {SET}.',
     es: '{P} ya no ofrece el modelo «{M}» y no encontré otro modelo de chat para esta clave. Revisa la clave o elige otro proveedor en {SET}.',
     fr: '{P} ne propose plus le modèle « {M} » et je n’ai trouvé aucun autre modèle de chat pour cette clé. Vérifiez la clé ou choisissez un autre fournisseur dans {SET}.',
-    de: '{P} bietet das Modell „{M}“ nicht mehr an, und für diesen Schlüssel fand ich kein anderes Chat-Modell. Prüfe den Schlüssel oder wähle einen anderen Anbieter unter {SET}.' },
+    de: '{P} bietet das Modell „{M}“ nicht mehr an, und für diesen Schlüssel fand ich kein anderes Chat-Modell. Prüfe den Schlüssel oder wähle einen anderen Anbieter unter {SET}.',
+    zh: '{P} 已不再提供模型「{M}」，而且我没有为这个密钥找到其他聊天模型。请检查密钥，或在「{SET}」中选择其他服务商。' },
   quota: {
     it: 'Il credito o la quota di {P} è esaurito. Ricarica o attiva la fatturazione sul sito di {P}, oppure usa un altro provider in {SET}.',
     en: 'Your {P} credit or quota is used up. Top up or enable billing on the {P} site, or use another provider in {SET}.',
     es: 'Se agotó el crédito o la cuota de {P}. Recarga o activa la facturación en {P}, o usa otro proveedor en {SET}.',
     fr: 'Le crédit ou le quota {P} est épuisé. Rechargez ou activez la facturation sur le site {P}, ou utilisez un autre fournisseur dans {SET}.',
-    de: 'Dein {P}-Guthaben oder -Kontingent ist aufgebraucht. Lade es auf der {P}-Seite auf oder nutze einen anderen Anbieter unter {SET}.' },
+    de: 'Dein {P}-Guthaben oder -Kontingent ist aufgebraucht. Lade es auf der {P}-Seite auf oder nutze einen anderen Anbieter unter {SET}.',
+    zh: '你的 {P} 额度或配额已用完。请在 {P} 网站充值或开启计费，或在「{SET}」中使用其他服务商。' },
   rate: {
     it: '{P} sta limitando le richieste per un momento{R}. Riprova tra poco.',
     en: '{P} is rate-limiting requests for a moment{R}. Try again shortly.',
     es: '{P} está limitando las solicitudes un momento{R}. Vuelve a intentarlo en breve.',
     fr: '{P} limite les requêtes pour un instant{R}. Réessayez bientôt.',
-    de: '{P} begrenzt gerade die Anfragen{R}. Versuche es gleich noch einmal.' },
+    de: '{P} begrenzt gerade die Anfragen{R}. Versuche es gleich noch einmal.',
+    zh: '{P} 暂时限制了请求频率{R}。请稍后重试。' },
   too_long: {
     it: 'La conversazione è troppo lunga per il modello «{M}». Inizia una nuova conversazione o accorcia il messaggio.',
     en: 'The conversation is too long for the model “{M}”. Start a new conversation or shorten the message.',
     es: 'La conversación es demasiado larga para el modelo «{M}». Empieza una nueva o acorta el mensaje.',
     fr: 'La conversation est trop longue pour le modèle « {M} ». Commencez-en une nouvelle ou raccourcissez le message.',
-    de: 'Die Unterhaltung ist zu lang für das Modell „{M}“. Starte eine neue oder kürze die Nachricht.' },
+    de: 'Die Unterhaltung ist zu lang für das Modell „{M}“. Starte eine neue oder kürze die Nachricht.',
+    zh: '对话对模型「{M}」来说太长了。请开始新对话，或缩短消息。' },
   provider_down: {
     it: '{P} ha un problema temporaneo{S}. Riprova fra qualche minuto.',
     en: '{P} has a temporary problem{S}. Try again in a few minutes.',
     es: '{P} tiene un problema temporal{S}. Inténtalo de nuevo en unos minutos.',
     fr: '{P} a un problème temporaire{S}. Réessayez dans quelques minutes.',
-    de: '{P} hat ein vorübergehendes Problem{S}. Versuche es in ein paar Minuten erneut.' },
+    de: '{P} hat ein vorübergehendes Problem{S}. Versuche es in ein paar Minuten erneut.',
+    zh: '{P} 出现临时故障{S}。请几分钟后重试。' },
   device_busy: {
     it: 'Il dispositivo è occupato a fare da ponte verso {P}. Riprova tra qualche secondo.',
     en: 'The device is busy relaying to {P}. Try again in a few seconds.',
     es: 'El dispositivo está ocupado haciendo de puente hacia {P}. Inténtalo en unos segundos.',
     fr: 'L’appareil est occupé à relayer vers {P}. Réessayez dans quelques secondes.',
-    de: 'Das Gerät ist mit der Weiterleitung zu {P} beschäftigt. Versuche es in ein paar Sekunden.' },
+    de: 'Das Gerät ist mit der Weiterleitung zu {P} beschäftigt. Versuche es in ein paar Sekunden.',
+    zh: '设备正忙于向 {P} 转发请求。请几秒后重试。' },
   network: {
     it: 'Non riesco a raggiungere {P}: controlla la connessione a Internet di questo computer (o un blocco di rete / estensione del browser).',
     en: 'I can’t reach {P}: check this computer’s Internet connection (or a network block / browser extension).',
     es: 'No puedo llegar a {P}: revisa la conexión a Internet de este equipo (o un bloqueo de red / extensión del navegador).',
     fr: 'Impossible de joindre {P} : vérifiez la connexion Internet de cet ordinateur (ou un blocage réseau / une extension).',
-    de: '{P} ist nicht erreichbar: prüfe die Internetverbindung dieses Computers (oder eine Netzsperre / Browser-Erweiterung).' },
+    de: '{P} ist nicht erreichbar: prüfe die Internetverbindung dieses Computers (oder eine Netzsperre / Browser-Erweiterung).',
+    zh: '无法连接 {P}：请检查这台电脑的互联网连接（或网络拦截 / 浏览器扩展）。' },
   timeout: {
     it: '{P} non ha risposto in tempo. Riprova; se succede spesso, scegli un modello più veloce in {SET}.',
     en: '{P} didn’t answer in time. Try again; if it keeps happening, pick a faster model in {SET}.',
     es: '{P} no respondió a tiempo. Inténtalo de nuevo; si se repite, elige un modelo más rápido en {SET}.',
     fr: '{P} n’a pas répondu à temps. Réessayez ; si cela se répète, choisissez un modèle plus rapide dans {SET}.',
-    de: '{P} hat nicht rechtzeitig geantwortet. Versuche es erneut; wenn es öfter passiert, wähle ein schnelleres Modell unter {SET}.' },
+    de: '{P} hat nicht rechtzeitig geantwortet. Versuche es erneut; wenn es öfter passiert, wähle ein schnelleres Modell unter {SET}.',
+    zh: '{P} 没有及时回应。请重试；如果经常发生，请在「{SET}」中选择更快的模型。' },
   no_engine: {
     it: 'Nessuna IA disponibile: aggiungi una chiave in {SET} oppure avvia un modello sul tuo PC (Ollama o LM Studio).',
     en: 'No AI is available: add a key in {SET}, or start a model on your PC (Ollama or LM Studio).',
     es: 'No hay ninguna IA disponible: añade una clave en {SET} o inicia un modelo en tu PC (Ollama o LM Studio).',
     fr: 'Aucune IA n’est disponible : ajoutez une clé dans {SET} ou lancez un modèle sur votre PC (Ollama ou LM Studio).',
-    de: 'Keine KI verfügbar: Füge unter {SET} einen Schlüssel hinzu oder starte ein Modell auf deinem PC (Ollama oder LM Studio).' },
+    de: 'Keine KI verfügbar: Füge unter {SET} einen Schlüssel hinzu oder starte ein Modell auf deinem PC (Ollama oder LM Studio).',
+    zh: '没有可用的 AI：请在「{SET}」中添加密钥，或在你的电脑上启动一个模型（Ollama 或 LM Studio）。' },
   private_no_pc: {
     it: 'Modalità Privato: può rispondere solo un modello su questo computer, e nessuno è acceso. Avvia Ollama o LM Studio, oppure passa ad Auto.',
     en: 'Private mode: only a model on this computer may answer, and none is running. Start Ollama or LM Studio, or switch to Auto.',
     es: 'Modo Privado: solo puede responder un modelo en este equipo y no hay ninguno en marcha. Inicia Ollama o LM Studio, o cambia a Auto.',
     fr: 'Mode Privé : seul un modèle sur cet ordinateur peut répondre, et aucun n’est lancé. Lancez Ollama ou LM Studio, ou passez en Auto.',
-    de: 'Privat-Modus: Nur ein Modell auf diesem Computer darf antworten, und keines läuft. Starte Ollama oder LM Studio oder wechsle zu Auto.' },
+    de: 'Privat-Modus: Nur ein Modell auf diesem Computer darf antworten, und keines läuft. Starte Ollama oder LM Studio oder wechsle zu Auto.',
+    zh: '私密模式：只有这台电脑上的模型可以回答，但目前没有在运行。请启动 Ollama 或 LM Studio，或切换到「自动」。' },
   bad_request: {
     it: '{P} ha rifiutato la richiesta{D}.',
     en: '{P} rejected the request{D}.',
     es: '{P} rechazó la solicitud{D}.',
     fr: '{P} a refusé la requête{D}.',
-    de: '{P} hat die Anfrage abgelehnt{D}.' },
+    de: '{P} hat die Anfrage abgelehnt{D}.',
+    zh: '{P} 拒绝了请求{D}。' },
 };
 // opts.settings: where THIS surface keeps its key (default: the OS Settings ▸ AI panel, localized).
-const AI_SETTINGS_AT = { it: 'Impostazioni ▸ AI', en: 'Settings ▸ AI', es: 'Ajustes ▸ IA', fr: 'Réglages ▸ IA', de: 'Einstellungen ▸ KI' };
+const AI_SETTINGS_AT = { it: 'Impostazioni ▸ AI', en: 'Settings ▸ AI', es: 'Ajustes ▸ IA', fr: 'Réglages ▸ IA', de: 'Einstellungen ▸ KI', zh: '设置 ▸ AI' };
 export function explainAiError(e, lang, opts = {}) {
   const err = e instanceof AiError ? e : toAiError(e);
   if (err.kind === 'stopped') return '';
@@ -583,7 +601,7 @@ export function explainAiError(e, lang, opts = {}) {
   const row = AI_ERR_TEXT[err.kind] || AI_ERR_TEXT.bad_request;
   const tpl = row[l] || row.en;
   // an unknown provider is "AI" — providerOf() falls back to Anthropic, and a Groq rate limit read "Claude is limiting…"
-  const P = err.provider ? (providerOf(err.provider).label || err.provider) : ({ it: 'IA', es: 'IA', fr: 'IA', de: 'KI' }[l] || 'AI');
+  const P = err.provider ? (providerOf(err.provider).label || err.provider) : ({ it: 'IA', es: 'IA', fr: 'IA', de: 'KI', zh: 'AI' }[l] || 'AI');
   const detail = redactSecrets(err.message || '').replace(/\s+/g, ' ').slice(0, 160);   // last line of defence
   return tpl.replace(/\{SET\}/g, opts.settings || AI_SETTINGS_AT[l] || AI_SETTINGS_AT.en)
     .replace(/\{P\}/g, P).replace(/\{M\}/g, err.model || '?')
@@ -653,14 +671,14 @@ export async function calibrateGemini(cfg) {
   return { tier, models, recommended, hasPro: tier === 'paid' };
 }
 
-// Honest one-line tier label for the UI. `lang` accepts a 2-letter OS code ('it'|'en'|'es'|'fr'|'de')
+// Honest one-line tier label for the UI. `lang` accepts a 2-letter OS code ('it'|'en'|'es'|'fr'|'de'|'zh')
 // or a legacy boolean (true→en, false→it) so existing callers and host gates keep working.
 export function geminiTierLabel(tier, lang) {
   const l = lang === true ? 'en' : (lang === false || lang == null ? 'it' : String(lang).slice(0, 2));
   const T = {
-    paid:    { it: 'Piano a pagamento · modelli Pro disponibili', en: 'Paid plan · Pro models available', es: 'Plan de pago · modelos Pro disponibles', fr: 'Offre payante · modèles Pro disponibles', de: 'Bezahltarif · Pro-Modelle verfügbar' },
-    free:    { it: 'Free tier · solo Flash (Pro richiede billing)', en: 'Free tier · Flash only (Pro needs billing)', es: 'Nivel gratis · solo Flash (Pro requiere facturación)', fr: 'Offre gratuite · Flash uniquement (Pro requiert la facturation)', de: 'Kostenlos · nur Flash (Pro erfordert Abrechnung)' },
-    unknown: { it: 'Piano non rilevato', en: 'Plan not detected', es: 'Plan no detectado', fr: 'Offre non détectée', de: 'Tarif nicht erkannt' },
+    paid:    { it: 'Piano a pagamento · modelli Pro disponibili', en: 'Paid plan · Pro models available', es: 'Plan de pago · modelos Pro disponibles', fr: 'Offre payante · modèles Pro disponibles', de: 'Bezahltarif · Pro-Modelle verfügbar', zh: '付费套餐 · 可用 Pro 模型' },
+    free:    { it: 'Free tier · solo Flash (Pro richiede billing)', en: 'Free tier · Flash only (Pro needs billing)', es: 'Nivel gratis · solo Flash (Pro requiere facturación)', fr: 'Offre gratuite · Flash uniquement (Pro requiert la facturation)', de: 'Kostenlos · nur Flash (Pro erfordert Abrechnung)', zh: '免费额度 · 仅 Flash（Pro 需要开启计费）' },
+    unknown: { it: 'Piano non rilevato', en: 'Plan not detected', es: 'Plan no detectado', fr: 'Offre non détectée', de: 'Tarif nicht erkannt', zh: '未检测到套餐' },
   };
   const row = tier === 'paid' ? T.paid : tier === 'free' ? T.free : T.unknown;
   return row[l] || row.it;
@@ -670,7 +688,7 @@ export const maskKey = (k, hint) => (isVaultKey(k) ? (hint || '••••') : 
 
 // "martedì 29 settembre 2026 alle ore 22:40 (Europe/Rome)" in the OS language — appended to every system
 // prompt the shell sends, because a model has no clock (twin of apps/anima/www/contextkit.js nowText).
-const CLOCK_LOCALE = { it: 'it-IT', en: 'en-GB', es: 'es-ES', fr: 'fr-FR', de: 'de-DE' };
+const CLOCK_LOCALE = { it: 'it-IT', en: 'en-GB', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', zh: 'zh-CN' };
 export function nowText(lang = 'en', d = new Date()) {
   let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch {}
   try {
@@ -679,7 +697,7 @@ export function nowText(lang = 'en', d = new Date()) {
   } catch { return d.toISOString(); }
 }
 // The reply-language rule for an English-worded prompt (es/fr/de otherwise get English answers).
-const REPLY_LANG = { it: 'Italian', en: 'English', es: 'Spanish', fr: 'French', de: 'German' };
+const REPLY_LANG = { it: 'Italian', en: 'English', es: 'Spanish', fr: 'French', de: 'German', zh: 'Simplified Chinese' };
 export const replyRule = (lang) => 'Always reply in ' + (REPLY_LANG[lang] || 'English') + '.';
 
 // Lightweight capability probe — preferred over readTeacher() to answer "is AI configured?" because
@@ -752,7 +770,8 @@ async function _readTeacher() {
     if (pub) { j = fromPublic(j); _sealed = true; }
     const provider = (j.provider && PROVIDERS[j.provider]) ? j.provider : (isLanUrl(j.base) ? 'local' : (j.base && /anthropic/.test(j.base) ? 'anthropic' : (j.base && /generativelanguage/.test(j.base) ? 'google' : (j.base && /x\.ai/.test(j.base) ? 'xai' : (j.key ? 'openai' : 'anthropic')))));
     const p = providerOf(provider);
-    const cfg = { provider, base: j.base || p.base, model: j.model || p.def, key: j.key || '', keyHint: j.keyHint || '', version: j.version || p.version, exec: j.exec || 'browser', keys: j.keys || {}, geminiTier: j.geminiTier || '', stt_url: j.stt_url || '', stt_model: j.stt_model || '', vision_model: j.vision_model || '', vision_base: j.vision_base || '', vision_key: j.vision_key || '', vision: typeof j.vision === 'boolean' ? j.vision : null };
+    const cfg = { provider, base: j.base || p.base, model: j.model || p.def, key: j.key || '', keyHint: j.keyHint || '', version: j.version || p.version, exec: j.exec || 'browser', keys: j.keys || {}, geminiTier: j.geminiTier || '', stt_url: j.stt_url || '', stt_model: j.stt_model || '', vision_model: j.vision_model || '', vision_base: j.vision_base || '', vision_key: j.vision_key || '', vision: typeof j.vision === 'boolean' ? j.vision : null,
+      effort: EFFORTS.includes(j.effort) ? j.effort : '', _extra: unknownFields(j) };
     _teacherCache = cfg; _teacherAt = Date.now();
     return cfg;
   } catch { return null; }
@@ -770,18 +789,34 @@ export async function whisperKey(opts = {}) {
   return g && g.key ? { key: g.key, base: g.base || PROVIDERS.openai.base } : null;
 }
 
-// Canonical teacher.json: the active provider at top-level (what the firmware reads) + a keys map
-// so switching providers doesn't lose the other key.
+// The top-level fields of teacher.json this file writes itself. Anything else (a field another edition, a newer
+// shell or the firmware added) is carried through a read/write untouched: readTeacher keeps it in cfg._extra and
+// buildTeacherDoc puts it back. (keys.<provider> entries are copied whole, so their unknown fields survive too.)
+const TEACHER_FIELDS = new Set(['provider', 'base', 'model', 'key', 'version', 'exec', 'keys', 'geminiTier', 'effort',
+  'stt_url', 'stt_model', 'vision_model', 'vision_base', 'vision_key', 'vision', 'keyHint', 'unpaired']);
+function unknownFields(j) {
+  const out = {};
+  for (const [k, v] of Object.entries(j || {})) if (!TEACHER_FIELDS.has(k) && !/_(set|hint)$/.test(k) && k[0] !== '_') out[k] = v;
+  return out;
+}
+// The firmware reads the file into a 4 KB buffer: a document past this is refused here, never truncated there.
+export const TEACHER_MAX_BYTES = 4096;
+
+// Canonical teacher.json: the active provider at top-level (what the firmware reads: provider, base, model, key,
+// version, effort) + a keys map so switching providers doesn't lose the other key.
 export function buildTeacherDoc(cfg) {
   const p = providerOf(cfg.provider);
   // The detected Gemini plan lives BOTH on the per-key entry (so the multi-model router can read it after the
   // user switches the active provider away from Google) AND at the top level (what the firmware reads today).
+  // effort: always written for Claude (absent = DEFAULT_EFFORT; written out so a device that MERGES the document
+  // can be set back to the default), elsewhere only when one was chosen.
   const entry = Object.assign({ base: cfg.base || p.base, model: cfg.model || p.def, key: cfg.key || '' },
-    cfg.provider === 'anthropic' ? { version: cfg.version || p.version } : {},
+    cfg.provider === 'anthropic' ? { version: cfg.version || p.version, effort: normEffort(cfg.effort) } : (EFFORTS.includes(cfg.effort) ? { effort: cfg.effort } : {}),
     (cfg.provider === 'google' && cfg.geminiTier) ? { geminiTier: cfg.geminiTier } : {});
   const keys = Object.assign({}, cfg.keys || {});
   const keyless = providerOf(cfg.provider).keyOptional && entry.base && entry.model;   // a LAN server needs no key
-  if (entry.key || keyless) keys[cfg.provider] = entry; else delete keys[cfg.provider];
+  // the active entry is updated in place: a field another edition put in it (keys.<provider>.x) stays
+  if (entry.key || keyless) keys[cfg.provider] = Object.assign({}, keys[cfg.provider] || {}, entry); else delete keys[cfg.provider];
   const extra = (cfg.provider === 'google' && cfg.geminiTier) ? { geminiTier: cfg.geminiTier } : {};   // top-level mirror for the firmware
   // The home speech-to-text server (whisper.cpp / speaches) rides along so a key change never drops it.
   const stt = cfg.stt_url ? Object.assign({ stt_url: cfg.stt_url }, cfg.stt_model ? { stt_model: cfg.stt_model } : {}) : {};
@@ -790,7 +825,7 @@ export function buildTeacherDoc(cfg) {
   const vis = {};
   for (const k of ['vision_model', 'vision_base', 'vision_key']) if (cfg[k]) vis[k] = cfg[k];
   if (typeof cfg.vision === 'boolean') vis.vision = cfg.vision;
-  const doc = Object.assign({ provider: cfg.provider, exec: cfg.exec || 'browser' }, entry, extra, stt, vis, { keys });
+  const doc = Object.assign({}, cfg._extra && typeof cfg._extra === 'object' ? cfg._extra : {}, { provider: cfg.provider, exec: cfg.exec || 'browser' }, entry, extra, stt, vis, { keys });
   return toDevice(doc);
 }
 
@@ -807,10 +842,11 @@ function toDevice(o) {
   return out;
 }
 
-// Write the vault (paired): merged on the device, keys left blank are kept. true | 'unpaired' | false.
+// Write the vault (paired): merged on the device, keys left blank are kept. true | 'unpaired' | 'too_big' | false.
 export async function writeTeacher(cfg) {
   try {
     const body = JSON.stringify(buildTeacherDoc(cfg));
+    if (new TextEncoder().encode(body).length > TEACHER_MAX_BYTES) return 'too_big';
     let r = _noTeacherApi ? null : await fetch(TEACHER_API, { method: 'POST', body });
     if (!r || r.status === 404) { _noTeacherApi = true; r = await fetch('/api/fs/write?path=' + encodeURIComponent(AI_PATH), { method: 'POST', body }); }   // classic vault
     if (r.ok) invalidateTeacher();   // our own write changed it — drop the memo so the next read is fresh
@@ -862,11 +898,76 @@ export async function adoptBrowserKey() {
   try { localStorage.removeItem('groq.key'); } catch {}
 }
 
-// Sonnet 5 runs ADAPTIVE thinking when `thinking` is omitted (the 4.x family ran thinking-off): for chat
-// surfaces that is slower + costlier, and a tiny max_tokens can be eaten by thinking before any text. The
-// rule as the ESP32-P4 apps (agent runtime, games coach) import it: disabled ONLY for sonnet-5* (fable-5
-// rejects "disabled" with a 400; 4.x is already off). This file's own wire does not apply it yet.
-export const anthThinking = (model) => (String(model || '').includes('sonnet-5') ? { thinking: { type: 'disabled' } } : {});
+// ── effort (Anthropic) ──────────────────────────────────────────────────────────────────────────────
+// How hard a Claude model thinks before it answers: output_config.effort (inside output_config, never top-level).
+// The 5.x family thinks ADAPTIVELY and always: `thinking: {type:"disabled"}` is a 400 on claude-opus-5-5,
+// claude-sonnet-5-5 and claude-fable-5-1 and `budget_tokens` a 400 on every 5.x model, so NO request built here
+// ever sends a `thinking` field — a low effort is the way to make them quick. Older models: Opus 4.7/4.8 take the
+// five levels, Opus 4.6 / Sonnet 4.6 four (no xhigh), Opus 4.5 three; Sonnet 4.5 and Haiku 4.5 none (the field is
+// omitted). The user's level is stored per key in teacher.json (keys.<provider>.effort, the active one also at the
+// top level); absent means DEFAULT_EFFORT. Other providers get no field: nothing is invented for them.
+export const EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+export const DEFAULT_EFFORT = 'medium';
+export const normEffort = (e) => (EFFORTS.includes(e) ? e : DEFAULT_EFFORT);
+// claude-<family>-<major>[-<minor>][-<date>] anywhere in the id (a relay or platform may prefix it).
+function claudeOf(model) {
+  const m = /(?:^|[./:])claude-(fable|mythos|opus|sonnet|haiku)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?(?:@.*)?$/.exec(String(model || '').toLowerCase());
+  return m ? { fam: m[1], major: +m[2], minor: m[3] ? +m[3] : 0 } : null;
+}
+// The effort levels `model` accepts ([] = send no effort at all).
+export function effortLevels(provider, model) {
+  if (provider !== 'anthropic') return [];
+  const c = claudeOf(model);
+  if (!c) return [];
+  if (c.major >= 5) return EFFORTS.slice();
+  if (c.major !== 4) return [];
+  if (c.fam === 'opus' && c.minor >= 7) return EFFORTS.slice();
+  if ((c.fam === 'opus' || c.fam === 'sonnet') && c.minor === 6) return ['low', 'medium', 'high', 'max'];
+  if (c.fam === 'opus' && c.minor === 5) return ['low', 'medium', 'high'];
+  return [];
+}
+// The level to send for `wanted` on `model`: the nearest one it accepts at or below it ('' = none).
+export function effortFor(provider, model, wanted) {
+  const lv = effortLevels(provider, model);
+  if (!lv.length) return '';
+  const w = normEffort(wanted);
+  for (let i = EFFORTS.indexOf(w); i >= 0; i--) if (lv.includes(EFFORTS[i])) return EFFORTS[i];
+  return lv[0];
+}
+// Models whose thinking is on even when the request says nothing about it (the 5.x family).
+export const thinksByDefault = (model) => { const c = claudeOf(model); return !!c && c.major >= 5; };
+// Thinking tokens count against max_tokens: a call that asks for a short answer (a 16-token ping, a 700-token plan)
+// must still leave room for the thinking its effort implies, or the reply comes back empty. max_tokens is a ceiling,
+// not a cost: only what the model writes is billed.
+export const EFFORT_FLOOR = Object.freeze({ low: 2048, medium: 4096, high: 8192, xhigh: 16000, max: 32000 });
+// An Anthropic /v1/messages body with cfg.effort applied: output_config.effort where the model takes it, max_tokens
+// raised to the effort's floor on a model that always thinks. Any other provider's body comes back as it was.
+export function withEffort(cfg, body) {
+  if (!isAnth(cfg) || !body) return body;
+  const e = effortFor('anthropic', body.model, cfg.effort);
+  if (!e) return body;
+  const out = Object.assign({}, body, { output_config: Object.assign({}, body.output_config || {}, { effort: e }) });
+  if (thinksByDefault(body.model)) out.max_tokens = Math.max(Number(body.max_tokens) || 0, EFFORT_FLOOR[e]);
+  return out;
+}
+// The effort level's name in the OS language (Settings ▸ AI, ANIMA's model picker).
+const EFFORT_NAMES = {
+  it: { low: 'bassa', medium: 'media', high: 'alta', xhigh: 'molto alta', max: 'massima', label: 'Impegno' },
+  en: { low: 'low', medium: 'medium', high: 'high', xhigh: 'extra high', max: 'max', label: 'Effort' },
+  es: { low: 'bajo', medium: 'medio', high: 'alto', xhigh: 'muy alto', max: 'máximo', label: 'Esfuerzo' },
+  fr: { low: 'faible', medium: 'moyen', high: 'élevé', xhigh: 'très élevé', max: 'maximal', label: 'Effort' },
+  de: { low: 'niedrig', medium: 'mittel', high: 'hoch', xhigh: 'sehr hoch', max: 'maximal', label: 'Aufwand' },
+  zh: { low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高', label: '思考强度' },
+};
+export function effortLabel(level, lang) {
+  let l = lang;
+  if (!l) { try { l = localStorage.getItem('anima.lang') || document.documentElement.lang || 'en'; } catch { l = 'en'; } }
+  const row = EFFORT_NAMES[String(l).slice(0, 2)] || EFFORT_NAMES.en;
+  return row[level === 'label' ? 'label' : normEffort(level)];
+}
+// Kept for code that imports it. The rule it carried (send `thinking:{type:"disabled"}` to every sonnet-5* id) is wrong
+// for claude-sonnet-5-5, which answers that with a 400: it adds no thinking field at all (effort is the lever: withEffort).
+export const anthThinking = () => ({});
 
 // Completion. Returns the assistant text; throws an AiError (explainAiError() says what to do).
 // The model is auto-chosen and re-picked if the provider retired it (withAutoModel). opts.tier = 'max'|'mid'|'fast'.
@@ -883,7 +984,7 @@ async function completeOnce(cfg, system, user, maxTokens, opts) {
     const resp = await fetch(apiUrl(cfg, '/v1/messages'), {
       method: 'POST', signal: opts.signal,
       headers: authHeaders(cfg),
-      body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens || 1024, ...(system ? { system } : {}), messages: [{ role: 'user', content: user }] }),
+      body: JSON.stringify(withEffort(cfg, { model: cfg.model, max_tokens: maxTokens || 1024, ...(system ? { system } : {}), messages: [{ role: 'user', content: user }] })),
     });
     const text = await resp.text().catch(() => '');
     let j = null; try { j = JSON.parse(text); } catch {}
@@ -928,7 +1029,7 @@ async function chatOnce(cfg, { system, messages, user, maxTokens, temperature, s
   const msgs = Array.isArray(messages) ? messages : [{ role: 'user', content: String(user == null ? '' : user) }];
   const anth = isAnth(cfg);
   const body = anth
-    ? { model: cfg.model, max_tokens: maxTokens || 1024, ...(system ? { system } : {}), messages: msgs }
+    ? withEffort(cfg, { model: cfg.model, max_tokens: maxTokens || 1024, ...(system ? { system } : {}), messages: msgs })
     : { model: cfg.model, ...(maxTokens != null ? { max_tokens: maxTokens } : {}), ...(typeof temperature === 'number' ? { temperature } : {}),
         messages: [...(system ? [{ role: 'system', content: system }] : []), ...msgs] };
   const stream = typeof onDelta === 'function';
@@ -987,7 +1088,7 @@ async function toolCallOnce(cfg, { system, messages = [], tools = [], signal, ma
     const resp = await fetch(apiUrl(cfg, '/v1/messages'), {
       method: 'POST', signal,
       headers: authHeaders(cfg),
-      body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens, ...(system ? { system } : {}), ...(atools.length ? { tools: atools } : {}), messages }),
+      body: JSON.stringify(withEffort(cfg, { model: cfg.model, max_tokens: maxTokens, ...(system ? { system } : {}), ...(atools.length ? { tools: atools } : {}), messages })),
     });
     const text = await resp.text().catch(() => '');
     let j = null; try { j = JSON.parse(text); } catch {}

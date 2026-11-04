@@ -1,0 +1,17 @@
+{
+  "_lang": "zh",
+  "title": "计分板",
+  "undo": "撤销",
+  "add": "+ 玩家",
+  "target": "获胜分数",
+  "sort": "按得分排序",
+  "reset": "新一局",
+  "foot": "保存在此设备上，无需联网即可使用。",
+  "player": "玩家",
+  "name": "名字",
+  "remove": "移除",
+  "winner": "获胜！",
+  "empty": "点「+ 玩家」添加玩家。",
+  "confirm.remove": "移除 {name}？",
+  "confirm.reset": "将所有得分清零？"
+}

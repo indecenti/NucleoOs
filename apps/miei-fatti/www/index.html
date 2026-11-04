@@ -192,6 +192,10 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   const lang = () => { const l=(localStorage.getItem('anima.lang')||'en').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; };
+  // The language of the WORDS on screen: also the browser-only ones (zh, /nucleo-i18n.js DEVICE_LANGS). lang() stays
+  // the language of the sentences taught to the device's ANIMA, which knows only the five (English for the others).
+  const UI_LANGS = ['it','en','es','fr','de','zh'];
+  const uiLang = () => { const l=(localStorage.getItem('anima.lang')||'en').slice(0,2); return UI_LANGS.includes(l)?l:'en'; };
 
   // ---- ANIMA teach grammar (matches firmware tool_teach: LEAD + copula è/sono/significa) -----
   const LEAD = { it:'ricorda che ', en:'remember that ', es:'recuerda que ', fr:'souviens-toi que ', de:'merke dir, dass ' };
@@ -249,7 +253,7 @@
       if (r.ok) return (_views[l] = unflatten(await r.json())); } catch {}
     return l === 'en' ? null : loadStrings('en');       // base language is the last resort
   }
-  const t = () => _views[lang()] || _views.en;
+  const t = () => _views[uiLang()] || _views.en;
   const tf = (tpl, vars) => String(tpl||'').replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : '{'+k+'}'));
 
   // ---- storage ---------------------------------------------------------------
@@ -545,7 +549,7 @@
     // Mirror the OS language to the canonical anima.lang signal, but only as a FALLBACK: localStorage is
     // authoritative (the Settings app + i18n engine keep it live), so never clobber an already-set language.
     const cur=localStorage.getItem('anima.lang');
-    if(!['it','en','es','fr','de'].includes(cur) && ['it','en','es','fr','de'].includes(s?.ui?.language)) localStorage.setItem('anima.lang',s.ui.language); }
+    if(!UI_LANGS.includes(cur) && ['it','en','es','fr','de'].includes(s?.ui?.language)) localStorage.setItem('anima.lang',s.ui.language); }
 
   // ---- boot ------------------------------------------------------------------
   async function load(){ const r=await readFacts(); readOk=r.ok; readStatus=r.ok?0:r.status;
@@ -557,7 +561,7 @@
     seq=[...state.facts,...state.rels].reduce((m,x)=>Math.max(m,(x.id|0)+1),1); }
   // The buttons answer from the first paint: the first read can take seconds on a busy device, and a click made
   // meanwhile must still count. Every edit goes through canEdit(), which re-reads before it writes.
-  async function init(){ await loadLangSetting(); await loadStrings('en'); if(lang()!=='en') await loadStrings(lang()); applyStrings();
+  async function init(){ await loadLangSetting(); await loadStrings('en'); if(uiLang()!=='en') await loadStrings(uiLang()); applyStrings();
     $('seg').addEventListener('click',(e)=>{ const b=e.target.closest('button[data-mode]'); if(b) setMode(b.dataset.mode); });
     $('cat').addEventListener('change',()=>{ applyPlaceholders(); renderPreview(); });
     $('subj').addEventListener('input',renderPreview); $('val').addEventListener('input',renderPreview);
@@ -579,11 +583,11 @@
 
   // Single re-render entry for an external language switch: repaint all labels + reload profile fields.
   // Reused by the OS-wide i18n live-sync hook below (and harmless if called any time).
-  window.__mieiFattiRelang = () => { loadStrings(lang()).then(() => { applyStrings(); loadProfileInputs(); }); };
+  window.__mieiFattiRelang = () => { loadStrings(uiLang()).then(() => { applyStrings(); loadProfileInputs(); }); };
 
   // ---- live: language, external edits, OS shortcuts -------------------------
   window.addEventListener('message',(e)=>{ const d=e.data||{};
-    if(d.type==='set-language'&&['it','en','es','fr','de'].includes(d.lang)){ localStorage.setItem('anima.lang',d.lang); loadStrings(d.lang).then(()=>{ applyStrings(); loadProfileInputs(); }); }
+    if(d.type==='set-language'&&UI_LANGS.includes(d.lang)){ localStorage.setItem('anima.lang',d.lang); loadStrings(d.lang).then(()=>{ applyStrings(); loadProfileInputs(); }); }
     if(d.t==='fs.changed'&&typeof d.d?.path==='string'){ if(d.d.path.endsWith('settings.json')) loadLangSetting().then(()=>window.__mieiFattiRelang()); else if(d.d.path===FILE&&!dirty) load().then(()=>{ loadProfileInputs(); render(); }); }
     if(d.type==='os-shortcut'){ const a=d.action; if(a==='new') (mode==='flat'?$('subj'):$('rel-a')).focus(); else if(a==='save') flushSave(); else if(a==='refresh') load().then(()=>{ loadProfileInputs(); render(); }); }
   });

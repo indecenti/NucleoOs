@@ -39,8 +39,32 @@ export const LANGS = [
   { code: 'es', label: 'Español',  flag: '🇪🇸', dir: 'ltr', locale: 'es-ES' },
   { code: 'fr', label: 'Français', flag: '🇫🇷', dir: 'ltr', locale: 'fr-FR' },
   { code: 'de', label: 'Deutsch',  flag: '🇩🇪', dir: 'ltr', locale: 'de-DE' },
+  // Browser-only language (see DEVICE_LANGS): the web OS shows it, the device keeps English underneath.
+  { code: 'zh', label: '简体中文', flag: '🇨🇳', dir: 'ltr', locale: 'zh-CN' },
 ];
 const LANG_CODES = LANGS.map((l) => l.code);
+
+// The languages the DEVICE stores: POST /api/lang, settings.json ui.language, the native UI. Every firmware
+// and backend released so far accepts exactly these five and turns any other code into 'en' — and then tells
+// every browser "en" (system.language), which would undo the choice a second later. So a display language
+// outside this set (zh) lives in this browser only, ON TOP OF a device language: the device is told
+// deviceLang(code) = 'en', and an 'en' coming back from it keeps the browser's choice (fromDevice). Any other
+// language from the device (picked on the device, or in another browser) is a real change: it wins.
+// Grow this list only behind a capability that says the device stores the new code.
+export const DEVICE_LANGS = ['it', 'en', 'es', 'fr', 'de'];
+const OVERLAY_KEY = 'nucleo.lang.overlay';     // {lang, over}: show `lang` while the device says `over`
+function readOverlay() {
+  try {
+    const o = JSON.parse(localStorage.getItem(OVERLAY_KEY) || 'null');
+    return o && LANG_CODES.includes(o.lang) && !DEVICE_LANGS.includes(o.lang) && DEVICE_LANGS.includes(o.over) ? o : null;
+  } catch { return null; }
+}
+function writeOverlay(l) {
+  try {
+    if (DEVICE_LANGS.includes(l)) localStorage.removeItem(OVERLAY_KEY);
+    else localStorage.setItem(OVERLAY_KEY, JSON.stringify({ lang: l, over: BASE }));
+  } catch {}
+}
 const META = Object.fromEntries(LANGS.map((l) => [l.code, l]));
 
 // --- internal state ---------------------------------------------------------
@@ -253,6 +277,7 @@ function applyTo(el, defaultNs) {
 const I18N = {
   BASE,
   LANGS,
+  DEVICE_LANGS,
   get lang() { return resolveLang(); },
   meta(code) { return META[code || resolveLang()]; },
 
@@ -322,6 +347,7 @@ const I18N = {
   // reads as Italian while nothing is chosen yet) — then the choice must still reach the OS.
   async setLang(code) {
     const l = normalize(code); if (!l) return;
+    writeOverlay(l);                     // before any await: a caller may read fromDevice() right after
     let stored = null;
     try { stored = normalize(localStorage.getItem(RUNTIME_KEY)); } catch {}
     if (l === activeLang && l === stored) return;
@@ -334,6 +360,20 @@ const I18N = {
       if (window.parent && window.parent !== window) window.parent.postMessage(msg, '*');
       else window.postMessage(msg, '*');
     } catch {}
+  },
+
+  // The language to tell the DEVICE for display language `code` (DEVICE_LANGS): itself, or English.
+  deviceLang(code) {
+    const l = normalize(code);
+    return l && DEVICE_LANGS.includes(l) ? l : BASE;
+  },
+  // The display language to use when the DEVICE reports `code` (settings.json, /api/lang, system.language):
+  // the browser-only language chosen here while the device still holds the one it was put over, else the
+  // device's own. null for an unknown code (the caller keeps what it has).
+  fromDevice(code) {
+    const d = normalize(code); if (!d) return null;
+    const o = readOverlay();
+    return o && o.over === d ? o.lang : d;
   },
 
   // Subscribe to language changes in THIS document (for imperatively-built text). Returns unsubscribe.

@@ -257,13 +257,13 @@
  "budget": {
   "bytes": 75497472,
   "ok": true,
-  "used": 38435181
+  "used": 39088228
  },
- "bytes": 59322298,
+ "bytes": 59975345,
  "caps_row": {
   "after": "0.8.3"
  },
- "commit": "ff8f2578a4466418d9278fb660b64f514ec87b8d",
+ "commit": "96949959550483ed884510627863abd077fd5e1c",
  "edition": "cardputer",
  "externals": [
   {
@@ -551,11 +551,11 @@
    "why": "unRAR license is not free software: out until verified (external-resources.json)"
   }
  ],
- "files": 1583,
+ "files": 1690,
  "format": 1,
  "generator": "nucleo-webos tools/build.py",
- "gz_twins": 715,
- "hash": "614cc11402321aac53a69ab8debbbcc2700e7559416c558c5701999e29dac5e3",
+ "gz_twins": 768,
+ "hash": "23fe413a8ffa5cf3a59400dd222c7fb7a57d2a4239fa6b4cdfbfa5acacb2a561",
  "left_out": [
   {
    "id": "cast",
@@ -589,7 +589,7 @@
   "app sources, tests and docs outside www/ (only manifest.json and www/ ship)": 13,
   "build metadata: decides which apps enter a build, never read at runtime": 51,
   "build scripts": 1,
-  "cardputer profile: a Store app (web channel, about 2 MB with pdf.js): installed from the Store, never built in": 17,
+  "cardputer profile: a Store app (web channel, about 2 MB with pdf.js): installed from the Store, never built in": 18,
   "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)": 10,
   "channel metadata: read by nucleoos-webapps-store's publishing tool": 2,
   "decoder sources and their build scripts (the built .wasm sits in www/)": 4,
@@ -598,8 +598,8 @@
  },
  "profile_sha256": "f84fc128e9d0121dd7a732107ea112fac273696d36da3aa9fb35ff5d3c8948d8",
  "shell": {
-  "cache": "nucleo-shell-v163-9675cd6b305d",
-  "hash": "9675cd6b305d"
+  "cache": "nucleo-shell-v164-bd1caf5a7a0e",
+  "hash": "bd1caf5a7a0e"
  },
  "shell_dir": "www/shell",
  "uncommitted_files": 0,

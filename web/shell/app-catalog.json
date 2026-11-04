@@ -221,7 +221,7 @@
   "nearby": {
    "name": "Vicino",
    "category": "connectivity",
-   "description": "Scambia file e comandi con dispositivi vicini (Nucleo o Bruce) via ESP-NOW."
+   "description": "Scambia file e comandi con dispositivi vicini (Nucleo o Bruce) via radio diretta tra dispositivi."
   },
   "notepad": {
    "name": "Notepad",

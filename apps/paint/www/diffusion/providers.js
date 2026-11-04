@@ -60,25 +60,25 @@ export function resolveConfigs(teacher) {
   return { image };
 }
 
-// Every reason the provider list shows, in the five OS languages (an unknown language reads English).
+// Every reason the provider list shows, in the OS display languages (an unknown language reads English).
 const STR = {
-  online_ok:    { it: 'online · nessun download', en: 'online · no download', es: 'en línea · sin descarga', fr: 'en ligne · aucun téléchargement', de: 'online · kein Download' },
-  offline:      { it: 'offline — nessuna connessione', en: 'offline — no connection', es: 'sin conexión — no hay red', fr: 'hors ligne — aucune connexion', de: 'offline — keine Verbindung' },
-  private:      { it: 'modalità Privato — niente esce da questo computer', en: 'Private mode — nothing leaves this computer', es: 'modo Privado — nada sale de este equipo', fr: 'mode Privé — rien ne quitte cet ordinateur', de: 'Privat-Modus — nichts verlässt diesen Computer' },
-  no_image_key: { it: 'nessuna chiave immagini (configura xAI/Grok in Impostazioni · IA)', en: 'no image key (set xAI/Grok in Settings · AI)', es: 'sin clave de imágenes (configura xAI/Grok en Ajustes · IA)', fr: 'aucune clé d’images (configurez xAI/Grok dans Réglages · IA)', de: 'kein Bild-Schlüssel (xAI/Grok unter Einstellungen · KI einrichten)' },
-  no_runtime:   { it: 'runtime ONNX non disponibile', en: 'ONNX runtime unavailable', es: 'runtime ONNX no disponible', fr: 'runtime ONNX indisponible', de: 'ONNX-Laufzeit nicht verfügbar' },
-  no_model:     { it: 'modello non scaricato (apri ⚙ Modello)', en: 'model not downloaded (open ⚙ Model)', es: 'modelo no descargado (abre ⚙ Modelo)', fr: 'modèle non téléchargé (ouvrez ⚙ Modèle)', de: 'Modell nicht heruntergeladen (⚙ Modell öffnen)' },
-  webgpu:       { it: 'nel browser · WebGPU', en: 'in browser · WebGPU', es: 'en el navegador · WebGPU', fr: 'dans le navigateur · WebGPU', de: 'im Browser · WebGPU' },
-  cpu:          { it: 'nel browser · CPU (lento)', en: 'in browser · CPU (slow)', es: 'en el navegador · CPU (lento)', fr: 'dans le navigateur · CPU (lent)', de: 'im Browser · CPU (langsam)' },
-  preview:      { it: 'Anteprima', en: 'Preview', es: 'Vista previa', fr: 'Aperçu', de: 'Vorschau' },
-  preview_why:  { it: 'procedurale · non IA · senza download', en: 'procedural · not AI · no download', es: 'procedural · no es IA · sin descarga', fr: 'procédural · pas d’IA · aucun téléchargement', de: 'prozedural · keine KI · kein Download' },
-  enhance_with: { it: 'migliora con ', en: 'enhance with ', es: 'mejorar con ', fr: 'améliorer avec ', de: 'verbessern mit ' },
+  online_ok:    { it: 'online · nessun download', en: 'online · no download', es: 'en línea · sin descarga', fr: 'en ligne · aucun téléchargement', de: 'online · kein Download', zh: '在线 · 无需下载' },
+  offline:      { it: 'offline — nessuna connessione', en: 'offline — no connection', es: 'sin conexión — no hay red', fr: 'hors ligne — aucune connexion', de: 'offline — keine Verbindung', zh: '离线 — 没有网络连接' },
+  private:      { it: 'modalità Privato — niente esce da questo computer', en: 'Private mode — nothing leaves this computer', es: 'modo Privado — nada sale de este equipo', fr: 'mode Privé — rien ne quitte cet ordinateur', de: 'Privat-Modus — nichts verlässt diesen Computer', zh: '私密模式 — 任何内容都不会离开这台电脑' },
+  no_image_key: { it: 'nessuna chiave immagini (configura xAI/Grok in Impostazioni · IA)', en: 'no image key (set xAI/Grok in Settings · AI)', es: 'sin clave de imágenes (configura xAI/Grok en Ajustes · IA)', fr: 'aucune clé d’images (configurez xAI/Grok dans Réglages · IA)', de: 'kein Bild-Schlüssel (xAI/Grok unter Einstellungen · KI einrichten)', zh: '没有图像密钥（在「设置 · AI / 模型」中配置 xAI/Grok）' },
+  no_runtime:   { it: 'runtime ONNX non disponibile', en: 'ONNX runtime unavailable', es: 'runtime ONNX no disponible', fr: 'runtime ONNX indisponible', de: 'ONNX-Laufzeit nicht verfügbar', zh: 'ONNX 运行时不可用' },
+  no_model:     { it: 'modello non scaricato (apri ⚙ Modello)', en: 'model not downloaded (open ⚙ Model)', es: 'modelo no descargado (abre ⚙ Modelo)', fr: 'modèle non téléchargé (ouvrez ⚙ Modèle)', de: 'Modell nicht heruntergeladen (⚙ Modell öffnen)', zh: '模型未下载（打开「⚙ 模型」）' },
+  webgpu:       { it: 'nel browser · WebGPU', en: 'in browser · WebGPU', es: 'en el navegador · WebGPU', fr: 'dans le navigateur · WebGPU', de: 'im Browser · WebGPU', zh: '在浏览器中 · WebGPU' },
+  cpu:          { it: 'nel browser · CPU (lento)', en: 'in browser · CPU (slow)', es: 'en el navegador · CPU (lento)', fr: 'dans le navigateur · CPU (lent)', de: 'im Browser · CPU (langsam)', zh: '在浏览器中 · CPU（较慢）' },
+  preview:      { it: 'Anteprima', en: 'Preview', es: 'Vista previa', fr: 'Aperçu', de: 'Vorschau', zh: '预览' },
+  preview_why:  { it: 'procedurale · non IA · senza download', en: 'procedural · not AI · no download', es: 'procedural · no es IA · sin descarga', fr: 'procédural · pas d’IA · aucun téléchargement', de: 'prozedural · keine KI · kein Download', zh: '程序生成 · 非 AI · 无需下载' },
+  enhance_with: { it: 'migliora con ', en: 'enhance with ', es: 'mejorar con ', fr: 'améliorer avec ', de: 'verbessern mit ', zh: '优化提示词 · ' },
 };
-const LANGS = ['it', 'en', 'es', 'fr', 'de'];
+const LANGS = ['it', 'en', 'es', 'fr', 'de', 'zh'];
 export const providerText = (key, lang) => STR[key][LANGS.includes(lang) ? lang : 'en'];
 
 // ── provider list with availability + reasons ──────────────────────────────────────────────────────────
-// caps = { online:bool, webgpu:bool, modelCached:bool, modelOnSD:bool, runtimeOk:bool, private:bool, lang:'it'|'en'|'es'|'fr'|'de' }
+// caps = { online:bool, webgpu:bool, modelCached:bool, modelOnSD:bool, runtimeOk:bool, private:bool, lang:'it'|'en'|'es'|'fr'|'de'|'zh' }
 // Returns ordered descriptors (online → local → preview):
 //   { id, kind:'online'|'local'|'preview', brand, model, available, reason }
 export function listProviders(image, caps = {}) {

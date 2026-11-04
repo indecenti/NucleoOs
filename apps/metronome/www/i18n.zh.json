@@ -1,0 +1,20 @@
+{
+  "_lang": "zh",
+  "title": "节拍器",
+  "tab.metronome": "节拍器",
+  "tab.tuner": "调音器",
+  "start": "开始",
+  "stop": "停止",
+  "tap": "敲击定速",
+  "sig": "每小节拍数",
+  "subdiv": "细分",
+  "kbd.startstop": "开始/停止",
+  "kbd.tap": "敲击",
+  "a4": "A4",
+  "tuner.listen": "聆听",
+  "tuner.stop": "停止",
+  "tuner.hint": "在麦克风附近单独弹奏一个音。",
+  "tuner.busy": "麦克风正在使用中",
+  "tuner.denied": "麦克风访问被拒绝。",
+  "tuner.err": "麦克风不可用。"
+}

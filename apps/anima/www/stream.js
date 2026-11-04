@@ -103,45 +103,54 @@ async function readStream(resp, provider, { onDelta, signal, idleMs }) {
   return full;
 }
 
-// One chat completion. cfg: {provider, base, model, key, version}; req: {system, messages, maxTokens,
-// temperature}; opts: {signal, onDelta, idleMs, proxyUrl(url)->url|null}. With onDelta and a direct
-// (non-proxy) provider the call streams; otherwise it is a single JSON round-trip. Returns the text.
-// On a mid-stream failure the thrown error carries .partial (what already arrived).
+// One chat completion. cfg: {provider, base, model, key, version, effort}; req: {system, messages, maxTokens,
+// temperature}; opts: {signal, onDelta, idleMs, proxyUrl(url)->url|null, apiUrl(cfg, path), authHeaders(cfg),
+// prepare(cfg, body)}. With onDelta and a direct (non-relayed) endpoint the call streams; otherwise it is a single
+// JSON round-trip. Returns the text. On a mid-stream failure the thrown error carries .partial.
+// apiUrl / authHeaders / prepare are shell/ai.js's (index.html passes AI.apiUrl, AI.authHeaders, AI.withEffort):
+// the address and the key header then follow the one rule every app shares (a sealed vault's saved key rides the
+// device relay, a typed key goes direct), and an Anthropic body gets the user's effort. Without them (Node tests,
+// an old caller) the call is built as before.
+const RELAYED = (u) => /^\/api\/llm\?/.test(String(u || ''));
 export async function chatComplete(cfg, req, opts = {}) {
   const { signal, onDelta, idleMs = 30000 } = opts;
   const msgs = Array.isArray(req.messages) ? req.messages : [{ role: 'user', content: String(req.user || '') }];
   const maxTokens = req.maxTokens || 1024;
   const temperature = typeof req.temperature === 'number' ? req.temperature : 0.4;
   const proxied = typeof opts.proxyUrl === 'function' ? opts.proxyUrl : null;
+  const prepare = typeof opts.prepare === 'function' ? (b) => opts.prepare(cfg, b) || b : (b) => b;
 
   if (cfg.provider === 'anthropic') {
-    const stream = !!onDelta;
-    const resp = await fetch((cfg.base || 'https://api.anthropic.com').replace(/\/+$/, '') + '/v1/messages', {
-      method: 'POST', signal,
-      headers: { 'content-type': 'application/json', 'x-api-key': cfg.key, 'anthropic-version': cfg.version || '2023-06-01',
-                 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: cfg.model || 'claude-sonnet-5-5', max_tokens: maxTokens,
-                             ...(req.system ? { system: req.system } : {}), messages: msgs, ...(stream ? { stream: true } : {}) }),
-    });
+    const def = (cfg.base || 'https://api.anthropic.com').replace(/\/+$/, '') + '/v1/messages';
+    const url = typeof opts.apiUrl === 'function' ? opts.apiUrl(cfg, '/v1/messages') : def;
+    const stream = !!onDelta && !RELAYED(url);
+    const headers = typeof opts.authHeaders === 'function' ? opts.authHeaders(cfg)
+      : { 'content-type': 'application/json', 'x-api-key': cfg.key, 'anthropic-version': cfg.version || '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true' };
+    // No `thinking` field, ever: the 5.x models think adaptively and reject "disabled" (see ai.js withEffort).
+    const body = prepare({ model: cfg.model || 'claude-sonnet-5-5', max_tokens: maxTokens,
+      ...(req.system ? { system: req.system } : {}), messages: msgs, ...(stream ? { stream: true } : {}) });
+    const resp = await fetch(url, { method: 'POST', signal, headers, body: JSON.stringify(body) });
     if (!resp.ok) throw await errorOf(resp);
     if (stream && resp.body && /event-stream/i.test(resp.headers.get('content-type') || '')) return readStream(resp, 'anthropic', { onDelta, signal, idleMs });
     const j = await resp.json().catch(() => null);
     if (!j || j.type === 'error') throw new Error((j && j.error && j.error.message) || 'bad response');
+    // only the text blocks: a thinking block (always there on 5.x) carries an empty `thinking`, never the answer
     const txt = Array.isArray(j.content) ? j.content.filter((b) => b && b.type === 'text').map((b) => b.text).join('') : '';
     if (onDelta && txt) { try { onDelta(txt); } catch {} }
     return txt;
   }
 
-  // OpenAI-compatible. A proxied provider (the device relays it) is never streamed.
+  // OpenAI-compatible. A provider relayed through the device is never streamed.
   const direct = (cfg.base || 'https://api.groq.com/openai/v1').replace(/\/+$/, '') + '/chat/completions';
-  const viaProxy = proxied ? proxied(direct) : null;
-  const stream = !!onDelta && !viaProxy;
-  const resp = await fetch(viaProxy || direct, {
-    method: 'POST', signal,
-    headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + cfg.key },
-    body: JSON.stringify({ model: cfg.model || 'llama-3.1-8b-instant', max_tokens: maxTokens, temperature,
+  const url = typeof opts.apiUrl === 'function' ? opts.apiUrl(cfg, '/chat/completions') : ((proxied && proxied(direct)) || direct);
+  const stream = !!onDelta && !RELAYED(url);
+  const headers = typeof opts.authHeaders === 'function' ? opts.authHeaders(cfg) : { 'content-type': 'application/json', 'authorization': 'Bearer ' + cfg.key };
+  const resp = await fetch(url, {
+    method: 'POST', signal, headers,
+    body: JSON.stringify(prepare({ model: cfg.model || 'llama-3.1-8b-instant', max_tokens: maxTokens, temperature,
                            messages: [...(req.system ? [{ role: 'system', content: req.system }] : []), ...msgs],
-                           ...(stream ? { stream: true } : {}) }),
+                           ...(stream ? { stream: true } : {}) })),
   });
   if (!resp.ok) throw await errorOf(resp);
   if (stream && resp.body && /event-stream/i.test(resp.headers.get('content-type') || '')) return readStream(resp, 'openai', { onDelta, signal, idleMs });

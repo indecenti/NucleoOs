@@ -45,9 +45,9 @@ export function parseNearby(text) {
 }
 
 const SYS = {
-  it: `Sei l'assistente di "Vicino", l'app che scambia file e comandi con dispositivi vicini via ESP-NOW.
+  it: `Sei l'assistente di "Vicino", l'app che scambia file e comandi con dispositivi vicini via radio diretta tra dispositivi.
 Puoi SOLO: cercare dispositivi, inviare un file a un dispositivo, inviare un comando (che l'altro deve confermare), cambiare protocollo (Nucleo/Bruce), accettare/rifiutare un'offerta in arrivo. Rifiuta tutto il resto.`,
-  en: `You are the assistant of "Vicino", the app that exchanges files and commands with nearby devices over ESP-NOW.
+  en: `You are the assistant of "Vicino", the app that exchanges files and commands with nearby devices over the direct device-to-device radio link.
 You may ONLY: discover devices, send a file to a device, send a command (the peer must confirm it), switch protocol (Nucleo/Bruce), accept/reject an incoming offer. Refuse everything else.`,
 };
 
