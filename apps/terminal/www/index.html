@@ -595,7 +595,7 @@
           radios: [
             ['wifi scan|known|join|forget|prio|reconnect', 'Wi-Fi (needs net.wifi)'],
             ['ir db|send|raw|tvbgone', 'infrared (needs device.ir)'],
-            ['link peers|status', 'ESP-NOW neighbours (needs mesh.peer)'],
+            ['link peers|status', 'the nearby devices over the direct radio link (needs mesh.peer)'],
             ['display on|off', 'panel power (needs device.display)'],
             ['gpio read <pin> | write <pin> <0|1>', 'raw pin I/O on the safe allowlist'],
             ['screen [-o <file>]', 'save what the panel shows (needs device.display)'],
@@ -1515,7 +1515,9 @@
       async lang(arg) {
         const want = (arg || '').trim().toLowerCase().replace(/^"|"$/g, '');
         if (!want) { const j = await devJSON('lang', '/api/lang'); if (j) emit(`lang ${j.lang} gen ${j.gen}`); return; }
-        if (!['it', 'en', 'fr', 'es', 'de'].includes(want)) { emit('usage: lang [it|en|fr|es|de]', 'err'); return; }
+        if (!I18N.LANGS.some((l) => l.code === want)) { emit('usage: lang [' + I18N.LANGS.map((l) => l.code).join('|') + ']', 'err'); return; }
+        // A browser-only language (zh): this browser shows it, the device keeps English underneath (I18N.deviceLang).
+        if (!I18N.DEVICE_LANGS.includes(want)) { await I18N.setLang(want); emit(`lang ${want} (this browser; device ${I18N.deviceLang(want)})`, 'ok'); return; }
         const j = await devPOST('lang', '/api/lang', { lang: want });
         if (j) emit(`lang ${j.lang || want} gen ${j.gen == null ? '?' : j.gen}`, 'ok');
       },
@@ -2096,7 +2098,7 @@
       anima: ['--caps', '--l1', '--reset', '-o', '-l', '-v'],
       wifi: ['scan', 'known', 'join', 'forget', 'prio', 'reconnect'],
       ir: ['db', 'send', 'raw', 'tvbgone'], display: ['on', 'off'], ota: ['status'],
-      apps: ['open', '-a'], lang: ['it', 'en', 'fr', 'es', 'de'], link: ['peers', 'status'],
+      apps: ['open', '-a'], lang: ['it', 'en', 'fr', 'es', 'de', 'zh'], link: ['peers', 'status'],
       sort: ['-r', '-n', '-u', '-k'], uniq: ['-c'], clip: ['-o'], base64: ['-d'],
       dmesg: ['-l'], date: ['-u', '-s'], du: ['-d'], tree: ['-L'], cut: ['-d', '-f', '-c'],
       hexdump: ['-n', '-s'], head: ['-n'], tail: ['-n'], find: ['-name'], watch: ['-n', '-c'],

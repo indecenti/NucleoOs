@@ -30,7 +30,7 @@
   'use strict';
   if (window.NucleoApp) return;
 
-  var LOCALES = { it: 'it-IT', en: 'en-US', es: 'es-ES', fr: 'fr-FR', de: 'de-DE' };
+  var LOCALES = { it: 'it-IT', en: 'en-US', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', zh: 'zh-CN' };
   var inShell = window.parent !== window;
   // The broker token the shell put in this frame's URL (wm.js brokerToken): sent with every call, then removed from
   // the address so the app's own code and its links never carry it.

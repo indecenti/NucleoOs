@@ -1185,19 +1185,25 @@ static void handle_launcher(int k, char ch)
         if (i >= 0 && i < launcher_visible_count()) { launcher_set_sel(i); launcher_open_focused(); }
         s_dirty = true; return;
     }
-    if (cols > 1) {                              // grid: left/right step one, up/down a whole row (clamped)
+    if (cols > 1) {                              // grid: left/right step one (wrapping through the rows), up/down a row
         int n = launcher_visible_count();
+        const int rows = (n + cols - 1) / cols, row = s / cols, col = s % cols;
         if      (k == NK_LEFT)  launcher_set_sel(s - 1);
         else if (k == NK_RIGHT) launcher_set_sel(s + 1);
-        else if (k == NK_UP)    { if (s - cols >= 0) launcher_set_sel(s - cols); }
-        else if (k == NK_DOWN) {                 // a shorter last row: from a column with nothing below, its last tile
-            const int lead = launcher_depth() > 0 ? 1 : 0;   // inside a category cell 0 is the Back tile
-            if (s + cols < n) launcher_set_sel(s + cols);
-            else if ((s + lead) / cols < (n - 1 + lead) / cols) launcher_set_sel(n - 1);
+        else if (k == NK_UP) {                   // the top row wraps to the bottom of the same column (or the last tile)
+            if (row > 0) launcher_set_sel(s - cols);
+            else if (rows > 1) { const int t = (rows - 1) * cols + col; launcher_set_sel(t < n ? t : n - 1); }
+        }
+        else if (k == NK_DOWN) {                 // a shorter last row: from a column with nothing below, its last tile;
+            if (s + cols < n) launcher_set_sel(s + cols);                     // the bottom row wraps to the top
+            else if (row < rows - 1) launcher_set_sel(n - 1);
+            else if (rows > 1) launcher_set_sel(col);
         }
         else if (k == NK_ENTER) { launcher_open_focused(); s_dirty = true; return; }   // a category: repaint its tiles now
         else if (k == NK_BACK)  launcher_back();
-        else if (k == NK_DEL)   launcher_filter_backspace();
+        else if (k == NK_DEL) {                  // Del erases the search; with nothing typed it steps back, like Esc
+            if (launcher_filter()[0]) launcher_filter_backspace(); else launcher_back();
+        }
         else if (k == NK_CHAR && ch == '*') { const MenuNode *f = launcher_focused(); if (f && f->kind == N_APP) launcher_toggle_pin(f->id); }
         else if (k == NK_CHAR && ch > ' ') launcher_filter_push(ch);
         s_dirty = true; return;
@@ -2371,6 +2377,10 @@ void nucleo_app_run(void)
                     handle_launcher(more.key, more.ch);
                 }
                 if (launcher_render_chrome_changed()) s_chrome_dirty = true;
+                // Two screens: the Cardputer's companion follows the focus at once (what is selected, the keys
+                // that work now), not on the next 1 Hz tick. Repainted only when its signature moved.
+                if (nucleo_surface_large() && s_active == -1 && !s_gamefront && launcher_render_companion_changed())
+                    nucleo_extdisp_draw_internal(companion_cb);
             } else if (nk.key == NK_BACK || nk.key == NK_LEFT) {
                 // The app may intercept Back/Left (e.g. ANIMA's sheet returns to its chat); only
                 // close to the launcher when it doesn't consume the key.

@@ -508,11 +508,11 @@
         <div class="sect" id="sect-net-fw" hidden><h2><span data-i18n="connectivity">Connettività</span> <span class="badge fw">Firmware</span></h2>
           <div class="row"><label>Wi-Fi</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-wifi"><span></span></span></div></div>
           <div class="row"><label>Bluetooth LE</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-ble"><span></span></span></div></div>
-          <div class="row"><label>Swarm (ESP-NOW)</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-swarm"><span></span></span></div></div>
+          <div class="row"><label data-i18n="swarmLabel">Swarm (radio diretta)</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-swarm"><span></span></span></div></div>
           <div class="hint" style="margin-top:6px" data-i18n="changesNextBoot">Le modifiche si salvano e si applicano al prossimo avvio.</div></div>
         <div class="sect" id="sect-ipv6" hidden><h2>IPv6 <span class="badge fw">Firmware</span></h2>
           <div class="row"><label data-i18n="enableIpv6">Abilita IPv6</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-ipv6"><span></span></span></div></div>
-          <div class="hint" style="margin-top:6px" data-i18n-html="ipv6Hint">IPv6 è <b>disabilitato</b> nel firmware per liberare SRAM: tutta la rete viaggia su IPv4. Le tabelle IPv6 di lwIP si allocano a compilazione — questo controllo registra solo la preferenza; per riattivarlo davvero ricompila con <code>CONFIG_LWIP_IPV6=y</code>.</div></div>
+          <div class="hint" style="margin-top:6px" data-i18n-html="ipv6Hint">Nel firmware di questo dispositivo IPv6 è <b>disabilitato</b> per risparmiare memoria: tutta la rete viaggia su IPv4. Questo controllo registra solo la preferenza: ha effetto solo con un firmware costruito con IPv6.</div></div>
         <div class="sect" id="sect-peers" hidden><h2 data-i18n="peersTitle">Le altre console NucleoOS</h2>
           <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl" style="flex-wrap:wrap"><button id="peers-scan">🔎 <span data-i18n="peersScan">Cerca sulla rete</span></button><span class="hint" id="peers-stat" role="status" aria-live="polite"></span></div></div>
           <div id="peers-list"></div>
@@ -772,9 +772,10 @@ import I18N, { LANGS } from '/nucleo-i18n.js';   // OS i18n engine: live languag
 // engine's async load from ever flashing raw keys on the OS control panel.
 const coreReady = I18N.init('settings', { apply: false, observe: false }).catch(() => {});
 // English-first floor (mirrors the engine BASE): Italian only for an explicit it* language/locale.
+// settings.json holds a DEVICE language: under a browser-only one (zh) it says 'en', and fromDevice() gives back zh.
 const detectLang = (model) => {
-  const l = model && model.ui && model.ui.language;
-  if (['it', 'en', 'es', 'fr', 'de'].includes(l)) return l;
+  const l = I18N.fromDevice(model && model.ui && model.ui.language);
+  if (LANGS.some((x) => x.code === l)) return l;
   const loc = (model && model.device && model.device.locale) || '';
   return /^it/i.test(loc) ? 'it' : 'en';
 };
@@ -1386,7 +1387,8 @@ function applyLiveUI() {
   document.documentElement.lang = lang;
   // Keep device.locale in step with the display language for ALL 5 OS languages (this used to
   // clamp es/fr/de to it-IT, silently corrupting the stored locale on any theme/accent change).
-  const langMeta = LANGS.find((l) => l.code === lang);
+  // The stored locale follows the DEVICE language (a browser-only zh keeps the device on English: en-US).
+  const langMeta = LANGS.find((l) => l.code === I18N.deviceLang(lang));
   if (langMeta) model.device.locale = langMeta.locale;
   retitle();
 }
@@ -1458,7 +1460,7 @@ function renderLangRow() {
     el.querySelector('.lb').textContent = l.label;
     el.addEventListener('click', () => {
       if (l.code === I18N.lang) return;
-      model.ui.language = l.code; lang = l.code;
+      model.ui.language = l.code; lang = l.code;     // persistModel() stores deviceLang() of it
       applyLiveUI(); persistUiSoon();
       I18N.setLang(l.code);                 // broadcast to the whole OS (shell + every open app), live
     });
@@ -1516,7 +1518,9 @@ function renderLangRegion() { renderLangRow(); renderRegionSelect(); renderRegio
 I18N.init('core', { observe: false, apply: false }).then(() => {
   I18N.onChange(() => {
     if (I18N.lang !== lang) { lang = I18N.lang; model.ui.language = lang; applyLiveUI(); }  // cascades to renderLangRegion
-    else renderLangRegion();                                                                 // region/format-only change
+    // Same language: Settings itself chose it and painted before the new catalogs had arrived (the words showed as
+    // their keys until the next open), or only the region/format changed. Repaint the words either way.
+    else { retitle(); renderLangRegion(); }
   });
   renderLangRegion();
 });
@@ -1822,6 +1826,8 @@ async function persistModel() {
   const r = await readSettingsFile();                      // re-read → merge → write: preserve keys we don't manage
   if (!r.ok) { settingsRead = false; return readFailText(r.status); }
   const out = merge(r.data, model);
+  // The file is the DEVICE's: a browser-only display language (zh) is stored as the device language under it.
+  if (out.ui && typeof out.ui.language === 'string') out.ui.language = I18N.deviceLang(out.ui.language);
   try { await fs.writeJSON(PATH, out, { pretty: true }); return true; } catch (e) { return e && e.code === 'denied' ? T('settingsNotPaired') : T('saveFailed'); }
 }
 async function save() {
@@ -2201,7 +2207,7 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
   try {
     const { mountKeyManager } = await import('/ai-keys.js');
     // The key manager speaks all five OS languages (anything else falls back to English, the OS base).
-    const kmLang = () => (['it', 'en', 'es', 'fr', 'de'].includes(I18N.lang) ? I18N.lang : 'en');
+    const kmLang = () => (['it', 'en', 'es', 'fr', 'de', 'zh'].includes(I18N.lang) ? I18N.lang : 'en');
     const km = mountKeyManager(mountEl, { variant: 'full', lang: kmLang(), onChange() { refreshCaps(); } });
     try { I18N.onChange(() => { if (km && km.setLang) km.setLang(kmLang()); }); } catch {}
   } catch (e) { mountEl.innerHTML = '<span class="hint">' + T('keyMgrUnavailable') + ' (' + (e && e.message || e) + ').</span>'; }
@@ -2549,7 +2555,7 @@ async function mountPcModelsUI() {
         if (out) out.textContent = r.ok ? `✓ ${T('apDeviceAnswers')} · ${ms} ms` : T('apNoAnswer');
         return;
       }
-      const r = await fetch('/api/anima?q=ping&lang=' + lang + '&mode=' + (pl.mode === 'on' ? 'on' : 'off'), { cache: 'no-store' });
+      const r = await fetch('/api/anima?q=ping&lang=' + I18N.deviceLang(lang) + '&mode=' + (pl.mode === 'on' ? 'on' : 'off'), { cache: 'no-store' });
       const j = r.ok ? await r.json().catch(() => null) : null; const ms = Math.round(performance.now() - t0);   // a 503 body is not an answer
       if (out) out.textContent = j ? `✓ ${T('apAnsweredBy')} ${j.intent || j.tier || 'device'} · ${ms} ms` : T('apNoAnswer');
     } catch (e) { if (out) out.textContent = '✗ ' + (e && e.message || e); }
@@ -2595,8 +2601,8 @@ async function load() {
   // stored es/fr/de back to Italian on every open (and persisting the damage on the next save).
   // No language in the file (a device that keeps it elsewhere: /api/lang, the wizard's choice): the OS's current one,
   // which Settings would otherwise overwrite for the whole OS. English is the floor only when even that is unknown.
-  if (!LANGS.some((l) => l.code === model.ui.language)) {
-    model.ui.language = LANGS.some((l) => l.code === I18N.lang) ? I18N.lang : /^it/i.test(model.device.locale || '') ? 'it' : 'en';
+  if (!I18N.DEVICE_LANGS.includes(model.ui.language)) {
+    model.ui.language = LANGS.some((l) => l.code === I18N.lang) ? I18N.deviceLang(I18N.lang) : /^it/i.test(model.device.locale || '') ? 'it' : 'en';
   }
   lang = detectLang(model);
   applyLiveUI(); toForm(); updateScreenUI(); setDirty(false);

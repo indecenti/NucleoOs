@@ -970,12 +970,12 @@
                 </div>
               </div>
               <div class="set-field" id="row-pcllm" hidden>
-                <div class="f-tx"><label data-i18n data-it="Modelli del PC" data-en="PC models" data-es="Modelos del PC" data-fr="Modèles du PC" data-de="Modelle des PCs">Modelli del PC</label><span class="f-sub" data-i18n data-it="Ollama, LM Studio, llama.cpp, Jan o KoboldCpp sul PC da cui guardi la console: ANIMA li trova e li usa da sola, niente va in rete. Auto: quando non risponde un modello online (e subito in modalità Browser). Prima: sempre per primi." data-en="Ollama, LM Studio, llama.cpp, Jan or KoboldCpp on the PC you view the console from: ANIMA finds and uses them by itself, nothing goes online. Auto: when no online model answers (and right away in Browser mode). First: always first." data-es="Ollama, LM Studio, llama.cpp, Jan o KoboldCpp en el PC desde el que ves la consola: ANIMA los encuentra y los usa sola, nada sale a la red. Auto: cuando no responde un modelo en línea (y enseguida en modo Navegador). Primero: siempre primero." data-fr="Ollama, LM Studio, llama.cpp, Jan ou KoboldCpp sur le PC d’où tu regardes la console : ANIMA les trouve et les utilise toute seule, rien ne part en ligne. Auto : quand aucun modèle en ligne ne répond (et tout de suite en mode Navigateur). D’abord : toujours en premier." data-de="Ollama, LM Studio, llama.cpp, Jan oder KoboldCpp auf dem PC, von dem aus du die Konsole siehst: ANIMA findet und nutzt sie selbst, nichts geht ins Netz. Auto: wenn kein Online-Modell antwortet (und sofort im Browser-Modus). Zuerst: immer zuerst.">Ollama, LM Studio, llama.cpp, Jan o KoboldCpp sul PC: ANIMA li trova e li usa da sola.</span></div>
+                <div class="f-tx"><label data-i18n data-it="Modelli del PC" data-en="PC models" data-es="Modelos del PC" data-fr="Modèles du PC" data-de="Modelle des PCs" data-zh="PC 上的模型">Modelli del PC</label><span class="f-sub" data-i18n data-it="Ollama, LM Studio, llama.cpp, Jan o KoboldCpp sul PC da cui guardi la console: ANIMA li trova e li usa da sola, niente va in rete. Auto: quando non risponde un modello online (e subito in modalità Browser). Prima: sempre per primi." data-en="Ollama, LM Studio, llama.cpp, Jan or KoboldCpp on the PC you view the console from: ANIMA finds and uses them by itself, nothing goes online. Auto: when no online model answers (and right away in Browser mode). First: always first." data-es="Ollama, LM Studio, llama.cpp, Jan o KoboldCpp en el PC desde el que ves la consola: ANIMA los encuentra y los usa sola, nada sale a la red. Auto: cuando no responde un modelo en línea (y enseguida en modo Navegador). Primero: siempre primero." data-fr="Ollama, LM Studio, llama.cpp, Jan ou KoboldCpp sur le PC d’où tu regardes la console : ANIMA les trouve et les utilise toute seule, rien ne part en ligne. Auto : quand aucun modèle en ligne ne répond (et tout de suite en mode Navigateur). D’abord : toujours en premier." data-de="Ollama, LM Studio, llama.cpp, Jan oder KoboldCpp auf dem PC, von dem aus du die Konsole siehst: ANIMA findet und nutzt sie selbst, nichts geht ins Netz. Auto: wenn kein Online-Modell antwortet (und sofort im Browser-Modus). Zuerst: immer zuerst." data-zh="你用来查看主机的那台 PC 上的 Ollama、LM Studio、llama.cpp、Jan 或 KoboldCpp：ANIMA 会自己找到并使用它们，不会联网。自动：在线模型没有回答时使用（在浏览器模式下立即使用）。优先：总是第一个使用。">Ollama, LM Studio, llama.cpp, Jan o KoboldCpp sul PC: ANIMA li trova e li usa da sola.</span></div>
                 <div class="f-ctl" style="flex-direction:column;align-items:flex-end;gap:6px">
-                  <div class="seg2" id="set-pc"><button data-pc="auto">Auto</button><button data-pc="prefer" data-i18n data-it="Prima" data-en="First" data-es="Primero" data-fr="D’abord" data-de="Zuerst">Prima</button><button data-pc="off">Off</button></div>
+                  <div class="seg2" id="set-pc"><button data-pc="auto">Auto</button><button data-pc="prefer" data-i18n data-it="Prima" data-en="First" data-es="Primero" data-fr="D’abord" data-de="Zuerst" data-zh="优先">Prima</button><button data-pc="off">Off</button></div>
                   <select id="set-pcmodel" class="keyin" style="cursor:pointer;width:auto;min-width:170px" hidden></select>
                   <span id="pc-stat" style="font:11px var(--mono);color:var(--muted);text-align:right;max-width:260px"></span>
-                  <button class="ebtn" id="pc-scan" data-i18n data-it="Cerca sul PC" data-en="Search the PC" data-es="Buscar en el PC" data-fr="Chercher sur le PC" data-de="Auf dem PC suchen">Cerca sul PC</button>
+                  <button class="ebtn" id="pc-scan" data-i18n data-it="Cerca sul PC" data-en="Search the PC" data-es="Buscar en el PC" data-fr="Chercher sur le PC" data-de="Auf dem PC suchen" data-zh="在 PC 上搜索">Cerca sul PC</button>
                 </div>
               </div>
               <div class="set-field">
@@ -1388,10 +1388,14 @@
     UI.it.webTog='Web: risposte aggiornate con fonti (Groq compound)'; UI.it.webSources='Fonti'; UI.it.webSearching='🌐 Sto cercando sul web…'; UI.it.webOn='Web'; UI.it.webNoKey='La modalità Web richiede una chiave Groq — impostala in Impostazioni ▸ IA.';
     UI.en.webTog='Web: current answers with sources (Groq compound)'; UI.en.webSources='Sources'; UI.en.webSearching='🌐 Searching the web…'; UI.en.webOn='Web'; UI.en.webNoKey='Web mode needs a Groq key — set it in Settings ▸ AI.';
 
-    // ── Multilingual: it/en are inline; es/fr/de come from ANIMA_L10N, keyed by the ENGLISH string.
-    //    TR() routes the inline it/en ternaries; UI.es/fr/de are deep-mapped from UI.en; the settings
+    // ── Multilingual: it/en are inline; es/fr/de/zh come from ANIMA_L10N, keyed by the ENGLISH string.
+    //    TR() routes the inline it/en ternaries; UI.es/fr/de/zh are deep-mapped from UI.en; the settings
     //    data-i18n loop consults the same table. ANIMA/LLM system prompts are intentionally left as-is.
+    //    Two languages: `lang` (LANG, one of the five) drives the logic (engine, prompts, speech, weather,
+    //    the device); `uiLang` (UILANG) drives the words on screen. They differ only for an OS language
+    //    the logic does not have (zh): the screen follows it, the logic stays English.
     function LANG(){ const l=(get('anima.lang','en')||'en').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; }   // English is the fallback floor (matches the OS i18n engine BASE)
+    function UILANG(l, os){ os=String(os||'').slice(0,2); return (!['it','en','es','fr','de'].includes(os) && UI[os] && ANIMA_L10N[os]) ? os : l; }
     const ANIMA_L10N = {
       es: {
         "offline assistant": "asistente offline",
@@ -2883,7 +2887,545 @@
       "Volume":"Lautstärke", "Brightness":"Helligkeit", "Done on the device":"Auf dem Gerät ausgeführt",
       "This question is too long for the device: shorten it and try again.":"Die Frage ist zu lang für das Gerät: kürze sie und versuch es noch einmal."
     });
-    function TR(it,en){ const l=lang; if(l==='it')return it; if(l==='en')return en; const o=ANIMA_L10N[l]; return (o&&o[en]!=null)?o[en]:en; }
+    // Simplified Chinese is a display-only OS language (see uiLang): these words are shown, never parsed. The few
+    // entries that go back in as a question (the welcome examples, "capital of France", "list ") stay English,
+    // because the logic language behind a zh screen is English.
+    ANIMA_L10N.zh = {
+      "offline assistant": "离线助手",
+      "Type a command or a question…": "输入命令或问题…",
+      "Appearance": "外观",
+      "Engine": "引擎",
+      "Conversation": "对话",
+      "Theme": "主题",
+      "Language": "语言",
+      "Microphone": "麦克风",
+      "Text size": "文字大小",
+      "Response speed": "回复速度",
+      "Mode": "模式",
+      "Show reasoning": "显示推理过程",
+      "Off": "关",
+      "Line": "单行",
+      "Tree": "树状",
+      "Under every reply: which engine and model actually answered (device, browser, local GPU, or online). <b>Line</b> = compact, click for details · <b>Tree</b> = expanded.": "每条回复下方显示实际作答的引擎和模型（设备、浏览器、本地 GPU 或在线）。<b>单行</b> = 紧凑，点击查看详情 · <b>树状</b> = 完全展开。",
+      "Suggestions": "建议",
+      "Clear conversation": "清空对话",
+      "Compact context": "压缩上下文",
+      "pin": "固定",
+      "Pinned in context": "已固定在上下文中",
+      "Unpinned": "已取消固定",
+      "Pin: keep in context through compaction": "固定：压缩时仍保留在上下文中",
+      "offline only": "仅离线",
+      "browser GPU": "浏览器 GPU",
+      "offline, in-browser": "离线，在浏览器中",
+      "online only": "仅在线",
+      "hybrid": "混合",
+      "local GPU": "本地 GPU",
+      "browser": "浏览器",
+      "Offline: the device’s brain, no network. If the device doesn’t answer, the browser brain (if ready) is the backup. Type /guide for the full map.": "离线：使用设备的大脑，不联网。设备无响应时，由浏览器大脑（若已就绪）接替。输入 /guide 查看完整说明。",
+      "Local GPU: the model runs on the browser GPU — offline and private. For full-sentence translation with no cloud (Grok only if there is no GPU).": "本地 GPU：模型在浏览器的 GPU 上运行，离线且私密。适合不经云端的整句翻译（没有 GPU 时才用 Grok）。",
+      "Browser: the whole offline cascade runs HERE in the browser (WebAssembly) — answers identical to the device. If it doesn’t know, it serves already-cached web cards (no network). The brain downloads once; then it works even with the device off. Nothing leaves the device.": "浏览器：整套离线级联就在这个浏览器里运行（WebAssembly），回答与设备完全相同。不知道答案时，会提供已缓存的网页卡片（不联网）。大脑只需下载一次，之后即使设备关机也能使用。数据不会离开设备。",
+      "Online: real LLMs (cloud Grok/Claude → browser LLM). As a last resort, BEFORE scaling onto the device, it uses the browser brain and indexes the web.": "在线：真正的 LLM（云端 Grok/Claude → 浏览器 LLM）。万不得已时，在交给设备之前，会先使用浏览器大脑并检索网页索引。",
+      "Could not load ANIMA locally: brain download failed. Check the device connection.": "无法在本地加载 ANIMA：大脑下载失败。请检查与设备的连接。",
+      "Local brain": "本地大脑",
+      "Reload": "重新加载",
+      "cached · ready offline": "已缓存 · 可离线使用",
+      "not downloaded yet": "尚未下载",
+      "ANIMA ready — running locally \u{26A1}": "ANIMA 已就绪，正在本地运行 \u{26A1}",
+      "ANIMA is ready — and it runs locally": "ANIMA 已就绪，并且在本地运行",
+      "Same answers as the device (same brain), just on your CPU.": "与设备的回答相同（同一个大脑），只是在你的 CPU 上运行。",
+      "Teach it facts: “remember that the meeting room <b>is</b> on the third floor” — it remembers them even after a reload.": "教它记住事实：「remember that the meeting room <b>is</b> on the third floor」，重新加载后也不会忘。",
+      "Type <b>/guide</b> for the full map: the brains, the fallback cascade and privacy.": "输入 <b>/guide</b> 查看完整说明：各个大脑、后备级联和隐私。",
+      "Start": "开始",
+      "Try: “capital of France”": "试试：「capital of France」",
+      "Good morning": "早上好",
+      "Good afternoon": "下午好",
+      "Good evening": "晚上好",
+      "Good night": "夜深了",
+      "Examples": "示例",
+      "Capabilities": "功能",
+      "Commands": "命令",
+      "<kbd>⏎</kbd> send": "<kbd>⏎</kbd> 发送",
+      "<kbd>⌘K</kbd> palette": "<kbd>⌘K</kbd> 命令面板",
+      "<kbd>/</kbd> commands": "<kbd>/</kbd> 命令",
+      "<kbd>↑</kbd> history": "<kbd>↑</kbd> 历史记录",
+      "<kbd>?</kbd> shortcuts": "<kbd>?</kbd> 快捷键",
+      "weather london": "weather london",
+      "days until christmas": "days until christmas",
+      "what time is it": "what time is it",
+      "who is Einstein": "who is Einstein",
+      "create a note with my shopping list": "create a note with my shopping list",
+      "set a timer for 5 minutes": "set a timer for 5 minutes",
+      "remind me of the dentist tomorrow at 4pm": "remind me of the dentist tomorrow at 4pm",
+      "wake me at 7:30": "wake me at 7:30",
+      "convert 10 km to miles": "convert 10 km to miles",
+      "I can't reach the ANIMA engine on the device.": "无法连接设备上的 ANIMA 引擎。",
+      "I don't know yet. I can open apps, tell time/space, create files, give the weather and answer questions.": "这个我还不知道。我可以打开应用、报告时间和存储空间、创建文件、查天气和回答问题。",
+      "opened": "已打开",
+      "created": "已创建",
+      "already exists": "已存在",
+      "Conversation cleared.": "对话已清空。",
+      "Thinking": "思考",
+      "Pondering": "琢磨",
+      "Cogitating": "斟酌",
+      "Reasoning": "推理",
+      "Composing": "组织语言",
+      "Recalling": "回想",
+      "Searching": "搜索",
+      "Conversation restored.": "对话已恢复。",
+      "steps": "步",
+      "Open app": "打开应用",
+      "Open file": "打开文件",
+      "Open calendar": "打开日历",
+      "Reopen": "重新打开",
+      "sent": "已发送",
+      "File created": "文件已创建",
+      "File already exists": "文件已存在",
+      "Event added": "日程已添加",
+      "Image generation": "图像生成",
+      "Open Paint": "打开 Paint",
+      "Generated in Paint · Atelier (browser GPU)": "在 Paint · Atelier 中生成（浏览器 GPU）",
+      "Awaiting": "等待中",
+      "continuing from the previous reply": "接着上一条回复",
+      "copy": "复制",
+      "copied": "已复制",
+      "regenerate": "重新生成",
+      "edit": "编辑",
+      "branch": "分支",
+      "Branch created": "已创建分支",
+      "run": "运行",
+      "running…": "运行中…",
+      "ran ✓": "已运行 ✓",
+      "output": "输出",
+      "+ New": "+ 新建",
+      "Conversations": "对话",
+      "Search…": "搜索…",
+      "New conversation": "新对话",
+      "Rename": "重命名",
+      "Delete": "删除",
+      "Delete this conversation?": "删除这个对话？",
+      "Pinned": "已固定",
+      "Today": "今天",
+      "Yesterday": "昨天",
+      "Previous 7 days": "过去 7 天",
+      "Previous 30 days": "过去 30 天",
+      "Older": "更早",
+      "Pin to top": "置顶",
+      "Unpin": "取消置顶",
+      "Conversation pinned": "对话已置顶",
+      "Conversation unpinned": "对话已取消置顶",
+      "Conversation deleted": "对话已删除",
+      "Undo": "撤销",
+      "No conversations yet.": "还没有对话。",
+      "Collapse panel": "收起面板",
+      "Expand panel": "展开面板",
+      "Clear search": "清除搜索",
+      "Exported": "已导出",
+      "Shortcuts": "快捷键",
+      "nothing": "无",
+      "Storage full: oldest conversation removed.": "存储空间已满：已删除最早的对话。",
+      "show commands": "显示命令",
+      "how ANIMA works": "ANIMA 的工作原理",
+      "new conversation": "新对话",
+      "clear the conversation": "清空对话",
+      "change theme": "切换主题",
+      "export (markdown)": "导出（Markdown）",
+      "compact the context": "压缩上下文",
+      "Italian": "意大利语",
+      "English": "英语",
+      "open settings": "打开设置",
+      "browser voice on/off": "开/关浏览器语音",
+      "model manager (downloads)": "模型管理器（下载）",
+      "Commands:\n  /help            show this list\n  /guide           how ANIMA works (brains, cascade, privacy)\n  /new             new conversation\n  /clear           clear the conversation\n  /theme [name]    change theme (midnight/daylight/carbon/contrast)\n  /export [md|json]  export the conversation\n  /offline /hybrid /online   change engine mode\n  /it /en          change language\n  /settings        open the settings panel\n\nShortcuts: `⌘K` palette · `⌘⇧S` conversations · `↑/↓` input history · `?` help.\nExamples: \"open notes\", \"what is 12% of 80\", \"will it rain tomorrow in rome\", \"create diary.txt\", \"who is Einstein\".": "命令：\n  /help            显示此列表\n  /guide           ANIMA 的工作原理（大脑、级联、隐私）\n  /new             新对话\n  /clear           清空对话\n  /theme [name]    切换主题（midnight/daylight/carbon/contrast）\n  /export [md|json]  导出对话\n  /offline /hybrid /online   切换引擎模式\n  /it /en          切换语言\n  /settings        打开设置面板\n\n快捷键：`⌘K` 命令面板 · `⌘⇧S` 对话 · `↑/↓` 输入历史 · `?` 帮助。\n示例：「open notes」、「what is 12% of 80」、「will it rain tomorrow in rome」、「create diary.txt」、「who is Einstein」。",
+      "Search for a command…": "搜索命令…",
+      "Navigation": "导航",
+      "Settings": "设置",
+      "Keyboard shortcuts": "键盘快捷键",
+      "No results": "无结果",
+      "Web: current answers with sources (Groq compound)": "网页：带来源的最新回答（Groq compound）",
+      "Sources": "来源",
+      "\u{1F310} Searching the web…": "\u{1F310} 正在搜索网页…",
+      "Web mode needs a Groq key — set it in Settings ▸ AI.": "网页模式需要 Groq 密钥，请在「设置 ▸ AI」中设置。",
+      "Interface colours. Follows the system if unset.": "界面颜色。未设置时跟随系统。",
+      "Text size in the conversation.": "对话中的文字大小。",
+      "Assistant and interface language.": "助手和界面的语言。",
+      "Source for voice dictation.": "语音听写的音源。",
+      "How fast reply text streams in.": "回复文字出现的速度。",
+      "How fast the device reads aloud (on-device voice).": "设备朗读的速度（设备端语音）。",
+      "Read replies aloud with the browser voice (also online/long replies).": "用浏览器语音朗读回复（包括在线回复和长回复）。",
+      "Yes": "是",
+      "Where the intelligence runs: device, browser or online.": "智能在哪里运行：设备、浏览器或在线。",
+      "Local GPU": "本地 GPU",
+      "Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Device. It scales onto the device only as the last net. Type /guide in chat for the full map.": "后备链：在线（云端）→ 本地 GPU → 浏览器（WASM + 网页索引）→ 设备。只有最后兜底时才交给设备。在对话中输入 /guide 查看完整说明。",
+      "The offline brain downloaded in this browser.": "已下载到此浏览器的离线大脑。",
+      "The LLM that runs in YOUR browser on the GPU. Downloaded once, only when you press “Download now”, then works offline. Bigger = better but needs more VRAM.": "在你的浏览器中用 GPU 运行的 LLM。只在你按下「立即下载」时下载一次，之后可离线使用。越大越好，但需要更多显存（VRAM）。",
+      "The device's offline programmatic brain. Auto: stands down when online or a browser model answers (frees RAM). On: always. Off: never.": "设备的离线程序化大脑。自动：在线模型或浏览器模型作答时暂停（释放 RAM）。开：始终启用。关：从不启用。",
+      "Replies": "回复",
+      "Show example prompts under replies.": "在回复下方显示示例问题。",
+      "Summarises old turns to stay light.": "概括较早的对话轮次，保持轻量。",
+      "Context & Agents": "上下文与智能体",
+      "Context window": "上下文窗口",
+      "Inspect": "查看",
+      "Agents (Online)": "智能体（在线）",
+      "For complex tasks (files, apps, web, device state) use the multi-agent runtime. Works with Claude or Grok.": "复杂任务（文件、应用、网页、设备状态）使用多智能体运行时。支持 Claude 或 Grok。",
+      "Auto-approve agent actions": "自动批准智能体操作",
+      "Run the agent's actions (file edits, scripts) without asking (not recommended). Deleting, installing apps and hardware actions always ask.": "不经询问直接执行智能体的操作（修改文件、脚本），不推荐。删除、安装应用和硬件操作始终会询问。",
+      "Web search (agent)": "网页搜索（智能体）",
+      "Let the agent search the web.": "允许智能体搜索网页。",
+      "AI Models — Forge": "AI 模型 — Forge",
+      "Install an AI model once: it then runs in YOUR browser, offline, no cloud. Source: the internet (CDN) first; with no network, the device SD. Every part is checksum-verified (SHA-256) and kept, so a dropped connection resumes by itself. One install at a time.": "AI 模型只需安装一次，之后就在你的浏览器中离线运行，无需云端。来源：优先使用互联网（CDN）；没有网络时使用设备的 SD 卡。每个部分都经过校验（SHA-256）并保存，连接中断后会自动续传。一次只能安装一个。",
+      "<li>Pick a model below — “GPU” needs WebGPU (faster), “CPU” runs anywhere.</li><li>Press <b>Install</b>: while it downloads the rest of NucleoOS waits — you can only watch or <b>cancel</b>.</li><li>When it finishes the model is ready offline: you can unplug the network.": "<li>在下方选择一个模型：「GPU」需要 WebGPU（更快），「CPU」随处可用。</li><li>按下<b>安装</b>：下载期间 NucleoOS 的其他部分会等待，你只能查看进度或<b>取消</b>。</li><li>完成后模型即可离线使用：可以断开网络。",
+      "Which engines run with the cable pulled. \u{2708} air-gapped · ↓ one download · ◌ needs weights · ! SD incomplete (re-sync) · \u{2601} cloud · ⊘ not here.": "断网时哪些引擎可以运行。\u{2708} 完全离线 · ↓ 需下载一次 · ◌ 需要权重 · ! SD 不完整（需重新同步）· \u{2601} 云端 · ⊘ 此处不可用。",
+      "Deep SHA-256 verification of the weights on the SD.": "对 SD 卡上的权重进行深度 SHA-256 校验。",
+      "en-US": "zh-CN",
+      "Show all ": "显示全部 ",
+      " lines": " 行",
+      "memory": "记忆",
+      "understood: ": "理解为：",
+      "low coherence": "连贯性低",
+      "knowledge graph (KGE)": "知识图谱（KGE）",
+      "knowledge retrieval": "知识检索",
+      "calculator": "计算器",
+      "dictionary": "词典",
+      "clarify": "澄清",
+      "system value": "系统数值",
+      "launch app": "启动应用",
+      "tool action": "工具操作",
+      "capabilities": "功能",
+      "recipes": "配方",
+      "browser · WebGPU": "浏览器 · WebGPU",
+      "Online · Web search": "在线 · 网页搜索",
+      "Online · Multi-agent": "在线 · 多智能体",
+      "Online · Weather": "在线 · 天气",
+      "Online · Exchange": "在线 · 汇率",
+      "Online · Grok teacher": "在线 · Grok 老师",
+      "Browser · web index": "浏览器 · 网页索引",
+      "cached card": "缓存卡片",
+      "Wikipedia (live)": "维基百科（实时）",
+      "Browser · WASM cascade": "浏览器 · WASM 级联",
+      "Device · offline cascade": "设备 · 离线级联",
+      "your browser GPU": "你的浏览器 GPU",
+      "Engine: ": "引擎：",
+      " — click for the full route": " — 点击查看完整路径",
+      "Route": "路径",
+      "Tool": "工具",
+      "Provider": "提供方",
+      "Network": "网络",
+      "none · local GPU": "无 · 本地 GPU",
+      "used (online)": "已使用（在线）",
+      "none (offline)": "无（离线）",
+      "Time": "用时",
+      "Domain": "领域",
+      "Intent": "意图",
+      "Confidence": "置信度",
+      "Memory": "记忆",
+      "recalled": "已回想",
+      "Understood": "理解为",
+      "State": "状态",
+      "Coherence": "连贯性",
+      "low": "低",
+      "Relation": "关系",
+      "Substrate": "基底",
+      " · on-device": " · 设备端",
+      " · browser GPU": " · 浏览器 GPU",
+      "Verdict": "结论",
+      "Length": "长度",
+      " chars": " 个字符",
+      "Steps": "步骤",
+      "to interrupt": "中断",
+      "compacted ": "已压缩 ",
+      " earlier turns": " 个较早的轮次",
+      "Context ": "上下文 ",
+      "Already compact": "已经很紧凑",
+      "your next message": "你的下一条消息",
+      "Context": "上下文",
+      "Compact now": "立即压缩",
+      "Working memory (facts)": "工作记忆（事实）",
+      "No facts tracked yet — start a conversation.": "尚未记录任何事实，开始对话吧。",
+      "Sent to the model": "发送给模型的内容",
+      "turns": "轮",
+      "Offline mode: the device answers with its on-board cascade. Context = the working memory above + recent turns.": "离线模式：由设备用其内置级联作答。上下文 = 上方的工作记忆 + 最近的轮次。",
+      "System": "系统",
+      "You": "你",
+      "Local GPU · WebLLM": "本地 GPU · WebLLM",
+      "Setting up ANIMA on this device": "正在此设备上设置 ANIMA",
+      "Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the device off. One-time download.": "正在把 ANIMA 的离线大脑复制到此浏览器，以便在本地运行：快速、私密，设备关机也能继续使用。只需下载一次。",
+      "Cancel download": "取消下载",
+      "Cancelling…": "正在取消…",
+      "loading engine…": "正在加载引擎…",
+      "checking for updates…": "正在检查更新…",
+      "updating the brain…": "正在更新大脑…",
+      "brain · ": "大脑 · ",
+      "starting…": "正在启动…",
+      "Retry": "重试",
+      "Use device": "使用设备",
+      "Download ANIMA’s offline brain?": "下载 ANIMA 的离线大脑？",
+      "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the device off.": "要在此浏览器中本地运行 ANIMA，需要从设备下载一次它的大脑（约 88 MB）。之后快速、私密，设备关机也能使用。",
+      "Download (~88 MB)": "下载（约 88 MB）",
+      "capital of France": "capital of France",
+      "How ANIMA works": "ANIMA 的工作原理",
+      "Got it": "知道了",
+      "Re-download ANIMA's brain (~88 MB)?": "重新下载 ANIMA 的大脑（约 88 MB）？",
+      " · best": " · 最佳",
+      "Loading… ": "正在加载… ",
+      "✓ Ready — runs offline now": "✓ 已就绪，现在可离线运行",
+      "Download cancelled — using the device": "下载已取消，改用设备",
+      "The agent is about to create files, but no workspace is open.\nOpen a workspace now so the files stay visible here?\n(Cancel = write to the temporary /data/agent folder.)": "智能体即将创建文件，但尚未打开工作区。\n现在打开一个工作区，让文件显示在这里吗？\n（取消 = 写入临时文件夹 /data/agent。）",
+      "The agent wants to ": "智能体想要",
+      "Allow?": "允许吗？",
+      "\u{2699} Multi-agent…": "\u{2699} 多智能体…",
+      "Agents · orchestrator → worker": "智能体 · 协调者 → 执行者",
+      "Stopped.": "已停止。",
+      " Some file changes were already applied.": "部分文件修改已经生效。",
+      "(Note: some file changes were already applied before the interruption.)\n\n": "（注意：中断前部分文件修改已经生效。）\n\n",
+      "\u{26A0} Offline fallback (the online model was unreachable):\n\n": "\u{26A0} 离线后备（无法连接在线模型）：\n\n",
+      "Send": "发送",
+      "just now": "刚刚",
+      "m ago": "分钟前",
+      "h ago": "小时前",
+      "d ago": "天前",
+      "conversation": "个对话",
+      "conversations": "个对话",
+      "Browser voice ON": "浏览器语音：开",
+      "Browser voice OFF": "浏览器语音：关",
+      "Nothing to compact": "没有可压缩的内容",
+      "Opening **Forge** — the offline agentic coder (you pick the engine: GPU/CPU/cloud/device).": "正在打开 **Forge**：离线的智能编程助手（引擎由你选择：GPU/CPU/云端/设备）。",
+      "Model manager (downloads)": "模型管理器（下载）",
+      "Scroll to top": "滚动到顶部",
+      "Scroll to bottom": "滚动到底部",
+      "New line": "换行",
+      "Command palette": "命令面板",
+      "Input history": "输入历史",
+      "Stop / close": "停止 / 关闭",
+      "current": "当前",
+      "Dictate": "听写",
+      "device mic": "设备麦克风",
+      "online model": "在线模型",
+      "browser mic": "浏览器麦克风",
+      "Stop dictation": "停止听写",
+      "Dictation is unavailable right now.": "当前无法使用听写。",
+      "Loading voice model…": "正在加载语音模型…",
+      "Reconnecting…": "正在重新连接…",
+      "Microphone permission denied.": "麦克风权限被拒绝。",
+      "No microphone found.": "未找到麦克风。",
+      "Device not paired — enter the PIN in NucleoOS, then retry.": "设备未配对：请在 NucleoOS 中输入 PIN 后重试。",
+      "Voice model unavailable: not on SD and no internet for the fallback.": "语音模型不可用：SD 卡上没有，也没有网络可用于后备下载。",
+      "Dictation error.": "听写出错。",
+      "GPU · needs WebGPU ✗": "GPU · 需要 WebGPU ✗",
+      "CPU · runs anywhere": "CPU · 随处可用",
+      "re-install": "重新安装",
+      "Install": "安装",
+      "installed — runs offline": "已安装，可离线运行",
+      "Device recipes": "设备配方",
+      "weights": "权重",
+      "needs: ": "需要：",
+      " verifying…": " 正在校验…",
+      " FAILED — re-sync the SD: ": " 失败，请重新同步 SD 卡：",
+      "Key manager unavailable.": "密钥管理器不可用。",
+      "Voice needs HTTPS or localhost": "语音需要 HTTPS 或 localhost",
+      "Data": "数据",
+      "Close": "关闭",
+      " (ready)": "（已就绪）",
+      "Engine mode — click to switch": "引擎模式，点击切换",
+      "Offline AI (L1)": "离线 AI（L1）",
+      "Browser voice": "浏览器语音",
+      "Online AI key": "在线 AI 密钥",
+      "Model": "模型",
+      "Weather and Wikipedia already work without a key. The key powers the online AI: better understanding, anti-error verification and \"Online\" mode. <b>Claude</b> answers straight from the browser (it doesn’t load the device). The key stays only on your device (SD), never in logs.": "天气和维基百科无需密钥即可使用。密钥用于在线 AI：理解更准确、防错校验以及「在线」模式。<b>Claude</b> 直接从浏览器作答（不占用设备）。密钥只保存在你的设备上（SD 卡），绝不写入日志。",
+      "<kbd>⏎</kbd> send · <kbd>/</kbd> commands · <kbd>⌘K</kbd> palette · <kbd>?</kbd> help": "<kbd>⏎</kbd> 发送 · <kbd>/</kbd> 命令 · <kbd>⌘K</kbd> 命令面板 · <kbd>?</kbd> 帮助",
+      "Choose workspace": "选择工作区",
+      "ANIMA offline runs entirely in this browser (WebAssembly): it downloads the brain once from the device, then answers locally even without the device — the exact same answers.": "离线 ANIMA 完全在此浏览器中运行（WebAssembly）：从设备下载一次大脑，之后即使没有设备也能在本地作答，回答完全一样。",
+      "Download now": "立即下载",
+      "Workspace: ": "工作区：",
+      "Workspace closed": "工作区已关闭",
+      "No workspace": "无工作区",
+      "Open a workspace": "打开工作区",
+      "Workspace": "工作区",
+      "none open": "未打开",
+      "No workspace open": "未打开工作区",
+      "Workspace no\u0020longer on SD — deselected: ": "工作区已不在 SD 卡上，已取消选择：",
+      "(empty)": "（空）",
+      "loading…": "正在加载…",
+      "cannot read (pair the browser?)": "无法读取（浏览器是否已配对？）",
+      "no subfolders here": "这里没有子文件夹",
+      "New folder name:": "新文件夹名称：",
+      "Open a workspace first.": "请先打开一个工作区。",
+      "That path is outside the workspace.": "该路径不在工作区内。",
+      "Not found: **": "未找到：**",
+      "Tell me which text to replace.": "告诉我要替换哪段文字。",
+      "** already exists. Overwrite?": "** 已存在。要覆盖吗？",
+      "Invalid search pattern.": "搜索模式无效。",
+      "Pair this browser to manage files.": "请先配对此浏览器再管理文件。",
+      "Operation failed": "操作失败",
+      "not done": "未执行",
+      "Read **": "已读取 **",
+      " lines · ": " 行 · ",
+      " (truncated)": "（已截断）",
+      "Created **": "已创建 **",
+      "Updated **": "已更新 **",
+      " · new": " · 新建",
+      " · overwritten": " · 已覆盖",
+      "Appended to **": "已追加到 **",
+      "Edited **": "已编辑 **",
+      " replacements": " 处替换",
+      "Renamed ": "已重命名 ",
+      "Moved ": "已移动 ",
+      "from ": "原位置：",
+      "Deleted **": "已删除 **",
+      "removed": "已移除",
+      "Created folder **": "已创建文件夹 **",
+      "folder": "文件夹",
+      "Contents of **": "内容：**",
+      " folders, ": " 个文件夹，",
+      " files": " 个文件",
+      "Tree of **": "目录树：**",
+      " matches for **": " 处匹配 **",
+      "** in ": "**，分布于 ",
+      "No matches for **": "没有匹配：**",
+      " files match **": " 个文件匹配 **",
+      "Now in **": "当前位于 **",
+      "workspace folder": "工作区文件夹",
+      "stopped": "已停止",
+      "(no output)": "（无输出）",
+      "Ran **": "已运行 **",
+      "completed": "已完成",
+      "Done.": "完成。",
+      "Open": "打开",
+      "Overwrite": "覆盖",
+      "list ": "list ",
+      "choose a folder on the SD": "在 SD 卡上选择一个文件夹",
+      "Open…": "打开…",
+      "That looks like a file operation. Open a **workspace** first and I will run it there — your files stay on the SD.": "这看起来是文件操作。请先打开一个**工作区**，我会在那里执行，你的文件会留在 SD 卡上。",
+      "Close the workspace?": "关闭工作区？",
+      "New folder:": "新文件夹：",
+      "Folder created": "文件夹已创建",
+      "New file:": "新文件：",
+      "Already exists": "已存在",
+      "Failed": "失败",
+      "Model manager": "模型管理器",
+      "Loading the catalogue…": "正在加载目录…",
+      "Catalogue not found": "未找到目录",
+      "Ready": "就绪",
+      "Partial": "不完整",
+      "Already on SD": "已在 SD 卡上",
+      "To provision": "待准备",
+      "Downloadable": "可下载",
+      "No action needed.": "无需操作。",
+      "How to get it": "获取方式",
+      "Source: ": "来源：",
+      "ONNX export: ": "ONNX 导出：",
+      "Resume": "继续",
+      "Download": "下载",
+      "Manifest unreachable on the configured CDN.": "无法从配置的 CDN 获取清单。",
+      "Pause": "暂停",
+      "Cancel": "取消",
+      "Commands (Ctrl/⌘ K)": "命令（Ctrl/⌘ K）",
+      "Workspace / files": "工作区 / 文件",
+      "ANIMA engine": "ANIMA 引擎",
+      "Go to bottom": "转到底部",
+      "Switch mode": "切换模式",
+      "Switch language": "切换语言",
+      "↻ Refresh": "↻ 刷新",
+      "+ Folder": "+ 文件夹",
+      "Close workspace": "关闭工作区",
+      "+ New folder": "+ 新建文件夹",
+      "Use this folder": "使用此文件夹",
+      "Show, under every reply, which tool ANIMA used\u0020to reason (engine, model, steps). Line = a collapsible one-liner; Tree = expanded.": "在每条回复下方显示 ANIMA 推理时使用的工具（引擎、模型、步骤）。单行 = 可展开的一行摘要；树状 = 完全展开。",
+      "ANIMA’s offline brain downloaded in this browser. Cached = it works even without the device.": "已下载到此浏览器的 ANIMA 离线大脑。已缓存 = 即使没有设备也能使用。",
+      "Re-download the brain from the device (if you updated it) and rebuild the local cache.": "从设备重新下载大脑（如果你更新过）并重建本地缓存。",
+      "Download/load the model in the browser now (shows progress). It never downloads by itself: until it is installed, chat skips the local GPU.": "立即在浏览器中下载/加载模型（显示进度）。它不会自行下载：安装之前，对话会跳过本地 GPU。",
+      "Message": "消息",
+      ") — click to inspect": "）— 点击查看",
+      "Compacted ": "已压缩 ",
+      " turns": " 轮",
+      "Context compacted in background (": "已在后台压缩上下文（",
+      " turns)": " 轮）",
+      "in use by ": "使用中：",
+      "The device mic is in use by ": "设备麦克风正被占用：",
+      "another app": "另一个应用",
+      ". Stop it there, then try again.": "。请先在那里停止，然后重试。",
+      "The device mic is busy": "设备麦克风正忙",
+      " (in use by ": " (使用者：",
+      " (a recording is in progress)": " (正在录音)",
+      "PC · Multi-agent": "PC · 多智能体",
+      "NucleoOS · console data": "NucleoOS · 主机数据",
+      "device API": "设备 API",
+      "your PC": "你的 PC",
+      "Play on the console": "在主机上玩",
+      "Play here": "在这里玩",
+      "On the console": "在主机上",
+      "PIN needed": "需要 PIN",
+      "failed": "失败",
+      "downloaded ✓": "已下载 ✓",
+      "still running…": "仍在进行…",
+      "console unreachable": "无法连接主机",
+      "started ✓": "已启动 ✓",
+      "a game is already open": "已有游戏在运行",
+      "console not ready": "主机未就绪",
+      "one moment…": "请稍候…",
+      "Agents · PC · ": "智能体 · PC · ",
+      "I can't find an app with that name.": "找不到这个名称的应用。",
+      "Permanently delete ": "永久删除",
+      "?\nWorkspace files are not moved to a trash.": "？\n工作区中的文件不会移到回收站。",
+      "Could not create the folder": "无法创建文件夹",
+      "Device voice speed": "设备语音速度",
+      "Local model (GPU)": "本地模型（GPU）",
+      "SD integrity": "SD 完整性",
+      "Air-gap readiness": "断网就绪情况",
+      "Search conversations": "搜索对话",
+      "Conversations (Ctrl/⌘⇧S)": "对话（Ctrl/⌘⇧S）",
+      "Show/hide conversations": "显示/隐藏对话",
+      "+ File": "+ 文件",
+      "The agent wants to run: ": "智能体想要执行：",
+      "Path: ": "路径：",
+      "Target: ": "目标：",
+      "Hardware action (it acts in the real world): it is always confirmed.": "硬件操作（会作用于现实世界）：始终需要确认。",
+      "Irreversible or system-level action: it is always confirmed, even with auto-approve on.": "不可撤销或系统级操作：即使开启了自动批准，也始终需要确认。",
+      "installed": "已安装",
+      "not installed — chat skips it until you download it": "未安装：下载之前对话不会使用它",
+      "Download {m} (~{gb} GB) into this browser? It happens once; afterwards it runs offline on your GPU.": "将 {m}（约 {gb} GB）下载到此浏览器？只需一次，之后在你的 GPU 上离线运行。",
+      "Preparing… (if another download is running, it waits for it to finish)": "正在准备…（如果有其他下载正在进行，会等待其完成）",
+      "the event was not added": "日程未添加",
+      "the volume was not changed": "音量未更改",
+      "the brightness was not changed": "亮度未更改",
+      "the file was not created": "文件未创建",
+      "the command was not carried out": "命令未执行",
+      "This browser isn’t paired with the device (PIN needed)": "此浏览器尚未与设备配对（需要 PIN）",
+      "The device is busy, try again in a moment": "设备正忙，请稍后重试",
+      "The request is too long for the device": "请求过长，设备无法处理",
+      "This device’s firmware can’t run it from the web (update it)": "此设备的固件无法从网页执行该操作（请更新固件）",
+      "The device did not recognise it as a command": "设备未将其识别为命令",
+      "The device refused or could not do it": "设备拒绝了，或无法完成",
+      "I can’t reach the device": "无法连接设备",
+      "Volume": "音量",
+      "Brightness": "亮度",
+      "Done on the device": "已在设备上完成",
+      "This question is too long for the device: shorten it and try again.": "这个问题对设备来说太长了：请缩短后重试。",
+      "General": "通用",
+      "offline + online": "离线 + 在线",
+      "offline": "离线",
+      "online": "在线",
+      "error": "错误",
+      "Host": "服务器",
+      "Error: ": "错误：",
+      "tokens · ": "token · ",
+      "Local · GPU": "本地 · GPU",
+      "Local · CPU": "本地 · CPU",
+      " tokens (": " token（",
+      " tokens · ": " token · ",
+      "Browser · exact rule": "浏览器 · 精确规则",
+      "arithmetic": "算术",
+      "app launch": "启动应用",
+      "calendar": "日历",
+      "measuring...": "正在测量…",
+      "Nothing downloads without your OK. Without the local brain, ANIMA still uses the device and the other minds.": "未经你同意不会下载任何内容。没有本地大脑时，ANIMA 仍会使用设备和其他大脑。",
+      "recommended for this GPU": "推荐用于此 GPU",
+      "Plan": "计划",
+      "This answer didn’t go through": "这条回答未能送达",
+      ". Try again in a moment: if the device was restarting, it is ready now.": "。请稍后重试：如果设备刚才在重启，现在已经就绪。",
+      "Opening **Agents** — ANIMA Code: pick the engine (cloud or local) from the \u{1F9E0} button.": "正在打开**智能体** — ANIMA Code：用 \u{1F9E0} 按钮选择引擎（云端或本地）。",
+      "GPU · WebGPU ✓": "GPU · WebGPU ✓"
+    };
+    function TR(it,en){ const l=uiLang; if(l==='it')return it; if(l==='en')return en; const o=ANIMA_L10N[l]; return (o&&o[en]!=null)?o[en]:en; }
     // Catalog strings — apps/anima/www/i18n.<lang>.json through the OS i18n engine, all five languages,
     // checked by `npm run i18n:gate`. Every string this app adds or reworks lives there; TR()/ANIMA_L10N
     // stay only for the older inline it/en pairs. Until a catalog has arrived (first paint, or the moment
@@ -2892,10 +3434,11 @@
     const _lastL={};
     function L(k,vars){ const v=I18N.t(k,vars,'anima'); if(v===k) return _lastL[k+'|'+(vars?JSON.stringify(vars):'')]||''; _lastL[k+'|'+(vars?JSON.stringify(vars):'')]=v; return v; }
     (function(){ const mp=(o,tr)=>{ if(typeof o==='string')return (tr&&tr[o]!=null)?tr[o]:o; if(Array.isArray(o))return o.map(v=>mp(v,tr)); if(o&&typeof o==='object'){ const r={}; for(const k in o) r[k]=mp(o[k],tr); return r; } return o; };
-      for(const L of ['es','fr','de']) UI[L]=mp(UI.en, ANIMA_L10N[L]); })();
+      for(const L of ['es','fr','de','zh']) UI[L]=mp(UI.en, ANIMA_L10N[L]); })();
 
     // ---- state ----------------------------------------------------------------
     let lang    = LANG();
+    let uiLang  = (()=>{ try{ return UILANG(lang, I18N.lang); }catch{ return lang; } })();
     let speed   = parseInt(get('anima.speed','14')); if(![0,6,14].includes(speed)) speed=14;
     // Default AUTO: walk the ladder and use the best brain available right now (see chooseMode). The
     // key, the two values and the legacy map live in /anima-mode.js — the copilot reads the same module.
@@ -3141,24 +3684,24 @@
     const RUNNABLE_LANG=/^(js|javascript|mjs|cjs|node|jsx|es|ecmascript)$/i;
     function attachRun(bar, wrap, code, langRaw){
       if(!RUNNABLE_LANG.test(langRaw||'')) return;
-      const rb=document.createElement('button'); rb.className='cbtn'; rb.style.color='var(--accent2)'; rb.textContent='▶ '+UI[lang].run;
+      const rb=document.createElement('button'); rb.className='cbtn'; rb.style.color='var(--accent2)'; rb.textContent='▶ '+UI[uiLang].run;
       let out=null, rt=null, running=false;
       const put=(cls,txt)=>{ const d=document.createElement('div'); d.style.cssText='white-space:pre-wrap;word-break:break-word;padding:1px 0;'+({err:'color:var(--err)',warn:'color:var(--warn)',info:'color:var(--accent2)',sys:'color:var(--dim);font-style:italic',ret:'color:var(--ok)'}[cls]||'color:var(--text)'); d.textContent=txt; out.appendChild(d); out.scrollTop=out.scrollHeight; };
       rb.addEventListener('click', async ()=>{
         if(running){ if(rt) rt.stop(); return; }
         if(!out){ out=document.createElement('div'); out.className='runout'; out.style.cssText='border-top:1px solid var(--line);background:var(--code-bg,#0a0e16);font:12px/1.5 ui-monospace,Consolas,monospace;max-height:240px;overflow:auto;padding:6px 10px;user-select:text'; wrap.appendChild(out); }
-        out.innerHTML=''; running=true; rb.textContent='■ '+UI[lang].running;
+        out.innerHTML=''; running=true; rb.textContent='■ '+UI[uiLang].running;
         try{
           const mod=await loadRunEngine();
           rt=mod.createRunner({ cwd: fs.hasRoot()?(fs.getRoot()||'/'):'/data', lang, timeoutMs:6000, hasDevice:(n)=>Caps.has(n),
             onLog:(lvl,t)=>{ if(lvl==='clear'){ out.innerHTML=''; return; } put(lvl==='error'?'err':lvl==='warn'?'warn':lvl==='info'?'info':'log', t); },
             onNotify:(t)=>put('sys','🔔 '+t) });
           const r=await rt.run(code);
-          if(r.ok){ if(r.hasValue) put('ret','⇐ '+r.value); put('sys','✓ '+Math.round(r.ms||0)+' ms'); rb.textContent='▶ '+UI[lang].ran; }
-          else if(r.timeout){ put('err','⏱ '+r.error); rb.textContent='▶ '+UI[lang].runErr; }
-          else if(r.stopped){ put('sys','■'); rb.textContent='▶ '+UI[lang].run; }
-          else { put('err','✖ '+(r.error||'')); if(r.stack) put('err', String(r.stack).split('\n').slice(0,3).join('\n')); rb.textContent='▶ '+UI[lang].runErr; }
-        }catch(e){ if(!out){ out=document.createElement('div'); wrap.appendChild(out); } put('err','✖ '+(e&&e.message||e)); rb.textContent='▶ '+UI[lang].runErr; }
+          if(r.ok){ if(r.hasValue) put('ret','⇐ '+r.value); put('sys','✓ '+Math.round(r.ms||0)+' ms'); rb.textContent='▶ '+UI[uiLang].ran; }
+          else if(r.timeout){ put('err','⏱ '+r.error); rb.textContent='▶ '+UI[uiLang].runErr; }
+          else if(r.stopped){ put('sys','■'); rb.textContent='▶ '+UI[uiLang].run; }
+          else { put('err','✖ '+(r.error||'')); if(r.stack) put('err', String(r.stack).split('\n').slice(0,3).join('\n')); rb.textContent='▶ '+UI[uiLang].runErr; }
+        }catch(e){ if(!out){ out=document.createElement('div'); wrap.appendChild(out); } put('err','✖ '+(e&&e.message||e)); rb.textContent='▶ '+UI[uiLang].runErr; }
         finally{ if(rt) rt.dispose(); rt=null; running=false; }
       });
       bar.appendChild(rb);
@@ -3189,9 +3732,9 @@
     // Wire a copy button. getText() -> the text; selectEl -> what to select when copying is refused.
     function wireCopy(btn, getText, selectEl){
       btn.addEventListener('click',()=>{ copyText(getText()).then((ok)=>{
-        if(ok){ btn.textContent=UI[lang].copied+' ✓'; }
+        if(ok){ btn.textContent=UI[uiLang].copied+' ✓'; }
         else { btn.textContent=L('copyNo'); if(selectEl) selectNode(selectEl); toast(L('copyUnavailable'),'warn'); }
-        setTimeout(()=>btn.textContent=UI[lang].copy, ok?1100:2600);
+        setTimeout(()=>btn.textContent=UI[uiLang].copy, ok?1100:2600);
       }); });
     }
 
@@ -3205,7 +3748,7 @@
           const wrap=document.createElement('div'); wrap.className='codewrap';
           const bar=document.createElement('div'); bar.className='codebar';
           const lab=document.createElement('span'); lab.className='lang'; lab.textContent=langRaw||'code'; bar.appendChild(lab);
-          const cb=document.createElement('button'); cb.className='cbtn'; cb.textContent=UI[lang].copy;
+          const cb=document.createElement('button'); cb.className='cbtn'; cb.textContent=UI[uiLang].copy;
           const pre=document.createElement('pre'); pre.className='code'; pre.innerHTML=hl(code,langRaw);
           wireCopy(cb, ()=>code, pre);
           bar.appendChild(cb); attachRun(bar, wrap, code, langRaw); wrap.appendChild(bar);
@@ -3245,18 +3788,18 @@
       d.innerHTML='<div class="gut">⏺</div>'; d.appendChild(body);
       const act=document.createElement('div'); act.className='msg-actions';
       const mkBtn=(label,fn)=>{ const b=document.createElement('button'); b.textContent=label; b.addEventListener('click',fn); return b; };
-      const cp=document.createElement('button'); cp.textContent=UI[lang].copy;
+      const cp=document.createElement('button'); cp.textContent=UI[uiLang].copy;
       wireCopy(cp, ()=>body.dataset.raw||body.textContent, body);
       act.appendChild(cp);
       if(engineReply && hidx!=null){
-        act.appendChild(mkBtn('↻ '+UI[lang].regenerate, ()=>regenerate(hidx)));
-        act.appendChild(mkBtn('✎ '+UI[lang].mEdit,      ()=>editFrom(hidx)));
-        act.appendChild(mkBtn('⑂ '+UI[lang].branch,     ()=>branchFrom(hidx)));
+        act.appendChild(mkBtn('↻ '+UI[uiLang].regenerate, ()=>regenerate(hidx)));
+        act.appendChild(mkBtn('✎ '+UI[uiLang].mEdit,      ()=>editFrom(hidx)));
+        act.appendChild(mkBtn('⑂ '+UI[uiLang].branch,     ()=>branchFrom(hidx)));
       }
       if(hidx!=null){   // pin: kept verbatim through context compaction
         const pinned=()=> !!(history[hidx] && history[hidx].pinned);
-        const pb=mkBtn('', ()=>{ const e=history[hidx]; if(!e) return; e.pinned=!e.pinned; pb.classList.toggle('on',e.pinned); pb.textContent=(e.pinned?'⭐ ':'☆ ')+UI[lang].pin; persist(); toast(e.pinned?UI[lang].pinned:UI[lang].unpinned); });
-        pb.textContent=(pinned()?'⭐ ':'☆ ')+UI[lang].pin; if(pinned()) pb.classList.add('on'); pb.title=UI[lang].pinHint; act.appendChild(pb);
+        const pb=mkBtn('', ()=>{ const e=history[hidx]; if(!e) return; e.pinned=!e.pinned; pb.classList.toggle('on',e.pinned); pb.textContent=(e.pinned?'⭐ ':'☆ ')+UI[uiLang].pin; persist(); toast(e.pinned?UI[uiLang].pinned:UI[uiLang].unpinned); });
+        pb.textContent=(pinned()?'⭐ ':'☆ ')+UI[uiLang].pin; if(pinned()) pb.classList.add('on'); pb.title=UI[uiLang].pinHint; act.appendChild(pb);
       }
       d.appendChild(act);
       w.appendChild(d); logEl.appendChild(w); enter(d); scrollDown(true);
@@ -3271,7 +3814,7 @@
     function addTrace(host, steps){
       const det=document.createElement('details'); det.className='trace'; det.open=false;   // tidy collapsed disclosure
       const sm=document.createElement('summary');
-      sm.innerHTML='<span class="tw">▸</span><span>'+esc(UI[lang].reasoning)+' · '+steps.length+' '+esc(UI[lang].steps)+'</span>';
+      sm.innerHTML='<span class="tw">▸</span><span>'+esc(UI[uiLang].reasoning)+' · '+steps.length+' '+esc(UI[uiLang].steps)+'</span>';
       det.appendChild(sm);
       const box=document.createElement('div'); box.className='steps';
       steps.forEach(s=>addLined(box, s, 'dim')); det.appendChild(box); host.appendChild(det);
@@ -3430,12 +3973,12 @@
         im.addEventListener('click',()=>{ try{ window.open(c.img,'_blank','noopener'); }catch{} }); im.addEventListener('error',()=>im.remove()); cl.appendChild(im); }
       card.appendChild(cl);
       if(c.btn){ const go=document.createElement('button'); go.className='cgo'; go.textContent=c.btn;
-        go.addEventListener('click',()=>{ c.onClick&&c.onClick(); go.textContent=UI[lang].sent+' ✓'; go.classList.add('done'); }); card.appendChild(go); }
+        go.addEventListener('click',()=>{ c.onClick&&c.onClick(); go.textContent=UI[uiLang].sent+' ✓'; go.classList.add('done'); }); card.appendChild(go); }
       // più azioni sulla stessa scheda (un gioco: qui o sulla console). onClick può tornare il testo
       // dell'esito, che prende il posto dell'etichetta: "avviato ✓", "serve il PIN"...
       (c.btns||[]).forEach(b=>{ const go=document.createElement('button'); go.className='cgo'; go.textContent=b.label;
         go.addEventListener('click',async()=>{ go.disabled=true; let out; try{ out=await b.onClick(); }catch{}
-          go.textContent=out||(UI[lang].sent+' ✓'); go.classList.add('done'); setTimeout(()=>{ go.disabled=false; },4000); });
+          go.textContent=out||(UI[uiLang].sent+' ✓'); go.classList.add('done'); setTimeout(()=>{ go.disabled=false; },4000); });
         card.appendChild(go); });
       host.appendChild(card);
     }
@@ -3506,22 +4049,22 @@
     const SPARK=['✳','✶','✻','✺','✸','✷'];
     function startThinking(){
       const w=wrapEl(); const d=document.createElement('div'); d.className='turn bot'; d.setAttribute('aria-hidden','true');
-      let vi=Math.floor(Math.random()*UI[lang].thinking.length);
-      d.innerHTML='<div class="gut"></div><div class="thinking"><span class="sp">✻</span><span class="vb">'+esc(UI[lang].thinking[vi])+'…</span>'+
+      let vi=Math.floor(Math.random()*UI[uiLang].thinking.length);
+      d.innerHTML='<div class="gut"></div><div class="thinking"><span class="sp">✻</span><span class="vb">'+esc(UI[uiLang].thinking[vi])+'…</span>'+
         '<span class="el">(0s)</span><span class="esc">· <kbd>esc</kbd> '+esc(L('escToStop'))+'</span></div>';
       w.appendChild(d); logEl.appendChild(w); scrollDown(true);
       const sp=d.querySelector('.sp'), el=d.querySelector('.el'), vb=d.querySelector('.vb');
       const t0=Date.now(); let k=0, status='';   // status = a sticky line (e.g. live agent step) that overrides the rotating verbs
       const iv=setInterval(()=>{ sp.textContent=SPARK[k++%SPARK.length]; el.textContent='('+Math.round((Date.now()-t0)/1000)+'s)';
-        if(status){ vb.textContent=status; } else if(k%18===0){ vi=(vi+1)%UI[lang].thinking.length; vb.textContent=UI[lang].thinking[vi]+'…'; } }, 110);
+        if(status){ vb.textContent=status; } else if(k%18===0){ vi=(vi+1)%UI[uiLang].thinking.length; vb.textContent=UI[uiLang].thinking[vi]+'…'; } }, 110);
       return { remove(){ clearInterval(iv); w.remove(); }, note(s){ status=s||''; if(s){ vb.textContent=s; announce(s); } } };
     }
 
     // welcome / empty state
-    function greeting(){ const h=new Date().getHours(); const g=UI[lang].greet;
+    function greeting(){ const h=new Date().getHours(); const g=UI[uiLang].greet;
       return h<6?g.night : h<12?g.morning : h<18?g.afternoon : g.evening; }
     function welcomeBox(){
-      const t=UI[lang]; const w=wrapEl();
+      const t=UI[uiLang]; const w=wrapEl();
       const wb=document.createElement('div'); wb.className='welcome';
       const card=(title,items,prefix)=>'<div class="wcard"><h5>'+esc(title)+'</h5>'+
         items.map(s=>'<button class="wchip" data-send="'+esc(s)+'">'+(prefix?'<span class="pfx">'+esc(prefix)+'</span>':'')+esc(s)+'</button>').join('')+'</div>';
@@ -3608,7 +4151,7 @@
           set('anima.active', activeId); sessions=pool; sessSdSave(); return;
         }catch(e){
           if(pool.length>1){ const v=pool.filter(s=>s.id!==activeId).sort((a,b)=>a.modified-b.modified)[0];
-            if(v){ pool=pool.filter(s=>s!==v); toast(UI[lang].quotaWarn,'warn'); continue; } }
+            if(v){ pool=pool.filter(s=>s!==v); toast(UI[uiLang].quotaWarn,'warn'); continue; } }
           const a=activeSession(); a.history=a.history.slice(-20); pool=[a];
         }
       }
@@ -3785,7 +4328,7 @@
     function handoffApp(idArg, query){ if(os.inShell) os.openApp(idArg, query ? Object.fromEntries(new URLSearchParams(query)) : undefined); }
     function handoffFile(path){ os.openFile(path); }
     function cardFromDescriptor(c){
-      const t=UI[lang];
+      const t=UI[uiLang];
       if(c.kind==='launch') return { icon:'▦', status:'ok', title:c.arg, sub:t.openApp, btn:t.reopen, onClick:()=>handoffApp(c.arg) };
       if(c.kind==='open_file') return { icon:'≣', status:'ok', title:c.arg, sub:t.openFile, btn:t.openFile, onClick:()=>handoffFile(c.arg) };
       if(c.kind==='create_file') return { icon:'≣', status:c.status||'ok', title:c.arg, sub:c.status==='warn'?t.fileExists:t.fileCreated,
@@ -3967,7 +4510,7 @@
     // First time the local engine is ready, show a one-shot tutorial in the same overlay; afterwards just
     // confirm with a toast. Reuses the two action buttons as "Start" + "Try an example".
     function provReady(){
-      const t=UI[lang];
+      const t=UI[uiLang];
       if(localStorage.getItem('anima.edge.seen')){ provHide(); toast(t.edge.ready,'ok'); return; }
       localStorage.setItem('anima.edge.seen','1');
       const e=provEl();
@@ -4020,7 +4563,7 @@
 
     // Settings · Engine: reflect whether the brain is cached, and offer a re-download.
     async function updateEdgeRow(){
-      const t=UI[lang], s=$('s-edge'), stat=$('edge-stat'), btn=$('edge-reload');
+      const t=UI[uiLang], s=$('s-edge'), stat=$('edge-stat'), btn=$('edge-reload');
       if(s) s.textContent=t.edge.mgmt; if(btn) btn.textContent=t.edge.reload;
       if(!stat) return;
       if(_edgeSyncing) return;                          // a running update owns the status line
@@ -4282,7 +4825,7 @@
     function pcMod(){ return _pcm ? Promise.resolve(_pcm) : (_pcmP ||= import('./local/pc-llm.js').then(m=>(_pcm=m))); }
     let pcMode = get('anima.pc','auto');
     let _pcScan = { at:0, res:null, p:null };
-    const L5 = (o) => (o && (o[lang] || o.en)) || '';
+    const L5 = (o) => (o && (o[uiLang] || o.en)) || '';
     async function pcScan(force){
       if(pcMode==='off' && !force) return null;
       if(!(await hasConsole())) return null;            // the PC-models path belongs to the console (see hasConsole)
@@ -4335,12 +4878,12 @@
     function pcFixCards(){
       const win = /Windows/i.test(navigator.userAgent||'');
       const cards = [];
-      if(win) cards.push({ kind:'action', arg:'pc-helper', title:L5({it:'Collega questo PC', en:'Link this PC', es:'Vincula este PC', fr:'Relier ce PC', de:'Diesen PC verbinden'}),
-        sub:L5({it:'una volta: un file, un avviso di Windows', en:'once: one file, one Windows prompt', es:'una vez: un archivo, un aviso de Windows', fr:'une fois : un fichier, un avertissement de Windows', de:'einmalig: eine Datei, eine Windows-Abfrage'}),
-        btn:L5({it:'Scarica', en:'Download', es:'Descargar', fr:'Télécharger', de:'Herunterladen'}) });
+      if(win) cards.push({ kind:'action', arg:'pc-helper', title:L5({it:'Collega questo PC', en:'Link this PC', es:'Vincula este PC', fr:'Relier ce PC', de:'Diesen PC verbinden', zh:'关联这台 PC'}),
+        sub:L5({it:'una volta: un file, un avviso di Windows', en:'once: one file, one Windows prompt', es:'una vez: un archivo, un aviso de Windows', fr:'une fois : un fichier, un avertissement de Windows', de:'einmalig: eine Datei, eine Windows-Abfrage', zh:'只需一次：一个文件，一次 Windows 提示'}),
+        btn:L5({it:'Scarica', en:'Download', es:'Descargar', fr:'Télécharger', de:'Herunterladen', zh:'下载'}) });
       cards.push({ kind:'action', arg:'pc-open', title:'http://localhost:'+(_pcm?_pcm.PC_PORT:18080),
-        sub:L5({it:'ANIMA da qui usa i modelli del PC', en:'from here ANIMA uses the PC models', es:'desde aquí ANIMA usa los modelos del PC', fr:'d\'ici ANIMA utilise les modèles du PC', de:'von hier nutzt ANIMA die Modelle des PCs'}),
-        btn:L5({it:'Apri', en:'Open', es:'Abrir', fr:'Ouvrir', de:'Öffnen'}) });
+        sub:L5({it:'ANIMA da qui usa i modelli del PC', en:'from here ANIMA uses the PC models', es:'desde aquí ANIMA usa los modelos del PC', fr:'d\'ici ANIMA utilise les modèles du PC', de:'von hier nutzt ANIMA die Modelle des PCs', zh:'从这里 ANIMA 会使用 PC 上的模型'}),
+        btn:L5({it:'Apri', en:'Open', es:'Abrir', fr:'Ouvrir', de:'Öffnen', zh:'打开'}) });
       return cards;
     }
     function pcFixText(res){
@@ -4351,19 +4894,19 @@
         en:'From this address the browser won\'t let me see the PC\'s programs: it\'s a browser safety rule for every page opened at a network address. If **Ollama** (or LM Studio, llama.cpp, Jan, KoboldCpp) runs on the PC, open ANIMA as **http://localhost:18080**: from there the browser allows it, and Ollama accepts it as it is, without touching its settings.',
         es:'Desde esta dirección el navegador no me deja ver los programas del PC: es una regla de seguridad suya para toda página abierta en una dirección de red. Si en el PC funciona **Ollama** (o LM Studio, llama.cpp, Jan, KoboldCpp), abre ANIMA como **http://localhost:18080**: desde ahí el navegador lo permite, y Ollama la acepta tal cual, sin tocar su configuración.',
         fr:'Depuis cette adresse, le navigateur ne me laisse pas voir les programmes du PC : c\'est sa règle de sécurité pour toute page ouverte à une adresse réseau. Si **Ollama** (ou LM Studio, llama.cpp, Jan, KoboldCpp) tourne sur le PC, ouvre ANIMA en **http://localhost:18080** : de là le navigateur l\'autorise, et Ollama l\'accepte telle quelle, sans toucher à sa configuration.',
-        de:'Von dieser Adresse aus lässt mich der Browser die Programme des PCs nicht sehen: Das ist seine Sicherheitsregel für jede Seite unter einer Netzwerkadresse. Läuft auf dem PC **Ollama** (oder LM Studio, llama.cpp, Jan, KoboldCpp), öffne ANIMA als **http://localhost:18080**: Von dort erlaubt es der Browser, und Ollama akzeptiert es so, ohne Änderung seiner Einstellungen.' }) : L5({
+        de:'Von dieser Adresse aus lässt mich der Browser die Programme des PCs nicht sehen: Das ist seine Sicherheitsregel für jede Seite unter einer Netzwerkadresse. Läuft auf dem PC **Ollama** (oder LM Studio, llama.cpp, Jan, KoboldCpp), öffne ANIMA als **http://localhost:18080**: Von dort erlaubt es der Browser, und Ollama akzeptiert es so, ohne Änderung seiner Einstellungen.', zh:'从这个地址，浏览器不允许我查看 PC 上的程序：这是浏览器的安全规则，适用于所有通过网络地址打开的页面。如果 PC 上运行着 **Ollama**（或 LM Studio、llama.cpp、Jan、KoboldCpp），请用 **http://localhost:18080** 打开 ANIMA：从那里浏览器会允许，Ollama 也会照常接受，无需改动它的设置。' }) : L5({
         it:'Sul PC c\'è **'+names+'**, ma non accetta richieste da una pagina aperta all\'indirizzo della console: lo fa di serie, per sicurezza. Senza toccarne la configurazione, la soluzione è aprire ANIMA come **http://localhost:18080**, un indirizzo che accetta così com\'è.',
         en:'**'+names+'** is on this PC, but it won\'t take requests from a page opened at the console\'s address: that\'s its default, for safety. Without touching its settings, the fix is to open ANIMA as **http://localhost:18080**, an address it accepts as it is.',
         es:'En el PC está **'+names+'**, pero no acepta peticiones de una página abierta en la dirección de la consola: lo hace por defecto, por seguridad. Sin tocar su configuración, la solución es abrir ANIMA como **http://localhost:18080**, una dirección que acepta tal cual.',
         fr:'**'+names+'** est sur ce PC, mais il refuse les requêtes d\'une page ouverte à l\'adresse de la console : c\'est son réglage par défaut, par sécurité. Sans toucher à sa configuration, la solution est d\'ouvrir ANIMA en **http://localhost:18080**, une adresse qu\'il accepte telle quelle.',
-        de:'Auf dem PC läuft **'+names+'**, nimmt aber keine Anfragen von einer Seite unter der Adresse der Konsole an: Das ist seine Voreinstellung, aus Sicherheitsgründen. Ohne seine Einstellungen anzufassen, ist die Lösung, ANIMA als **http://localhost:18080** zu öffnen, eine Adresse, die er so akzeptiert.' });
+        de:'Auf dem PC läuft **'+names+'**, nimmt aber keine Anfragen von einer Seite unter der Adresse der Konsole an: Das ist seine Voreinstellung, aus Sicherheitsgründen. Ohne seine Einstellungen anzufassen, ist die Lösung, ANIMA als **http://localhost:18080** zu öffnen, eine Adresse, die er so akzeptiert.', zh:'PC 上有 **'+names+'**，但它不接受从主机地址打开的页面发来的请求：出于安全，这是它的默认设置。无需改动它的设置，解决办法是用 **http://localhost:18080** 打开 ANIMA，它会照常接受这个地址。' });
       const how = win ? L5({
         it:'Una volta per PC: scarica **Collega questo PC**, aprilo e conferma l\'avviso di Windows. Fa solo un inoltro di porta (strumento di Windows, nessuna installazione) e apre ANIMA su localhost. Come vantaggio in più, da localhost il browser concede microfono e installazione come app.',
         en:'Once per PC: download **Link this PC**, open it and confirm the Windows prompt. It only adds a port forward (a Windows tool, nothing installed) and opens ANIMA on localhost. As a bonus, on localhost the browser allows the microphone and installing as an app.',
         es:'Una vez por PC: descarga **Vincula este PC**, ábrelo y confirma el aviso de Windows. Solo añade un reenvío de puerto (herramienta de Windows, nada que instalar) y abre ANIMA en localhost. De regalo, en localhost el navegador permite el micrófono e instalarla como app.',
         fr:'Une fois par PC : télécharge **Relier ce PC**, ouvre-le et confirme l\'avertissement de Windows. Il ajoute seulement une redirection de port (outil de Windows, rien à installer) et ouvre ANIMA sur localhost. En prime, sur localhost le navigateur autorise le micro et l\'installation en app.',
-        de:'Einmal pro PC: Lade **Diesen PC verbinden** herunter, öffne die Datei und bestätige die Windows-Abfrage. Sie richtet nur eine Portweiterleitung ein (ein Windows-Werkzeug, nichts zu installieren) und öffnet ANIMA auf localhost. Als Bonus erlaubt der Browser auf localhost Mikrofon und Installation als App.' })
-        : L5({ it:'Su Mac o Linux, in un terminale (la password è quella della console):', en:'On Mac or Linux, in a terminal (the password is the console\'s):', es:'En Mac o Linux, en un terminal (la contraseña es la de la consola):', fr:'Sur Mac ou Linux, dans un terminal (le mot de passe est celui de la console) :', de:'Auf Mac oder Linux in einem Terminal (das Passwort ist das der Konsole):' })
+        de:'Einmal pro PC: Lade **Diesen PC verbinden** herunter, öffne die Datei und bestätige die Windows-Abfrage. Sie richtet nur eine Portweiterleitung ein (ein Windows-Werkzeug, nichts zu installieren) und öffnet ANIMA auf localhost. Als Bonus erlaubt der Browser auf localhost Mikrofon und Installation als App.', zh:'每台 PC 只需一次：下载 **关联这台 PC**，打开它并确认 Windows 提示。它只会添加一个端口转发（Windows 自带工具，无需安装），并在 localhost 上打开 ANIMA。另外，在 localhost 上浏览器还允许使用麦克风和安装为应用。' })
+        : L5({ it:'Su Mac o Linux, in un terminale (la password è quella della console):', en:'On Mac or Linux, in a terminal (the password is the console\'s):', es:'En Mac o Linux, en un terminal (la contraseña es la de la consola):', fr:'Sur Mac ou Linux, dans un terminal (le mot de passe est celui de la console) :', de:'Auf Mac oder Linux in einem Terminal (das Passwort ist das der Konsole):', zh:'在 Mac 或 Linux 上，在终端中执行（密码就是主机的密码）：' })
           + '\n```\n' + _pcm.sshHint(location.hostname) + '\n```';
       return head + '\n\n' + how;
     }
@@ -4371,21 +4914,21 @@
       const res = await pcScan(true);
       const m = await pcMod();
       const x = { tier:'command', action:'answer', intent:'pc-models', domain:'local', confidence:90, local:true, skill:true, trace:'PC' };
-      if(!res) return Object.assign(x, { reply:L5({it:'Non sono riuscita a cercare i modelli sul PC.', en:'I couldn\'t look for models on the PC.', es:'No he podido buscar modelos en el PC.', fr:'Je n\'ai pas pu chercher les modèles sur le PC.', de:'Ich konnte nicht nach Modellen auf dem PC suchen.'}) });
+      if(!res) return Object.assign(x, { reply:L5({it:'Non sono riuscita a cercare i modelli sul PC.', en:'I couldn\'t look for models on the PC.', es:'No he podido buscar modelos en el PC.', fr:'Je n\'ai pas pu chercher les modèles sur le PC.', de:'Ich konnte nicht nach Modellen auf dem PC suchen.', zh:'我没能在 PC 上查找模型。'}) });
       if(res.best){
         const ok = res.servers.filter(s=>s.state==='ok' && s.models.length);
         const lines = ok.map(s=>'- **'+s.srv.label+'**: '+s.models.slice(0,6).map(mo=>'`'+mo.id+'`').join(', ')+(s.models.length>6?' …':''));
         const modeTx = L5(pcMode==='prefer'
-          ? {it:'Lo uso per primo, prima dei modelli online.', en:'I use it first, before online models.', es:'Lo uso primero, antes que los modelos en línea.', fr:'Je l\'utilise en premier, avant les modèles en ligne.', de:'Ich nutze es zuerst, vor den Online-Modellen.'}
-          : {it:'Lo uso quando non risponde un modello online, e subito in modalità Browser. In Impostazioni → Motore puoi metterlo per primo o sceglierne un altro.', en:'I use it when no online model answers, and right away in Browser mode. In Settings → Engine you can put it first or pick another.', es:'Lo uso cuando no responde un modelo en línea, y enseguida en modo Navegador. En Ajustes → Motor puedes ponerlo primero o elegir otro.', fr:'Je l\'utilise quand aucun modèle en ligne ne répond, et tout de suite en mode Navigateur. Dans Réglages → Moteur tu peux le mettre en premier ou en choisir un autre.', de:'Ich nutze es, wenn kein Online-Modell antwortet, und sofort im Browser-Modus. Unter Einstellungen → Motor kannst du es zuerst setzen oder ein anderes wählen.'});
+          ? {it:'Lo uso per primo, prima dei modelli online.', en:'I use it first, before online models.', es:'Lo uso primero, antes que los modelos en línea.', fr:'Je l\'utilise en premier, avant les modèles en ligne.', de:'Ich nutze es zuerst, vor den Online-Modellen.', zh:'我会优先使用它，先于在线模型。'}
+          : {it:'Lo uso quando non risponde un modello online, e subito in modalità Browser. In Impostazioni → Motore puoi metterlo per primo o sceglierne un altro.', en:'I use it when no online model answers, and right away in Browser mode. In Settings → Engine you can put it first or pick another.', es:'Lo uso cuando no responde un modelo en línea, y enseguida en modo Navegador. En Ajustes → Motor puedes ponerlo primero o elegir otro.', fr:'Je l\'utilise quand aucun modèle en ligne ne répond, et tout de suite en mode Navigateur. Dans Réglages → Moteur tu peux le mettre en premier ou en choisir un autre.', de:'Ich nutze es, wenn kein Online-Modell antwortet, und sofort im Browser-Modus. Unter Einstellungen → Motor kannst du es zuerst setzen oder ein anderes wählen.', zh:'在线模型没有回答时我会使用它，在浏览器模式下则立即使用。在「设置 → 引擎」中可以把它设为优先，或选择其他模型。'});
         if(res.warming) await Promise.race([res.warming, new Promise((ok)=>setTimeout(ok, 45000))]);
         const cold = res.cold ? '\n\n⚠ ' + L5({
           it:'Ollama scarica questo modello dalla memoria dopo ogni risposta, così ognuna aspetta di ricaricarlo (decine di secondi). Succede con alcune combinazioni di modello e scheda video: in Impostazioni → Motore scegline uno più leggero.',
           en:'Ollama drops this model from memory after every answer, so each one waits for it to reload (tens of seconds). It happens with some model/graphics card pairs: pick a lighter one in Settings → Engine.',
           es:'Ollama saca este modelo de la memoria tras cada respuesta, así que cada una espera a que se recargue (decenas de segundos). Pasa con algunas combinaciones de modelo y tarjeta gráfica: elige uno más ligero en Ajustes → Motor.',
           fr:'Ollama retire ce modèle de la mémoire après chaque réponse, donc chacune attend qu\'il se recharge (des dizaines de secondes). Cela arrive avec certaines combinaisons de modèle et de carte graphique : choisis-en un plus léger dans Réglages → Moteur.',
-          de:'Ollama entfernt dieses Modell nach jeder Antwort aus dem Speicher, also wartet jede Antwort aufs Neuladen (Dutzende Sekunden). Das passiert bei manchen Kombinationen aus Modell und Grafikkarte: Wähl unter Einstellungen → Motor ein leichteres.' }) : '';
-        return Object.assign(x, { reply: L5({it:'Sul PC uso **'+res.best.model.id+'** ('+res.best.srv.label+'): gira sulla tua macchina, niente va in rete.', en:'On the PC I use **'+res.best.model.id+'** ('+res.best.srv.label+'): it runs on your machine, nothing goes online.', es:'En el PC uso **'+res.best.model.id+'** ('+res.best.srv.label+'): corre en tu máquina, nada sale a la red.', fr:'Sur le PC j\'utilise **'+res.best.model.id+'** ('+res.best.srv.label+') : il tourne sur ta machine, rien ne part en ligne.', de:'Auf dem PC nutze ich **'+res.best.model.id+'** ('+res.best.srv.label+'): Es läuft auf deinem Rechner, nichts geht ins Netz.'})
+          de:'Ollama entfernt dieses Modell nach jeder Antwort aus dem Speicher, also wartet jede Antwort aufs Neuladen (Dutzende Sekunden). Das passiert bei manchen Kombinationen aus Modell und Grafikkarte: Wähl unter Einstellungen → Motor ein leichteres.', zh:'Ollama 每次回答后都会把这个模型移出内存，所以每次回答都要等它重新加载（几十秒）。某些模型和显卡的组合会出现这种情况：请在「设置 → 引擎」中选择一个更轻量的模型。' }) : '';
+        return Object.assign(x, { reply: L5({it:'Sul PC uso **'+res.best.model.id+'** ('+res.best.srv.label+'): gira sulla tua macchina, niente va in rete.', en:'On the PC I use **'+res.best.model.id+'** ('+res.best.srv.label+'): it runs on your machine, nothing goes online.', es:'En el PC uso **'+res.best.model.id+'** ('+res.best.srv.label+'): corre en tu máquina, nada sale a la red.', fr:'Sur le PC j\'utilise **'+res.best.model.id+'** ('+res.best.srv.label+') : il tourne sur ta machine, rien ne part en ligne.', de:'Auf dem PC nutze ich **'+res.best.model.id+'** ('+res.best.srv.label+'): Es läuft auf deinem Rechner, nichts geht ins Netz.', zh:'在 PC 上我使用 **'+res.best.model.id+'**（'+res.best.srv.label+'）：它在你的电脑上运行，不会联网。'})
           + '\n\n' + lines.join('\n') + '\n\n' + modeTx + cold });
       }
       if(pcBlockedHere(res) || (res.hidden && !m.isLocalOrigin(location))) return Object.assign(x, { reply:pcFixText(res), cards:pcFixCards() });
@@ -4394,7 +4937,7 @@
         en:'I can\'t find any model server on the PC (Ollama, LM Studio, llama.cpp, Jan, KoboldCpp). Open one and I\'ll use it by myself: nothing to set up here.',
         es:'No encuentro ningún servidor de modelos en el PC (Ollama, LM Studio, llama.cpp, Jan, KoboldCpp). Si abres uno, lo uso sola: no hay que configurar nada aquí.',
         fr:'Je ne trouve aucun serveur de modèles sur le PC (Ollama, LM Studio, llama.cpp, Jan, KoboldCpp). Ouvre-en un et je l\'utiliserai toute seule : rien à régler ici.',
-        de:'Ich finde auf dem PC keinen Modellserver (Ollama, LM Studio, llama.cpp, Jan, KoboldCpp). Öffne einen, dann nutze ich ihn von selbst: Hier ist nichts einzurichten.' }) });
+        de:'Ich finde auf dem PC keinen Modellserver (Ollama, LM Studio, llama.cpp, Jan, KoboldCpp). Öffne einen, dann nutze ich ihn von selbst: Hier ist nichts einzurichten.', zh:'我在 PC 上找不到任何模型服务器（Ollama、LM Studio、llama.cpp、Jan、KoboldCpp）。打开一个，我就会自己使用它：这里不需要任何设置。' }) });
     }
     // "che modelli ho sul pc?", "usa ollama", "local models", "modelos del PC", "modèles locaux", "lokale Modelle"
     const PC_Q = /\b(ollama|lm ?studio|llama ?\.?cpp|koboldcpp)\b|\b(modell[oi]|models?|modelos?|mod[eè]les?|modelle)\b.{0,24}\b(pc|computer|ordinateur|rechner|locali|local|locales|locaux|lokal\w*)\b|\b(local|lokale) (models?|modelle)\b/i;
@@ -4405,8 +4948,8 @@
         a.href = URL.createObjectURL(new Blob([txt], { type:'application/octet-stream' }));
         a.download = 'NucleoOS-Collega-PC.cmd'; document.body.appendChild(a); a.click(); a.remove();
         setTimeout(()=>URL.revokeObjectURL(a.href), 30000);
-        return L5({it:'scaricato: aprilo', en:'downloaded: open it', es:'descargado: ábrelo', fr:'téléchargé : ouvre-le', de:'geladen: öffnen'});
-      }catch{ return L5({it:'non riuscito', en:'failed', es:'no se pudo', fr:'échec', de:'fehlgeschlagen'}); }
+        return L5({it:'scaricato: aprilo', en:'downloaded: open it', es:'descargado: ábrelo', fr:'téléchargé : ouvre-le', de:'geladen: öffnen', zh:'已下载：请打开'});
+      }catch{ return L5({it:'non riuscito', en:'failed', es:'no se pudo', fr:'échec', de:'fehlgeschlagen', zh:'失败'}); }
     }
     // ===========================================================================
     // THE PERSON'S OWN APPS (/nucleo-myapps.js, docs/myapps.md): "scrivi un'app che…" -> the model writes one page
@@ -4525,20 +5068,20 @@
       return null;
     }
     function forgeStep(k, i){
-      if(k==='writing'){ const n=(i.chars||0).toLocaleString(); return L5({it:'Scrivo il codice… '+n+' caratteri', en:'Writing the code… '+n+' characters', es:'Escribo el código… '+n+' caracteres', fr:'J\'écris le code… '+n+' caractères', de:'Schreibe den Code… '+n+' Zeichen'}); }
-      if(k==='write') return L5({it:'Scrivo il gioco'+(_forgeModel?' con '+_forgeModel:'')+'…', en:'Writing the game'+(_forgeModel?' with '+_forgeModel:'')+'…', es:'Escribo el juego'+(_forgeModel?' con '+_forgeModel:'')+'…', fr:'J\'écris le jeu'+(_forgeModel?' avec '+_forgeModel:'')+'…', de:'Ich schreibe das Spiel'+(_forgeModel?' mit '+_forgeModel:'')+'…'});
-      if(k==='lint') return L5({it:'Sistemo '+i.problems.length+' cose prima di provarlo…', en:'Fixing '+i.problems.length+' things before testing…', es:'Arreglo '+i.problems.length+' cosas antes de probarlo…', fr:'Je corrige '+i.problems.length+' points avant de l\'essayer…', de:'Ich behebe '+i.problems.length+' Dinge vor dem Test…'});
-      if(k==='install') return L5({it:'Installo sulla console ('+Math.round(i.bytes/1024)+' KB)…', en:'Installing on the console ('+Math.round(i.bytes/1024)+' KB)…', es:'Instalo en la consola ('+Math.round(i.bytes/1024)+' KB)…', fr:'J\'installe sur la console ('+Math.round(i.bytes/1024)+' Ko)…', de:'Installiere auf der Konsole ('+Math.round(i.bytes/1024)+' KB)…'});
-      if(k==='launch') return L5({it:'Lo provo sulla console (tentativo '+i.attempt+')…', en:'Testing it on the console (attempt '+i.attempt+')…', es:'Lo pruebo en la consola (intento '+i.attempt+')…', fr:'Je l\'essaie sur la console (essai '+i.attempt+')…', de:'Teste auf der Konsole (Versuch '+i.attempt+')…'});
-      if(k==='result') return i.result.ok ? L5({it:'Gira: '+i.result.fps+' FPS a '+i.result.screen, en:'It runs: '+i.result.fps+' FPS at '+i.result.screen, es:'Funciona: '+i.result.fps+' FPS a '+i.result.screen, fr:'Ça tourne : '+i.result.fps+' FPS en '+i.result.screen, de:'Läuft: '+i.result.fps+' FPS bei '+i.result.screen})
-        : L5({it:'Errore: ', en:'Error: ', es:'Error: ', fr:'Erreur : ', de:'Fehler: '}) + String(i.result.error||'').slice(0,90);
-      if(k==='fix') return L5({it:'Correggo l\'errore e riprovo…', en:'Fixing the error and retrying…', es:'Corrijo el error y vuelvo a probar…', fr:'Je corrige l\'erreur et je réessaie…', de:'Ich behebe den Fehler und teste erneut…'});
+      if(k==='writing'){ const n=(i.chars||0).toLocaleString(); return L5({it:'Scrivo il codice… '+n+' caratteri', en:'Writing the code… '+n+' characters', es:'Escribo el código… '+n+' caracteres', fr:'J\'écris le code… '+n+' caractères', de:'Schreibe den Code… '+n+' Zeichen', zh:'正在编写代码… '+n+' 个字符'}); }
+      if(k==='write') return L5({it:'Scrivo il gioco'+(_forgeModel?' con '+_forgeModel:'')+'…', en:'Writing the game'+(_forgeModel?' with '+_forgeModel:'')+'…', es:'Escribo el juego'+(_forgeModel?' con '+_forgeModel:'')+'…', fr:'J\'écris le jeu'+(_forgeModel?' avec '+_forgeModel:'')+'…', de:'Ich schreibe das Spiel'+(_forgeModel?' mit '+_forgeModel:'')+'…', zh:'正在编写游戏'+(_forgeModel?'（使用 '+_forgeModel+'）':'')+'…'});
+      if(k==='lint') return L5({it:'Sistemo '+i.problems.length+' cose prima di provarlo…', en:'Fixing '+i.problems.length+' things before testing…', es:'Arreglo '+i.problems.length+' cosas antes de probarlo…', fr:'Je corrige '+i.problems.length+' points avant de l\'essayer…', de:'Ich behebe '+i.problems.length+' Dinge vor dem Test…', zh:'测试前先修正 '+i.problems.length+' 处问题…'});
+      if(k==='install') return L5({it:'Installo sulla console ('+Math.round(i.bytes/1024)+' KB)…', en:'Installing on the console ('+Math.round(i.bytes/1024)+' KB)…', es:'Instalo en la consola ('+Math.round(i.bytes/1024)+' KB)…', fr:'J\'installe sur la console ('+Math.round(i.bytes/1024)+' Ko)…', de:'Installiere auf der Konsole ('+Math.round(i.bytes/1024)+' KB)…', zh:'正在安装到主机（'+Math.round(i.bytes/1024)+' KB）…'});
+      if(k==='launch') return L5({it:'Lo provo sulla console (tentativo '+i.attempt+')…', en:'Testing it on the console (attempt '+i.attempt+')…', es:'Lo pruebo en la consola (intento '+i.attempt+')…', fr:'Je l\'essaie sur la console (essai '+i.attempt+')…', de:'Teste auf der Konsole (Versuch '+i.attempt+')…', zh:'正在主机上测试（第 '+i.attempt+' 次尝试）…'});
+      if(k==='result') return i.result.ok ? L5({it:'Gira: '+i.result.fps+' FPS a '+i.result.screen, en:'It runs: '+i.result.fps+' FPS at '+i.result.screen, es:'Funciona: '+i.result.fps+' FPS a '+i.result.screen, fr:'Ça tourne : '+i.result.fps+' FPS en '+i.result.screen, de:'Läuft: '+i.result.fps+' FPS bei '+i.result.screen, zh:'运行正常：'+i.result.screen+' 下 '+i.result.fps+' FPS'})
+        : L5({it:'Errore: ', en:'Error: ', es:'Error: ', fr:'Erreur : ', de:'Fehler: ', zh:'错误：'}) + String(i.result.error||'').slice(0,90);
+      if(k==='fix') return L5({it:'Correggo l\'errore e riprovo…', en:'Fixing the error and retrying…', es:'Corrijo el error y vuelvo a probar…', fr:'Je corrige l\'erreur et je réessaie…', de:'Ich behebe den Fehler und teste erneut…', zh:'正在修正错误并重试…'});
       return '';
     }
     async function forgeAsk(q, want, think){
       const x = { tier:'command', action:'answer', intent:'forge', domain:'local', confidence:90, local:true, skill:true, trace:'ANIMA · fucina LÖVE' };
       let F, kit;
-      try{ F = await forgeMod(); kit = await loveKit(); }catch{ return Object.assign(x, { reply:L5({it:'Il kit dei giochi non è installato con questa versione di ANIMA.', en:'The game kit is not installed with this ANIMA version.', es:'El kit de juegos no está instalado con esta versión de ANIMA.', fr:'Le kit de jeux n\'est pas installé avec cette version d\'ANIMA.', de:'Das Spiele-Kit ist mit dieser ANIMA-Version nicht installiert.'}) }); }
+      try{ F = await forgeMod(); kit = await loveKit(); }catch{ return Object.assign(x, { reply:L5({it:'Il kit dei giochi non è installato con questa versione di ANIMA.', en:'The game kit is not installed with this ANIMA version.', es:'El kit de juegos no está instalado con esta versión de ANIMA.', fr:'Le kit de jeux n\'est pas installé avec cette version d\'ANIMA.', de:'Das Spiele-Kit ist mit dieser ANIMA-Version nicht installiert.', zh:'此版本的 ANIMA 没有安装游戏工具包。'}) }); }
       let prev = null, title = forgeTitle(q);
       if(want.edit){
         const code = await forgeDev.read('roms/love2d/src/'+want.last.name+'/game.lua');
@@ -4555,8 +5098,8 @@
           en:'To write a game I need a model: **Ollama** (or LM Studio…) on the PC, with ANIMA opened at http://localhost:18080, or an online key in Settings → Keys. Ask me “PC models” to link it.',
           es:'Para escribir un juego necesito un modelo: **Ollama** (o LM Studio…) en el PC, con ANIMA abierta en http://localhost:18080, o una clave en línea en Ajustes → Claves. Pregúntame «modelos del PC» para vincularlo.',
           fr:'Pour écrire un jeu il me faut un modèle : **Ollama** (ou LM Studio…) sur le PC, avec ANIMA ouverte sur http://localhost:18080, ou une clé en ligne dans Réglages → Clés. Demande-moi « modèles du PC » pour le relier.',
-          de:'Um ein Spiel zu schreiben, brauche ich ein Modell: **Ollama** (oder LM Studio…) auf dem PC, mit ANIMA unter http://localhost:18080 geöffnet, oder einen Online-Schlüssel unter Einstellungen → Schlüssel. Frag mich „Modelle des PCs“, um es zu verbinden.' }), cards: pcFixCards() });
-        return Object.assign(x, { reply:L5({it:'La fucina si è fermata: ', en:'The forge stopped: ', es:'La forja se detuvo: ', fr:'La forge s\'est arrêtée : ', de:'Die Schmiede hat angehalten: '}) + String(e && e.message || e) });
+          de:'Um ein Spiel zu schreiben, brauche ich ein Modell: **Ollama** (oder LM Studio…) auf dem PC, mit ANIMA unter http://localhost:18080 geöffnet, oder einen Online-Schlüssel unter Einstellungen → Schlüssel. Frag mich „Modelle des PCs“, um es zu verbinden.', zh:'要编写游戏，我需要一个模型：PC 上的 **Ollama**（或 LM Studio…），并通过 http://localhost:18080 打开 ANIMA；或者在「设置 → 密钥」中填入在线密钥。问我「models on the PC」即可关联。' }), cards: pcFixCards() });
+        return Object.assign(x, { reply:L5({it:'La fucina si è fermata: ', en:'The forge stopped: ', es:'La forja se detuvo: ', fr:'La forge s\'est arrêtée : ', de:'Die Schmiede hat angehalten: ', zh:'游戏工坊已停止：'}) + String(e && e.message || e) });
       }
       _lastForgeTurn = history.length;
       if(res.name && res.code) set('anima.forge.last', JSON.stringify({ name:res.name, title }));   // anche se la prova è fallita: "riprova" e "cambia" ripartono da qui
@@ -4570,23 +5113,23 @@
           en:'**'+title+'** is ready, and it has already been tested on the console: '+res.fps+' FPS at '+res.screen+(res.attempts>1?' (attempt '+res.attempts+': I fixed the errors myself)':'')+'. It is also in Games → Love2d.\n\nControls: d-pad to move, **A** action, **START** pause, **SELECT+START** to quit. Want changes? Say for example “add enemies” or “make it harder”.',
           es:'**'+title+'** está listo y ya probado en la consola: '+res.fps+' FPS a '+res.screen+(res.attempts>1?' (intento '+res.attempts+': los errores los corregí yo)':'')+'. También está en Juegos → Love2d.\n\nControles: cruceta para moverte, **A** acción, **START** pausa, **SELECT+START** para salir. ¿Quieres cambiarlo? Dime por ejemplo «añade enemigos» o «hazlo más difícil».',
           fr:'**'+title+'** est prêt, et déjà testé sur la console : '+res.fps+' FPS en '+res.screen+(res.attempts>1?' (essai '+res.attempts+' : j\'ai corrigé les erreurs moi-même)':'')+'. Il est aussi dans Jeux → Love2d.\n\nCommandes : croix pour bouger, **A** action, **START** pause, **SELECT+START** pour quitter. Envie de changements ? Dis par exemple « ajoute des ennemis » ou « rends-le plus difficile ».',
-          de:'**'+title+'** ist fertig und schon auf der Konsole getestet: '+res.fps+' FPS bei '+res.screen+(res.attempts>1?' (Versuch '+res.attempts+': die Fehler habe ich selbst behoben)':'')+'. Es steht auch unter Spiele → Love2d.\n\nSteuerung: Steuerkreuz zum Bewegen, **A** Aktion, **START** Pause, **SELECT+START** zum Beenden. Änderungen? Sag zum Beispiel „füge Gegner hinzu“ oder „mach es schwerer“.' });
+          de:'**'+title+'** ist fertig und schon auf der Konsole getestet: '+res.fps+' FPS bei '+res.screen+(res.attempts>1?' (Versuch '+res.attempts+': die Fehler habe ich selbst behoben)':'')+'. Es steht auch unter Spiele → Love2d.\n\nSteuerung: Steuerkreuz zum Bewegen, **A** Aktion, **START** Pause, **SELECT+START** zum Beenden. Änderungen? Sag zum Beispiel „füge Gegner hinzu“ oder „mach es schwerer“.', zh:'**'+title+'** 已就绪，并已在主机上测试过：'+res.screen+' 下 '+res.fps+' FPS'+(res.attempts>1?'（第 '+res.attempts+' 次尝试：错误是我自己修正的）':'')+'。你也可以在「游戏 → Love2d」中找到它。\n\n操作：方向键移动，**A** 动作，**START** 暂停，**SELECT+START** 退出。想修改吗？比如说「add enemies」或「make it harder」。' });
         // lento: o il gioco fa troppo per fotogramma, o la console era occupata durante la prova
         const slow = res.fps > 0 && res.fps < 20 ? '\n\n⚠ ' + L5({
           it:'Durante la prova andava a soli '+res.fps+' FPS: o il gioco fa troppo lavoro per fotogramma (chiedimi «rendilo più leggero»), o la console era occupata in quel momento.',
           en:'During the test it ran at only '+res.fps+' FPS: either the game does too much per frame (ask me “make it lighter”), or the console was busy at that moment.',
           es:'Durante la prueba iba a solo '+res.fps+' FPS: o el juego hace demasiado por fotograma (pídeme «hazlo más ligero»), o la consola estaba ocupada en ese momento.',
           fr:'Pendant le test il tournait à seulement '+res.fps+' FPS : soit le jeu en fait trop par image (demande-moi « rends-le plus léger »), soit la console était occupée à ce moment-là.',
-          de:'Beim Test lief es nur mit '+res.fps+' FPS: Entweder macht das Spiel zu viel pro Bild (sag „mach es leichter“), oder die Konsole war gerade beschäftigt.' }) : '';
+          de:'Beim Test lief es nur mit '+res.fps+' FPS: Entweder macht das Spiel zu viel pro Bild (sag „mach es leichter“), oder die Konsole war gerade beschäftigt.', zh:'测试时只有 '+res.fps+' FPS：要么游戏每帧做的事太多（跟我说「make it lighter」），要么主机当时正忙。' }) : '';
         return Object.assign(x, { reply: head + slow + trail + codeBlock,
           cards:[{ kind:'game', consoleOnly:true, arg:'love2d/'+res.file, title, sub:'LÖVE · '+res.screen+' · '+res.fps+' FPS', img }] });
       }
-      const why = res.stage==='launch' ? (res.error==='game_running' ? L5({it:'sulla console c\'è un gioco aperto: chiudilo (SELECT+START) e riprova', en:'a game is open on the console: close it (SELECT+START) and retry', es:'hay un juego abierto en la consola: ciérralo (SELECT+START) y vuelve a intentarlo', fr:'un jeu est ouvert sur la console : ferme-le (SELECT+START) et réessaie', de:'auf der Konsole läuft ein Spiel: beende es (SELECT+START) und versuch es erneut'})
-                  : res.error==='pairing' ? L5({it:'serve l\'abbinamento: inserisci il PIN della console', en:'pairing needed: enter the console PIN', es:'hace falta vincular: introduce el PIN de la consola', fr:'appairage nécessaire : saisis le PIN de la console', de:'Kopplung nötig: Gib die PIN der Konsole ein'})
-                  : res.error==='core_not_listening' ? L5({it:'la console non è pronta (il menu di NucleoOS non risponde)', en:'the console is not ready (the NucleoOS menu does not answer)', es:'la consola no está lista', fr:'la console n\'est pas prête', de:'die Konsole ist nicht bereit'}) : res.error)
+      const why = res.stage==='launch' ? (res.error==='game_running' ? L5({it:'sulla console c\'è un gioco aperto: chiudilo (SELECT+START) e riprova', en:'a game is open on the console: close it (SELECT+START) and retry', es:'hay un juego abierto en la consola: ciérralo (SELECT+START) y vuelve a intentarlo', fr:'un jeu est ouvert sur la console : ferme-le (SELECT+START) et réessaie', de:'auf der Konsole läuft ein Spiel: beende es (SELECT+START) und versuch es erneut', zh:'主机上有游戏正在运行：请关闭它（SELECT+START）后重试'})
+                  : res.error==='pairing' ? L5({it:'serve l\'abbinamento: inserisci il PIN della console', en:'pairing needed: enter the console PIN', es:'hace falta vincular: introduce el PIN de la consola', fr:'appairage nécessaire : saisis le PIN de la console', de:'Kopplung nötig: Gib die PIN der Konsole ein', zh:'需要配对：请输入主机的 PIN'})
+                  : res.error==='core_not_listening' ? L5({it:'la console non è pronta (il menu di NucleoOS non risponde)', en:'the console is not ready (the NucleoOS menu does not answer)', es:'la consola no está lista', fr:'la console n\'est pas prête', de:'die Konsole ist nicht bereit', zh:'主机未就绪（NucleoOS 菜单没有响应）'}) : res.error)
                 : '`' + String(res.error||'').slice(0,300) + '`';
-      return Object.assign(x, { confidence:60, reply: L5({it:'Non sono riuscita a far partire **'+title+'**: ', en:'I couldn\'t get **'+title+'** running: ', es:'No he conseguido arrancar **'+title+'**: ', fr:'Je n\'ai pas réussi à lancer **'+title+'** : ', de:'Ich konnte **'+title+'** nicht starten: '}) + why +
-        '.\n\n' + L5({it:'Il codice è qui sotto: posso riprovare se mi dici «riprova il gioco», o cambiarlo con una richiesta più semplice.', en:'The code is below: I can retry if you say “retry the game”, or change it with a simpler request.', es:'El código está abajo: puedo reintentarlo si dices «reintenta el juego», o cambiarlo con una petición más sencilla.', fr:'Le code est ci-dessous : je peux réessayer si tu dis « réessaie le jeu », ou le changer avec une demande plus simple.', de:'Der Code steht unten: Ich kann es erneut versuchen, wenn du „versuch das Spiel nochmal“ sagst, oder es mit einer einfacheren Bitte ändern.'}) + trail + codeBlock });
+      return Object.assign(x, { confidence:60, reply: L5({it:'Non sono riuscita a far partire **'+title+'**: ', en:'I couldn\'t get **'+title+'** running: ', es:'No he conseguido arrancar **'+title+'**: ', fr:'Je n\'ai pas réussi à lancer **'+title+'** : ', de:'Ich konnte **'+title+'** nicht starten: ', zh:'无法启动 **'+title+'**：'}) + why +
+        '.\n\n' + L5({it:'Il codice è qui sotto: posso riprovare se mi dici «riprova il gioco», o cambiarlo con una richiesta più semplice.', en:'The code is below: I can retry if you say “retry the game”, or change it with a simpler request.', es:'El código está abajo: puedo reintentarlo si dices «reintenta el juego», o cambiarlo con una petición más sencilla.', fr:'Le code est ci-dessous : je peux réessayer si tu dis « réessaie le jeu », ou le changer avec une demande plus simple.', de:'Der Code steht unten: Ich kann es erneut versuchen, wenn du „versuch das Spiel nochmal“ sagst, oder es mit einer einfacheren Bitte ändern.', zh:'代码在下方：如果你说「retry the game」，我可以重试，也可以按更简单的要求修改它。'}) + trail + codeBlock });
     }
     // "Scarica il database dei trucchi" (scheda azione delle abilità): lo scarica la console, in background
     // (POST /api/cheats/fetch, solo i sistemi presenti sulla scheda), e si segue il lavoro su /api/cheats/job.
@@ -5100,7 +5643,7 @@
     function appendSources(bodyEl, sources){
       if(!sources || !sources.length) return;
       const wrap=document.createElement('div'); wrap.className='sources';
-      const lab=document.createElement('span'); lab.className='lab'; lab.textContent=UI[lang].webSources; wrap.appendChild(lab);
+      const lab=document.createElement('span'); lab.className='lab'; lab.textContent=UI[uiLang].webSources; wrap.appendChild(lab);
       const ol=document.createElement('ol');
       for(const s of sources){ const li=document.createElement('li'); const a=document.createElement('a');
         a.href=s.url; a.target='_blank'; a.rel='noreferrer noopener'; a.textContent=s.title||s.url; li.appendChild(a); ol.appendChild(li); }
@@ -5589,7 +6132,7 @@
             // A TASK on the user's files that the agent could not run must not fall to the tool-less chat below: it
             // "applies" the change in prose (live on the Cardputer: "¡Claro! Corregiré…" + code, app.js untouched).
             if(!r && agentErr && !sig.aborted && String(agentErr.message)!=='stopped' && ctxkit.wantsAgent(sendQ, { workspace:fs.hasRoot() })){
-              const why=(AI.explainAiError && AI.explainAiError(agentErr, lang)) || String(agentErr.message||agentErr).slice(0,160);
+              const why=(AI.explainAiError && AI.explainAiError(agentErr, uiLang)) || String(agentErr.message||agentErr).slice(0,160);
               r={ reply:'⚠ '+L('agentFailed',{ why }), tier:'remote', intent:'agent', confidence:0, domain:'online', notDone:true };
             }
           }
@@ -5678,12 +6221,12 @@
         // device" even when the device had answered, or was merely busy. Only when NO brain could be asked
         // does the reply name the device problem (and how to get a local one).
         const why = _turnDevErr;
-        const aiWhy = _turnAiErr ? AI.explainAiError(_turnAiErr, lang) : '';
-        const msg = aiWhy ? aiWhy + ' ' + (have ? UI[lang].dontknow : L('noEngine'))
+        const aiWhy = _turnAiErr ? AI.explainAiError(_turnAiErr, uiLang) : '';
+        const msg = aiWhy ? aiWhy + ' ' + (have ? UI[uiLang].dontknow : L('noEngine'))
           : why==='too_long'
           ? TR('La domanda è troppo lunga per il dispositivo: accorciala e riprova.', 'This question is too long for the device: shorten it and try again.')
-          : (have || !why) ? UI[lang].dontknow
-          : (why==='unreachable' ? UI[lang].offline : '⚠ '+notDoneWhy(why)+'.') + ' ' + L('noEngine');
+          : (have || !why) ? UI[uiLang].dontknow
+          : (why==='unreachable' ? UI[uiLang].offline : '⚠ '+notDoneWhy(why)+'.') + ' ' + L('noEngine');
         renderMd(body, msg); body.dataset.raw=msg; history.push({role:'bot',text:msg}); persist(); setDot('err');
         maybeLocalAiHint(body, null).catch(()=>{});   // nothing answered: exactly when "your Ollama refuses NucleoOS" matters most
         return;
@@ -5711,7 +6254,7 @@
       // the engine only speaks it/en) and it also tells the user what ANIMA *can* do, which a bare
       // refusal doesn't. Matching on the exact template only, so a real answer is never swallowed.
       const bareDecline = /^(non lo so\.?|i don'?t know\.?)$/i;
-      const reply = (!r.reply || bareDecline.test(r.reply.trim())) ? UI[lang].dontknow : r.reply;
+      const reply = (!r.reply || bareDecline.test(r.reply.trim())) ? UI[uiLang].dontknow : r.reply;
       const hidx = history.length;          // this bot turn's index after push below
       let body, turn;
       if(live){ ({ body, turn }=live); live.finish(reply); }                     // streamed: settle the final markdown
@@ -5730,7 +6273,7 @@
       if(r.memPending){ const t='⏳ '+L('memPendingNote'); entry.lines.push({ text:t, kind:'dim' }); addLined(body, t, 'dim'); }
       // The cloud failed and another tier answered: say why, so a bad key / used-up quota gets fixed instead of
       // silently making every answer worse. Actionable -> a warning; a transient blip -> a quiet note.
-      if(_turnAiErr && r.domain!=='online'){ const act=AI.actionableAiError(_turnAiErr); const t=(act?'⚠ ':'ℹ ')+AI.explainAiError(_turnAiErr, lang);
+      if(_turnAiErr && r.domain!=='online'){ const act=AI.actionableAiError(_turnAiErr); const t=(act?'⚠ ':'ℹ ')+AI.explainAiError(_turnAiErr, uiLang);
         entry.lines.push({ text:t, kind:act?'warn':'dim' }); addLined(body, t, act?'warn':'dim'); }
       maybeLocalAiHint(body, r).catch(()=>{});
 
@@ -5764,8 +6307,8 @@
       else if(r.intent==='image_gen'){ entry.card={kind:'open_paint'}; buildCard(body, cardFromDescriptor(entry.card)); }
       if(r.cards && r.cards.length){ entry.cards=r.cards; r.cards.forEach(c=>buildCard(body, cardFromDescriptor(c))); }
       // dialogue state surfacing
-      if((r.state==='slot'||r.awaiting) && r.intent!=='clarify'){ entry.banner={kind:'warn',text:'⏳ '+UI[lang].awaiting+(r.arg?': '+r.arg:'')}; buildBanner(body,'warn',entry.banner.text); }
-      else if(r.state==='followup'){ entry.banner={kind:'followup',text:'↳ '+UI[lang].followupPill}; buildBanner(body,'followup',entry.banner.text); }
+      if((r.state==='slot'||r.awaiting) && r.intent!=='clarify'){ entry.banner={kind:'warn',text:'⏳ '+UI[uiLang].awaiting+(r.arg?': '+r.arg:'')}; buildBanner(body,'warn',entry.banner.text); }
+      else if(r.state==='followup'){ entry.banner={kind:'followup',text:'↳ '+UI[uiLang].followupPill}; buildBanner(body,'followup',entry.banner.text); }
       // live reasoning map: which engine/model actually answered, collapsible (default per Settings · Motore)
       if(r) r.__ms = Date.now()-_t0;   // total latency of this turn (network + any fallback hops)
       entry.emap=engineMap(r); addEnginePanel(body, entry.emap);
@@ -5822,7 +6365,7 @@
       const s=mkSession(slice);
       const u=slice.find(h=>h.role==='user'); if(u) s.title=clamp(u.text.trim(),60);
       sessions.unshift(s); activeId=s.id; history=s.history; saveSessions(); renderAll(); closeDrawer();
-      toast(UI[lang].branchMade,'ok'); input.focus();
+      toast(UI[uiLang].branchMade,'ok'); input.focus();
     }
 
     // ===========================================================================
@@ -5863,8 +6406,8 @@
     function groupOf(ts){ const n=new Date(); const sod=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime();
       if(ts>=sod) return 'today'; if(ts>=sod-864e5) return 'yesterday'; if(ts>=sod-6*864e5) return 'week'; if(ts>=sod-29*864e5) return 'month'; return 'older'; }
     const GRP_KEY={today:'grpToday',yesterday:'grpYesterday',week:'grpWeek',month:'grpMonth',older:'grpOlder'};
-    const grpLabel=g=>UI[lang][GRP_KEY[g]]||g;
-    function sessTitle(s){ return s.title || UI[lang].untitled; }
+    const grpLabel=g=>UI[uiLang][GRP_KEY[g]]||g;
+    function sessTitle(s){ return s.title || UI[uiLang].untitled; }
     // One-line preview of the most recent message (user turns prefixed with ›) for the row subtitle.
     function lastMsg(s){ const h=s.history||[]; for(let i=h.length-1;i>=0;i--){ const m=h[i]; if(m && m.text && (m.role==='user'||m.role==='bot')) return (m.role==='user'?'› ':'')+String(m.text).replace(/\s+/g,' ').trim(); } return ''; }
     // XSS-safe search highlight: escape first, wrap the first match in <mark>.
@@ -5887,9 +6430,9 @@
       const groups=[]; if(pinned.length) groups.push(['pinned',pinned]);
       const buckets={}; rest.forEach(s=>{ const g=groupOf(s.modified); (buckets[g]||(buckets[g]=[])).push(s); });
       ['today','yesterday','week','month','older'].forEach(g=>{ if(buckets[g]){ buckets[g].sort((a,b)=>b.modified-a.modified); groups.push([g,buckets[g]]); } });
-      if(!all.length){ const e=document.createElement('div'); e.className='sb-empty'; e.textContent=q?UI[lang].noResults:UI[lang].noConvs; list.appendChild(e); }
+      if(!all.length){ const e=document.createElement('div'); e.className='sb-empty'; e.textContent=q?UI[uiLang].noResults:UI[uiLang].noConvs; list.appendChild(e); }
       groups.forEach(([g,arr])=>{
-        const gh=document.createElement('div'); gh.className='sb-group'; gh.textContent=g==='pinned'?('★ '+UI[lang].grpPinned):grpLabel(g); list.appendChild(gh);
+        const gh=document.createElement('div'); gh.className='sb-group'; gh.textContent=g==='pinned'?('★ '+UI[uiLang].grpPinned):grpLabel(g); list.appendChild(gh);
         arr.forEach(s=>list.appendChild(sessRow(s,q)));
       });
       const foot=$('sb-foot'); if(foot){ const n=sessions.length; foot.textContent=n+' '+(n===1?(TR('conversazione', 'conversation')):(TR('conversazioni', 'conversations'))); }
@@ -5904,11 +6447,11 @@
       const tt=document.createElement('div'); tt.className='stt'; tt.innerHTML=(s.pinned?'<span class="sr-pin">★</span>':'')+hlsearch(sessTitle(s),q); main.appendChild(tt);
       const time=document.createElement('span'); time.className='sr-time'; time.textContent=relTime(s.modified); main.appendChild(time);
       const acts=document.createElement('div'); acts.className='sr-acts';
-      const pinb=document.createElement('button'); pinb.className='sk'+(s.pinned?' pinon':''); pinb.textContent=s.pinned?'★':'☆'; pinb.title=s.pinned?UI[lang].unpinConv:UI[lang].pinConv;
+      const pinb=document.createElement('button'); pinb.className='sk'+(s.pinned?' pinon':''); pinb.textContent=s.pinned?'★':'☆'; pinb.title=s.pinned?UI[uiLang].unpinConv:UI[uiLang].pinConv;
       pinb.addEventListener('click',e=>{ e.stopPropagation(); togglePin(s.id); }); acts.appendChild(pinb);
-      const renb=document.createElement('button'); renb.className='sk'; renb.textContent='✎'; renb.title=UI[lang].rename;
+      const renb=document.createElement('button'); renb.className='sk'; renb.textContent='✎'; renb.title=UI[uiLang].rename;
       renb.addEventListener('click',e=>{ e.stopPropagation(); startRename(row,s); }); acts.appendChild(renb);
-      const delb=document.createElement('button'); delb.className='sk del'; delb.textContent='✕'; delb.title=UI[lang].del;
+      const delb=document.createElement('button'); delb.className='sk del'; delb.textContent='✕'; delb.title=UI[uiLang].del;
       delb.addEventListener('click',e=>{ e.stopPropagation(); deleteSession(s.id); }); acts.appendChild(delb);
       main.appendChild(acts); row.appendChild(main);
       const prev=lastMsg(s); if(prev){ const pv=document.createElement('div'); pv.className='sr-prev'; pv.innerHTML=hlsearch(clamp(prev,72),q); row.appendChild(pv); }
@@ -5935,12 +6478,12 @@
       inp.addEventListener('blur',()=>commit(true));
       inp.addEventListener('click',e=>e.stopPropagation());
     }
-    function togglePin(id){ const s=sessions.find(x=>x.id===id); if(!s) return; s.pinned=!s.pinned; saveSessions(); updateSessions(); toast(s.pinned?UI[lang].convPinned:UI[lang].convUnpinned,'ok'); }
+    function togglePin(id){ const s=sessions.find(x=>x.id===id); if(!s) return; s.pinned=!s.pinned; saveSessions(); updateSessions(); toast(s.pinned?UI[uiLang].convPinned:UI[uiLang].convUnpinned,'ok'); }
     function newSession(){
       if(activeSession().history.length===0){ closeDrawer(); input.focus(); return; }   // reuse the empty one
       const s=mkSession([]);
       sessions.unshift(s); activeId=s.id; history=s.history; saveSessions(); renderAll(); closeDrawer();
-      toast(UI[lang].newStarted); input.focus();
+      toast(UI[uiLang].newStarted); input.focus();
     }
     function switchSession(id){ if(id===activeId){ closeDrawer(); return; } stopRec();
       activeId=id; history=activeSession().history; set('anima.active',activeId); renderAll(); closeDrawer(); scrollActiveIntoView(); input.focus(); }
@@ -5955,7 +6498,7 @@
       if(wasActive){ activeId=sessions.slice().sort((a,b)=>b.modified-a.modified)[0].id; history=activeSession().history; renderAll(); } else { updateSessions(); }
       saveSessions();
       _undo={removed,idx,wasActive,placeholderId};
-      toastAction(UI[lang].convDeleted, UI[lang].undo, restoreDeleted, 6000);
+      toastAction(UI[uiLang].convDeleted, UI[uiLang].undo, restoreDeleted, 6000);
     }
     function restoreDeleted(){
       if(!_undo) return; const {removed,idx,wasActive,placeholderId}=_undo; _undo=null;
@@ -5963,7 +6506,7 @@
       if(!sessions.find(s=>s.id===removed.id)) sessions.splice(Math.min(idx,sessions.length),0,removed);
       untomb(removed.id);
       if(wasActive){ activeId=removed.id; history=activeSession().history; renderAll(); } else { updateSessions(); }
-      saveSessions(); toast(UI[lang].restored,'ok');
+      saveSessions(); toast(UI[uiLang].restored,'ok');
     }
     // Toast with an action button (e.g. Undo). Longer-lived + clickable (the toasts layer is otherwise pointer-transparent).
     function toastAction(msg,label,fn,ms){
@@ -6022,7 +6565,7 @@
         md+='\n---\n*ANIMA · '+date+' · '+modeLabel(mode)+' · '+lang.toUpperCase()+'*\n';
         download(name+'.md', md, 'text/markdown');
       }
-      toast(UI[lang].exported+' ✓','ok');
+      toast(UI[uiLang].exported+' ✓','ok');
     }
     $('exp-md').addEventListener('click',()=>exportConv('md'));
     $('exp-json').addEventListener('click',()=>exportConv('json'));
@@ -6034,9 +6577,9 @@
     // The slash list / help with the two engine modes (/auto, /private) in place of the retired three.
     const RETIRED_MODE_CMD=/^\/(offline|ibrida|hybrid|online)$/;
     function cmdList(){ const out=[{c:'/model',d:L('cmdModel')}]; let put=false;
-      for(const c of UI[lang].cmds){ if(RETIRED_MODE_CMD.test(c.c)){ if(!put){ out.push({c:'/auto',d:L('cmdAuto')},{c:'/private',d:L('cmdPrivate')}); put=true; } continue; } out.push(c); }
+      for(const c of UI[uiLang].cmds){ if(RETIRED_MODE_CMD.test(c.c)){ if(!put){ out.push({c:'/auto',d:L('cmdAuto')},{c:'/private',d:L('cmdPrivate')}); put=true; } continue; } out.push(c); }
       return out; }
-    function helpText(){ return UI[lang].helpText.replace(/^( *)\/offline \/(?:ibrida|hybrid) \/online +[^\n]*$/m, (m,sp)=>sp+'/auto /private'+' '.repeat(12)+L('cmdModes')); }
+    function helpText(){ return UI[uiLang].helpText.replace(/^( *)\/offline \/(?:ibrida|hybrid) \/online +[^\n]*$/m, (m,sp)=>sp+'/auto /private'+' '.repeat(12)+L('cmdModes')); }
     function handleSlash(q){
       const parts=q.slice(1).trim().split(/\s+/); const cmd=(parts[0]||'').toLowerCase(); const arg=(parts[1]||'').toLowerCase();
       if(cmd==='help'||cmd==='?'){ const h=helpText(); addUser(q); history.push({role:'user',text:q}); sysLine(h); history.push({role:'bot',text:h}); persist(); return true; }
@@ -6082,7 +6625,7 @@
     const palScrim=$('pal-scrim'), palQ=$('pal-q'), palList=$('pal-list');
     let palMode='cmd', palSel=0, palRows=[], palFlat=[];
     function buildPalette(){
-      const t=UI[lang], C=t.palCats;
+      const t=UI[uiLang], C=t.palCats;
       const A=[];
       A.push({cat:C.conv, icon:'＋', label:t.newSession.replace('+ ','')+'', keys:[mod,'⇧','S'], run:newSession});
       A.push({cat:C.conv, icon:'☰', label:t.sessions, keys:[mod,'⇧','S'], run:openDrawer});
@@ -6090,8 +6633,8 @@
       A.push({cat:C.conv, icon:'↓', label:t.expMd, keys:[mod,'E'], run:()=>exportConv('md')});
       A.push({cat:C.conv, icon:'↓', label:t.expJson, run:()=>exportConv('json')});
       for(const k of ['dark','light','oled','hc']) A.push({cat:C.theme, icon:'◐', label:t.theme+': '+t.themeNames[k], cur:theme===k, run:()=>chooseTheme(k)});
-      A.push({cat:C.lang, icon:'A', label:t.language+': IT', cur:lang==='it', run:()=>chooseLang('it')});
-      A.push({cat:C.lang, icon:'A', label:t.language+': EN', cur:lang==='en', run:()=>chooseLang('en')});
+      A.push({cat:C.lang, icon:'A', label:t.language+': IT', cur:uiLang==='it', run:()=>chooseLang('it')});
+      A.push({cat:C.lang, icon:'A', label:t.language+': EN', cur:uiLang==='en', run:()=>chooseLang('en')});
       for(const m of AM.MODES) A.push({cat:C.mode, icon:'◉', label:t.mode+': '+modeLabel(m), cur:mode===m, run:()=>chooseMode(m)});
       A.push({cat:C.set, icon:'⚙', label:t.appearance+' / '+t.engine, run:()=>openSettings(true)});
       A.push({cat:C.set, icon:'◆', label:L('mpPalette'), keys:['/model'], run:()=>mpOpen()});
@@ -6105,11 +6648,11 @@
     const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
     function fuzzy(q,str){ q=q.toLowerCase(); str=str.toLowerCase(); if(!q) return 1; let i=0,score=0,run=0;
       for(const ch of str){ if(i<q.length && ch===q[i]){ i++; run++; score+=run; } else run=0; } return i===q.length?score:0; }
-    function openPalette(seed){ palMode='cmd'; palFlat=buildPalette(); palQ.placeholder=UI[lang].palPlaceholder;
+    function openPalette(seed){ palMode='cmd'; palFlat=buildPalette(); palQ.placeholder=UI[uiLang].palPlaceholder;
       openModal(palScrim, palQ); palQ.value=seed||''; palSel=0; renderPalette(); }
-    function openShortcuts(){ palMode='sc'; palFlat=shortcutRows(); palQ.placeholder=UI[lang].scTitle;
+    function openShortcuts(){ palMode='sc'; palFlat=shortcutRows(); palQ.placeholder=UI[uiLang].scTitle;
       openModal(palScrim, palQ); palQ.value=''; palSel=0; renderPalette(); }
-    function shortcutRows(){ const t=UI[lang];
+    function shortcutRows(){ const t=UI[uiLang];
       const KB=[['⏎',TR('Invia', 'Send')],['⇧⏎',TR('A capo', 'New line')],
         [mod+' K',TR('Tavolozza comandi', 'Command palette')],[mod+' ⇧ S',t.sessions],
         ['↑ / ↓',TR('Cronologia input', 'Input history')],[mod+' L',t.clear],[mod+' E',t.expMd.replace('↓ ','Export ')],
@@ -6123,7 +6666,7 @@
       let rows = palFlat.map(r=>({ r, s:fuzzy(q, r.label+' '+r.cat) })).filter(x=>q?x.s>0:true);
       if(q) rows.sort((a,b)=>b.s-a.s); rows=rows.slice(0,40).map(x=>x.r);
       palRows=rows;
-      if(!rows.length){ palList.innerHTML='<div class="pal-empty">'+esc(UI[lang].noResults)+'</div>'; return; }
+      if(!rows.length){ palList.innerHTML='<div class="pal-empty">'+esc(UI[uiLang].noResults)+'</div>'; return; }
       palSel=Math.min(palSel, rows.length-1); if(palSel<0) palSel=0;
       let html='', lastCat=null;
       rows.forEach((r,i)=>{
@@ -6501,7 +7044,7 @@
       const el=$('ai-keys-mount'); if(!el || _keyKm || _keyMounting) return;
       _keyMounting=true;
       try{ const { mountKeyManager }=await import('/ai-keys.js');
-        _keyKm=mountKeyManager(el, { variant:'compact', lang, onChange(c){ keyHydrated=true; adoptKeyCfg(c); try{ renderForgeReadiness(); paintSub(); }catch{} } });
+        _keyKm=mountKeyManager(el, { variant:'compact', lang:uiLang, onChange(c){ keyHydrated=true; adoptKeyCfg(c); try{ renderForgeReadiness(); paintSub(); }catch{} } });
       }catch(e){ el.innerHTML='<div class="keystat">'+(TR('Gestore chiavi non disponibile.', 'Key manager unavailable.'))+'</div>'; }
       _keyMounting=false;
     }
@@ -6509,14 +7052,19 @@
 
     function doClear(){ history.length=0; activeSession().history=history; activeSession().title=''; activeSession().sid=AM.newSid('a'); persist(); openSettings(false); closeDrawer();
       dfetch('/api/anima?reset=1&q='+sidQ()).catch(()=>{}); renderAll();   // a cleared conversation is a new device context too
-      const {body}=botShell(null,false); const t=UI[lang].cleared; renderMd(body,t); body.dataset.raw=t; input.focus(); }
+      const {body}=botShell(null,false); const t=UI[uiLang].cleared; renderMd(body,t); body.dataset.raw=t; input.focus(); }
     $('clear').addEventListener('click',doClear);
 
     // ---- choose handlers ------------------------------------------------------
-    function chooseLang(l){ l=(l||'').slice(0,2); lang=['it','en','es','fr','de'].includes(l)?l:'en'; set('anima.lang',lang); applyAll(); renderAll();
+    function chooseLang(l){ l=(l||'').slice(0,2); lang=['it','en','es','fr','de'].includes(l)?l:'en';
+      // The OS is in a language the logic does not cover (zh): the words on screen follow it (uiLang), the logic
+      // stays English, and nothing writes 'en' back over the OS choice.
+      const osOnly = l!==lang && I18N.lang===l;
+      uiLang = osOnly ? UILANG(lang, l) : lang;
+      if(!osOnly) set('anima.lang',lang); applyAll(); renderAll();
       if(!recording){ if(voice&&voice.available) micBtn.title=idleTitle(); else if(voice&&voice.reason==='insecure') micBtn.title=L('voiceNeedsSecure'); }
-      try{ if(I18N.lang!==lang) I18N.setLang(lang); }catch{}   // broadcast ANIMA's own toggle to the whole OS (its onChange repaints the catalog strings)
-      try{ if(_keyKm&&_keyKm.setLang) _keyKm.setLang(lang); }catch{}   // relabel the shared key manager live
+      try{ if(!osOnly && I18N.lang!==lang) I18N.setLang(lang); }catch{}   // broadcast ANIMA's own toggle to the whole OS (its onChange repaints the catalog strings)
+      try{ if(_keyKm&&_keyKm.setLang) _keyKm.setLang(uiLang); }catch{}   // relabel the shared key manager live
       input.focus(); }
     // init('anima') loads this app's catalogs (i18n.<lang>.json + the shared core one), installs the engine's
     // cross-window listeners and paints the [data-i18n*] chrome. observe:false — every annotated node exists at
@@ -6524,7 +7072,7 @@
     // language switch from anywhere in the OS) the imperative strings are repainted from it too.
     const i18nReady=(async()=>{ try{ await I18N.init('anima',{observe:false}); }catch{} })();
     i18nReady.then(()=>{ try{ applyAll(); secureBanner(); }catch{} });
-    try{ I18N.onChange(()=>{ if(I18N.lang!==lang) chooseLang(I18N.lang); else { try{ applyAll(); secureBanner(); }catch{} } }); }catch{}
+    try{ I18N.onChange(()=>{ if(I18N.lang!==uiLang) chooseLang(I18N.lang); else { try{ applyAll(); secureBanner(); }catch{} } }); }catch{}
     // TWO modes, not five. The old set (off/on/local/edge/only) named WHERE the compute ran - a
     // detail the 4-rung cascade already decides - so the user had to pre-pick a rung and then got
     // stuck on it (the 'answers from the WASM brain, never reaches the GPU model' report). Now:
@@ -6554,7 +7102,7 @@
     function chooseVoiceSource(s){ voiceSrc=(s==='cardputer')?'cardputer':'browser'; set('anima.voiceSrc',voiceSrc); applyAll();
       if(!recording && voice && voice.available) micBtn.title=idleTitle(); input.focus(); }
     function chooseTheme(t){ theme=['dark','light','oled','hc'].includes(t)?t:'dark'; set('anima.theme',theme);
-      document.documentElement.setAttribute('data-theme',theme); applyAll(); toast(UI[lang].theme+': '+UI[lang].themeNames[theme]); }
+      document.documentElement.setAttribute('data-theme',theme); applyAll(); toast(UI[uiLang].theme+': '+UI[uiLang].themeNames[theme]); }
     for(const b of $('set-lang').children)    b.addEventListener('click',()=>chooseLang(b.dataset.l));
     for(const b of $('set-voicesrc').children) b.addEventListener('click',()=>{ if(!b.disabled) chooseVoiceSource(b.dataset.vs); });
     for(const b of $('set-mode').children)    b.addEventListener('click',()=>chooseMode(b.dataset.m));
@@ -6588,7 +7136,7 @@
     async function renderPcRow(force){
       const st=$('pc-stat'), sel=$('set-pcmodel'); if(!st) return;
       if(pcMode==='off' && !force){ st.textContent=''; sel.hidden=true; return; }
-      st.style.color='var(--muted)'; st.textContent=L5({it:'cerco…', en:'searching…', es:'buscando…', fr:'recherche…', de:'suche…'});
+      st.style.color='var(--muted)'; st.textContent=L5({it:'cerco…', en:'searching…', es:'buscando…', fr:'recherche…', de:'suche…', zh:'正在搜索…'});
       const res=await pcScan(!!force);
       if(res && res.best){
         const all=res.servers.filter(s=>s.state==='ok').flatMap(s=>s.models.map(mo=>({ id:mo.id, srv:s.srv.label })));
@@ -6597,11 +7145,11 @@
         st.style.color='#36d399'; st.textContent='✓ '+res.best.srv.label+' · '+res.best.model.id;
       } else if(pcBlockedHere(res)){
         sel.hidden=true; st.style.color='#fbbd23';
-        st.textContent=L5({it:'trovato, ma serve localhost: chiedimi «modelli del PC»', en:'found, but it needs localhost: ask me “PC models”', es:'encontrado, pero hace falta localhost: pregúntame «modelos del PC»', fr:'trouvé, mais il faut localhost : demande-moi « modèles du PC »', de:'gefunden, braucht aber localhost: frag mich „Modelle des PCs“'});
+        st.textContent=L5({it:'trovato, ma serve localhost: chiedimi «modelli del PC»', en:'found, but it needs localhost: ask me “PC models”', es:'encontrado, pero hace falta localhost: pregúntame «modelos del PC»', fr:'trouvé, mais il faut localhost : demande-moi « modèles du PC »', de:'gefunden, braucht aber localhost: frag mich „Modelle des PCs“', zh:'已找到，但需要 localhost：问我「models on the PC」'});
       } else if(res && res.hidden){
         sel.hidden=true; st.style.color='#fbbd23';
-        st.textContent=L5({it:'da qui il browser non vede il PC: apri da localhost:18080', en:'from here the browser can\'t see the PC: open from localhost:18080', es:'desde aquí el navegador no ve el PC: abre desde localhost:18080', fr:'d\'ici le navigateur ne voit pas le PC : ouvre depuis localhost:18080', de:'von hier sieht der Browser den PC nicht: öffne über localhost:18080'});
-      } else { sel.hidden=true; st.textContent=L5({it:'nessun server di modelli sul PC', en:'no model server on the PC', es:'ningún servidor de modelos en el PC', fr:'aucun serveur de modèles sur le PC', de:'kein Modellserver auf dem PC'}); }
+        st.textContent=L5({it:'da qui il browser non vede il PC: apri da localhost:18080', en:'from here the browser can\'t see the PC: open from localhost:18080', es:'desde aquí el navegador no ve el PC: abre desde localhost:18080', fr:'d\'ici le navigateur ne voit pas le PC : ouvre depuis localhost:18080', de:'von hier sieht der Browser den PC nicht: öffne über localhost:18080', zh:'从这里浏览器看不到 PC：请通过 localhost:18080 打开'});
+      } else { sel.hidden=true; st.textContent=L5({it:'nessun server di modelli sul PC', en:'no model server on the PC', es:'ningún servidor de modelos en el PC', fr:'aucun serveur de modèles sur le PC', de:'kein Modellserver auf dem PC', zh:'这台 PC 上没有模型服务器'}); }
     }
     for(const b of $('set-pc').children) b.addEventListener('click',()=>{ pcMode=b.dataset.pc; set('anima.pc',pcMode); applyAll(); renderPcRow(false); });
     $('set-pcmodel').addEventListener('change',(e)=>{ set('anima.pcModel', e.target.value); _pcScan={at:0,res:null,p:null}; renderPcRow(true); });
@@ -6611,7 +7159,7 @@
     // 🌐 Web toggle: arm only if a Groq key is reachable (compound is Groq-only); otherwise point the user to Settings ▸ AI.
     $('webtog').addEventListener('click', async ()=>{
       if(!webCompound && isPrivate()){ sysLine(L('webPrivate')); return; }   // Private never reaches the web
-      if(!webCompound){ await ensureKeyLoaded(); if(!hasGroq()){ sysLine(UI[lang].webNoKey); return; } }
+      if(!webCompound){ await ensureKeyLoaded(); if(!hasGroq()){ sysLine(UI[uiLang].webNoKey); return; } }
       webCompound=!webCompound; set('anima.web', webCompound?'1':'0'); applyAll(); input.focus();
     });
     $('ctx-inspect').addEventListener('click',()=>{ openSettings(false); openInspector(); });
@@ -6720,8 +7268,8 @@
       try{ paintPickBtn(); }catch{}
     }
     function applyAll(){
-      const t=UI[lang];
-      document.documentElement.lang=lang;
+      const t=UI[uiLang];
+      document.documentElement.lang=uiLang;
       document.documentElement.setAttribute('data-theme',theme);
       document.documentElement.style.setProperty('--fs',fsize+'px');
       document.body.classList.toggle('nodetails',detMode==='0');
@@ -6744,10 +7292,10 @@
       // theme labels
       const tn=t.themeNames; const tb=$('set-theme').children; tb[0].textContent=tn.dark; tb[1].textContent=tn.light; tb[2].textContent=tn.oled; tb[3].textContent=tn.hc;
       // localized field descriptions / section notes (data-it / data-en) + crumb mirrors the active tab
-      for(const el of panel.querySelectorAll('[data-i18n]')){ let v=el.dataset[lang]; if(v==null){ const den=el.dataset.en, o=ANIMA_L10N[lang]; v=(o&&den!=null&&o[den]!=null)?o[den]:(den!=null?den:el.dataset.it); } if(v!=null) el.innerHTML=v; }
+      for(const el of panel.querySelectorAll('[data-i18n]')){ let v=el.dataset[uiLang]; if(v==null){ const den=el.dataset.en, o=ANIMA_L10N[uiLang]; v=(o&&den!=null&&o[den]!=null)?o[den]:(den!=null?den:el.dataset.it); } if(v!=null) el.innerHTML=v; }
       { const on=$('set-tabs').querySelector('.set-tab.on'), cr=$('set-crumb'); if(on&&cr){ const tl=on.querySelector('.tl'); if(tl) cr.textContent=tl.textContent; } }
       // status + header
-      $('st-mode').textContent=modeLabel(mode); $('pill-mode').textContent=modeLabel(mode); $('st-lang').textContent=lang.toUpperCase();
+      $('st-mode').textContent=modeLabel(mode); $('pill-mode').textContent=modeLabel(mode); $('st-lang').textContent=uiLang.toUpperCase();
       // BROWSER (edge): ⚡ prefix on the pill + a ready-aware tooltip, and surface the local-engine row
       const mp=$('mode-pill'); if(mp){ mp.classList.toggle('edge', isPrivate()); mp.classList.toggle('ready', isPrivate()&&_edgeReady);
         mp.title = L('modePillTip',{ mode:modeLabel(mode) }); mp.setAttribute('aria-label', mp.title); }
@@ -6756,11 +7304,11 @@
       const re=$('row-edge'); if(re){ re.hidden = false; if(typeof updateEdgeRow==='function') updateEdgeRow(); }
       const rlm=$('row-localmodel'); if(rlm){ rlm.hidden = false; if(typeof renderLocalModel==='function') renderLocalModel(); }
       const onseg=(host,attr,val)=>{ for(const b of $(host).children) b.classList.toggle('on', b.dataset[attr]===String(val)); };
-      onseg('set-lang','l',lang); onseg('set-mode','m',mode); onseg('set-theme','t',theme); onseg('set-size','z',fsize);
+      onseg('set-lang','l',uiLang); onseg('set-mode','m',mode); onseg('set-theme','t',theme); onseg('set-size','z',fsize);
       onseg('set-speed','s',speed); onseg('set-details','d',detMode); onseg('set-sugg','g',suggOn?'1':'0'); onseg('set-compact','c',autoCompact?'1':'0');
       onseg('set-agents','a',useAgents?'1':'0'); onseg('set-agentauto','aa',agentAuto?'1':'0'); onseg('set-agentweb','aw',agentWeb?'1':'0');
       onseg('set-pc','pc',pcMode);
-      { const wb=$('webtog'); if(wb){ wb.setAttribute('aria-pressed', webCompound?'true':'false'); wb.title=UI[lang].webTog; } }
+      { const wb=$('webtog'); if(wb){ wb.setAttribute('aria-pressed', webCompound?'true':'false'); wb.title=UI[uiLang].webTog; } }
       onseg('set-voicesrc','vs',curVoiceSrc());
       onseg('set-webvoice','wv',webVoice?'1':'0');
       try{ updateMeter(); }catch{}   // refresh the token-budget meter for the active mode
@@ -7065,7 +7613,7 @@
       const wrap=document.createElement('div'); wrap.className='codewrap';
       const bar=document.createElement('div'); bar.className='codebar';
       const lab=document.createElement('span'); lab.className='lang'; lab.textContent=path||langRaw||'text'; bar.appendChild(lab);
-      const cb=document.createElement('button'); cb.className='cbtn'; cb.textContent=UI[lang].copy;
+      const cb=document.createElement('button'); cb.className='cbtn'; cb.textContent=UI[uiLang].copy;
       const pre=document.createElement('pre'); pre.className='code'; pre.innerHTML=hl(code||'', langRaw);
       wireCopy(cb, ()=>code||'', pre);
       bar.appendChild(cb); attachRun(bar, wrap, code, langRaw); wrap.appendChild(bar);
@@ -7076,7 +7624,7 @@
       renderMd(body, view.reply||''); body.dataset.raw=view.reply||'';
       if(view.card){ const c=view.card; const card=document.createElement('div'); card.className='card fcard'; card.dataset.status=c.status||'info';
         card.innerHTML='<div class="ci">'+esc(c.icon||'≣')+'</div><div class="cl"><div class="ct">'+esc(c.title||'')+(c.badge?(' <span class="badge '+(c.badgeKind||'')+'">'+esc(c.badge)+'</span>'):'')+'</div>'+(c.sub?'<div class="cs">'+esc(c.sub)+'</div>':'')+'</div>';
-        if(c.openPath){ const go=document.createElement('button'); go.className='cgo'; go.textContent=TR('Apri', 'Open'); go.addEventListener('click',()=>{ handoffFile(c.openPath); go.textContent=UI[lang].sent+' ✓'; go.classList.add('done'); }); card.appendChild(go); }
+        if(c.openPath){ const go=document.createElement('button'); go.className='cgo'; go.textContent=TR('Apri', 'Open'); go.addEventListener('click',()=>{ handoffFile(c.openPath); go.textContent=UI[uiLang].sent+' ✓'; go.classList.add('done'); }); card.appendChild(go); }
         if(c.overwrite){ const go=document.createElement('button'); go.className='cgo'; go.textContent=TR('Sovrascrivi', 'Overwrite'); go.addEventListener('click',()=>{ go.disabled=true; doOverwriteMove(c.overwrite.from,c.overwrite.to); }); card.appendChild(go); }
         body.appendChild(card);
       }
@@ -7218,7 +7766,7 @@
       if(!quiet) toast(L('mpChosen',{ name:pickLabel(p, true) }),'ok');
     }
     // " · medium": the effort the request will really carry (clamped to what the model takes), '' where none.
-    function effortTag(provider, model, e){ const v=AI.effortFor(provider, model, e); return v ? ' · '+AI.effortLabel(v, lang) : ''; }
+    function effortTag(provider, model, e){ const v=AI.effortFor(provider, model, e); return v ? ' · '+AI.effortLabel(v, uiLang) : ''; }
     function pickLabel(p, withEffort){
       if(!p || p.kind==='auto'){
         let l=L('modeAuto');
@@ -7293,20 +7841,20 @@
             +'<span class="mp-e" data-ef="'+i+'"></span>'+(it.badge?'<span class="mp-b">'+esc(it.badge)+'</span>':'')+'</div>';
         }
       }
-      if(!html) html='<div class="mp-load">'+esc(UI[lang].noResults||'—')+'</div>';
+      if(!html) html='<div class="mp-load">'+esc(UI[uiLang].noResults||'—')+'</div>';
       list.innerHTML=html;
       if(_mpSel>=_mpRows.length) _mpSel=Math.max(0,_mpRows.length-1);
       mpRowEff(); mpMark();
     }
     // The effort beside each row that takes one (the level its request will carry).
-    function mpRowEff(){ _mp.querySelectorAll('.mp-e[data-ef]').forEach((el)=>{ const e=rowEffort(_mpRows[+el.dataset.ef]); el.textContent=e?AI.effortLabel(e, lang):''; }); }
+    function mpRowEff(){ _mp.querySelectorAll('.mp-e[data-ef]').forEach((el)=>{ const e=rowEffort(_mpRows[+el.dataset.ef]); el.textContent=e?AI.effortLabel(e, uiLang):''; }); }
     // The strip above the footer: the highlighted model's effort levels; a tap or ←/→ changes it.
     function mpEffPaint(){
       const box=_mp.querySelector('#mp-eff'), it=_mpRows[_mpSel];
       if(!it || !it.levels || !it.levels.length){ box.hidden=true; return; }
       const cur=rowEffort(it);
       box.hidden=false;
-      box.innerHTML='<span class="mp-el">'+esc(AI.effortLabel('label', lang))+'</span>'+it.levels.map((l)=>'<button type="button" class="mp-ei'+(l===cur?' on':'')+'" data-e="'+l+'" aria-pressed="'+(l===cur)+'">'+esc(AI.effortLabel(l, lang))+'</button>').join('');
+      box.innerHTML='<span class="mp-el">'+esc(AI.effortLabel('label', uiLang))+'</span>'+it.levels.map((l)=>'<button type="button" class="mp-ei'+(l===cur?' on':'')+'" data-e="'+l+'" aria-pressed="'+(l===cur)+'">'+esc(AI.effortLabel(l, uiLang))+'</button>').join('');
     }
     function mpMark(){
       _mp.querySelectorAll('.mp-row.sel').forEach((r)=>r.classList.remove('sel'));

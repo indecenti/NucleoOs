@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
-// tour.js — Paint's first-run guided tutorial. Bilingual (IT/EN), spotlight + step cards, and — crucially —
-// it VERIFIES the device is ready (WebGPU? SDXS model on SD? save target?) and WARNS the user with concrete
-// next steps. Self-contained: it injects its own CSS, queries Paint's DOM by id, and runs the capability
+// tour.js — Paint's first-run guided tutorial in IT/EN/ZH (other languages read English). Spotlight + step cards, and
+// — crucially — it VERIFIES the device is ready (WebGPU? SDXS model on SD? save target?) and WARNS the user
+// with concrete next steps. Self-contained: it injects its own CSS, queries Paint's DOM by id, and runs the capability
 // checks itself (probeDiffusion + a manifest fetch). DOM-only; no coupling beyond a few element ids.
 //
 // startTour({ lang, force, modelDir, inShell, openAtelier }):
@@ -67,7 +67,38 @@ const T = {
       ['X', 'Swap primary/secondary colors'], ['Ctrl+Z / Ctrl+Y', 'Undo / Redo'], ['Ctrl+S', 'Save'],
       ['Ctrl+wheel', 'Zoom'], ['Tab', 'Toggle panel'], ['Del', 'Clear all'], ['Esc', 'Close window/tour']],
   },
+  zh: {
+    skip: '跳过', back: '上一步', next: '下一步', done: '完成', start: '开始导览', later: '以后再说',
+    checking: '正在检查…',
+    steps: [
+      { title: '欢迎使用画图', body: '一款在设备上用 AI 生成图像的图像编辑器。接下来用 9 步带你了解：工具、透明度，以及如何设置模型。只需一分钟。' },
+      { sel: '#tools', title: '工具', body: '画笔（B）、直线（L）、矩形（R）、椭圆（E）、橡皮擦、油漆桶、取色器、选框（M）、魔棒（W）和文字（T）。' },
+      { sel: '.color-pair', title: '颜色', body: '主色（描边）和副色（填充）。按 X 键可交换。旁边的调色板用于快速选色。' },
+      { sel: '#optsbar', title: '工具选项', body: '这一栏随当前工具变化：形状填充、油漆桶/魔棒的容差、文字大小。' },
+      { sel: '#panel', title: '工具面板', body: '这里有选区、背景、调整（亮度/对比度/饱和度和滤镜）以及变换。按 Tab 可隐藏面板，腾出更多画布空间。' },
+      { sel: '.psec[data-sec="bg"]', title: '移除背景', body: '展开这一栏：「移除背景（自动）」会把纯色背景变成透明。也可以选择 魔棒，点按背景。透明效果是真正的 PNG（保存的 .png 带透明通道）。' },
+      { sel: '#rulerTop', title: '标尺和缩放', body: '标尺显示像素坐标。用 Ctrl+滚轮或下方的按钮缩放；网格和标尺在「视图」菜单中。' },
+      { sel: '#atelierBtn', title: 'Atelier — AI 生成', body: '根据文字或草图生成图像：在浏览器的 GPU 上运行，不经过云端。现在检查你的设备是否已准备就绪…' },
+      { title: '你的设备准备好了吗？', body: '正在检查 WebGPU、模型和本地缓存：', check: true },
+      { sel: '[data-menu="file"]', title: '保存并完成', body: '按 Ctrl+S 保存（带透明度的 PNG）。可以随时在「帮助 → 引导教程」中重看本教程。祝你玩得开心！' },
+    ],
+    chkWebgpuOk: (mb) => `WebGPU 可用${mb ? `（约 ${mb} MB）` : ''} — 生成速度快。`,
+    chkWebgpuWasm: '没有 WebGPU：将使用 CPU（WASM），较慢但可以运行。使用桌面版 Chrome/Edge 效果最佳。',
+    chkModelOk: '设备的 SD 卡上已有 SDXS 模型 — 已就绪。',
+    chkModelNo: '设备的 SD 卡上没有模型。你仍可以用下方的按钮从互联网下载（553 MB，GitHub）。要安装到 SD 卡：先运行 node tools/sdxs/provision-lsb.mjs，再运行 sd-sync.ps1。',
+    chkCacheOk: '已有本地缓存 — 即时加载（无需 WiFi）。',
+    chkCacheNo: (mb) => `首次打开：从互联网（GitHub）或通过 WiFi 从设备下载 ${mb} MB，然后保存在浏览器中。之后打开都在本地，即时完成。`,
+    chkCacheOpen: '打开 Atelier 并立即下载',
+    chkSaveOk: '已启用保存到设备。',
+    chkSaveNo: '不在外壳中：只有在 NucleoOS 外壳中才能保存到设备。',
+    scTitle: '键盘快捷键', scClose: '关闭',
+    sc: [['B / L / R / E', '画笔 / 直线 / 矩形 / 椭圆'], ['M / W / T', '选框 / 魔棒 / 文字'],
+      ['X', '交换主色/副色'], ['Ctrl+Z / Ctrl+Y', '撤销 / 重做'], ['Ctrl+S', '保存'],
+      ['Ctrl+滚轮', '缩放'], ['Tab', '显示/隐藏面板'], ['Del', '全部清除'], ['Esc', '关闭窗口/导览']],
+  },
 };
+// A language without a table (es, fr, de) reads English.
+const pick = (lang) => T[lang] || T.en;
 
 // Check whether at least one chunk of the SDXS model is already in IndexedDB.
 // Uses the same DB name as model-cache.js: sdxs-cache-{revision}.
@@ -126,7 +157,7 @@ const lset = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 export function startTour({ lang = 'it', force = false, modelDir = '', inShell = false } = {}) {
   if (!force && lget('paint.tour.done')) return;
   injectStyle();
-  const t = T[lang === 'en' ? 'en' : 'it'];
+  const t = pick(lang);
   const steps = t.steps;
   let i = 0, back = null;
 
@@ -235,7 +266,7 @@ export function startTour({ lang = 'it', force = false, modelDir = '', inShell =
 
 export function showShortcuts(lang = 'it') {
   injectStyle();
-  const t = T[lang === 'en' ? 'en' : 'it'];
+  const t = pick(lang);
   const back = document.createElement('div'); back.className = 'tour-back';
   back.innerHTML = `<div class="tour-card" style="left:50%;top:50%;transform:translate(-50%,-50%);width:min(380px,92vw)">
     <h3>⌨️ ${t.scTitle}</h3>

@@ -68,8 +68,8 @@ On first power-up the Cardputer runs a short on-screen wizard, driven by its own
 only once (until you reset the device). See [`setup-wizard.md`](setup-wizard.md).
 
 1. **Language** — **English** or **Italiano**. The choice applies at once to the rest of the
-   wizard and to the whole OS. The other interface languages (Deutsch, Español, Français) can be
-   chosen afterwards in **Settings ▸ Language**.
+   wizard and to the whole OS. The other interface languages (Deutsch, Español, Français, and
+   简体中文 in the browser) can be chosen afterwards in **Settings ▸ Language**.
 2. **Welcome** — press **Enter** to begin.
 3. **Network** — choose one:
    - **Connect to a Wi-Fi network** — pick your SSID from the scan, type the password on the keyboard.
@@ -202,6 +202,13 @@ The OS UI ships in **five languages: Italian, English, German, Spanish, French**
 · fr). Change it in **Settings ▸ language** on the device, or in the web Settings. The choice is
 system-wide — the shell, apps, launcher search and voice all follow it. (ANIMA's offline knowledge
 engine understands Italian and English.) See [`i18n.md`](i18n.md).
+
+**Simplified Chinese (简体中文)** is a sixth language for the web OS in the browser: pick it in the web
+**Settings ▸ Appearance ▸ Language** (or `lang zh` in the Terminal). The shell, every app, ANIMA's
+interface and the manual (Help, `man`) switch to Chinese, and online models answer in Chinese. The
+Cardputer itself stays in English underneath: its screen font has no Chinese characters, and its
+offline voice and ANIMA's offline answers are Italian/English. The choice belongs to the browser where
+you make it — another browser shows the device's language until Chinese is chosen there too.
 
 ---
 

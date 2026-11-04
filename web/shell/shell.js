@@ -1743,7 +1743,11 @@ function connectWS() {
       if (ev.t === 'system.language' && ev.d && ev.d.lang) {
         // setLang() already validates the code against all 5 OS languages (it/en/es/fr/de) and no-ops on
         // an unknown one — so no it/en-only gate here, which used to drop a device->web switch to es/fr/de.
-        try { if (window.NucleoI18N && window.NucleoI18N.lang !== ev.d.lang) window.NucleoI18N.setLang(ev.d.lang); } catch {}
+        // fromDevice(): the device echoing 'en' under a browser-only language (zh) keeps it (nucleo-i18n.js DEVICE_LANGS).
+        try {
+          const I = window.NucleoI18N, l = I && (I.fromDevice(ev.d.lang) || ev.d.lang);
+          if (I && I.lang !== l) I.setLang(l);
+        } catch {}
       }
       // The heavy-work arbiter took/released its single token (one TLS/SD/heavy job at a time on the
       // PSRAM-less device) — show a subtle, debounced "busy" tray indicator. NOT a blocking overlay:
@@ -2205,6 +2209,9 @@ async function showStartPerson() {
 // already switched. Loop-safe: the device only re-broadcasts on an ACTUAL change, so our own echo is
 // a no-op that stops the cycle.
 function postLangToDevice(lang) {
+  // The device stores only its own languages: a browser-only one (zh) is sent as English, which every
+  // firmware accepts — never a code an old firmware would turn into 'en' by itself and echo back.
+  if (window.NucleoI18N) lang = window.NucleoI18N.deviceLang(lang);
   try {
     fetch('/api/lang', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ lang }), credentials: 'same-origin', cache: 'no-store' }).catch(() => {});
@@ -2228,7 +2235,8 @@ async function applySettingsFromDevice() {
       // every surface's translation; nucleo.locale = optional Intl format override) so the stored
       // OS settings drive the whole OS on every client.
       // Accept all 5 OS languages, not just it/en (settings.json stores the code verbatim: es/fr/de too).
-      const _lang = s.ui.language;
+      // settings.json holds a DEVICE language: under a browser-only one (zh) it says 'en' (nucleo-i18n.js DEVICE_LANGS).
+      const _lang = window.NucleoI18N ? (window.NucleoI18N.fromDevice(s.ui.language) || s.ui.language) : s.ui.language;
       const _validLang = window.NucleoI18N ? window.NucleoI18N.LANGS.some((l) => l.code === _lang) : SHELL_LANGS.includes(_lang);
       if (_validLang) {
         if (window.NucleoI18N) window.NucleoI18N.setLang(_lang);

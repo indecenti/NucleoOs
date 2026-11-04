@@ -451,16 +451,17 @@ const $ = id => document.getElementById(id);
 // canvas-clearing shortcut fires — so typing "blue rect" can't switch tools or wipe the canvas.
 function isTyping(){ const a=document.activeElement; return !!(a && (a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.isContentEditable)); }
 
-// ---- language (IT/EN inline + es/fr/de overrides) — single source: the OS language (anima.lang).
+// ---- language (IT/EN inline + es/fr/de/zh overrides) — single source: the OS language (anima.lang).
 // Reads anima.lang first, then the document lang (kept in sync by /nucleo-i18n.js). Returns the FULL code.
-function paintLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; }catch{ return 'en'; } }
+function paintLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de','zh'].includes(l)?l:'en'; }catch{ return 'en'; } }
 function EN(){ return paintLang()==='en'; }
 // LT(it,en): pick the right string for the active language at call time. Used by every runtime message.
 // (Named LT, not L — `L` is the pervasive per-layer variable name throughout this file.)
-// IT + EN live inline at each call site; es/fr/de are looked up in PAINT_L10N, KEYED BY THE ENGLISH string.
+// IT + EN live inline at each call site; es/fr/de/zh are looked up in PAINT_L10N, KEYED BY THE ENGLISH string.
 // A missing key falls back to English (never Italian), so a stray untranslated string is at worst English.
 function LT(it,en){ const l=paintLang(); if(l==='it') return it; if(l==='en') return en; return (PAINT_L10N[l]&&PAINT_L10N[l][en])||en; }
-// es/fr/de professional translations, keyed by the ENGLISH string above. UL() (Atelier) shares this table.
+// es/fr/de/zh translations of the runtime strings, keyed by the ENGLISH string above. UL() (Atelier) shares this
+// table; the static chrome (menus, tooltips, panel) comes from the i18n.<lang>.json catalogs instead.
 // Proper nouns (Paint, Atelier, WebGPU, SDXS, ORT, ControlNet, UNet, VAE, PNG, Grok, xAI, Cardputer), file
 // paths, keyboard shortcuts and ${…} vars are intentionally NOT translated. Prefix/suffix keys keep their spaces.
 const PAINT_L10N = {
@@ -490,41 +491,11 @@ const PAINT_L10N = {
     'Background removed (active layer)':'Fondo eliminado (capa activa)','Grayscale':'Escala de grises',
     'Colors inverted':'Colores invertidos','Sepia':'Sepia','Blurred':'Desenfocado','Sharpened':'Enfocado','Edges':'Bordes',
     'Commands module not loaded':'Módulo de comandos no cargado','Error: ':'Error: ','Tutorial unavailable':'Tutorial no disponible',
-    // menu bar
-    'File':'Archivo','Edit':'Editar','Adjust':'Ajustar','View':'Ver','Help':'Ayuda',
-    'Open…':'Abrir…','Save':'Guardar','Save as…':'Guardar como…','Exit':'Salir','Undo':'Deshacer','Redo':'Rehacer',
-    'Copy':'Copiar','Paste':'Pegar','Clear all':'Borrar todo','Resize canvas…':'Redimensionar lienzo…',
-    'New transparent':'Nuevo transparente','Crop to selection':'Recortar a la selección','Trim transparent borders':'Recortar bordes transparentes',
-    'Rotate 90° clockwise':'Rotar 90° a la derecha','Rotate 90° counter-clockwise':'Rotar 90° a la izquierda',
-    'Flip horizontal':'Voltear horizontal','Flip vertical':'Voltear vertical','Remove background (auto)':'Quitar fondo (auto)',
-    'Brightness / Contrast / Saturation…':'Brillo / Contraste / Saturación…','Invert colors':'Invertir colores',
-    'Blur':'Desenfocar','Sharpen':'Enfocar','Rulers':'Reglas','Grid':'Cuadrícula','Tools panel':'Panel de herramientas',
-    'Fit to window':'Ajustar a la ventana','Guided tutorial ✨':'Tutorial guiado ✨','Keyboard shortcuts':'Atajos de teclado',
-    // toolbar tooltips
-    'Brush (B)':'Pincel (B)','Line (L)':'Línea (L)','Rectangle (R)':'Rectángulo (R)','Ellipse (E)':'Elipse (E)',
-    'Eraser':'Goma','Fill bucket':'Cubo de relleno','Eyedropper':'Cuentagotas','Rectangular selection (M)':'Selección rectangular (M)',
-    'Magic wand — erase the background by clicking (W)':'Varita mágica — borra el fondo haciendo clic (W)','Text (T)':'Texto (T)',
-    'Primary color (stroke)':'Color primario (trazo)','Secondary color (fill)':'Color secundario (relleno)',
-    'Swap colors (X)':'Intercambiar colores (X)','Brush size':'Grosor del pincel','Undo (Ctrl+Z)':'Deshacer (Ctrl+Z)',
-    'Redo (Ctrl+Y)':'Rehacer (Ctrl+Y)','Show/hide panel (Tab)':'Mostrar/ocultar panel (Tab)',
-    'Atelier — generate an image with AI (WebGPU, on device)':'Atelier — genera una imagen con IA (WebGPU, en el dispositivo)',
-    // options bar
-    ' Filled (color 2)':' Relleno (color 2)','Tolerance':'Tolerancia','Size':'Tamaño',' Bold':' Negrita',
-    'Ask Paint… e.g. «remove the background», «create a cat icon», «brightness +20», «rotate right»':'Pide a Paint… p. ej. «quita el fondo», «crea un icono de gato», «brillo +20», «girar a la derecha»',
-    'Run (Enter)':'Ejecutar (Intro)','Drop to open the image':'Suelta para abrir la imagen',
-    // right panel
-    'Tools':'Herramientas','Hide panel (Tab)':'Ocultar panel (Tab)','Layers':'Capas','Brush':'Pincel','Selection':'Selección',
-    'Adjustments':'Ajustes','Transform':'Transformar','Opacity':'Opacidad','Blend':'Fusión','Brightness':'Brillo',
-    'Contrast':'Contraste','Saturation':'Saturación','Feather':'Difuminar',
-    'Normal':'Normal','Multiply':'Multiplicar','Screen':'Trama','Overlay':'Superponer','Darken':'Oscurecer',
-    'Lighten':'Aclarar','Color dodge':'Sobreexponer color','Difference':'Diferencia',
-    'New layer':'Nueva capa','Duplicate':'Duplicar','Move up':'Subir','Move down':'Bajar','Merge down':'Combinar hacia abajo','Delete':'Eliminar',
-    'The eraser cuts to transparent (real PNG alpha).':'La goma borra a transparente (alfa PNG real).',
-    'Crop':'Recortar','Clear':'Borrar','Fill':'Rellenar','✨ Generate here':'✨ Generar aquí','Deselect':'Deseleccionar',
-    'Or pick the 🪄 wand and click the background to erase.':'O elige la 🪄 varita y haz clic en el fondo para borrarlo.',
-    'Apply':'Aplicar','Gray':'Grises','Invert':'Invertir','Sharp':'Enfocar',
-    'File: ':'Archivo: ','Canvas: ':'Lienzo: ','Zoom out':'Alejar','Zoom in':'Acercar','Fit':'Ajustar',
-    // options-bar tool name + hint
+    // tool names (options bar)
+    'Eraser':'Goma','Eyedropper':'Cuentagotas',
+    'Brush':'Pincel','Selection':'Selección',
+    'Fill':'Rellenar',
+    // options-bar hints
     'Line':'Línea','Rectangle':'Rectángulo','Ellipse':'Elipse','Magic wand':'Varita mágica','Text':'Texto',
     'Drag to draw · opacity in the panel':'Arrastra para dibujar · opacidad en el panel',
     'Erases to transparent (PNG alpha)':'Borra a transparente (alfa PNG)',
@@ -608,41 +579,11 @@ const PAINT_L10N = {
     'Background removed (active layer)':'Fond supprimé (calque actif)','Grayscale':'Niveaux de gris',
     'Colors inverted':'Couleurs inversées','Sepia':'Sépia','Blurred':'Flouté','Sharpened':'Netteté appliquée','Edges':'Contours',
     'Commands module not loaded':'Module de commandes non chargé','Error: ':'Erreur : ','Tutorial unavailable':'Tutoriel indisponible',
-    // menu bar
-    'File':'Fichier','Edit':'Édition','Adjust':'Ajuster','View':'Affichage','Help':'Aide',
-    'Open…':'Ouvrir…','Save':'Enregistrer','Save as…':'Enregistrer sous…','Exit':'Quitter','Undo':'Annuler','Redo':'Rétablir',
-    'Copy':'Copier','Paste':'Coller','Clear all':'Tout effacer','Resize canvas…':'Redimensionner la toile…',
-    'New transparent':'Nouveau transparent','Crop to selection':'Rogner à la sélection','Trim transparent borders':'Rogner les bords transparents',
-    'Rotate 90° clockwise':'Pivoter 90° sens horaire','Rotate 90° counter-clockwise':'Pivoter 90° sens antihoraire',
-    'Flip horizontal':'Retourner horizontalement','Flip vertical':'Retourner verticalement','Remove background (auto)':'Supprimer le fond (auto)',
-    'Brightness / Contrast / Saturation…':'Luminosité / Contraste / Saturation…','Invert colors':'Inverser les couleurs',
-    'Blur':'Flou','Sharpen':'Netteté','Rulers':'Règles','Grid':'Grille','Tools panel':'Panneau d’outils',
-    'Fit to window':'Ajuster à la fenêtre','Guided tutorial ✨':'Tutoriel guidé ✨','Keyboard shortcuts':'Raccourcis clavier',
-    // toolbar tooltips
-    'Brush (B)':'Pinceau (B)','Line (L)':'Ligne (L)','Rectangle (R)':'Rectangle (R)','Ellipse (E)':'Ellipse (E)',
-    'Eraser':'Gomme','Fill bucket':'Pot de peinture','Eyedropper':'Pipette','Rectangular selection (M)':'Sélection rectangulaire (M)',
-    'Magic wand — erase the background by clicking (W)':'Baguette magique — effacez le fond en cliquant (W)','Text (T)':'Texte (T)',
-    'Primary color (stroke)':'Couleur primaire (trait)','Secondary color (fill)':'Couleur secondaire (remplissage)',
-    'Swap colors (X)':'Permuter les couleurs (X)','Brush size':'Taille du pinceau','Undo (Ctrl+Z)':'Annuler (Ctrl+Z)',
-    'Redo (Ctrl+Y)':'Rétablir (Ctrl+Y)','Show/hide panel (Tab)':'Afficher/masquer le panneau (Tab)',
-    'Atelier — generate an image with AI (WebGPU, on device)':'Atelier — générez une image avec l’IA (WebGPU, sur l’appareil)',
-    // options bar
-    ' Filled (color 2)':' Rempli (couleur 2)','Tolerance':'Tolérance','Size':'Taille',' Bold':' Gras',
-    'Ask Paint… e.g. «remove the background», «create a cat icon», «brightness +20», «rotate right»':'Demandez à Paint… ex. «supprime le fond», «crée une icône de chat», «luminosité +20», «pivoter à droite»',
-    'Run (Enter)':'Exécuter (Entrée)','Drop to open the image':'Déposez pour ouvrir l’image',
-    // right panel
-    'Tools':'Outils','Hide panel (Tab)':'Masquer le panneau (Tab)','Layers':'Calques','Brush':'Pinceau','Selection':'Sélection',
-    'Adjustments':'Réglages','Transform':'Transformer','Opacity':'Opacité','Blend':'Fusion','Brightness':'Luminosité',
-    'Contrast':'Contraste','Saturation':'Saturation','Feather':'Adoucir',
-    'Normal':'Normal','Multiply':'Produit','Screen':'Superposition','Overlay':'Incrustation','Darken':'Obscurcir',
-    'Lighten':'Éclaircir','Color dodge':'Densité couleur -','Difference':'Différence',
-    'New layer':'Nouveau calque','Duplicate':'Dupliquer','Move up':'Monter','Move down':'Descendre','Merge down':'Fusionner vers le bas','Delete':'Supprimer',
-    'The eraser cuts to transparent (real PNG alpha).':'La gomme efface en transparence (alpha PNG réel).',
-    'Crop':'Rogner','Clear':'Effacer','Fill':'Remplir','✨ Generate here':'✨ Générer ici','Deselect':'Désélectionner',
-    'Or pick the 🪄 wand and click the background to erase.':'Ou choisissez la 🪄 baguette et cliquez sur le fond à effacer.',
-    'Apply':'Appliquer','Gray':'Gris','Invert':'Inverser','Sharp':'Netteté',
-    'File: ':'Fichier : ','Canvas: ':'Toile : ','Zoom out':'Zoom arrière','Zoom in':'Zoom avant','Fit':'Ajuster',
-    // options-bar tool name + hint
+    // tool names (options bar)
+    'Eraser':'Gomme','Eyedropper':'Pipette',
+    'Brush':'Pinceau','Selection':'Sélection',
+    'Fill':'Remplir',
+    // options-bar hints
     'Line':'Ligne','Rectangle':'Rectangle','Ellipse':'Ellipse','Magic wand':'Baguette magique','Text':'Texte',
     'Drag to draw · opacity in the panel':'Glissez pour dessiner · opacité dans le panneau',
     'Erases to transparent (PNG alpha)':'Efface en transparence (alpha PNG)',
@@ -726,41 +667,11 @@ const PAINT_L10N = {
     'Background removed (active layer)':'Hintergrund entfernt (aktive Ebene)','Grayscale':'Graustufen',
     'Colors inverted':'Farben umgekehrt','Sepia':'Sepia','Blurred':'Weichgezeichnet','Sharpened':'Geschärft','Edges':'Kanten',
     'Commands module not loaded':'Befehlsmodul nicht geladen','Error: ':'Fehler: ','Tutorial unavailable':'Tutorial nicht verfügbar',
-    // menu bar
-    'File':'Datei','Edit':'Bearbeiten','Adjust':'Anpassen','View':'Ansicht','Help':'Hilfe',
-    'Open…':'Öffnen…','Save':'Speichern','Save as…':'Speichern unter…','Exit':'Beenden','Undo':'Rückgängig','Redo':'Wiederholen',
-    'Copy':'Kopieren','Paste':'Einfügen','Clear all':'Alles löschen','Resize canvas…':'Leinwand skalieren…',
-    'New transparent':'Neu transparent','Crop to selection':'Auf Auswahl zuschneiden','Trim transparent borders':'Transparente Ränder beschneiden',
-    'Rotate 90° clockwise':'90° im Uhrzeigersinn drehen','Rotate 90° counter-clockwise':'90° gegen den Uhrzeigersinn drehen',
-    'Flip horizontal':'Horizontal spiegeln','Flip vertical':'Vertikal spiegeln','Remove background (auto)':'Hintergrund entfernen (auto)',
-    'Brightness / Contrast / Saturation…':'Helligkeit / Kontrast / Sättigung…','Invert colors':'Farben umkehren',
-    'Blur':'Weichzeichnen','Sharpen':'Schärfen','Rulers':'Lineale','Grid':'Raster','Tools panel':'Werkzeugleiste',
-    'Fit to window':'An Fenster anpassen','Guided tutorial ✨':'Geführtes Tutorial ✨','Keyboard shortcuts':'Tastenkürzel',
-    // toolbar tooltips
-    'Brush (B)':'Pinsel (B)','Line (L)':'Linie (L)','Rectangle (R)':'Rechteck (R)','Ellipse (E)':'Ellipse (E)',
-    'Eraser':'Radierer','Fill bucket':'Farbeimer','Eyedropper':'Pipette','Rectangular selection (M)':'Rechteckige Auswahl (M)',
-    'Magic wand — erase the background by clicking (W)':'Zauberstab — Hintergrund per Klick löschen (W)','Text (T)':'Text (T)',
-    'Primary color (stroke)':'Primärfarbe (Kontur)','Secondary color (fill)':'Sekundärfarbe (Füllung)',
-    'Swap colors (X)':'Farben tauschen (X)','Brush size':'Pinselgröße','Undo (Ctrl+Z)':'Rückgängig (Ctrl+Z)',
-    'Redo (Ctrl+Y)':'Wiederholen (Ctrl+Y)','Show/hide panel (Tab)':'Panel ein-/ausblenden (Tab)',
-    'Atelier — generate an image with AI (WebGPU, on device)':'Atelier — ein Bild mit KI erzeugen (WebGPU, auf dem Gerät)',
-    // options bar
-    ' Filled (color 2)':' Gefüllt (Farbe 2)','Tolerance':'Toleranz','Size':'Größe',' Bold':' Fett',
-    'Ask Paint… e.g. «remove the background», «create a cat icon», «brightness +20», «rotate right»':'Frag Paint… z. B. «entferne den Hintergrund», «erstelle ein Katzen-Icon», «Helligkeit +20», «nach rechts drehen»',
-    'Run (Enter)':'Ausführen (Enter)','Drop to open the image':'Zum Öffnen des Bildes ablegen',
-    // right panel
-    'Tools':'Werkzeuge','Hide panel (Tab)':'Panel ausblenden (Tab)','Layers':'Ebenen','Brush':'Pinsel','Selection':'Auswahl',
-    'Adjustments':'Anpassungen','Transform':'Transformieren','Opacity':'Deckkraft','Blend':'Modus','Brightness':'Helligkeit',
-    'Contrast':'Kontrast','Saturation':'Sättigung','Feather':'Weiche Kante',
-    'Normal':'Normal','Multiply':'Multiplizieren','Screen':'Negativ multiplizieren','Overlay':'Ineinanderkopieren','Darken':'Abdunkeln',
-    'Lighten':'Aufhellen','Color dodge':'Farbig abwedeln','Difference':'Differenz',
-    'New layer':'Neue Ebene','Duplicate':'Duplizieren','Move up':'Nach oben','Move down':'Nach unten','Merge down':'Nach unten reduzieren','Delete':'Löschen',
-    'The eraser cuts to transparent (real PNG alpha).':'Der Radierer löscht zu Transparenz (echtes PNG-Alpha).',
-    'Crop':'Zuschneiden','Clear':'Löschen','Fill':'Füllen','✨ Generate here':'✨ Hier erzeugen','Deselect':'Auswahl aufheben',
-    'Or pick the 🪄 wand and click the background to erase.':'Oder wähle den 🪄 Zauberstab und klicke auf den zu löschenden Hintergrund.',
-    'Apply':'Anwenden','Gray':'Grau','Invert':'Umkehren','Sharp':'Schärfen',
-    'File: ':'Datei: ','Canvas: ':'Leinwand: ','Zoom out':'Verkleinern','Zoom in':'Vergrößern','Fit':'Anpassen',
-    // options-bar tool name + hint
+    // tool names (options bar)
+    'Eraser':'Radierer','Eyedropper':'Pipette',
+    'Brush':'Pinsel','Selection':'Auswahl',
+    'Fill':'Füllen',
+    // options-bar hints
     'Line':'Linie','Rectangle':'Rechteck','Ellipse':'Ellipse','Magic wand':'Zauberstab','Text':'Text',
     'Drag to draw · opacity in the panel':'Ziehen zum Zeichnen · Deckkraft im Panel',
     'Erases to transparent (PNG alpha)':'Löscht zu Transparenz (PNG-Alpha)',
@@ -817,6 +728,94 @@ const PAINT_L10N = {
     'Image (SDXS · in browser)':'Bild (SDXS · im Browser)',' · in the selection':' · in der Auswahl',
     ' · prompt reworked by the model':' · Prompt vom Modell überarbeitet',' · saved to /data/Pictures/':' · gespeichert in /data/Pictures/',
     ' · save failed':' · Speichern fehlgeschlagen','✨ Improve the prompt with ':'✨ Prompt verbessern mit ',
+  },
+  zh:{
+    // runtime messages
+    'untitled':'未命名','Undone':'已撤销','Redone':'已重做','Layer 1':'图层 1','Layer ':'图层 ',
+    'Layer added':'已添加图层','At least one layer is required':'至少需要一个图层',' copy':' 副本',
+    'No layer below':'下方没有图层','Layers merged':'图层已合并','Background':'背景',
+    'Image flattened':'图像已拼合','Show/hide':'显示/隐藏','Double-click: rename':'双击：重命名',
+    'Layer name:':'图层名称：','Color picked ':'已取色 ','Ready':'就绪','Image':'图像',
+    'Opened ':'已打开 ','Could not open ':'无法打开 ','Image loaded: ':'图像已载入：',
+    ' (save to keep it)':'（保存后才会保留）','Saved to ':'已保存到 ','Save failed (':'保存失败 (',
+    'Network error: ':'网络错误：','drawing.png':'绘图.png','Image copied to clipboard':'图像已复制到剪贴板',
+    'Image copy not available here (needs HTTPS or localhost)':'此处无法复制图像（需要 HTTPS 或 localhost）',
+    'Copy failed: ':'复制失败：','Paste not available here (needs HTTPS or localhost)':'此处无法粘贴（需要 HTTPS 或 localhost）',
+    'Image pasted':'图像已粘贴','No image in the clipboard':'剪贴板中没有图像','Paste failed: ':'粘贴失败：',
+    'Save image':'保存图像','Open image':'打开图像','New':'新建','Canvas width:':'画布宽度：',
+    'Canvas height:':'画布高度：','Invalid size':'大小无效',
+    'Exit without saving? Your changes will be lost.':'不保存就退出？所做的更改将会丢失。',
+    'Imaging module not loaded yet':'图像模块尚未加载','Operation failed: ':'操作失败：',
+    'Background erased (wand)':'背景已擦除（魔棒）','Selection ':'选区 ',' at (':' 位于 (',
+    'No selection. Use the ▭ tool to select an area.':'没有选区。请用 ▭ 工具选择一个区域。',
+    'No selection':'没有选区','Cropped to selection':'已裁剪到选区','Area cleared':'区域已清除',
+    'Text:':'文字：','Text added':'已添加文字','Adjustments applied':'已应用调整','Reset':'已重置',
+    'Rulers ':'标尺 ','Grid ':'网格 ','New transparent canvas':'新建透明画布','Empty canvas':'画布为空',
+    'Transparent borders trimmed':'已裁掉透明边缘','Rotated 90°':'已旋转 90°','Flipped':'已翻转',
+    'Background removed (active layer)':'背景已移除（当前图层）','Grayscale':'灰度',
+    'Colors inverted':'颜色已反相','Sepia':'棕褐色','Blurred':'已模糊','Sharpened':'已锐化','Edges':'边缘',
+    'Commands module not loaded':'命令模块未加载','Error: ':'错误：','Tutorial unavailable':'教程不可用',
+    // tool names (options bar)
+    'Eraser':'橡皮擦','Eyedropper':'取色器',
+    'Brush':'画笔','Selection':'选区',
+    'Fill':'油漆桶',
+    // options-bar hints
+    'Line':'直线','Rectangle':'矩形','Ellipse':'椭圆','Magic wand':'魔棒','Text':'文字',
+    'Drag to draw · opacity in the panel':'拖动即可绘制 · 不透明度在面板中设置',
+    'Erases to transparent (PNG alpha)':'擦成透明（PNG 透明通道）',
+    'Click to fill an area · tolerance here':'点按即可填充区域 · 容差在此设置',
+    'Click to pick a colour':'点按即可取色',
+    'Drag a rectangle, then use the Selection panel':'拖出一个矩形，然后使用「选区」面板',
+    'Click the background to erase':'点按要擦除的背景','Click where you want to write':'在要输入文字的位置点按',
+    'Drag · Shift to constrain the angle':'拖动 · 按住 Shift 限制角度','Drag · Shift for a square':'拖动 · 按住 Shift 画正方形',
+    'Drag · Shift for a circle':'拖动 · 按住 Shift 画圆形',
+    // Atelier
+    'Atelier — generate an image':'Atelier — 生成图像','SDXS model manager':'SDXS 模型管理','Model':'模型',
+    'Close (Esc)':'关闭（Esc）','Text → Image':'文字 → 图像','Sketch → Image':'草图 → 图像','From image':'从图像',
+    'Model — you choose who generates':'模型 — 由你选择谁来生成','Description (prompt)':'描述（提示词）',
+    'e.g. a red cat sitting on a sofa, warm light, watercolor style':'例如：一只坐在沙发上的红猫，暖光，水彩风格',
+    'What to avoid (negative, optional)':'要避免的内容（反向提示词，可选）',
+    'e.g. blurry, deformed, text, watermark, low quality':'例如：模糊、变形、文字、水印、低质量',
+    '✨ Improve the prompt with AI':'✨ 用 AI 优化提示词','(an LLM rewrites the idea into a professional prompt)':'（由 LLM 把你的想法改写成专业的提示词）',
+    'Seed (reproducible)':'种子（可复现）','Random seed':'随机种子','Variants:':'变体：',
+    'Sketch adherence:':'草图贴合度：','Strength (img→img):':'强度（图→图）：','new layer':'新图层',
+    'save to the device':'保存到设备','Generate':'生成',
+    'Use your drawing as a guide sketch (ControlNet).':'把你的绘图用作引导草图（ControlNet）。',
+    'Reworks the current canvas content according to the prompt.':'按提示词重新处理当前画布内容。',
+    'Generates from text only (canvas ignored).':'只根据文字生成（忽略画布）。','Loading ':'正在加载 ',
+    'Local · SDXS (in browser)':'本地 · SDXS（在浏览器中）','Preview (not AI)':'预览（非 AI）',' — unavailable':' — 不可用',
+    '  ·  Online: the sketch is ignored (text→image only).':'  ·  在线：会忽略草图（仅限文字→图像）。',
+    'no online image provider — configure xAI/Grok in Settings · AI':'没有在线图像服务商 — 请在「设置 · AI / 模型」中配置 xAI/Grok',
+    'Procedural preview (not AI) active.':'程序生成预览（非 AI）已启用。',
+    'Procedural preview (not AI). For real images choose Online (Grok) or download the local model.':'程序生成预览（非 AI）。要生成真正的图像，请选择「在线」（Grok）或下载本地模型。',
+    'Checking model…':'正在检查模型…','Ready · SDXS q68 on WebGPU':'就绪 · SDXS q68 运行于 WebGPU',
+    'Ready · SDXS on WebGPU':'就绪 · SDXS 运行于 WebGPU','Ready · procedural preview':'就绪 · 程序生成预览',
+    '✓ WebGPU active — fast generation':'✓ WebGPU 已启用 — 生成速度快',
+    '⚠ WebGPU missing — will use the CPU (slow but works)':'⚠ 没有 WebGPU — 将使用 CPU（较慢但可以运行）',
+    'Model in <b>local cache</b> — ready, instant load. No download needed.':'模型在<b>本地缓存</b>中 — 已就绪，即时加载，无需下载。',
+    'Model <b>not cached</b>. Download it once (≈553&nbsp;MB): then it stays in the browser and starts instantly.':'模型<b>未缓存</b>。只需下载一次（≈553&nbsp;MB）：之后会保存在浏览器中，即时启动。',
+    'ONNX&nbsp;Runtime unavailable (needs desktop Chrome/Edge). You can still use the procedural preview.':'ONNX&nbsp;Runtime 不可用（需要桌面版 Chrome/Edge）。你仍可以使用程序生成预览。',
+    'Re-download':'重新下载','Download':'下载','Download from the Internet':'从互联网下载',
+    'offline — no connection':'离线 — 没有网络连接','GitHub · ~553 MB · requires a connection':'GitHub · ~553 MB · 需要联网',
+    'Download from the device':'从设备下载','SD over local WiFi · ~553 MB':'SD 卡，通过本地 WiFi · ~553 MB',
+    'model not present on the SD':'SD 卡上没有模型','Use procedural preview (no download)':'使用程序生成预览（无需下载）',
+    'Remove from cache':'从缓存中移除','ORT runtime (inference engine)':'ORT 运行时（推理引擎）',
+    'Starting engine ':'正在启动引擎 ','Fused model (ControlNet + UNet + VAE)':'融合模型（ControlNet + UNet + VAE）',
+    ' · part ':' · 分块 ','MB done':'MB 已完成','compiling the model on the GPU…':'正在 GPU 上编译模型…',
+    '⚠ Operation failed':'⚠ 操作失败','⚙ Preparing the engine':'⚙ 正在准备引擎','⬇ Downloading from ':'⬇ 正在下载，来源：',
+    'Retry':'重试','Try from the device':'尝试从设备获取','Try from the Internet':'尝试从互联网获取','Use preview':'使用预览',
+    'Almost ready — one moment. Do not close Atelier.':'马上就好 — 请稍候，不要关闭 Atelier。',
+    'Download in progress — keep Atelier open and do not drag files until it finishes. You can keep using the rest of the PC.':'正在下载 — 完成前请保持 Atelier 打开，也不要拖动文件。电脑的其他功能可以照常使用。',
+    'First time only: then startup is instant.':'仅首次需要：之后即时启动。',
+    'One time only: then the model stays cached and starts instantly.':'只需一次：之后模型会保留在缓存中，即时启动。',
+    'Model ready and cached — next openings are instant.':'模型已就绪并已缓存 — 之后打开都会即时完成。',
+    'Write a description.':'请写一段描述。','Generating…':'正在生成…','✨ Improving the prompt (':'✨ 正在优化提示词 (',
+    'Preparing the engine…':'正在准备引擎…','Variant ':'变体 ','Choose a variant below.':'请在下方选择一个变体。',
+    'Prompt enhancement failed — using your original text.':'提示词优化失败 — 将使用你的原文。',
+    ' variant(s) failed: ':' 个变体失败：','Generation failed: ':'生成失败：','Image · ':'图像 · ',
+    'Image (SDXS · in browser)':'图像（SDXS · 在浏览器中）',' · in the selection':' · 在选区内',
+    ' · prompt reworked by the model':' · 提示词已由模型改写',' · saved to /data/Pictures/':' · 已保存到 /data/Pictures/',
+    ' · save failed':' · 保存失败','✨ Improve the prompt with ':'✨ 优化提示词 · ',
   },
 };
 
@@ -1275,6 +1274,7 @@ $('layBlend').addEventListener('change', e=>setLayerBlend(e.target.value));
 // ===== NATURAL-LANGUAGE COMMAND BAR — type a phrase, Paint does it. DETERMINISTIC + OFFLINE (nlcommand.js,
 // zero hallucination). Fully ISOLATED in Paint: nothing routes through ANIMA; ANIMA still never touches images.
 let NLC=null; import('./nlcommand.js').then(m=>NLC=m).catch(()=>{});
+// The parser's grammar language: one of the five nlcommand.js understands; any other OS language (zh) parses English.
 function cmdLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; }catch{ return 'en'; } }
 function cmdResp(text,cls){ const r=$('cmdResp'); if(r){ r.textContent=text||''; r.className='cmd-resp'+(cls?' '+cls:''); } if(text) setMsg(text); }
 async function runCommand(text){ if(!text||!text.trim()) return; if(!NLC){ try{ NLC=await import('./nlcommand.js'); }catch{ cmdResp(LT('Modulo comandi non caricato','Commands module not loaded'),'warn'); return; } }
@@ -1305,7 +1305,7 @@ window.addEventListener('keydown', e=>{ if(e.ctrlKey||e.metaKey||isTyping()) ret
 
 // ---- guided tutorial (tour.js) — bilingual, first-run + Aiuto menu ----
 let _tour=null;
-function tourLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; }catch{ return 'en'; } }
+function tourLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de','zh'].includes(l)?l:'en'; }catch{ return 'en'; } }
 async function loadTour(){ if(!_tour) _tour=await import('./tour.js'); return _tour; }
 async function startTour(force){ try{ const m=await loadTour(); m.startTour({ lang:tourLang(), force:!!force, modelDir:'/apps/paint/models/sdxs-512-dreamshaper-sketch', inShell }); }catch(e){ setMsg(LT('Tutorial non disponibile','Tutorial unavailable')); } }
 async function showShortcuts(){ try{ const m=await loadTour(); m.showShortcuts(tourLang()); }catch{} }
@@ -1341,8 +1341,8 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
   const escapeHtml = (s)=> String(s==null?'':s).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
   // Active OS language for Atelier strings. Reads anima.lang first (the canonical OS signal), then the
   // document lang (kept in sync by /nucleo-i18n.js). Mirrors the top-level paintLang().
-  const uiLang = ()=> { try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; }catch{ return 'en'; } };
-  // Same shape + behaviour as the top-level LT(): IT/EN inline, es/fr/de from the shared PAINT_L10N table.
+  const uiLang = ()=> { try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'en').toLowerCase().slice(0,2); return ['it','en','es','fr','de','zh'].includes(l)?l:'en'; }catch{ return 'en'; } };
+  // Same shape + behaviour as the top-level LT(): IT/EN inline, es/fr/de/zh from the shared PAINT_L10N table.
   const UL = (it,en)=> { const l=uiLang(); if(l==='it') return it; if(l==='en') return en; return (PAINT_L10N[l]&&PAINT_L10N[l][en])||en; };
 
   // Lazy-load the three pure pipeline modules (providers / online-image / pipeline) once.
@@ -1470,6 +1470,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
       : _sl==='es' ? ` · generaré DENTRO la selección ${_dim}`
       : _sl==='fr' ? ` · générera DANS la sélection ${_dim}`
       : _sl==='de' ? ` · erzeugt IN die ${_dim}-Auswahl`
+      : _sl==='zh' ? ` · 将生成到 ${_dim} 选区内`
       : ` · will generate INTO the ${_dim} selection`;
     el.hint.textContent = (m==='sketch' ? UL('Usa il tuo disegno come schizzo guida (ControlNet).','Use your drawing as a guide sketch (ControlNet).')
       : m==='img' ? UL('Rielabora il contenuto attuale della tela secondo il prompt.','Reworks the current canvas content according to the prompt.')

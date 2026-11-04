@@ -71,9 +71,9 @@ const capOf = (id, reg) => { const p = provOf(id, reg); return (p && p.caps) || 
 const labelOf = (id, reg) => { const p = provOf(id, reg); return (p && p.label) || id; };
 const anyKey = (sig) => !!sig.keys && Object.values(sig.keys).some(Boolean);
 
-// Labels are { it, en, es, fr, de } objects, rendered by the caller with L(o) = o[lang] || o.en || o.it.
+// Labels are { it, en, es, fr, de, zh } objects, rendered by the caller with L(o) = o[lang] || o.en || o.it.
 // same(): a label that reads identically in every language (provider names, model ids, '' = none).
-const same = (s) => ({ it: s, en: s, es: s, fr: s, de: s });
+const same = (s) => ({ it: s, en: s, es: s, fr: s, de: s, zh: s });
 
 // Validate a wanted tier model against the registry; NEVER invent or rewrite — fall back to the provider
 // default only if the wanted id is absent (the claude-*-4-x / gemini-2.5-* ids here are the real 2026 ids).
@@ -92,13 +92,13 @@ const mk = (landedRung, mode, l1, browserLLM, extra = {}) => Object.assign(
   extra,
 );
 
-const GPU_LLM = () => ({ it: 'LLM nella GPU del browser', en: 'LLM on the browser GPU', es: 'LLM en la GPU del navegador', fr: 'LLM sur le GPU du navigateur', de: 'LLM auf der Browser-GPU' });
-const PC_LLM = (sig) => { const m = (sig.pcServer ? sig.pcServer + ' · ' : '') + sig.pcModel; return { it: 'Sul PC · ' + m, en: 'On the PC · ' + m, es: 'En el PC · ' + m, fr: 'Sur le PC · ' + m, de: 'Auf dem PC · ' + m }; };
+const GPU_LLM = () => ({ it: 'LLM nella GPU del browser', en: 'LLM on the browser GPU', es: 'LLM en la GPU del navegador', fr: 'LLM sur le GPU du navigateur', de: 'LLM auf der Browser-GPU', zh: '浏览器 GPU 上的 LLM' });
+const PC_LLM = (sig) => { const m = (sig.pcServer ? sig.pcServer + ' · ' : '') + sig.pcModel; return { it: 'Sul PC · ' + m, en: 'On the PC · ' + m, es: 'En el PC · ' + m, fr: 'Sur le PC · ' + m, de: 'Auf dem PC · ' + m, zh: '在 PC 上 · ' + m }; };
 // The last rung: the device's own brain where it has one, else its own data and commands only.
 const DEVICE_RUNG = (sig) => sig.deviceBrain === false
-  ? { it: 'Solo comandi e dati del dispositivo', en: 'Device commands and data only', es: 'Solo órdenes y datos del dispositivo', fr: 'Seulement les commandes et données de l’appareil', de: 'Nur Befehle und Daten des Geräts' }
-  : { it: 'Cervello del dispositivo', en: 'The device brain', es: 'El cerebro del dispositivo', fr: 'Le cerveau de l’appareil', de: 'Das Gerätegehirn' };
-const WASM_BRAIN = () => ({ it: 'Cervello WASM del browser', en: 'Browser WASM brain', es: 'Cerebro WASM del navegador', fr: 'Cerveau WASM du navigateur', de: 'WASM-Gehirn im Browser' });
+  ? { it: 'Solo comandi e dati del dispositivo', en: 'Device commands and data only', es: 'Solo órdenes y datos del dispositivo', fr: 'Seulement les commandes et données de l’appareil', de: 'Nur Befehle und Daten des Geräts', zh: '仅设备的命令和数据' }
+  : { it: 'Cervello del dispositivo', en: 'The device brain', es: 'El cerebro del dispositivo', fr: 'Le cerveau de l’appareil', de: 'Das Gerätegehirn', zh: '设备大脑' };
+const WASM_BRAIN = () => ({ it: 'Cervello WASM del browser', en: 'Browser WASM brain', es: 'Cerebro WASM del navegador', fr: 'Cerveau WASM du navigateur', de: 'WASM-Gehirn im Browser', zh: '浏览器 WASM 大脑' });
 
 // ── PRESETS ──────────────────────────────────────────────────────────────────────────────────────────
 // Each entry is pure metadata + plan(sig,reg) (resolved knobs) + feasible(sig,reg) ({state,reason}).
@@ -106,8 +106,8 @@ const WASM_BRAIN = () => ({ it: 'Cervello WASM del browser', en: 'Browser WASM b
 // unlocks the strong rung), 'blocked' (a hard requirement is missing — only Massima qualità can be).
 export const PRESETS = [
   {
-    id: 'auto', icon: '✨', it: 'Auto', en: 'Auto', es: 'Auto', fr: 'Auto', de: 'Auto',
-    intent: { it: 'Sceglie il cervello più forte che è davvero pronto', en: 'Picks the strongest brain that is actually ready', es: 'Elige el cerebro más potente que esté realmente listo', fr: 'Choisit le cerveau le plus puissant réellement prêt', de: 'Wählt das stärkste Gehirn, das wirklich bereit ist' },
+    id: 'auto', icon: '✨', it: 'Auto', en: 'Auto', es: 'Auto', fr: 'Auto', de: 'Auto', zh: '自动',
+    intent: { it: 'Sceglie il cervello più forte che è davvero pronto', en: 'Picks the strongest brain that is actually ready', es: 'Elige el cerebro más potente que esté realmente listo', fr: 'Choisit le cerveau le plus puissant réellement prêt', de: 'Wählt das stärkste Gehirn, das wirklich bereit ist', zh: '选择真正就绪的最强大脑' },
     plan(sig, reg) {
       const cloudOk = sig.online && sig.enabled && sig.hasKey;
       // ANIMA's own order (docs/anima-engines.md): the PC's model answers first with no usable cloud key, or when
@@ -125,58 +125,58 @@ export const PRESETS = [
     feasible() { return { state: 'recommended', reason: same('') }; },
   },
   {
-    id: 'max', icon: '🚀', it: 'Massima qualità', en: 'Max quality', es: 'Máxima calidad', fr: 'Qualité maximale', de: 'Maximale Qualität',
-    intent: { it: 'Cloud al massimo, il dispositivo resta a riposo', en: 'Best cloud, the device stays idle', es: 'La mejor nube, el dispositivo en reposo', fr: 'Le meilleur cloud, l’appareil reste au repos', de: 'Beste Cloud, das Gerät bleibt im Leerlauf' },
+    id: 'max', icon: '🚀', it: 'Massima qualità', en: 'Max quality', es: 'Máxima calidad', fr: 'Qualité maximale', de: 'Maximale Qualität', zh: '最高质量',
+    intent: { it: 'Cloud al massimo, il dispositivo resta a riposo', en: 'Best cloud, the device stays idle', es: 'La mejor nube, el dispositivo en reposo', fr: 'Le meilleur cloud, l’appareil reste au repos', de: 'Beste Cloud, das Gerät bleibt im Leerlauf', zh: '最佳云端，设备保持空闲' },
     plan(sig, reg) {
       const model = resolveModel(sig.provider, 'max', reg, sig.geminiTier === 'paid');
       return mk('cloud', 'only', 'off', true, { teacherModel: model, using: same(labelOf(sig.provider, reg) + ' · ' + (model || '')) });
     },
     feasible(sig) {
-      if (!sig.online || !sig.enabled) return { state: 'blocked', reason: { it: 'Serve una connessione a Internet', en: 'Needs an internet connection', es: 'Necesita conexión a Internet', fr: 'Nécessite une connexion Internet', de: 'Benötigt eine Internetverbindung' } };
+      if (!sig.online || !sig.enabled) return { state: 'blocked', reason: { it: 'Serve una connessione a Internet', en: 'Needs an internet connection', es: 'Necesita conexión a Internet', fr: 'Nécessite une connexion Internet', de: 'Benötigt eine Internetverbindung', zh: '需要互联网连接' } };
       if (!sig.hasKey) return anyKey(sig)
-        ? { state: 'blocked', reason: { it: 'Hai una chiave per un altro provider — selezionalo in Avanzate', en: 'You have a key for another provider — pick it in Advanced', es: 'Tienes una clave de otro proveedor — elígelo en Avanzado', fr: 'Vous avez une clé pour un autre fournisseur — choisissez-le dans Avancé', de: 'Du hast einen Schlüssel für einen anderen Anbieter — wähle ihn unter Erweitert' } }
-        : { state: 'blocked', reason: { it: 'Aggiungi una chiave online per usarlo', en: 'Add an online key to use this', es: 'Añade una clave online para usarlo', fr: 'Ajoutez une clé en ligne pour l’utiliser', de: 'Füge einen Online-Schlüssel hinzu, um dies zu nutzen' } };
+        ? { state: 'blocked', reason: { it: 'Hai una chiave per un altro provider — selezionalo in Avanzate', en: 'You have a key for another provider — pick it in Advanced', es: 'Tienes una clave de otro proveedor — elígelo en Avanzado', fr: 'Vous avez une clé pour un autre fournisseur — choisissez-le dans Avancé', de: 'Du hast einen Schlüssel für einen anderen Anbieter — wähle ihn unter Erweitert', zh: '你有另一个提供商的密钥 — 请在「高级」中选择它' } }
+        : { state: 'blocked', reason: { it: 'Aggiungi una chiave online per usarlo', en: 'Add an online key to use this', es: 'Añade una clave online para usarlo', fr: 'Ajoutez une clé en ligne pour l’utiliser', de: 'Füge einen Online-Schlüssel hinzu, um dies zu nutzen', zh: '添加在线密钥即可使用' } };
       return { state: 'available', reason: same('') };
     },
   },
   {
-    id: 'balanced', icon: '⚖️', it: 'Bilanciato', en: 'Balanced', es: 'Equilibrado', fr: 'Équilibré', de: 'Ausgewogen',
-    intent: { it: 'Cloud quando c’è, il dispositivo di riserva', en: 'Cloud when available, the device as fallback', es: 'Nube cuando hay, el dispositivo como reserva', fr: 'Le cloud quand il est là, l’appareil en secours', de: 'Cloud, wenn verfügbar, das Gerät als Reserve' },
+    id: 'balanced', icon: '⚖️', it: 'Bilanciato', en: 'Balanced', es: 'Equilibrado', fr: 'Équilibré', de: 'Ausgewogen', zh: '均衡',
+    intent: { it: 'Cloud quando c’è, il dispositivo di riserva', en: 'Cloud when available, the device as fallback', es: 'Nube cuando hay, el dispositivo como reserva', fr: 'Le cloud quand il est là, l’appareil en secours', de: 'Cloud, wenn verfügbar, das Gerät als Reserve', zh: '有云端时用云端，设备作为后备' },
     plan(sig, reg) {
       const model = sig.hasKey ? resolveModel(sig.provider, 'mid', reg, sig.geminiTier === 'paid') : null;
       return mk('cloud', 'on', 'auto', false, { teacherModel: model, using: sig.hasKey
         ? (sig.deviceBrain === false
-          ? { it: labelOf(sig.provider, reg) + ' + comandi del dispositivo', en: labelOf(sig.provider, reg) + ' + device commands', es: labelOf(sig.provider, reg) + ' + órdenes del dispositivo', fr: labelOf(sig.provider, reg) + ' + commandes de l’appareil', de: labelOf(sig.provider, reg) + ' + Gerätebefehle' }
-          : { it: labelOf(sig.provider, reg) + ' + L1 di riserva', en: labelOf(sig.provider, reg) + ' + L1 fallback', es: labelOf(sig.provider, reg) + ' + L1 de reserva', fr: labelOf(sig.provider, reg) + ' + L1 en secours', de: labelOf(sig.provider, reg) + ' + L1 als Reserve' })
+          ? { it: labelOf(sig.provider, reg) + ' + comandi del dispositivo', en: labelOf(sig.provider, reg) + ' + device commands', es: labelOf(sig.provider, reg) + ' + órdenes del dispositivo', fr: labelOf(sig.provider, reg) + ' + commandes de l’appareil', de: labelOf(sig.provider, reg) + ' + Gerätebefehle', zh: labelOf(sig.provider, reg) + ' + 设备命令' }
+          : { it: labelOf(sig.provider, reg) + ' + L1 di riserva', en: labelOf(sig.provider, reg) + ' + L1 fallback', es: labelOf(sig.provider, reg) + ' + L1 de reserva', fr: labelOf(sig.provider, reg) + ' + L1 en secours', de: labelOf(sig.provider, reg) + ' + L1 als Reserve', zh: labelOf(sig.provider, reg) + ' + L1 后备' })
         : (sig.deviceBrain === false
-          ? { it: 'Nessuna chiave: solo comandi e dati del dispositivo', en: 'No key: device commands and data only', es: 'Sin clave: solo órdenes y datos del dispositivo', fr: 'Pas de clé : seulement les commandes et données de l’appareil', de: 'Kein Schlüssel: nur Befehle und Daten des Geräts' }
-          : { it: 'Nessuna chiave: solo cervello del dispositivo', en: 'No key: device brain only', es: 'Sin clave: solo el cerebro del dispositivo', fr: 'Pas de clé : cerveau de l’appareil uniquement', de: 'Kein Schlüssel: nur das Gerätegehirn' }) });
+          ? { it: 'Nessuna chiave: solo comandi e dati del dispositivo', en: 'No key: device commands and data only', es: 'Sin clave: solo órdenes y datos del dispositivo', fr: 'Pas de clé : seulement les commandes et données de l’appareil', de: 'Kein Schlüssel: nur Befehle und Daten des Geräts', zh: '没有密钥：仅设备的命令和数据' }
+          : { it: 'Nessuna chiave: solo cervello del dispositivo', en: 'No key: device brain only', es: 'Sin clave: solo el cerebro del dispositivo', fr: 'Pas de clé : cerveau de l’appareil uniquement', de: 'Kein Schlüssel: nur das Gerätegehirn', zh: '没有密钥：仅设备大脑' }) });
     },
     feasible() { return { state: 'available', reason: same('') }; },
   },
   {
-    id: 'local', icon: '💻', it: 'Solo locale', en: 'Local only', es: 'Solo local', fr: 'Local uniquement', de: 'Nur lokal',
-    intent: { it: 'Tutto su questo computer, il dispositivo può dormire', en: 'Everything on this computer, the device can sleep', es: 'Todo en este equipo, el dispositivo puede dormir', fr: 'Tout sur cet ordinateur, l’appareil peut dormir', de: 'Alles auf diesem Computer, das Gerät kann schlafen' },
+    id: 'local', icon: '💻', it: 'Solo locale', en: 'Local only', es: 'Solo local', fr: 'Local uniquement', de: 'Nur lokal', zh: '仅本地',
+    intent: { it: 'Tutto su questo computer, il dispositivo può dormire', en: 'Everything on this computer, the device can sleep', es: 'Todo en este equipo, el dispositivo puede dormir', fr: 'Tout sur cet ordinateur, l’appareil peut dormir', de: 'Alles auf diesem Computer, das Gerät kann schlafen', zh: '一切都在这台电脑上，设备可以休眠' },
     plan(sig) {
       if (sig.pcModel && sig.pcLoopback) return mk('pc', 'pc', 'auto', false, { using: PC_LLM(sig) });
       if (sig.webgpu && (sig.vramMB || 0) >= 900 && sig.localModelReady)
         return mk('gpu', 'local', 'auto', true, { localModel: sig.localModelId || 'auto', using: GPU_LLM() });
       if (sig.packUsable)
         return mk('wasm', 'edge', 'auto', false, { using: WASM_BRAIN() });
-      return mk('wasm', 'edge', 'auto', false, { using: { it: 'Da preparare per funzionare offline', en: 'Needs preparing to run offline', es: 'Hay que prepararlo para funcionar offline', fr: 'À préparer pour fonctionner hors ligne', de: 'Muss für den Offline-Betrieb vorbereitet werden' } });
+      return mk('wasm', 'edge', 'auto', false, { using: { it: 'Da preparare per funzionare offline', en: 'Needs preparing to run offline', es: 'Hay que prepararlo para funcionar offline', fr: 'À préparer pour fonctionner hors ligne', de: 'Muss für den Offline-Betrieb vorbereitet werden', zh: '需要先准备才能离线运行' } });
     },
     feasible(sig) {
       if ((sig.pcModel && sig.pcLoopback) || sig.localModelReady || sig.packUsable) return { state: 'available', reason: same('') };
-      return { state: 'needs-prep', reason: { it: 'Scarica il cervello (~88 MB) per funzionare offline nel browser', en: 'Download the brain (~88 MB) to run offline in the browser', es: 'Descarga el cerebro (~88 MB) para funcionar offline en el navegador', fr: 'Téléchargez le cerveau (~88 MB) pour fonctionner hors ligne dans le navigateur', de: 'Lade das Gehirn (~88 MB) herunter, um offline im Browser zu laufen' } };
+      return { state: 'needs-prep', reason: { it: 'Scarica il cervello (~88 MB) per funzionare offline nel browser', en: 'Download the brain (~88 MB) to run offline in the browser', es: 'Descarga el cerebro (~88 MB) para funcionar offline en el navegador', fr: 'Téléchargez le cerveau (~88 MB) pour fonctionner hors ligne dans le navigateur', de: 'Lade das Gehirn (~88 MB) herunter, um offline im Browser zu laufen', zh: '下载大脑（约 88 MB）即可在浏览器中离线运行' } };
     },
   },
   {
-    id: 'private', icon: '🔒', it: 'Privacy', en: 'Privacy', es: 'Privacidad', fr: 'Confidentialité', de: 'Privatsphäre',
-    intent: { it: 'Niente esce dal dispositivo, nemmeno il web', en: 'Nothing leaves the device, not even the web', es: 'Nada sale del dispositivo, ni siquiera la web', fr: 'Rien ne quitte l’appareil, pas même le web', de: 'Nichts verlässt das Gerät, nicht einmal das Web' },
+    id: 'private', icon: '🔒', it: 'Privacy', en: 'Privacy', es: 'Privacidad', fr: 'Confidentialité', de: 'Privatsphäre', zh: '隐私',
+    intent: { it: 'Niente esce dal dispositivo, nemmeno il web', en: 'Nothing leaves the device, not even the web', es: 'Nada sale del dispositivo, ni siquiera la web', fr: 'Rien ne quitte l’appareil, pas même le web', de: 'Nichts verlässt das Gerät, nicht einmal das Web', zh: '任何内容都不会离开设备，网页也不例外' },
     plan(sig) {
-      if (sig.pcModel && sig.pcLoopback) return mk('pc', 'pc', 'on', false, { edgeWeb: 0, using: { it: 'Sul PC · ' + sig.pcModel + ' · niente esce in Internet', en: 'On the PC · ' + sig.pcModel + ' · nothing goes to the Internet', es: 'En el PC · ' + sig.pcModel + ' · nada sale a Internet', fr: 'Sur le PC · ' + sig.pcModel + ' · rien ne part sur Internet', de: 'Auf dem PC · ' + sig.pcModel + ' · nichts geht ins Internet' } });
+      if (sig.pcModel && sig.pcLoopback) return mk('pc', 'pc', 'on', false, { edgeWeb: 0, using: { it: 'Sul PC · ' + sig.pcModel + ' · niente esce in Internet', en: 'On the PC · ' + sig.pcModel + ' · nothing goes to the Internet', es: 'En el PC · ' + sig.pcModel + ' · nada sale a Internet', fr: 'Sur le PC · ' + sig.pcModel + ' · rien ne part sur Internet', de: 'Auf dem PC · ' + sig.pcModel + ' · nichts geht ins Internet', zh: '在 PC 上 · ' + sig.pcModel + ' · 不会发送到互联网' } });
       const mode = sig.packUsable ? 'edge' : 'off';
-      return mk(sig.packUsable ? 'wasm' : 'device', mode, 'on', false, { edgeWeb: 0, using: { it: 'Air-gapped · nessuna uscita di rete', en: 'Air-gapped · no network egress', es: 'Air-gapped · sin salida de red', fr: 'Air-gapped · aucune sortie réseau', de: 'Air-gapped · kein ausgehender Netzverkehr' } });
+      return mk(sig.packUsable ? 'wasm' : 'device', mode, 'on', false, { edgeWeb: 0, using: { it: 'Air-gapped · nessuna uscita di rete', en: 'Air-gapped · no network egress', es: 'Air-gapped · sin salida de red', fr: 'Air-gapped · aucune sortie réseau', de: 'Air-gapped · kein ausgehender Netzverkehr', zh: '物理隔离 · 无网络外发' } });
     },
     feasible() { return { state: 'available', reason: same('') }; },
   },
@@ -196,25 +196,25 @@ export function feasibility(id, sig, reg) { const p = find(id); return p ? p.fea
 // so a secondary key does NOT help it today: that's flagged as a warn, repaired in a follow-up.)
 export function gaps(sig, reg) {
   const cap = capOf(sig.provider, reg), out = [];
-  if (!cap.image && !(sig.keys && sig.keys.xai)) out.push({ feature: 'image', app: 'Paint · Atelier', it: 'Le immagini IA richiedono una chiave Grok (xAI)', en: 'AI images need an xAI (Grok) key', es: 'Las imágenes IA necesitan una clave de xAI (Grok)', fr: 'Les images IA nécessitent une clé xAI (Grok)', de: 'KI-Bilder brauchen einen xAI-Schlüssel (Grok)', fixKey: 'xai' });
-  if (!cap.whisper && !(sig.keys && sig.keys.openai)) out.push({ feature: 'whisper', app: 'Recorder · Dettatura', it: 'La trascrizione richiede una chiave Groq (Whisper)', en: 'Transcription needs a Groq (Whisper) key', es: 'La transcripción necesita una clave de Groq (Whisper)', fr: 'La transcription nécessite une clé Groq (Whisper)', de: 'Die Transkription braucht einen Groq-Schlüssel (Whisper)', fixKey: 'openai' });
-  if (!cap.ir && sig.ir) out.push({ feature: 'ir', app: 'Telecomando IR', it: 'La skill in linguaggio naturale funziona con Groq o Gemini', en: 'The natural-language skill works with Groq or Gemini', es: 'La habilidad en lenguaje natural funciona con Groq o Gemini', fr: 'La compétence en langage naturel fonctionne avec Groq ou Gemini', de: 'Der Skill in natürlicher Sprache funktioniert mit Groq oder Gemini', fixKey: null });
+  if (!cap.image && !(sig.keys && sig.keys.xai)) out.push({ feature: 'image', app: 'Paint · Atelier', it: 'Le immagini IA richiedono una chiave Grok (xAI)', en: 'AI images need an xAI (Grok) key', es: 'Las imágenes IA necesitan una clave de xAI (Grok)', fr: 'Les images IA nécessitent une clé xAI (Grok)', de: 'KI-Bilder brauchen einen xAI-Schlüssel (Grok)', zh: 'AI 图像需要 xAI（Grok）密钥', fixKey: 'xai' });
+  if (!cap.whisper && !(sig.keys && sig.keys.openai)) out.push({ feature: 'whisper', app: 'Recorder · Dettatura', it: 'La trascrizione richiede una chiave Groq (Whisper)', en: 'Transcription needs a Groq (Whisper) key', es: 'La transcripción necesita una clave de Groq (Whisper)', fr: 'La transcription nécessite une clé Groq (Whisper)', de: 'Die Transkription braucht einen Groq-Schlüssel (Whisper)', zh: '转录需要 Groq（Whisper）密钥', fixKey: 'openai' });
+  if (!cap.ir && sig.ir) out.push({ feature: 'ir', app: 'Telecomando IR', it: 'La skill in linguaggio naturale funziona con Groq o Gemini', en: 'The natural-language skill works with Groq or Gemini', es: 'La habilidad en lenguaje natural funciona con Groq o Gemini', fr: 'La compétence en langage naturel fonctionne avec Groq ou Gemini', de: 'Der Skill in natürlicher Sprache funktioniert mit Groq oder Gemini', zh: '自然语言技能适用于 Groq 或 Gemini', fixKey: null });
   return out;
 }
 
 // Central teacher.json consumers, for the "su quali app agisce" panel. need → the capability they require.
 export const APP_MAP = [
-  { id: 'chat', it: 'Chat ANIMA · Copilota · Agenti · Giochi', en: 'ANIMA chat · Copilot · Agents · Games', es: 'Chat ANIMA · Copiloto · Agentes · Juegos', fr: 'Chat ANIMA · Copilote · Agents · Jeux', de: 'ANIMA-Chat · Copilot · Agenten · Spiele', need: 'chat' },
-  { id: 'image', it: 'Paint · Atelier', en: 'Paint · Atelier', es: 'Paint · Atelier', fr: 'Paint · Atelier', de: 'Paint · Atelier', need: 'image' },
-  { id: 'whisper', it: 'Recorder · Dettatura', en: 'Recorder · Dictation', es: 'Grabadora · Dictado', fr: 'Enregistreur · Dictée', de: 'Rekorder · Diktat', need: 'whisper' },
-  { id: 'ir', it: 'Telecomando IR', en: 'IR Remote', es: 'Mando IR', fr: 'Télécommande IR', de: 'IR-Fernbedienung', need: 'ir' },
+  { id: 'chat', it: 'Chat ANIMA · Copilota · Agenti · Giochi', en: 'ANIMA chat · Copilot · Agents · Games', es: 'Chat ANIMA · Copiloto · Agentes · Juegos', fr: 'Chat ANIMA · Copilote · Agents · Jeux', de: 'ANIMA-Chat · Copilot · Agenten · Spiele', zh: 'ANIMA 聊天 · 助手 · 智能体 · 游戏', need: 'chat' },
+  { id: 'image', it: 'Paint · Atelier', en: 'Paint · Atelier', es: 'Paint · Atelier', fr: 'Paint · Atelier', de: 'Paint · Atelier', zh: 'Paint · Atelier', need: 'image' },
+  { id: 'whisper', it: 'Recorder · Dettatura', en: 'Recorder · Dictation', es: 'Grabadora · Dictado', fr: 'Enregistreur · Dictée', de: 'Rekorder · Diktat', zh: '录音机 · 听写', need: 'whisper' },
+  { id: 'ir', it: 'Telecomando IR', en: 'IR Remote', es: 'Mando IR', fr: 'Télécommande IR', de: 'IR-Fernbedienung', zh: '红外遥控器', need: 'ir' },
 ];
 export function appStatus(app, sig, reg) {
   const cap = capOf(sig.provider, reg);
   if (app.need === 'chat') return { ok: true };
-  if (app.need === 'image') return (cap.image || (sig.keys && sig.keys.xai)) ? { ok: true } : { ok: false, it: 'richiede una chiave Grok (xAI)', en: 'needs an xAI (Grok) key', es: 'necesita una clave de xAI (Grok)', fr: 'nécessite une clé xAI (Grok)', de: 'braucht einen xAI-Schlüssel (Grok)' };
-  if (app.need === 'whisper') return (cap.whisper || (sig.keys && sig.keys.openai)) ? { ok: true } : { ok: false, it: 'richiede una chiave Groq (Whisper)', en: 'needs a Groq (Whisper) key', es: 'necesita una clave de Groq (Whisper)', fr: 'nécessite une clé Groq (Whisper)', de: 'braucht einen Groq-Schlüssel (Whisper)' };
-  if (app.need === 'ir') return cap.ir ? { ok: true } : { ok: false, it: 'NL solo con Groq o Gemini', en: 'NL only with Groq or Gemini', es: 'LN solo con Groq o Gemini', fr: 'LN uniquement avec Groq ou Gemini', de: 'NL nur mit Groq oder Gemini' };
+  if (app.need === 'image') return (cap.image || (sig.keys && sig.keys.xai)) ? { ok: true } : { ok: false, it: 'richiede una chiave Grok (xAI)', en: 'needs an xAI (Grok) key', es: 'necesita una clave de xAI (Grok)', fr: 'nécessite une clé xAI (Grok)', de: 'braucht einen xAI-Schlüssel (Grok)', zh: '需要 xAI（Grok）密钥' };
+  if (app.need === 'whisper') return (cap.whisper || (sig.keys && sig.keys.openai)) ? { ok: true } : { ok: false, it: 'richiede una chiave Groq (Whisper)', en: 'needs a Groq (Whisper) key', es: 'necesita una clave de Groq (Whisper)', fr: 'nécessite une clé Groq (Whisper)', de: 'braucht einen Groq-Schlüssel (Whisper)', zh: '需要 Groq（Whisper）密钥' };
+  if (app.need === 'ir') return cap.ir ? { ok: true } : { ok: false, it: 'NL solo con Groq o Gemini', en: 'NL only with Groq or Gemini', es: 'LN solo con Groq o Gemini', fr: 'LN uniquement avec Groq ou Gemini', de: 'NL nur mit Groq oder Gemini', zh: '自然语言仅支持 Groq 或 Gemini' };
   return { ok: true };
 }
 

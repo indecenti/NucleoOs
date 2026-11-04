@@ -1,0 +1,50 @@
+{
+  "_lang": "zh",
+  "app_title": "压缩包管理器",
+  "extract_here": "解压到此处",
+  "compress": "压缩",
+  "status_idle": "未加载压缩包。正在等待压缩包…",
+  "empty_open_hint": "从 File Commander 打开一个 .zip 文件",
+  "working": "正在处理…",
+  "prog_files": {
+    "other": "{done} / {total} 个文件"
+  },
+  "err_parse_compress": "解析待压缩的文件时出错。",
+  "loading_file": "正在加载 {path}…",
+  "loading_archive": "正在加载压缩包…",
+  "items_in": {
+    "other": "{path} 中有 {count} 项"
+  },
+  "error_x": "错误：{msg}",
+  "open_failed": "无法打开压缩包。",
+  "archive_empty": "此压缩包为空。",
+  "extracting_to": "正在解压到 {dir}",
+  "extracting_file": "正在解压 {name}…（{done}/{total}）",
+  "extract_complete": "解压完成！",
+  "files_extracted": {
+    "other": "已解压 {count} 个文件。"
+  },
+  "extract_error": "解压出错",
+  "create_in": "在 {dir} 中创建压缩包",
+  "name_label": "名称：",
+  "preparing": "正在准备文件…",
+  "scanning": "正在扫描文件夹…",
+  "compressing": "正在压缩…",
+  "reading_file": "正在读取 {name}…（{i}/{total}）",
+  "generating_zip": "正在生成 .zip 文件…",
+  "saving_archive": "正在保存压缩包…",
+  "compress_complete": "压缩完成！",
+  "saved_x": "已保存 {name}",
+  "compress_error": "压缩出错",
+  "no_files": "没有要压缩的文件",
+  "err_read_file": "无法从设备读取压缩包（错误 {status}）。",
+  "err_write_file": "无法写入 {name}（错误 {status}）。",
+  "err_mkdir": "无法创建文件夹 {name}（错误 {status}）。",
+  "err_list_dir": "无法列出文件夹 {name} 的内容（错误 {status}）。",
+  "err_read_src": "无法读取 {name}（错误 {status}）。",
+  "err_save_archive": "无法保存 {name}（错误 {status}）。",
+  "confirm_overwrite": {
+    "other": "已有 {count} 个文件存在，将被覆盖：\n{names}\n\n仍要解压吗？"
+  },
+  "format_label": "格式："
+}

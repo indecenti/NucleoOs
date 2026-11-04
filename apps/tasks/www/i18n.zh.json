@@ -1,0 +1,21 @@
+{
+  "_lang": "zh",
+  "app_title": "任务",
+  "filter_active": "未完成",
+  "add_ph": "添加任务，按 Enter 确认…",
+  "priority": "优先级",
+  "clear_done": "清除已完成",
+  "saving": "正在保存…",
+  "saved_locally": "已保存在本地",
+  "copied": "已复制",
+  "empty_done": "还没有已完成的任务。",
+  "empty_active": "无事可做，全部完成！🎉",
+  "empty_all": "还没有任务。<br>在上方输入并按 Enter。",
+  "toggle": "切换完成状态",
+  "count": "{active} 项未完成 · 共 {total} 项",
+  "read_failed": "无法从设备读取任务。编辑已暂停，以免覆盖数据，请稍后重试。",
+  "read_corrupt": "无法读取设备上的任务文件：文件保持原样，不会丢失任何内容。",
+  "not_paired": "此浏览器尚未与设备配对：配对后才能保存任务。",
+  "save_failed": "未保存：设备没有响应，正在重试",
+  "not_loaded": "尚未从设备加载任务。"
+}

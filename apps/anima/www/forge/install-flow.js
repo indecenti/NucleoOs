@@ -133,7 +133,7 @@ const MSG = {
     de: ['Verbindung verloren – setze fort', 'Die Quelle (Internet oder Gerät) ist nicht erreichbar. Ich behalte die geprüften Teile und versuche es automatisch erneut; nichts geht verloren. Jederzeit abbrechen.'] },
 };
 const FLAGS = { insecure: [true, false], 'no-webgpu': [true, false], 'no-wasm': [true, false], integrity: [true, true], notfound: [true, true], cache: [true, true], busy: [true, true], unknown: [true, true], transient: [false, true] };
-const SIZE = { it: ' (circa {s})', en: ' (about {s})', es: ' (unos {s})', fr: ' (environ {s})', de: ' (etwa {s})' };
+const SIZE = { it: ' (circa {s})', en: ' (about {s})', es: ' (unos {s})', fr: ' (environ {s})', de: ' (etwa {s})', zh: '（约 {s}）' };
 export function messageFor(kind, ctx = {}, lang = 'it') {
   const k = MSG[kind] ? kind : 'transient';
   const L = MSG[k][lang] ? lang : 'en';

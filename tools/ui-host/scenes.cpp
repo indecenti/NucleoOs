@@ -137,6 +137,7 @@ static const Scene SCENES[] = {
     { "home-end",    [] { launcher_reset(); launcher_set_sel(launcher_visible_count() - 1); draw_launcher(); } },   // the last tile: scrolled
     { "cat-office",  [] { go_category("Office", 0); draw_launcher(); } },
     { "cat-system",  [] { go_category("System", 0); draw_launcher(); } },
+    { "cat-media",   [] { go_category("Media", 0); draw_launcher(); } },             // long two-line titles (Voice Recorder)
     { "cat-games",   [] { go_category("Games", 2); draw_launcher(); } },
     { "cat-games-end", [] { go_category("Games", 0); launcher_set_sel(launcher_visible_count() - 1); draw_launcher(); } },
     { "cat-security",[] { go_category("Security", 0); draw_launcher(); } },
@@ -157,9 +158,12 @@ static const Scene SCENES[] = {
                            for (int k = 0; k < 3; k++) launcher_qm_key(NK_DOWN, 0); launcher_qm_key(NK_ENTER, 0); draw_launcher(); store_weather_done(); } },
     // The Cardputer's own panel while the home is on the external one (duplicate mode): time, date, battery,
     // network; then with a track playing.
-    { "companion",       [] { launcher_render_companion(&d); } },
+    { "companion",       [] { launcher_reset(); launcher_render_companion(&d); } },
     { "companion-music", [] { g_host.playing = true; g_host.track = "/sd/Music/Daft Punk - Veridis Quo.mp3";
-                              launcher_render_companion(&d); } },
+                              launcher_reset(); launcher_render_companion(&d); } },
+    // ...with the focus on an app inside a category (its description, '*' menu, Esc back) and a search.
+    { "companion-app",   [] { go_category("Media", 4); launcher_render_companion(&d); } },
+    { "companion-find",  [] { type("cal"); launcher_render_companion(&d); } },
     { "cc",          [] { cc_scene({}); } },
     { "cc-bright",   [] { cc_scene({ NK_DOWN }); } },                              // brightness card centred
     { "cc-xbright",  [] { cc_scene({ NK_DOWN, NK_DOWN }); } },                     // ADV: the second screen's brightness
@@ -513,7 +517,7 @@ static const Scene *find_scene(const char *surface, const char *scene)
     return nullptr;
 }
 
-static const char *const LARGE_SCENES[] = { "home", "home-row3", "home-end", "cat-office", "cat-games", "cat-games-end", "search-set", "search-none",
+static const char *const LARGE_SCENES[] = { "home", "home-row3", "home-end", "cat-office", "cat-media", "cat-games", "cat-games-end", "search-set", "search-none",
                                               "menu", "menu-store", "menu-info", "menu-confirm",
                                               "cc", "cc-xbright", "cc-volume", "cc-web", "cc-restart" };
 

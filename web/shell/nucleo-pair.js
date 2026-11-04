@@ -70,16 +70,31 @@ const T = {
         on_local: 'Von diesem Browser aus geht das nicht: schalte es an der Konsole oder per USB-Kabel ein und tippe dann erneut.',
         on_still: 'Der Schutz ist auf dem Gerät noch nicht aktiv.',
         on_done: 'Schutz aktiv. PIN: {pin}', on_done_nopin: 'Schutz aktiv. Die PIN steht auf dem Bildschirm der Konsole (Schnellmenü › Netzwerk): andere Browser brauchen sie.' },
+  zh: { title: '配对此浏览器', body: '要操作设备（文件、终端、设置），这个浏览器需要先配对一次。',
+        speak: '在设备上朗读 PIN', speaking: '正在设备上朗读 PIN…',
+        pin: '6 位 PIN', ok: '配对', cancel: '取消', wrong: 'PIN 错误', off: '此设备未启用配对',
+        done: '已配对 ✓', err: '无法连接设备', file: 'PIN 也显示在主机屏幕上：快捷菜单 › 网络。',
+        throttled: '请稍等几秒后重试。', locked: '尝试次数过多：请一分钟后重试。',
+        on_title: '需要 PIN', on_body: '此功能会在设备上打开一个 shell，因此仅在同一网络中还不够：需要启用 PIN 保护。为了安全，只能在主机上或通过 USB 线连接的浏览器（http://192.168.42.1:8080）中开启。开启后 PIN 会显示在主机屏幕上（快捷菜单 › 网络），在这里输入即可。',
+        on_btn: '开启', recheck: '我已开启：输入 PIN',
+        on_local: '无法从这个浏览器开启：请在主机上或通过 USB 线开启，然后再按一次。',
+        on_still: '设备上的保护尚未开启。',
+        on_done: '保护已开启。PIN：{pin}', on_done_nopin: '保护已开启。PIN 显示在主机屏幕上（快捷菜单 › 网络）：其他浏览器需要用到它。' },
 };
 // The OS language is a DEVICE fact (/api/lang), not a per-browser one — the same
-// console answers on several origins. The document/browser hint is only the seed
-// used until the device has answered.
-let LANG = (document.documentElement.lang || navigator.language || 'it').slice(0, 2);
+// console answers on several origins. The i18n engine's language (or the
+// document/browser hint) is only the seed used until the device has answered;
+// the device's answer goes through the engine's fromDevice(), which keeps a
+// browser-only display language (zh) that the device stores as 'en'.
+const engine = () => { try { return window.NucleoI18N || null; } catch { return null; } };
+let LANG = String((engine() && engine().lang) || document.documentElement.lang || navigator.language || 'it').slice(0, 2);
 async function syncLang() {
   try {
     const r = await fetch('/api/lang', { cache: 'no-store' });
     const j = await r.json();
-    if (j && T[j.lang]) LANG = j.lang;
+    const E = engine();
+    const l = j && (E && typeof E.fromDevice === 'function' ? E.fromDevice(j.lang) : j.lang);
+    if (l && T[l]) LANG = l;
   } catch {}
 }
 // Accounts (capability users.multi, docs/multiuser.md): the device knows people, not browsers.
@@ -119,8 +134,21 @@ const TA = {
         c_title: 'Neues Passwort wählen', c_body: 'Der Administrator hat dein Passwort zurückgesetzt: Wähle ein neues, um fortzufahren.',
         c_old: 'Aktuelles Passwort', c_new: 'Neues Passwort', c_again: 'Neues Passwort wiederholen', c_ok: 'Speichern',
         c_mismatch: 'Die beiden Passwörter stimmen nicht überein', c_weak: 'Passwort zu schwach: mindestens 8 Zeichen und keines der häufigsten.' },
+  zh: { a_title: '登录', a_body: '这台设备上每个人都有自己的账户：用你的名称和密码登录。',
+        a_name: '名称', a_pw: '密码', a_remember: '在此浏览器上记住我', a_ok: '登录',
+        a_bad: '名称或密码错误', a_disabled: '此账户已停用：请联系管理员。',
+        a_active: '当前登录的人数过多：请稍后重试。',
+        c_title: '设置新密码', c_body: '管理员已重置你的密码：请设置一个新密码以继续。',
+        c_old: '当前密码', c_new: '新密码', c_again: '再次输入新密码', c_ok: '保存',
+        c_mismatch: '两次输入的密码不一致', c_weak: '密码太弱：至少 8 个字符，且不能是常见密码。' },
 };
 for (const l of Object.keys(TA)) Object.assign(T[l], TA[l]);
+// A language may leave out the leading pictograph of a label: the English one is put in front.
+const LEAD = /^\p{Extended_Pictographic}️?\s*/u;
+for (const l of Object.keys(T)) for (const k of Object.keys(T.en)) {
+  const m = LEAD.exec(T.en[k]), v = T[l][k];
+  if (m && typeof v === 'string' && !LEAD.test(v)) T[l][k] = m[0] + v;
+}
 const t = (k) => (T[LANG] || T.it)[k] || T.it[k] || k;
 
 const CSS = `

@@ -6,7 +6,8 @@
     "it",
     "es",
     "fr",
-    "de"
+    "de",
+    "zh"
   ],
   "required": [
     "en",
@@ -15,15 +16,17 @@
   "extra": [
     "es",
     "fr",
-    "de"
+    "de",
+    "zh"
   ],
   "extraCoverage": {
     "es": 100,
     "fr": 100,
-    "de": 100
+    "de": 100,
+    "zh": 100
   },
   "surfaces": 52,
-  "totalKeys": 4901,
+  "totalKeys": 4921,
   "namespaces": {
     "agent": 161,
     "anima": 193,
@@ -62,8 +65,8 @@
     "recorder": 107,
     "recycle-bin": 20,
     "scoreboard": 14,
-    "settings": 581,
-    "shell": 437,
+    "settings": 582,
+    "shell": 456,
     "spreadsheet": 303,
     "ssh": 70,
     "store": 58,

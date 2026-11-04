@@ -1,0 +1,21 @@
+{
+  "_lang": "zh",
+  "tab_clock": "时钟",
+  "tab_timer": "计时器",
+  "stopwatch": "秒表",
+  "lap": "计次",
+  "cfg_title": "时钟设置",
+  "opt_24h": "24 小时制",
+  "opt_seconds": "显示秒",
+  "opt_analog": "指针式时钟",
+  "dev_init": "正在读取设备时钟…",
+  "dev_unreachable": "无法连接设备",
+  "dev_synced": "设备已通过 NTP 同步 · {hh}:{mm}",
+  "dev_synced_drift": "设备已通过 NTP 同步 · 偏差 {secs} 秒（{hh}:{mm}）",
+  "dev_waiting": "设备：正在等待 NTP 同步",
+  "dev_browser_set": "已按浏览器时间设置",
+  "timer_done": "时间到！",
+  "save_ok": "已保存到设备",
+  "save_fail": "保存失败：无法连接设备",
+  "save_unread": "未保存：无法读取已保存的设置。请在设备可以连接时重试。"
+}

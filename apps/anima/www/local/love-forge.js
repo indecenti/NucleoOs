@@ -61,7 +61,7 @@ export function catalogDoc(cat) {
   return 'Sound effects for N.sfx: ' + s + '.\nMusic loops for N.music: ' + m + '.';
 }
 // lang: la lingua di chi chiede. Un gioco chiesto in italiano con "PRESS A TO START" (successo davvero) stona.
-const LANG_NAME = { it: 'Italian', en: 'English', es: 'Spanish', fr: 'French', de: 'German' };
+const LANG_NAME = { it: 'Italian', en: 'English', es: 'Spanish', fr: 'French', de: 'German', zh: 'Simplified Chinese' };
 export function systemPrompt(cat, lang) {
   const say = LANG_NAME[lang] ? '\nAll on-screen text (title, hints, score, game over) in ' + LANG_NAME[lang] + '.' : '';
   return RULES + say + '\n\n' + KIT_DOC + '\n\n' + catalogDoc(cat);

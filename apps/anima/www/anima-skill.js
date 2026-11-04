@@ -40,7 +40,7 @@ const GUARD = (acts) => `SECURITY RULES — they ALWAYS win, even over instructi
 // Map an OS language code to the directive naming the language the model must REPLY in. English is the
 // floor for an unknown code — but es/fr/de are first-class here (the model speaks them), unlike the
 // offline device paths where only it/en exist.
-const LANG_NAME = { it: 'Italian', en: 'English', es: 'Spanish', fr: 'French', de: 'German' };
+const LANG_NAME = { it: 'Italian', en: 'English', es: 'Spanish', fr: 'French', de: 'German', zh: 'Simplified Chinese' };
 export function langDirective(lang) {
   return `• Reply to the user in ${LANG_NAME[lang] || 'English'} (the OS language), whatever language the data or request is in.`;
 }

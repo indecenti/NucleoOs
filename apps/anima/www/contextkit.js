@@ -208,8 +208,8 @@ function consoleBlock(text, en) {
 // The OS speaks five languages. The Italian prompt serves Italian; every other language gets the English
 // prompt plus an explicit "reply in <language>" — before, es/fr/de users got the ITALIAN prompt, which
 // ends in "Rispondi in italiano", so ANIMA answered a German user in Italian.
-const LANG_NAME = { it: 'Italian', en: 'English', es: 'Spanish', fr: 'French', de: 'German' };
-const LOCALE = { it: 'it-IT', en: 'en-GB', es: 'es-ES', fr: 'fr-FR', de: 'de-DE' };
+const LANG_NAME = { it: 'Italian', en: 'English', es: 'Spanish', fr: 'French', de: 'German', zh: 'Simplified Chinese' };
+const LOCALE = { it: 'it-IT', en: 'en-GB', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', zh: 'zh-CN' };
 export const replyLanguage = (lang) => LANG_NAME[lang] || 'English';
 // The language a message is written in (it/en/es/fr/de), or null when it does not show. "Reply in the language of the
 // user's latest message" alone did not hold: on the Italian desktop qwen3.5:9b answered "Turn the brightness down" and a
@@ -236,7 +236,7 @@ export function userLanguage(text) {
   const words = t.split(/\s+/).filter(Boolean).length;
   return (bestN >= 2 && bestN > second) || (bestN === 1 && second === 0 && words <= 8) ? best : null;   // a short order: one clean cue
 }
-const LANG_NAME_IT = { it: 'italiano', en: 'inglese', es: 'spagnolo', fr: 'francese', de: 'tedesco' };
+const LANG_NAME_IT = { it: 'italiano', en: 'inglese', es: 'spagnolo', fr: 'francese', de: 'tedesco', zh: 'cinese semplificato' };
 // The last line of the prompt when the user wrote in another language than the OS one (most salient place).
 const replyLangLine = (en, userLang) => en
   ? 'REPLY LANGUAGE: the user\'s latest message is in ' + replyLanguage(userLang) + ' — write your whole reply in ' + replyLanguage(userLang) + '.'

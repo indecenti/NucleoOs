@@ -11,7 +11,7 @@
 // This module is THE single way web code touches the Cardputer mic. Like the download gate
 // (dlgate.js) it is built on Web Locks, which coordinate across every same-origin context — so the
 // 'nucleo-mic' lock is genuinely OS-wide: no two apps, tabs or iframes the device serves can hold the
-// mic at once, and the holder's human label is broadcast so anyone can show "🎤 in uso da …".
+// mic at once, and the holder's human label is broadcast so anyone can show who is using it.
 //
 // Two backstops stay untouched beneath this: the firmware atomics (hardware truth) and the 409
 // (covers the ONE owner Web Locks can't see — the on-device native Recorder, which holds no web lock).

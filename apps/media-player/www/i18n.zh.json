@@ -1,0 +1,7 @@
+{
+  "_lang": "zh",
+  "app_title": "媒体播放器",
+  "library_hint": "曲库 · /data/Music，由浏览器解码",
+  "empty_list": "/data/Music 中没有音频",
+  "load_failed": "无法访问曲库：设备在线吗？"
+}
