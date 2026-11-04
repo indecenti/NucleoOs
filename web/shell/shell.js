@@ -5,9 +5,8 @@ import * as WM from './wm.js';
 import * as FsIndex from './fsindex.js';
 import { resolveShortcut, resolveEscape } from './shortcuts.js';
 import { createBusyController } from './busy.js';
-// All five OS languages — the fallback language gate when the i18n engine is not loaded yet
-// (with it, NucleoI18N.LANGS is the authority).
-const SHELL_LANGS = ['it', 'en', 'es', 'de', 'fr'];
+// Every OS language: the language gate before the i18n engine is up (nucleo-langs.js is the one table).
+import { CODES as SHELL_LANGS } from './nucleo-langs.js';
 import { ensureOnboarding } from './onboarding.js';   // first-boot AI setup + install tutorial
 import I18N from './nucleo-i18n.js';                  // centralized OS-wide internationalization
 import { makeFetchJSON, makeLoadState } from './boot-fetch.js';   // resilient boot fetch + typed user-state load (shell-boot-fetch.test)

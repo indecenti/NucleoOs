@@ -25,33 +25,19 @@
 //   I18N.apply();                               // fills [data-i18n] in the document
 //   I18N.onChange(() => repaintDynamicBits());  // re-render anything t() built imperatively
 
-const BASE = 'en';                               // default + fallback floor for every key (English-first OS)
+import { BASE, LANGS, DEVICE_LANGS, CODES as LANG_CODES, deviceLang as toDevice } from './nucleo-langs.js';
+export { LANGS, DEVICE_LANGS };
 const RUNTIME_KEY = 'anima.lang';                // the localStorage key the whole OS already reads
 const LOCALE_KEY = 'nucleo.locale';              // optional regional-format override (display lang ≠ format)
 
-// Supported languages. Add a row here + the matching catalog files to ship a new language OS-wide;
-// the Settings/onboarding pickers render straight from this list, so nothing else needs to change.
-export const LANGS = [
-  { code: 'it', label: 'Italiano', flag: '🇮🇹', dir: 'ltr', locale: 'it-IT' },
-  { code: 'en', label: 'English',  flag: '🇬🇧', dir: 'ltr', locale: 'en-US' },
-  // Tier-2 languages (translation in progress): every missing key falls back through base (en), so a
-  // partial catalog is safe. They appear in the Settings/onboarding pickers as soon as they're listed.
-  { code: 'es', label: 'Español',  flag: '🇪🇸', dir: 'ltr', locale: 'es-ES' },
-  { code: 'fr', label: 'Français', flag: '🇫🇷', dir: 'ltr', locale: 'fr-FR' },
-  { code: 'de', label: 'Deutsch',  flag: '🇩🇪', dir: 'ltr', locale: 'de-DE' },
-  // Browser-only language (see DEVICE_LANGS): the web OS shows it, the device keeps English underneath.
-  { code: 'zh', label: '简体中文', flag: '🇨🇳', dir: 'ltr', locale: 'zh-CN' },
-];
-const LANG_CODES = LANGS.map((l) => l.code);
-
-// The languages the DEVICE stores: POST /api/lang, settings.json ui.language, the native UI. Every firmware
-// and backend released so far accepts exactly these five and turns any other code into 'en' — and then tells
-// every browser "en" (system.language), which would undo the choice a second later. So a display language
-// outside this set (zh) lives in this browser only, ON TOP OF a device language: the device is told
-// deviceLang(code) = 'en', and an 'en' coming back from it keeps the browser's choice (fromDevice). Any other
-// language from the device (picked on the device, or in another browser) is a real change: it wins.
-// Grow this list only behind a capability that says the device stores the new code.
-export const DEVICE_LANGS = ['it', 'en', 'es', 'fr', 'de'];
+// The languages, their locales and which ones the device stores live in one pure module (nucleo-langs.js), shared
+// with the shell, the AI layer and host tests. The Settings/onboarding pickers render straight from LANGS.
+//
+// DEVICE_LANGS is what the DEVICE stores: POST /api/lang, settings.json ui.language, the native UI. Every firmware
+// released so far accepts exactly those five and turns any other code into 'en' — and then tells every browser "en"
+// (system.language), which would undo the choice a second later. So a display language outside that set (zh) lives
+// in this browser only, ON TOP OF a device language: the device is told deviceLang(code) = 'en', and an 'en' coming
+// back from it keeps the browser's choice (fromDevice). Any other language from the device wins.
 const OVERLAY_KEY = 'nucleo.lang.overlay';     // {lang, over}: show `lang` while the device says `over`
 function readOverlay() {
   try {
@@ -363,10 +349,7 @@ const I18N = {
   },
 
   // The language to tell the DEVICE for display language `code` (DEVICE_LANGS): itself, or English.
-  deviceLang(code) {
-    const l = normalize(code);
-    return l && DEVICE_LANGS.includes(l) ? l : BASE;
-  },
+  deviceLang: toDevice,
   // The display language to use when the DEVICE reports `code` (settings.json, /api/lang, system.language):
   // the browser-only language chosen here while the device still holds the one it was put over, else the
   // device's own. null for an unknown code (the caller keeps what it has).

@@ -26,6 +26,7 @@
 // LESS than the status quo, where each app fetched on its own schedule.
 
 import { CORE } from './nucleo-version.js';
+import { deviceLang } from './nucleo-langs.js';
 import { createFs } from './nucleo-fs.js';
 import { createMyApps, isMyApp } from './nucleo-myapps.js';
 
@@ -576,9 +577,8 @@ export function createBroker({ fetchFn, fs: fsIn, findApp, notify, onFsChange, g
         const opts = { cache: 'no-store' };
         if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) opts.signal = AbortSignal.timeout(8000);
         try {
-          // The device speaks only its own languages (nucleo-i18n.js DEVICE_LANGS): a browser-only one (zh) asks in English.
-          const dl = ['it', 'en', 'es', 'fr', 'de'].includes(lang) ? lang : 'en';
-          const r = await doFetch('/api/anima?q=' + encodeURIComponent(q) + '&lang=' + dl + '&mode=off', opts);
+          // The device speaks only its own languages: a browser-only one (zh) asks in English (nucleo-langs.js).
+          const r = await doFetch('/api/anima?q=' + encodeURIComponent(q) + '&lang=' + deviceLang(lang) + '&mode=off', opts);
           if (!r.ok) return { ok: false, error: 'http-' + r.status };
           const j = await r.json().catch(() => null);
           if (!j) return { ok: false, error: 'bad reply' };

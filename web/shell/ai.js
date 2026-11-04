@@ -22,6 +22,8 @@
 // the Anthropic "dangerous-direct-browser-access" opt-in is appropriate here. The key is never
 // logged and never sent anywhere except the provider the user chose.
 
+import { languageName, localeOf } from './nucleo-langs.js';
+
 export const AI_PATH = '/data/anima/teacher.json';
 const TEACHER_API = '/api/anima/teacher';
 // Where a saved key would be: never a secret, never sent (authHeaders), written back as "" (kept).
@@ -688,17 +690,15 @@ export const maskKey = (k, hint) => (isVaultKey(k) ? (hint || '••••') : 
 
 // "martedì 29 settembre 2026 alle ore 22:40 (Europe/Rome)" in the OS language — appended to every system
 // prompt the shell sends, because a model has no clock (twin of apps/anima/www/contextkit.js nowText).
-const CLOCK_LOCALE = { it: 'it-IT', en: 'en-GB', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', zh: 'zh-CN' };
 export function nowText(lang = 'en', d = new Date()) {
   let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch {}
   try {
-    const s = new Intl.DateTimeFormat(CLOCK_LOCALE[lang] || 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d);
+    const s = new Intl.DateTimeFormat(localeOf(lang), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d);
     return tz ? `${s} (${tz})` : s;
   } catch { return d.toISOString(); }
 }
 // The reply-language rule for an English-worded prompt (es/fr/de otherwise get English answers).
-const REPLY_LANG = { it: 'Italian', en: 'English', es: 'Spanish', fr: 'French', de: 'German', zh: 'Simplified Chinese' };
-export const replyRule = (lang) => 'Always reply in ' + (REPLY_LANG[lang] || 'English') + '.';
+export const replyRule = (lang) => 'Always reply in ' + languageName(lang) + '.';
 
 // Lightweight capability probe — preferred over readTeacher() to answer "is AI configured?" because
 // it never returns the raw key. {hasKey, online, enabled, provider?, model?} or null on error.
