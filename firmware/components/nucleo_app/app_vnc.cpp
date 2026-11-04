@@ -1244,6 +1244,13 @@ static void run_session(const char *name)
             }
             const unsigned char mods_now = nucleo_kbd_mods();
             if (mods_now != mods_seen) { mods_seen = mods_now; comp_dirty = true; }
+            if (s_bench > 0 && s_test_setup && M.t_connected) {   // bench: the control pages and the mouse, for their screenshots
+                const int64_t t = now - M.t_connected;
+                const int want = t > 10000000 && t < 13000000 ? CP_MENU : t >= 13000000 && t < 16000000 ? CP_KEYS : CP_STATUS;
+                if (want != s_cpage) { s_cpage = want; comp_dirty = true; }
+                if (t > 16000000 && !s_mouse && !(s_shots_done & 32)) mouse_toggle();
+                if (t > 19000000 && s_mouse && !(s_shots_done & 32)) { auto_shot(5, "session-mouse"); mouse_toggle(); }
+            }
             if (s_bench > 0 && now - t_pan > 4000000) {   // bench: walk the desktop, a full view each time
                 t_pan = now; pan_i = (pan_i + 1) % (int)(sizeof PAN / sizeof PAN[0]);
                 s_vx = PAN[pan_i][0]; s_vy = PAN[pan_i][1]; clamp_view(); s_full = true; M.pans++;
@@ -1715,6 +1722,11 @@ static void on_tick()
 {
     if (s_page == P_LIST && s_drawn == P_LIST) auto_shot(0, "list");
     if (s_page == P_FORM && s_drawn == P_FORM) auto_shot(1, "form");
+    if (s_test_setup && !s_auto_done) {                  // the bench card shows each page (and takes its screenshot) first
+        if (s_drawn != s_page) return;
+        if (s_page == P_LIST && !(s_shots_done & 2) && s_nsaved) { open_form(s_sel); return; }
+        if (s_page == P_FORM) { form_leave(); nucleo_app_request_draw(); return; }
+    }
     if (!s_auto_done) {
         s_auto_done = true;
         int a = -1;
