@@ -1,0 +1,1 @@
+stats.py is the reference implementation of a text-statistics tool. Port it to stats.js for this device: the output must be identical, line by line, to what the Python prints. Reason carefully about how Python sorts, rounds and splits, run your port and compare it against the Python semantics.

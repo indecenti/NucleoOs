@@ -65,6 +65,7 @@ ANIMA is NucleoOS's offline natural-language assistant (retrieval + reasoning in
 | [anima-forge.md](anima-forge.md) | ANIMA Forge — four cooperating intelligence substrates, GPU/WASM local models, the verifier. *(design; deterministic spine built)* |
 | [anima-atelier.md](anima-atelier.md) | Sketch-conditioned on-device image generation (SDXS + ControlNet on the browser's WebGPU). *(design)* |
 | [ai-models.md](ai-models.md) | How every cloud-LLM surface picks a model live from the key's own `/models` and turns failures into one actionable sentence. |
+| [nucleo-code.md](nucleo-code.md) | Design: a small Claude Code on the Cardputer (agent, SD workspace, MicroQuickJS, LLM service ABI 9, UI) on 512 KB without PSRAM. |
 | [ai-roadmap.md](ai-roadmap.md) | The AI strategy record — a 2026-08 design review's ranked proposals, with the judge's reasoning. *(roadmap)* |
 | [kryonos-integration-plan.md](kryonos-integration-plan.md) | Three ideas adopted from KryonOS — a rescue page, a release `type`, and a parked third. *(plan; items 1 and 3 host-tested, firmware halves flash-pending; item 2 parked)* |
 

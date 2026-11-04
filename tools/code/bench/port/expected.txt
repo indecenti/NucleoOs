@@ -1,0 +1,11 @@
+WORDS 38
+UNIQUE 29
+TOP la 5
+TOP di 2
+TOP il 2
+TOP lia 2
+TOP paese 2
+LONGEST gracchiava 10
+SENTENCES 5
+AVG 4.50
+RLE 3ab2c5de xyz 12z

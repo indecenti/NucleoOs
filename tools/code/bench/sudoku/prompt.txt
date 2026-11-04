@@ -1,0 +1,3 @@
+Write sudoku.js that solves this puzzle with backtracking (0 = empty, rows left to right, top to bottom):
+530070000600195000098000060800060003400803001700020006060000280000419005000080079
+Print the solved grid as 9 lines of 9 digits, then print VALID if your own check confirms every row, column and 3x3 box holds 1-9 exactly once. It must finish well within the 10 s limit on the device: make it efficient (for example, choose the empty cell with the fewest candidates). Run it and fix it until it prints VALID.
