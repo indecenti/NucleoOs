@@ -151,11 +151,9 @@ CONFIG_MBEDTLS_GCM_SUPPORT_NON_AES_CIPHER=n
 # it and gives the RAM back. See memory cardputer-adv-exploitation / nucleo-exclusive-mode.
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
-# The controller's code in flash, not IRAM: on the S3 IRAM and the heap are the same SRAM, so the ~16 KB of
-# BLE link-layer code that sat in IRAM was heap lost to every app — on a boot where the radio is never up
-# (the normal one, the emulators' Solo boot) for nothing. BLE is only up inside the BLE app's exclusive mode;
-# there it runs a little slower and may stall while the flash is erased, which that app does not do.
-CONFIG_BT_CTRL_RUN_IN_FLASH_ONLY=y
+# The controller's code stays in IRAM (CONFIG_BT_CTRL_RUN_IN_FLASH_ONLY off): in flash it freed ~20 KB of heap for
+# the emulators but cost ~95 KB of image (libbtdm_app_flash), which put the image over the M5Launcher slot
+# (docs/m5launcher.md, image:check). Measured 2026-11-04; the emulators run with the 0.8.5 heap again.
 # The octal (OPI) MXIC flash driver is in IRAM (~1.4 KB) and this board's flash is quad (DIO): never used.
 CONFIG_SPI_FLASH_SUPPORT_MXIC_OPI_CHIP=n
 # FatFs fast seek: a file opened for reading keeps its cluster map (256 B) and fseek jumps straight to the cluster
