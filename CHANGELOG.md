@@ -6,6 +6,8 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.8.5] — 2026-11-04
+
 ### Added
 - **Native apps can connect to your PC, when they say so.** Native app ABI level 7: `nucleo_tcp`, TCP client
   connections the system opens for an app whose signed store record grants the `net` permission (the Store shows
@@ -13,6 +15,12 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   user: the Remote desktop (VNC) app in the Native C store. No raw sockets for apps, ever.
 - **Raw touch pointer for apps** (`nucleo_touch_raw`): press, move and lift with coordinates, for apps that run
   their own gestures (drag, long press, a wheel strip).
+- **Store apps look like the built-in ones on the original Cardputer.** ABI 7 also gives native apps the system's
+  compact list and title (`app_ui_title`, `app_ui_list`) and the screen readback without a second screen, so an
+  app can save a screenshot of the Cardputer's own display.
+
+### Changed
+- **ANIMA answers with the model you chose**, and the model names in the web OS are readable (web OS ff8f257).
 
 ### Fixed
 - **Fn, Ctrl, Opt and Alt now are the keys printed on them.** Fn and Ctrl were swapped, and so were Opt and Alt: an
