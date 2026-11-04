@@ -120,6 +120,8 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   rendered on the PC from its source; a cover captured on the device still wins).
 - The selection's whole title has a line of its own across the panel, above the picture and the wheel; one too long
   for it scrolls (a pause, then round), redrawn alone; under the picture, its caption and what it is.
+- Gallery touch: the left column and the title line open the selection (a tap under the picture used to jump five
+  titles).
 - Games gallery, faster pictures: the ones of the titles around the selection are kept in RAM, packed (PackBits on
   RGB565: a console screenshot 22.6 KB -> ~1.8 KB, a cover 14 KB -> ~1 KB), filled while the player is still and only
   while the heap keeps 20 KB free (Wi-Fi stays on, no Solo boot): stopping on one draws it without reading the card,

@@ -1949,7 +1949,7 @@ static void paint_left(void *)
     d.fillRect(0, top, WX, H - top, BG);
     const int tw = 118, tx = (WX - tw) / 2, ph = 98;    // the picture's place
     draw_pic(tx, top + 2, tw, ph, acc);
-    nucleo_touch_add(tx, top + 2, tw, ph, NK_ENTER, 0);   // the picture opens the selection too
+    nucleo_touch_add(0, top, WX, H - top, NK_ENTER, 0);   // the picture, its caption: open the selection too
     char cap[64]; caption(cap, sizeof cap);
     int ly = top + ph + 6;
     lg::font(0);
@@ -1982,6 +1982,7 @@ static void paint_title(void *)
 {
     d.fillRect(0, TY, 320, TH, BG);
     if (!s_n) { s_mq_long = false; return; }
+    nucleo_touch_add(0, TY, 320, TH, NK_ENTER, 0);   // the title opens it
     const int64_t now = esp_timer_get_time();
     const uint32_t key = title_key();
     if (key != s_mq_key) { s_mq_key = key; s_mq_t0 = now; }
