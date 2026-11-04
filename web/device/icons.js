@@ -450,11 +450,24 @@ export function drawIcon(g, id, cx, cy, s) {
       g.bx(cx - s, cy + s * 0.06, 2 * s, T * 0.65, g.bg);
       break;
 
-    case 'device':                                   // phone / device: body, screen, earpiece, home dot
-      g.frr(cx - s * 0.58, cy - s, s * 1.16, 2 * s, s * 0.22);
-      g.frr(cx - s * 0.4, cy - s * 0.68, s * 0.8, s * 1.25, 2, g.bg);
-      g.bx(cx - s * 0.18, cy - s * 0.85, s * 0.36, T * 0.4, g.bg); g.fc(cx, cy + s * 0.78, T * 0.5, g.bg);
+    case 'device':                                   // the Cardputer itself: screen with an "i" + key rows
+      g.frr(cx - s, cy - s * 0.8, 2 * s, s * 1.6, s * 0.2);
+      g.frr(cx - s * 0.74, cy - s * 0.56, s * 1.48, s * 0.66, 2, g.bg);
+      g.fc(cx, cy - s * 0.43, T * 0.34);
+      g.bx(cx - T * 0.3, cy - s * 0.22, T * 0.6, s * 0.24);
+      for (let ry = 0; ry < 2; ry++) for (let k = 0; k < 4; k++)
+        g.bx(cx - s * 0.74 + k * s * 0.4, cy + s * 0.22 + ry * s * 0.27, s * 0.28, s * 0.15, g.bg);
       break;
+
+    case 'updates': {                                // circular arrow round a download arrow
+      g.fc(cx, cy, s * 0.92); g.fc(cx, cy, s * 0.92 - T, g.bg);
+      g.bx(cx, cy - s, s * 0.52, s * 0.56, g.bg);
+      const ym = cy - s * 0.92 + T * 0.5;
+      g.tri(cx - s * 0.04, ym - s * 0.34, cx - s * 0.04, ym + s * 0.34, cx + s * 0.4, ym);
+      g.bx(cx - T * 0.45, cy - s * 0.4, T * 0.9, s * 0.46);
+      g.tri(cx - s * 0.36, cy + s * 0.04, cx + s * 0.36, cy + s * 0.04, cx, cy + s * 0.46);
+      break;
+    }
 
     case 'poker':                                    // playing card with a heart pip
       g.frr(cx - s * 0.68, cy - s, s * 1.36, 2 * s, s * 0.18);
