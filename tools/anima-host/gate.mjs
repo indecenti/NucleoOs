@@ -436,6 +436,11 @@ const gates = [
     // HTTP_TIMEOUT symbol (no raw literal dodge), the wall-clock turn budget + WDT-pet + heap-state failure
     // logging are present, and nucleo_exclusive_enter returns per-call ownership. Source-invariant, no exe.
     ok: (code) => code === 0, summary: (o) => (o.match(/\[online-stability\][^\n]*/) || [lastLine(o)])[0] },
+  { name: 'claude-stream', cmd: 'node', args: ['tools/anima-host/claude-stream-check.mjs'],
+    // ANIMA's Claude client (firmware/components/nucleo_anima/anima_claude.h, host-compiled): the effort each
+    // model accepts (5.x/Fable all five and they think; 4.6 no xhigh; Haiku/Sonnet 4.5 none), the streamed
+    // body (stream + output_config.effort), and the SSE reader (text deltas only, cap, stop, error event).
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[claude-stream\][^\n]*/) || [lastLine(o)])[0] },
   { name: 'offline-installer', cmd: 'node', args: ['--test', 'tools/anima-host/forge-model-store.test.mjs', 'tools/anima-host/forge-install-flow.test.mjs', 'tools/anima-host/forge-install-integration.test.mjs', 'tools/anima-host/forge-model-url-map.test.mjs', 'tools/anima-host/forge-local-models.test.mjs'],
     // First-class regression guard for the OFFLINE-MODEL INSTALLER (apps/anima/www/forge — the "scarica dal
     // Cardputer → gira offline nel browser" core path). Two suites: the download CONTROLLER's hard invariants
@@ -539,8 +544,7 @@ const gates = [
     // The device time-zone table (firmware/components/nucleo_setup/clock_zones.c), host-compiled with MinGW:
     // every POSIX rule newlib will apply is evaluated over 2026-2027 against Node's IANA database (offsets,
     // DST, the switch moments), aliases resolve to a zone with the same offsets, unknown ids are refused.
-    ok: (code) => code === 0, summary: (o) => (o.match(/clock-zones: [^
-]*/) || [lastLine(o)])[0].trim() },
+    ok: (code) => code === 0, summary: (o) => (o.match(/clock-zones: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'update-policy (release)', cmd: 'node', args: ['tools/anima-host/update-check.mjs'],
     // The native release-update decision core (firmware/components/nucleo_app/update_policy.c), host-
     // compiled with MinGW — the SAME C that runs on the device. Proves semver-triplet parse/compare

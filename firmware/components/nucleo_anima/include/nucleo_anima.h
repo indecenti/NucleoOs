@@ -196,6 +196,14 @@ bool nucleo_anima_teacher_configured(void);   // a chat-teacher key (any provide
 // Report the ACTIVE chat teacher without exposing the key: provider ("anthropic"|"openai") + model.
 // Returns true iff a key is configured. Lets a UI show "Claude (sonnet-4-6)" vs "Grok (llama-3.1-8b)".
 bool nucleo_anima_teacher_info(char *provider, int pcap, char *model, int mcap);
+// Native IA tab: the cloud model and its effort, read from / written to /data/anima/teacher.json (the
+// same file the web OS writes). refresh() caches the choices (call it when the menu opens); label/get read
+// the cache; step() moves to the next/previous choice (dir +1/-1, wrapping) and saves it.
+void nucleo_anima_models_refresh(void);
+bool nucleo_anima_model_label(char *out, int cap, char *id, int idcap);
+bool nucleo_anima_model_step(int dir);
+bool nucleo_anima_effort_get(char *out, int cap);
+bool nucleo_anima_effort_step(int dir);
 
 // Content channel for multi-step "compose THEN act": when the controller computes a payload too
 // large for the 64-byte arg field (e.g. a file body composed from a calculation or a literal text

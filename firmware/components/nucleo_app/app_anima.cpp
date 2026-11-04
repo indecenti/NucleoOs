@@ -325,8 +325,9 @@ static bool s_en    = false;                      // mirror of the OS language (
 enum { TAB_IDEE = 0, TAB_OGGI = 1, TAB_GUIDA = 2, TAB_IA = 3, TAB_STATO = 4 };
 #define TAB_N 5
 // IA (settings) tab rows — fixed order; SLIDER rows (Velocita voce/Volume/Luce) enter L/R adjust mode.
-enum { IA_ONLINE = 0, IA_LANG, IA_TEXT, IA_VOICE, IA_SPEED, IA_VOL, IA_BRI, IA_CLEAR };
-#define IA_ROWS 8
+// IA_MODEL / IA_EFFORT: the cloud model and its effort (teacher.json, shared with the web OS).
+enum { IA_ONLINE = 0, IA_MODEL, IA_EFFORT, IA_LANG, IA_TEXT, IA_VOICE, IA_SPEED, IA_VOL, IA_BRI, IA_CLEAR };
+#define IA_ROWS 10
 #define GUIDE_N 9                                 // cards in the GUIDA manual (also its "row" count)
 static bool s_menu_open;                          // the tabbed menu is up (modal over the chat)
 static int  s_tab;                                // active tab (TAB_*)
@@ -2206,6 +2207,18 @@ static void menu_hint(void)
         }
         nucleo_app_set_hint(s_en ? "l/r adjust   enter ok" : "sx/dx regola   invio ok"); return;
     }
+    if (s_tab == TAB_IA && s_mrow == IA_MODEL) {                // the exact model id the requests carry
+        char id[48];
+        if (nucleo_anima_model_label(NULL, 0, id, sizeof id)) { char h[64]; snprintf(h, sizeof h, "%s  %s", id, s_en ? "enter next" : "invio cambia"); nucleo_app_set_hint(h); }
+        else nucleo_app_set_hint(s_en ? "add a key in the web OS: Settings > AI" : "chiave: web OS > Impostazioni > IA");
+        return;
+    }
+    if (s_tab == TAB_IA && s_mrow == IA_EFFORT) {
+        char e[8];
+        nucleo_app_set_hint(!nucleo_anima_effort_get(e, sizeof e) ? (s_en ? "this model has no effort setting" : "questo modello non ha impegno")
+                            : (s_en ? "more effort: better, slower, costlier" : "piu impegno: meglio, piu lento e caro"));
+        return;
+    }
     if (s_tab == TAB_IDEE && s_form_leaf >= 0) {               // adapt: last slot sends, earlier ones advance
         bool last = s_form_slot >= LEAVES[s_form_leaf].slots - 1;
         if (LEAVES[s_form_leaf].slots < 2)                     // single field: nothing to hop between
@@ -2235,7 +2248,7 @@ static void on_tab(void)
     if (!s_ses || s_ed_open || s_exit_confirm || s_ses->clear_confirm) return;   // no session / the editor / a confirm owns the screen
     reader_close();                                        // TAB from the reader: straight to the menu
     s_menu_open = !s_menu_open;
-    if (s_menu_open) { s_tab = TAB_IDEE; s_mrow = -1; s_edit = false; s_sug_sel = 0; reset_idee(); load_today(); menu_hint(); }
+    if (s_menu_open) { s_tab = TAB_IDEE; s_mrow = -1; s_edit = false; s_sug_sel = 0; reset_idee(); load_today(); nucleo_anima_models_refresh(); menu_hint(); }
     else             { nucleo_app_set_hint(chat_hint()); }
     mark_all_dirty();
     nucleo_app_request_draw();
@@ -2588,6 +2601,8 @@ static void ia_key(int key)
     else if (key == NK_ENTER) {
         switch (s_mrow) {
             case IA_ONLINE: s_omode = (s_omode + 1) % 3; apply_online_mode(); save_settings(); break;
+            case IA_MODEL:  nucleo_anima_model_step(+1); break;    // next model (wraps), saved to teacher.json
+            case IA_EFFORT: nucleo_anima_effort_step(+1); break;   // low -> medium -> high -> xhigh -> max -> low
             case IA_LANG:                                    // the OS language itself (settings.json ui.language)
                 nucleo_i18n_set_en(!s_en); s_en = !nucleo_i18n_is_it(); save_settings();
                 if (s_ses->vmode == V_MANUAL) s_ses->vmode = V_FOLLOW;
@@ -2884,14 +2899,26 @@ static void draw_set_row(int y, bool focus, const char *label, const char *val,
     }
 }
 
-// Build the IA tab's eight rows: mode chip, language, text size, voice toggle, voice-SPEED slider,
+// Build the IA tab's ten rows: mode chip, cloud model, effort, language, text size, voice toggle, voice-SPEED slider,
 // volume + screen sliders, and the clear-chat action. ASCII labels (Font0 has no glyphs for accents).
 struct IAItem { const char *label; char val[14]; int kind; bool on; int slider; };
 static int build_ia(IAItem *it)
 {
     memset(it, 0, sizeof(IAItem) * IA_ROWS);
-    it[IA_ONLINE].label = "Online"; it[IA_ONLINE].kind = SV_TEXT;
-    snprintf(it[IA_ONLINE].val, 14, "%s", s_omode == OM_OFF ? "Off" : s_omode == OM_ONLY ? TR5("Solo", "Only", "Solo", "Seul", "Nur") : "On");
+    it[IA_ONLINE].label = TR5("Modo", "Mode", "Modo", "Mode", "Modus"); it[IA_ONLINE].kind = SV_TEXT;   // short: the value is up to 13 columns
+    snprintf(it[IA_ONLINE].val, 14, "%s", mode_name(s_omode));       // the same words as the toast and /info
+    it[IA_MODEL].label = TR5("Modello", "Model", "Modelo", "Modele", "Modell"); it[IA_MODEL].kind = SV_TEXT;
+    if (!nucleo_anima_model_label(it[IA_MODEL].val, 14, NULL, 0)) snprintf(it[IA_MODEL].val, 14, "%s", "-");
+    it[IA_EFFORT].label = TR5("Impegno", "Effort", "Esfuerzo", "Effort", "Aufwand"); it[IA_EFFORT].kind = SV_TEXT;
+    {
+        char e[8];
+        if (!nucleo_anima_effort_get(e, sizeof e)) snprintf(it[IA_EFFORT].val, 14, "-");
+        else if (!strcmp(e, "low"))    snprintf(it[IA_EFFORT].val, 14, "%s", TR5("Basso", "Low", "Bajo", "Faible", "Niedrig"));
+        else if (!strcmp(e, "high"))   snprintf(it[IA_EFFORT].val, 14, "%s", TR5("Alto", "High", "Alto", "Eleve", "Hoch"));
+        else if (!strcmp(e, "xhigh"))  snprintf(it[IA_EFFORT].val, 14, "%s", TR5("Molto alto", "Extra high", "Muy alto", "Tres eleve", "Sehr hoch"));
+        else if (!strcmp(e, "max"))    snprintf(it[IA_EFFORT].val, 14, "%s", TR5("Massimo", "Max", "Maximo", "Maximum", "Maximal"));
+        else                           snprintf(it[IA_EFFORT].val, 14, "%s", TR5("Medio", "Medium", "Medio", "Moyen", "Mittel"));
+    }
     it[IA_LANG].label = s_en ? "Lang" : "Lingua"; it[IA_LANG].kind = SV_TEXT;   // the OS language (Enter: IT <-> EN)
     snprintf(it[IA_LANG].val, 14, "%.2s", nucleo_i18n_lang());
     for (char *c = it[IA_LANG].val; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
