@@ -6,6 +6,20 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.8.6] — 2026-11-04
+
+### Added
+- **NES games on the Cardputer itself.** The NES emulator joins the Native C store: `.nes` cartridges in
+  `/data/ROMs/nes` run with sound, battery saves and save states, and the Games gallery lists them. It needs this
+  firmware (the Store shows it only from 0.8.6).
+- **Big cartridges from internal flash.** Native app ABI level 8: `nucleo_rom_map` copies a cartridge too big for RAM
+  once into the spare update slot and maps it, so an emulator reads it like memory instead of from the SD card.
+  Never under M5Launcher (its slots belong to other apps): there the game reads from the card as before.
+
+### Changed
+- **Faster jumps inside big files on the SD card** (FatFs fast seek): a file opened for reading keeps its cluster
+  map, so a seek no longer walks the card's allocation table from the start.
+
 ## [0.8.5] — 2026-11-04
 
 ### Added
