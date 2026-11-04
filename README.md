@@ -428,7 +428,7 @@ Every demanding feature respects a tight set of RAM tricks, validated on hardwar
   `service` (native C) · `elf` (PSRAM‑gated). Install/run without reflashing.
 - **OS services** — capability‑scoped manifests, OTA A/B with rollback, PIN pairing + cookie auth,
   delta SD‑sync (never `/MIR`), OS‑wide live i18n in 5 languages (IT/EN/DE/ES/FR; ANIMA and its
-  voice stay IT/EN), notifications, an OS‑wide **mic gate** and
+  voice stay IT/EN) plus **Simplified Chinese (简体中文) in the web OS**, notifications, an OS‑wide **mic gate** and
   **download gate** (Web Locks), and a service‑worker update gate.
 - **Robustness gates** run before any build ships:
   - a 129‑gate ANIMA regression suite that compiles the real firmware C on the PC — 0 fabrications
@@ -472,7 +472,7 @@ Every demanding feature respects a tight set of RAM tricks, validated on hardwar
 > The **desktop shell** is a real workstation: window snapping (drag‑to‑edge + Snap Layouts), Alt‑Tab,
 > a global search that also asks ANIMA, an OS clipboard with history, a Notification Center (Do‑Not‑Disturb
 > + quiet hours), taskbar **widgets** (weather + device pulse + recents, all browser‑side), **night light**,
-> a **lock screen** (Ctrl+Alt+L) and a keyboard‑shortcuts sheet — all in 5 languages, all costing the
+> a **lock screen** (Ctrl+Alt+L) and a keyboard‑shortcuts sheet — all in 6 languages (with 简体中文), all costing the
 > Cardputer ~0 RAM.
 
 > Apps are capability‑scoped (each declares its permissions) and most cost **~0 device RAM** — they
