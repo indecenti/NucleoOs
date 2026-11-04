@@ -61,11 +61,36 @@ The rules that keep an installed app working across OS updates:
    Level 4 = level 3 + what the two emulators need (51 names): the sprite panel behind their scaler, the PCM sink,
    the second-screen surface and exclusive-mode calls, the heap probes, a few libc/libgcc helpers and the ROM
    inflater for zipped cartridges.
+   Level 6 = level 5 + the second core (`nucleo_cowork_*`).
+   Level 7 = level 6 + the network an app may have (`nucleo_tcp_*`, below), its secrets (`nucleo_secret_*`), the
+   raw touch pointer (`nucleo_touch_raw`, `nucleo_touch_raw_read`, `nucleo_touch_last`), the Cardputer's screen
+   readback (`nucleo_extdisp_screen_size` / `_row`), `lg::settings_list`, `cJSON_IsString` / `cJSON_IsTrue` and
+   `__lshrdi3`. First needed by VNC (Remote desktop).
 
 Not in v1, on purpose: the web server (`httpd_*`: a module's handlers would outlive it, and the web OS's
 catch-all route is registered last, so a late endpoint is never reached), task creation, raw radio, OTA,
 NVS, the registry, partitions. A module cannot outlive its own foreground life except through what the
 framework already bounds (handlers it sets are cleared when the app closes).
+
+### Network (level 7)
+
+Sockets, lwIP and Wi-Fi are never exported. A module that needs a connection the user asked for uses
+`nucleo_tcp.h`: TCP client connections the firmware opens for it — `nucleo_tcp_connect(host, port, ms)`, then
+`_send`, `_recv`, `_readable`, `_close`, every call bounded in time (the waits feed the task watchdog), at most
+`NUCLEO_TCP_MAX` (2) at once. Refused: loopback, `0.x`, multicast, broadcast and the device's own address, so an app
+cannot reach the Cardputer's own services. `nucleo_tcp_connect` asks `nucleo_app_net_allowed()`
+(`store_apps.cpp`): built-in apps may; a store app only when its signed record grants `net`. The framework closes
+whatever an app left open when it closes. A store app with `net` gets its Solo boot **with** Wi-Fi (`NX_SOLO`,
+decided by the store record before the module loads; the `wifi` games keep opening inline). The Store shows the
+permission before installing, and `tools/store.py` rejects a module that imports `nucleo_tcp_*` without `net`, any
+raw socket/lwIP/Wi-Fi name, or `net` below level 7 (store `docs/rules.md`, "Network, declared").
+
+### Secrets (level 7)
+
+`nucleo_secret.h`: a value of up to 64 bytes (a password) under a name of up to 15 characters, in NVS (internal
+flash), in a namespace made from the foreground app's id — an app sees only its own, and nothing is on the SD card,
+which anyone can take out. Not encrypted at rest unless flash encryption is on: it keeps a secret off the removable
+card, not away from whoever holds the device.
 
 ## Building one
 

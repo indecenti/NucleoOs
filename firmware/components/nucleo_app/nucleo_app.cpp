@@ -53,6 +53,7 @@ extern "C" {
 #include "app_gfx.h"
 #include "nucleo_surface.h"     // large (external 320x240) vs compact surface for the launcher home
 #include "nucleo_touch.h"       // touch targets: apps mark what a tap on the external panel means
+#include "nucleo_tcp.h"         // apps' TCP connections: closed with the app
 #include "nucleo_extdisp.h"     // /api/screen?display=ext: the external panel, rebuilt from the internal one
 
 // Network info (resolved at link; declared here for the stub screen, no component dep).
@@ -1024,6 +1025,8 @@ static void close_app(void)
     s_app_back = nullptr; s_app_direct = false; // ...Back returns to close, drawing back to buffered
     if (s_app_fullscreen) { s_app_fullscreen = false; s_hint_dirty = true; } // restore the footer on app close
     s_app_keep_awake = false;
+    nucleo_touch_raw(false);                    // ...the panel's touch back to targets and gestures
+    nucleo_tcp_close_all();                     // ...and no connection outlives the app that opened it
     s_app_ptt = nullptr;                        // ...GO-hold returns to the voice recognizer
     s_app_poll = nullptr;                       // ...no live app polling once back at the launcher
     launcher_render_reset_hint_colors();        // restore the default dark footer for the launcher

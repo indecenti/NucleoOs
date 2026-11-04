@@ -6,6 +6,19 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+- **Native apps can connect to your PC, when they say so.** Native app ABI level 7: `nucleo_tcp`, TCP client
+  connections the system opens for an app whose signed store record grants the `net` permission (the Store shows
+  "network, to the PCs you pick" before installing), and `nucleo_secret`, per-app secrets in internal flash. First
+  user: the Remote desktop (VNC) app in the Native C store. No raw sockets for apps, ever.
+- **Raw touch pointer for apps** (`nucleo_touch_raw`): press, move and lift with coordinates, for apps that run
+  their own gestures (drag, long press, a wheel strip).
+
+### Fixed
+- **Fn, Ctrl, Opt and Alt now are the keys printed on them.** Fn and Ctrl were swapped, and so were Opt and Alt: an
+  app's "Fn+…" shortcut answered to Ctrl. Every app that uses them (SSH, ANIMA, Keydeck, the emulators, Fn+P) now
+  follows the labels.
+
 ## [0.8.4] — 2026-11-01
 
 ### Added

@@ -110,6 +110,19 @@ int                s_bl_pct = 100;               // settings "external_brightnes
 spi_device_handle_t s_touch = nullptr;           // the XPT2046, kept for the touch task
 volatile int       s_presses = 0, s_last_x = -1, s_last_y = -1;
 volatile int       s_tap_x = -1, s_tap_y = -1;       // where the last target tap landed (nucleo_touch_last)
+// Raw pointer (nucleo_touch_raw): an app with its own gestures gets every sample instead of the gesture layer.
+volatile bool      s_raw_on = false;
+nucleo_touch_raw_t s_raw_q[16];
+volatile int       s_raw_head = 0, s_raw_tail = 0;   // head = next write, tail = next read (one writer, one reader)
+portMUX_TYPE       s_raw_mux = portMUX_INITIALIZER_UNLOCKED;
+void raw_push(bool down, int x, int y, uint32_t ms)
+{
+    portENTER_CRITICAL(&s_raw_mux);
+    const int nx = (s_raw_head + 1) % 16;
+    if (nx == s_raw_tail && !down) s_raw_tail = (s_raw_tail + 1) % 16;   // full: a lift must never be lost
+    if (nx != s_raw_tail) { s_raw_q[s_raw_head] = nucleo_touch_raw_t{ down, (short)x, (short)y, ms }; s_raw_head = nx; }
+    portEXIT_CRITICAL(&s_raw_mux);
+}
 bool               s_primary = true;             // settings "external_primary": an attached panel hosts large screens
 bool               s_fit = true;                 // settings "external_fit": compact screens scaled 4/3 (320x180)
 volatile int       s_layout = 0;                 // settings "external_layout": 0 duplicate, 1 Cardputer only, 2 second only
@@ -637,6 +650,7 @@ void touch_task(void *)
     ScrollTrack sc = {};
     bool was_scroll = false;
     int64_t t_down = 0;
+    bool raw_down = false; int raw_up_n = 0, raw_x = -1, raw_y = -1;
     for (;;) {
         if (s_cal_req) {                           // Settings / Control Center: "Calibrate touch"
             s_cal_req = false;
@@ -665,7 +679,7 @@ void touch_task(void *)
             was_down = false;
         }
         if (s_layout == 1 && !calibrating) { vTaskDelay(pdMS_TO_TICKS(200)); continue; }   // Cardputer only
-        const bool busy = g.down || wake_hold || sc.vel != 0 || (calibrating && (cal.down || cal.wait_release));
+        const bool busy = g.down || raw_down || wake_hold || sc.vel != 0 || (calibrating && (cal.down || cal.wait_release));
         vTaskDelay(pdMS_TO_TICKS(busy ? 20 : 40));
         if (s_hud_until && !g.down && (int32_t)((uint32_t)(esp_timer_get_time() / 1000) - s_hud_until) >= 0) {
             s_hud_until = 0;                       // the on-demand bar times out: the app repaints under it
@@ -729,6 +743,22 @@ void touch_task(void *)
 
         int sx = 0, sy = 0;
         if (on) extdisp_cal_apply(&s_tc->cal, rx, ry, W, H, &sx, &sy);
+        if (s_raw_on || raw_down) {
+            // Raw pointer: no targets, no scroll areas, no long-press Back. Every sample while the finger is down
+            // that moved (or the first), then ONE lift after EXT_RELEASE_N empty samples (the film flickers).
+            int ax = 0, ay = 0;
+            const bool in = on && to_screen(solo_seen, sx, sy, &ax, &ay);
+            if (in) {
+                raw_up_n = 0;
+                if (!raw_down || ax != raw_x || ay != raw_y) { raw_push(true, ax, ay, now); raw_x = ax; raw_y = ay; }
+                raw_down = true;
+            } else if (raw_down && ++raw_up_n >= EXT_RELEASE_N) {
+                raw_push(false, raw_x, raw_y, now);
+                raw_down = false; raw_up_n = 0;
+            }
+            if (s_raw_on || raw_down) { was_down = false; continue; }
+            extdisp_gesture_init(&g, solo_seen ? s_tc->keys_solo : s_tc->keys);   // raw just ended: start clean
+        }
         int ev[EXT_MAX_EVENTS];
         const int n = extdisp_gesture_feed(&g, now, on, sx, sy, ev);
         if (g.down && !was_down) {
@@ -1245,6 +1275,22 @@ extern "C" bool nucleo_extdisp_draw_internal(void (*fn)(void *gfx))
 }
 
 // ---- touch targets (include/nucleo_touch.h) ----------------------------------------------------------------
+extern "C" void nucleo_touch_raw(bool on)
+{
+    portENTER_CRITICAL(&s_raw_mux);
+    s_raw_head = 0; s_raw_tail = 0;
+    portEXIT_CRITICAL(&s_raw_mux);
+    s_raw_on = on;
+}
+extern "C" bool nucleo_touch_raw_read(nucleo_touch_raw_t *ev)
+{
+    bool got = false;
+    portENTER_CRITICAL(&s_raw_mux);
+    if (s_raw_tail != s_raw_head) { *ev = s_raw_q[s_raw_tail]; s_raw_tail = (s_raw_tail + 1) % 16; got = true; }
+    portEXIT_CRITICAL(&s_raw_mux);
+    return got;
+}
+
 extern "C" bool nucleo_touch_last(int *x, int *y)
 {
     if (s_tap_x < 0) return false;

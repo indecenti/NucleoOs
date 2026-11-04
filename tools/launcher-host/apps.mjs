@@ -48,7 +48,12 @@ export function readRegistry() {
     const src = stripComments(raw);
     // A registration only a store module compiles (`#ifdef NAP_MODULE ... #endif`, no nested #if) never runs in
     // the firmware: it does not take a built-in slot.
-    const fw = src.replace(/#ifdef\s+NAP_MODULE\b(?:(?!#if)[\s\S])*?#endif/g, '');
+    // A whole store-only file (its first conditional is `#if defined(NAP_MODULE) || !defined(ESP_PLATFORM)`,
+    // closed by the file's last #endif: units, vnc) is empty in the firmware: none of its registrations count.
+    const firstIf = /^[ \t]*#if.*$/m.exec(src);
+    const storeOnly = firstIf && /^[ \t]*#if\s+defined\s*\(\s*NAP_MODULE\s*\)\s*\|\|\s*!\s*defined\s*\(\s*ESP_PLATFORM\s*\)/.test(firstIf[0]) &&
+                      /#endif[^\n]*\s*$/.test(src);
+    const fw = storeOnly ? '' : src.replace(/#ifdef\s+NAP_MODULE\b(?:(?!#if)[\s\S])*?#endif/g, '');
     callSites += (fw.match(/\bnucleo_app_register\s*\(/g) || []).length;
     callSites -= (fw.match(/\bvoid\s+nucleo_app_register\s*\(/g) || []).length;
     const funcs = [...src.matchAll(/void\s+(nucleo_(?:register_\w+|setup_register_apps))\s*\(\s*void\s*\)\s*\{/g)]

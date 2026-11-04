@@ -529,6 +529,14 @@ static void ui_icon(lgfx::v1::LGFXBase *g, int cx, int cy, int r, const char *id
         IBX(cx - Tk * 0.36f, cy - s * 0.14f, Tk * 0.72f, s * 0.48f, bg);                                // arrow stem
         ITR(cx - s * 0.34f, cy + s * 0.3f, cx + s * 0.34f, cy + s * 0.3f, cx, cy + s * 0.7f, bg);       // arrow head
 
+    } else if (!strcmp(id, "vnc")) {                                    // remote desktop: a monitor with the pointer on it
+        IRR(cx - s, cy - s * 0.85f, 2 * s, s * 1.35f, s * 0.18f, col);
+        IRR(cx - s + Tk * 0.8f, cy - s * 0.85f + Tk * 0.8f, 2 * s - Tk * 1.6f, s * 1.35f - Tk * 1.6f, 2, bg);   // screen
+        IBX(cx - Tk * 0.5f, cy + s * 0.5f, Tk, s * 0.26f, col);                                                 // stand
+        IBX(cx - s * 0.45f, cy + s * 0.72f, s * 0.9f, Tk * 0.6f, col);                                          // foot
+        ITR(cx - s * 0.3f, cy - s * 0.58f, cx - s * 0.3f, cy + s * 0.1f, cx + s * 0.2f, cy - s * 0.12f, col);   // pointer
+        IL(cx - s * 0.1f, cy - s * 0.08f, cx + s * 0.1f, cy + s * 0.28f, Tk * 0.6f, col);                       // its tail
+
     } else if (!strcmp(id, "chrono")) {                                 // stopwatch: dial ring + top plunger + single hand
         IBX(cx - Tk * 0.4f, cy - s * 0.98f, Tk * 0.8f, s * 0.34f, col);        // plunger stem
         IFC(cx, cy - s * 0.98f, Tk * 0.6f, col);                              // plunger knob

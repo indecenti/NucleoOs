@@ -59,6 +59,15 @@ void nucleo_touch_add_scroll(int x, int y, int w, int h, int step,
 // hit the targets. Shares the NUCLEO_TOUCH_SCROLL_MAX table with the scroll areas.
 void nucleo_touch_add_pad(int x, int y, int w, int h, int step);
 
+// Raw pointer, for a screen that runs its own gestures (a remote desktop: press, drag, long press). While on, the
+// panel's touch skips everything above (targets, scroll areas, pads, the long-press Back) and queues each sample:
+// down = true with the position (moved, or the first) in the screen's coordinates, then one down = false at the
+// lift. ms = the sample's time. The queue holds 16 (oldest dropped, a lift never). Turn it off before the screen
+// goes away; without a touch panel nothing ever arrives.
+typedef struct { bool down; short x, y; unsigned int ms; } nucleo_touch_raw_t;
+void nucleo_touch_raw(bool on);
+bool nucleo_touch_raw_read(nucleo_touch_raw_t *ev);
+
 #ifdef __cplusplus
 }
 #endif

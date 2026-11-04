@@ -692,6 +692,24 @@ static void draw_category(int top, int h)
     else empty_state(y, TR5("Nessuna app in questa categoria.", "No apps in this category.", "Sin apps en esta categoria.", "Aucune app ici.", "Keine Apps hier."), MUTED);
 }
 
+// The permissions as a person reads them: "net" says where the app connects (it is the one that matters most).
+static void perms_text(const char *perms, char *out, size_t cap)
+{
+    out[0] = 0;
+    size_t o = 0;
+    for (const char *t = perms; *t && o + 1 < cap; ) {
+        while (*t == ' ' || *t == ',') t++;
+        const size_t n = strcspn(t, " ,");
+        if (!n) break;
+        char w[16]; snprintf(w, sizeof w, "%.*s", (int)(n < 15 ? n : 15), t);
+        const char *shown = !strcmp(w, "net") ? TR5("rete verso i PC che scegli", "network, to the PCs you pick", "red, a los PC que elijas",
+                                                     "reseau, vers les PC choisis", "Netz, zu den PCs deiner Wahl") : w;
+        o += (size_t)snprintf(out + o, cap - o, "%s%s", o ? ", " : "", shown);
+        if (o >= cap) { out[cap - 1] = 0; break; }
+        t += n;
+    }
+}
+
 static void draw_app(int top, int h)
 {
     const st_app_t &a = M->app;
@@ -715,7 +733,8 @@ static void draw_app(int top, int h)
     }
     if (s_note) txt_fit(&fonts::Font0, 6, y + 2, 228, s_note, C_RED);
     else if (a.perms[0]) {
-        snprintf(s, sizeof s, "%s %s", TR5("Usa:", "Uses:", "Usa:", "Utilise :", "Nutzt:"), a.perms);
+        char pt[96]; perms_text(a.perms, pt, sizeof pt);
+        snprintf(s, sizeof s, "%s %s", TR5("Usa:", "Uses:", "Usa:", "Utilise :", "Nutzt:"), pt);
         txt_fit(&fonts::Font0, 6, y + 2, 228, s, C_YELLOW);
     }
     // The action, and what else can be done.
@@ -888,7 +907,7 @@ static void lg_app(void)
     if (s_desc_off) { lg::font(0); d.setTextColor(DIM, BG); d.setTextDatum(top_right); d.drawString("^", W - 16, dy); d.setTextDatum(top_left); }
     if (more)       { lg::font(0); d.setTextColor(DIM, BG); d.setTextDatum(top_right); d.drawString("v", W - 16, ey - 12); d.setTextDatum(top_left); }
     nucleo_touch_add_scroll(14, dy, W - 28, descBot - dy, 16, NK_UP, 0, NK_DOWN, 0);
-    if (a.perms[0]) { char p[72]; snprintf(p, sizeof p, "%s %s", TR5("Usa:", "Uses:", "Usa:", "Utilise :", "Nutzt:"), a.perms); lg::font(0); d.setTextColor(C_YELLOW, BG); char pf[72]; lg::fit(pf, sizeof pf, p, W - 28); d.drawString(pf, 16, H - 70); }
+    if (a.perms[0]) { char pt[96]; perms_text(a.perms, pt, sizeof pt); char p[112]; snprintf(p, sizeof p, "%s %s", TR5("Usa:", "Uses:", "Usa:", "Utilise :", "Nutzt:"), pt); lg::font(0); d.setTextColor(C_YELLOW, BG); char pf[112]; lg::fit(pf, sizeof pf, p, W - 28); d.drawString(pf, 16, H - 70); }
     bool system = false;
     const bool mine = installed(a.id, &system) != 0;
     const char *act = stt == S_OK ? TR5("Apri", "Open", "Abrir", "Ouvrir", "Oeffnen") : state_word(stt);

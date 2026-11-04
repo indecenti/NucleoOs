@@ -42,6 +42,7 @@ struct StoreApp {
     unsigned short color;
     bool has_icon;
     bool offline;               // its record lists its permissions, and none is the network
+    bool net;                   // its record grants "net": TCP client connections through nucleo_tcp
     uint8_t icon[128];          // 32 x 32, 1 bit per pixel, MSB first
 };
 
@@ -92,6 +93,13 @@ static bool read_record(const char *id, StoreApp *a)
         } else if (!strncmp(line, "perm", 4) && (line[4] == ' ' || !line[4])) {
             // Only a record that lists its permissions can say "no network"; an older one (no line) keeps it.
             a->offline = !strstr(line, "wifi") && !strstr(line, "net");
+            a->net = false;                                // the exact token, not a substring of another name
+            for (const char *t = line + 4; *t; ) {
+                while (*t == ' ' || *t == ',') t++;
+                const size_t n = strcspn(t, " ,");
+                if (n == 3 && !strncmp(t, "net", 3)) a->net = true;
+                t += n;
+            }
         } else if (!strncmp(line, "name ", 5)) {
             const char *s = line + 5;
             for (int i = 0; i < lang_idx() && s; i++) { s = strchr(s, '|'); if (s) s++; }
@@ -213,6 +221,16 @@ extern "C" bool nucleo_store_app_is_native(const char *id)
     return a && !strcmp(a->kind, "native");
 }
 
+// nucleo_tcp's gate: the foreground app may open connections when it is built in, or a store app whose signed
+// record grants "net". Nothing in the foreground (the launcher) may not.
+extern "C" bool nucleo_app_net_allowed(void)
+{
+    const char *id = nucleo_app_active_id();
+    if (!id) return false;
+    const StoreApp *a = find(id);
+    return a ? a->net : true;
+}
+
 // The launcher's quick menu (a long press on a tile): a store app's facts - its channel, the version installed and
 // the catalog's description in the OS language (empty when the catalog is not on the card; the entry is read into a
 // heap block freed at once). False = not an app the store installed.
@@ -302,6 +320,9 @@ extern "C" void nucleo_store_apps_sync(void)
         // launch happens before the module is loaded (its own NX_WIFI arrives only with it): the radio costs
         // ~48 KB and halves the largest free block, which is what an emulator's cartridge cache lives on.
         if (native && apps[i].offline) d0.exclusive_flags = NX_SOLO | NX_WIFI;
+        // One that connects to a PC ("net") gets its Solo boot WITH Wi-Fi: a fresh heap for its TLS-free TCP and
+        // its buffers. (The "wifi" games keep opening inline as before: their radio is ESP-NOW.)
+        else if (native && apps[i].net) d0.exclusive_flags = NX_SOLO;
     }
     // Every slot is rewritten below: none runs a module any more (a resident module is simply re-attached
     // by the next nucleo_store_app_prepare, without reloading).
