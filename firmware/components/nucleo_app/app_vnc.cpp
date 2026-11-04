@@ -225,11 +225,19 @@ static bool data_waiting(int ms) { return C.rpos < C.rlen || nucleo_tcp_readable
 
 // ── RFB ──
 static int s_fbw = 0, s_fbh = 0;
-static int s_vx = 0, s_vy = 0, s_vw = 240, s_vh = 135;
+static int s_vx = 0, s_vy = 0, s_vw = 240, s_vh = 135;   // the window on the desktop, in desktop pixels
+// One screen only (an original Cardputer, or an ADV without the panel): the desktop and the controls share the
+// 240x135 glass. The zoom is then the Cardputer's own (1 screen pixel = s_cz desktop pixels), the menu and the
+// legend cover the desktop while they are open, and the keyboard can drive the pointer.
+static bool s_single = false;
+static int  s_cz = 1;
+static int  s_scr_w = 240, s_scr_h = 135;   // the glass the session draws on
+static int  s_strip_w = 240;                 // pixels per strip row (allocated once per session)
+static bool s_overlay = false;               // single screen: a control page covers the desktop, updates are not drawn
 static int s_scale = 1;                  // what the server reported last (1 = unknown or 1:1)
 static bool s_nucleo_srv = false;        // the NucleoOS test server: it takes the zoom from the client
 static bool s_hold_draw = false;         // the panel self-test said: keep the bus open across an update
-static uint16_t *s_strip = nullptr;      // STRIP_ROWS rows of up to s_vw pixels, panel byte order
+static uint16_t *s_strip = nullptr;      // STRIP_ROWS rows of s_strip_w pixels, panel byte order
 static uint16_t s_tile[16 * 16];         // one Hextile tile when a rectangle is wider than the strip
 static bool s_full = true;               // the next request asks for the whole view (not incremental)
 static int  s_pending = 0;               // requests the server still owes us
@@ -347,6 +355,18 @@ static void request(bool incremental)
     wr(m, sizeof m);
 }
 
+// One area again, whole (not incremental): what a toast or the drawn pointer covered on the single screen.
+static void request_area(int x, int y, int w, int h)
+{
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    if (x + w > s_fbw) w = s_fbw - x;
+    if (y + h > s_fbh) h = s_fbh - y;
+    if (w <= 0 || h <= 0) return;
+    const uint8_t m[10] = { 3, 0, (uint8_t)(x >> 8), (uint8_t)x, (uint8_t)(y >> 8), (uint8_t)y, (uint8_t)(w >> 8), (uint8_t)w, (uint8_t)(h >> 8), (uint8_t)h };
+    wr(m, sizeof m);
+}
+
 // The zoom is the server's: ask the NucleoOS test server for 1:n of the real screen (a real VNC server keeps its size).
 static void ask_scale(int n)
 {
@@ -363,11 +383,21 @@ static void hold_bus(bool on)
     if (on && !s_bus_open) { d.startWrite(); s_bus_open = true; }
     else if (!on && s_bus_open) { d.endWrite(); s_bus_open = false; }
 }
-static void push(int x, int y, int w, int h, const uint16_t *px)
+static void push(int x, int y, int w, int h, uint16_t *px)
 {
+    if (s_overlay) return;                               // the menu covers the desktop: a full view follows when it closes
     const int64_t t0 = esp_timer_get_time();
     if (s_holding) hold_bus(true);
-    d.pushImage(x - s_vx, y - s_vy, w, h, px);
+    if (s_cz > 1) {
+        // Nearest pixel on the view's grid, packed in place (a written pixel never lies after one still to read).
+        const int k = s_cz;
+        const int c0 = ((s_vx - x) % k + k) % k, r0 = ((s_vy - y) % k + k) % k;
+        if (c0 >= w || r0 >= h) return;
+        const int ow = (w - c0 + k - 1) / k, oh = (h - r0 + k - 1) / k;
+        uint16_t *o = px;
+        for (int r = r0; r < h; r += k) { const uint16_t *src = px + r * w; for (int c = c0; c < w; c += k) *o++ = src[c]; }
+        d.pushImage((x + c0 - s_vx) / k, (y + r0 - s_vy) / k, ow, oh, px);
+    } else d.pushImage(x - s_vx, y - s_vy, w, h, px);
     const int64_t dt = esp_timer_get_time() - t0;
     M.draw_us += dt; M.pushes++; if (dt > M.push_us_max) M.push_us_max = dt;
 }
@@ -375,7 +405,7 @@ static void push(int x, int y, int w, int h, const uint16_t *px)
 static bool rect_raw(int x, int y, int w, int h)
 {
     M.raw_rects++;
-    const int cap = s_vw * STRIP_ROWS;                  // pixels the strip holds
+    const int cap = s_strip_w * STRIP_ROWS;             // pixels the strip holds
     if (w > cap) return skip((uint32_t)w * (uint32_t)h * 2u);   // wider than the strip (never for a viewport request)
     int rows = cap / w; if (rows > h) rows = h;
     for (int r = 0; r < h; r += rows) {
@@ -395,7 +425,7 @@ static bool rect_hextile(int x, int y, int w, int h)
 {
     M.hex_rects++;
     uint16_t bg = 0, fg = 0;
-    const bool strip_ok = w <= s_vw;                    // a whole tile row fits the strip: one push per 16 rows
+    const bool strip_ok = w <= s_strip_w;               // a whole tile row fits the strip: one push per 16 rows
     for (int ty = 0; ty < h; ty += 16) {
         const int th = ty + 16 > h ? h - ty : 16;
         for (int tx = 0; tx < w; tx += 16) {
@@ -855,12 +885,15 @@ static void paint_status()
            "Fn+Espace menu   Fn+Esc quitter", "Fn+Leer Menue   Fn+Esc beenden"));
 }
 
-enum { MA_ZOOM, MA_KEYS, MA_DESKTOP, MA_ALTTAB, MA_CLOSE, MA_TASKS, MA_CAD, MA_SHOT, MA_QUIT, MA_N };
+enum { MA_ZOOM, MA_MOUSE, MA_KEYS, MA_DESKTOP, MA_ALTTAB, MA_CLOSE, MA_TASKS, MA_CAD, MA_SHOT, MA_QUIT, MA_N };
+static bool s_mouse = false;              // the keyboard drives the pointer (Fn+Tab): the way to click without a touch screen
 static const char *menu_label(int i)
 {
     static char z[32];
     switch (i) {
-        case MA_ZOOM:    snprintf(z, sizeof z, "Zoom  1:%d", s_want_scale); return z;
+        case MA_ZOOM:    snprintf(z, sizeof z, "Zoom  1:%d", s_single ? s_cz : s_want_scale); return z;
+        case MA_MOUSE:   return s_mouse ? L("Mouse da tastiera: attivo", "Keyboard mouse: on", "Raton con teclado: si", "Souris au clavier: oui", "Tastaturmaus: an")
+                                        : L("Mouse da tastiera (Fn+Tab)", "Keyboard mouse (Fn+Tab)", "Raton con teclado (Fn+Tab)", "Souris au clavier (Fn+Tab)", "Tastaturmaus (Fn+Tab)");
         case MA_KEYS:    return L("Tasti del PC (legenda)", "PC keys (legend)", "Teclas del PC (leyenda)", "Touches du PC (legende)", "PC-Tasten (Legende)");
         case MA_DESKTOP: return L("Mostra desktop", "Show desktop", "Mostrar escritorio", "Afficher le bureau", "Desktop zeigen");
         case MA_ALTTAB:  return L("Cambia finestra", "Switch window", "Cambiar ventana", "Changer de fenetre", "Fenster wechseln");
@@ -916,9 +949,14 @@ static void paint_keys()
         text(6, 21 + i * 9, legend(i, 0), C_INK);
         text(126, 21 + i * 9, legend(i, 1), C_DIM);
     }
-    text(6, 112, L("tocco clic, tieni destro, tieni+trascina seleziona", "tap click, hold right, hold+drag selects", "toque clic, manten derecho, manten+arrastra",
+    if (s_single) text(6, 112, L("Fn+Tab mouse: ; . , / muovi, Invio clic, Del destro", "Fn+Tab mouse: ; . , / move, Enter click, Del right",
+                                 "Fn+Tab raton: ; . , / mueve, Intro clic, Del derecho", "Fn+Tab souris: ; . , / bouge, Entree clic, Del droit",
+                                 "Fn+Tab Maus: ; . , / bewegt, Enter Klick, Del rechts"), C_GOOD);
+    else text(6, 112, L("tocco clic, tieni destro, tieni+trascina seleziona", "tap click, hold right, hold+drag selects", "toque clic, manten derecho, manten+arrastra",
                    "appui clic, tenir droit, tenir+glisser", "tippen Klick, halten rechts, halten+ziehen"), C_GOOD);
-    foot(L("trascina sposta, bordo destro rotella  Esc", "drag moves, right edge = wheel  Esc", "arrastra mueve, borde derecho rueda  Esc",
+    if (s_single) foot(L("mouse: - = rotella, D trascina  Esc torna", "mouse: - = wheel, D drag  Esc back", "raton: - = rueda, D arrastra  Esc",
+                         "souris: - = molette, D glisser  Esc", "Maus: - = Rad, D ziehen  Esc"));
+    else foot(L("trascina sposta, bordo destro rotella  Esc", "drag moves, right edge = wheel  Esc", "arrastra mueve, borde derecho rueda  Esc",
            "glisser deplace, bord droit molette  Esc", "ziehen schiebt, rechter Rand Rad  Esc"));
 }
 
@@ -929,6 +967,89 @@ static void companion()
     band_render(ig, 0, 135, s_cpage == CP_MENU ? paint_menu : s_cpage == CP_KEYS ? paint_keys : paint_status);
 }
 static void toast(const char *t) { snprintf(s_toast, sizeof s_toast, "%s", t); s_toast_until = esp_timer_get_time() + 2500000; }
+
+// The single screen's zoom, around the middle of the window.
+static void set_zoom(int k)
+{
+    const int cx = s_vx + s_vw / 2, cy = s_vy + s_vh / 2;
+    s_cz = k; s_vw = s_scr_w * k; s_vh = s_scr_h * k;
+    s_vx = cx - s_vw / 2; s_vy = cy - s_vh / 2;
+    clamp_view();
+    if (!s_overlay) d.fillScreen(0);
+    s_full = true;
+    char t[24]; snprintf(t, sizeof t, "zoom 1:%d", k); toast(t);
+}
+static int next_zoom(int k) { return k == 1 ? 2 : k == 2 ? 4 : 1; }
+
+// The pointer, drawn by the app over the desktop (a server does not draw it in the picture): where, and drawn yet.
+static int s_cur_x = -1, s_cur_y = -1;     // screen position of the drawn one, -1 = none
+static void cursor_forget()
+{
+    if (s_cur_x < 0) return;
+    request_area(s_vx + (s_cur_x - 1) * s_cz, s_vy + (s_cur_y - 1) * s_cz, 12 * s_cz, 14 * s_cz);   // the server paints it away
+    s_cur_x = s_cur_y = -1;
+}
+static void cursor_draw()
+{
+    if (!s_mouse || s_overlay || s_px < 0) return;
+    const int x = (s_px - s_vx) / s_cz, y = (s_py - s_vy) / s_cz;
+    if (x < 0 || y < 0 || x >= s_scr_w || y >= s_scr_h) return;
+    hold_bus(false);
+    d.fillTriangle(x, y, x, y + 11, x + 8, y + 8, TFT_WHITE);
+    d.drawTriangle(x, y, x, y + 11, x + 8, y + 8, TFT_BLACK);
+    s_cur_x = x; s_cur_y = y;
+}
+// The pointer moved: the window follows it near an edge (a quarter of the window at a time).
+static void mouse_move(int dx, int dy, uint8_t mask)
+{
+    if (s_px < 0) { s_px = s_vx + s_vw / 2; s_py = s_vy + s_vh / 2; }
+    cursor_forget();
+    pointer(s_px + dx, s_py + dy, mask);
+    const int m = 10 * s_cz;
+    bool moved = false;
+    if (s_px < s_vx + m && s_vx > 0)                 { s_vx -= s_vw / 4; moved = true; }
+    if (s_px > s_vx + s_vw - m && s_vx + s_vw < s_fbw) { s_vx += s_vw / 4; moved = true; }
+    if (s_py < s_vy + m && s_vy > 0)                 { s_vy -= s_vh / 4; moved = true; }
+    if (s_py > s_vy + s_vh - m && s_vy + s_vh < s_fbh) { s_vy += s_vh / 4; moved = true; }
+    if (moved) { clamp_view(); s_full = true; M.pans++; s_cur_x = s_cur_y = -1; }
+    else cursor_draw();
+}
+static bool s_drag = false;               // keyboard mouse: the left button held (D)
+// Keyboard mouse: ; . , / move (faster while held), Enter or Space click, Del right click, - = wheel, D drag, Esc off.
+static bool mouse_key(const nucleo_key_t &k, int64_t now)
+{
+    static int64_t t_last = 0; static int run = 0;
+    const bool arrow = k.key == NK_UP || k.key == NK_DOWN || k.key == NK_LEFT || k.key == NK_RIGHT;
+    const uint8_t held = s_drag ? 1 : 0;
+    if (arrow) {
+        run = now - t_last < 250000 ? run + 1 : 0; t_last = now;
+        const int step = (run < 3 ? 3 : run < 8 ? 8 : 20) * s_cz;
+        mouse_move(k.key == NK_LEFT ? -step : k.key == NK_RIGHT ? step : 0, k.key == NK_UP ? -step : k.key == NK_DOWN ? step : 0, held);
+        return true;
+    }
+    if (s_px < 0) mouse_move(0, 0, held);
+    if (k.key == NK_ENTER || (k.key == NK_CHAR && k.ch == ' ')) { pointer(s_px, s_py, 1); pointer(s_px, s_py, 0); s_drag = false; M.clicks++; return true; }
+    if (k.key == NK_DEL) { pointer(s_px, s_py, 4); pointer(s_px, s_py, held); M.clicks++; return true; }
+    if (k.key == NK_CHAR && k.ch == '-') { pointer(s_px, s_py, 8 | held);  pointer(s_px, s_py, held); return true; }   // wheel up
+    if (k.key == NK_CHAR && k.ch == '=') { pointer(s_px, s_py, 16 | held); pointer(s_px, s_py, held); return true; }   // wheel down
+    if (k.key == NK_CHAR && (k.ch == 'd' || k.ch == 'D')) {
+        s_drag = !s_drag; pointer(s_px, s_py, s_drag ? 1 : 0);
+        toast(s_drag ? L("trascino: muovi e premi D", "dragging: move, then D", "arrastro: mueve y D", "glisse: bouge puis D", "ziehe: bewegen, dann D")
+                     : L("rilasciato", "released", "soltado", "relache", "losgelassen"));
+        return true;
+    }
+    if (k.key == NK_BACK) { s_mouse = false; s_drag = false; pointer(s_px, s_py, 0); cursor_forget(); toast(L("mouse spento", "mouse off", "raton apagado", "souris eteinte", "Maus aus")); return true; }
+    return false;                                        // any other key still types
+}
+static void mouse_toggle()
+{
+    s_mouse = !s_mouse; s_drag = false;
+    if (s_mouse) { mouse_move(0, 0, 0); toast(L("mouse: ; . , / Invio Del  Esc", "mouse: ; . , / Enter Del  Esc", "raton: ; . , / Intro Del  Esc",
+                                              "souris: ; . , / Entree Del  Esc", "Maus: ; . , / Enter Del  Esc")); }
+    else { cursor_forget(); toast(L("mouse spento", "mouse off", "raton apagado", "souris eteinte", "Maus aus")); }
+}
+static int s_shot_n = 0;
+static bool shot_now() { char n[24]; snprintf(n, sizeof n, "cardputer-%d", ++s_shot_n); return save_shot(n); }
 static const char *shot_word(bool ok)
 {
     return ok ? L("screenshot salvato", "screenshot saved", "captura guardada", "capture enregistree", "Screenshot gespeichert")
@@ -953,7 +1074,7 @@ static void panel_self_test()
     int64_t t0 = esp_timer_get_time();
     d.fillRect(0, 0, s_vw, s_vh, 0);
     M.panel_fill_us = esp_timer_get_time() - t0;
-    memset(s_strip, 0, (size_t)s_vw * STRIP_ROWS * 2);
+    memset(s_strip, 0, (size_t)s_strip_w * STRIP_ROWS * 2);
     t0 = esp_timer_get_time();
     for (int y = 0; y < s_vh; y += STRIP_ROWS) d.pushImage(0, y, s_vw, STRIP_ROWS, s_strip);
     M.panel_push_us = esp_timer_get_time() - t0;
@@ -984,7 +1105,8 @@ static void run_session(const char *name)
     s_cur_name = name;
     bool switched = false;
     if (nucleo_surface_large_ok() && !nucleo_surface_large()) switched = nucleo_surface_set_large(true);
-    s_vw = d.width(); s_vh = d.height();
+    s_scr_w = s_vw = d.width(); s_scr_h = s_vh = d.height(); s_strip_w = s_scr_w;
+    s_single = !nucleo_surface_large(); s_cz = 1; s_overlay = false; s_mouse = false; s_drag = false; s_cur_x = s_cur_y = -1;
     M.view_w = s_vw; M.view_h = s_vh;
     const bool swap = d.getSwapBytes();
     d.setSwapBytes(false);                               // the strips are already in panel order
@@ -998,7 +1120,7 @@ static void run_session(const char *name)
     s_cpage = CP_STATUS; s_msel = 0; s_toast[0] = 0;
     s_px = s_py = -1; s_scale = 1; s_fbw = s_fbh = 0; s_vx = s_vy = 0; s_fps = 0; s_kbs = 0;
     C.rb = (uint8_t *)malloc(RBUF);
-    s_strip = (uint16_t *)heap_caps_malloc((size_t)s_vw * STRIP_ROWS * 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    s_strip = (uint16_t *)heap_caps_malloc((size_t)s_strip_w * STRIP_ROWS * 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (!C.rb || !s_strip) fail(L("RAM insufficiente", "not enough RAM", "RAM insuficiente", "RAM insuffisante", "zu wenig RAM"));
     else {
         panel_message(L("Connessione...", "Connecting...", "Conectando...", "Connexion...", "Verbinde..."), sub, C_DIM);
@@ -1019,6 +1141,10 @@ static void run_session(const char *name)
         static const int PAN[][2] = { {0, 0}, {320, 0}, {640, 0}, {640, 240}, {320, 240}, {0, 240}, {0, 480}, {320, 480}, {640, 480} };
         int pan_i = 0;
         unsigned char mods_seen = 0;
+        uint32_t upd_seen = 0;
+        bool toast_shown = false;
+        if (s_single) toast(L("Fn+Spazio menu   Fn+Tab mouse", "Fn+Space menu   Fn+Tab mouse", "Fn+Espacio menu   Fn+Tab raton",
+                              "Fn+Espace menu   Fn+Tab souris", "Fn+Leer Menue   Fn+Tab Maus"));
         int gmode_seen = G_IDLE;
         bool quit = false, comp_dirty = true;
         while (!quit && !C.fail) {
@@ -1057,21 +1183,25 @@ static void run_session(const char *name)
                     else if (k.key == NK_ENTER) {
                         switch (s_msel) {
                             case MA_ZOOM:
+                                if (s_single) { s_cpage = CP_STATUS; s_overlay = false; set_zoom(next_zoom(s_cz)); break; }
                                 ask_scale(s_want_scale == 1 ? 2 : s_want_scale == 2 ? 4 : 1);
                                 if (!s_nucleo_srv) toast(L("zoom: lo decide il PC", "zoom: set on the PC", "zoom: lo decide el PC", "zoom: regle sur le PC", "Zoom: am PC"));
                                 break;
                             case MA_KEYS:    s_cpage = CP_KEYS; break;
+                            case MA_MOUSE:   s_cpage = CP_STATUS; if (s_overlay) { s_overlay = false; d.fillScreen(0); s_full = true; } mouse_toggle(); break;
                             case MA_DESKTOP: combo(0xffeb, 0, 'd'); s_cpage = CP_STATUS; break;
                             case MA_ALTTAB:  combo(0xffe9, 0, 0xff09); s_cpage = CP_STATUS; break;
                             case MA_CLOSE:   combo(0xffe9, 0, 0xffc1); s_cpage = CP_STATUS; break;
                             case MA_TASKS:   combo(0xffe3, 0xffe1, 0xff1b); s_cpage = CP_STATUS; break;
                             case MA_CAD:     combo(0xffe3, 0xffe9, 0xffff); s_cpage = CP_STATUS; break;
-                            case MA_SHOT:    toast(shot_word(save_shot("cardputer"))); s_cpage = CP_STATUS; break;
+                            case MA_SHOT:    toast(shot_word(shot_now())); s_cpage = CP_STATUS; break;
                             default:         quit = true; break;
                         }
                     }
                     continue;
                 }
+                if (s_mouse && !fn && !chord && mouse_key(k, now)) continue;                            // the keyboard mouse
+                if (fn && k.key == NK_TAB) { mouse_toggle(); continue; }                                 // Fn+Tab: keyboard mouse on/off
                 if (k.key == NK_BACK) key_tap(0xff1b, chord);                                          // Esc on the PC
                 else if (fn && arrow && (mods & NK_MOD_CTRL)) {                                       // Fn+Ctrl+arrow: move the view
                     if (k.key == NK_LEFT)  s_vx -= s_vw / 2;
@@ -1082,8 +1212,8 @@ static void run_session(const char *name)
                 }
                 else if (fn && arrow) key_tap(k.key == NK_UP ? 0xff52 : k.key == NK_DOWN ? 0xff54 : k.key == NK_LEFT ? 0xff51 : 0xff53, chord);
                 else if (fn && k.key == NK_DEL) key_tap(0xffff, chord);
-                else if (fn && k.key == NK_CHAR && (k.ch == 'z' || k.ch == 'Z')) ask_scale(s_want_scale == 1 ? 2 : s_want_scale == 2 ? 4 : 1);
-                else if (fn && k.key == NK_CHAR && (k.ch == 's' || k.ch == 'S')) toast(shot_word(save_shot("cardputer")));
+                else if (fn && k.key == NK_CHAR && (k.ch == 'z' || k.ch == 'Z')) { if (s_single) set_zoom(next_zoom(s_cz)); else ask_scale(s_want_scale == 1 ? 2 : s_want_scale == 2 ? 4 : 1); }
+                else if (fn && k.key == NK_CHAR && (k.ch == 's' || k.ch == 'S')) toast(shot_word(shot_now()));
                 else if (fn && k.key == NK_CHAR) {
                     const char c = (k.ch >= 'A' && k.ch <= 'Z') ? (char)(k.ch + 32) : k.ch;
                     for (const FnKey &f : FN_KEYS) if (f.ch == c) { key_tap(f.sym, chord); break; }
@@ -1113,7 +1243,40 @@ static void run_session(const char *name)
                 heap_sample();
                 t_sec = now; comp_dirty = true;
             }
-            if (comp_dirty && now - t_comp > 120000) {
+            if (M.updates != upd_seen) {                      // an update may have painted over the pointer and the toast
+                upd_seen = M.updates; cursor_draw();
+                if (toast_shown && now < s_toast_until) toast_shown = false;
+            }
+            if (s_single) {
+                if (s_cpage != CP_STATUS) {                       // the menu or the legend covers the desktop
+                    if (!s_overlay) { s_overlay = true; s_cur_x = s_cur_y = -1; comp_dirty = true; }
+                    if (comp_dirty && now - t_comp > 120000) {
+                        hold_bus(false); d.setSwapBytes(swap);
+                        band_render(nucleo_app_gfx(), 0, s_scr_h, s_cpage == CP_MENU ? paint_menu : paint_keys);
+                        d.setSwapBytes(false);
+                        comp_dirty = false; t_comp = now;
+                        if (M.t_connected && now - M.t_connected > 8000000) auto_shot(s_cpage + 2, s_cpage == CP_MENU ? "session-menu" : "session-keys");
+                    }
+                } else {
+                    if (s_overlay) { s_overlay = false; d.fillScreen(0); s_full = true; }
+                    const bool tv = s_toast[0] && now < s_toast_until;
+                    if (tv && !toast_shown) {                     // one line at the bottom, then that strip is asked again
+                        hold_bus(false);
+                        d.fillRect(0, s_scr_h - 14, s_scr_w, 14, lg::card());
+                        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(middle_left); d.setTextColor(C_INK, lg::card());
+                        char t[64]; lg::fit(t, sizeof t, s_toast, s_scr_w - 12);
+                        d.drawString(t, 6, s_scr_h - 7); d.setTextDatum(top_left);
+                        toast_shown = true;
+                    } else if (!tv && toast_shown) {
+                        toast_shown = false; s_toast[0] = 0;
+                        request_area(s_vx, s_vy + (s_scr_h - 14) * s_cz, s_vw, 14 * s_cz);
+                    }
+                    if (comp_dirty && now - t_comp > 120000) {
+                        comp_dirty = false; t_comp = now;
+                        if (M.t_connected && now - M.t_connected > 8000000) auto_shot(2, "session");
+                    }
+                }
+            } else if (comp_dirty && now - t_comp > 120000) {
                 companion(); comp_dirty = false; t_comp = now;
                 if (M.t_connected && now - M.t_connected > 8000000) auto_shot(s_cpage + 2, s_cpage == CP_MENU ? "session-menu" : s_cpage == CP_KEYS ? "session-keys" : "session");
             }
