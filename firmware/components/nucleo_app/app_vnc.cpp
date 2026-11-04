@@ -30,6 +30,7 @@
 #include "nucleo_surface.h"
 #include "nucleo_extdisp.h"
 #include "nucleo_touch.h"
+#include "nucleo_ui.h"
 #include "nucleo_tcp.h"
 #include "nucleo_secret.h"
 #include "nucleo_i18n.h"
@@ -763,7 +764,9 @@ static void band_render(LovyanGFX *dst, int top, int h, void (*paint)(void))
 static bool save_shot(const char *name)
 {
     int w = 0, h = 0;
-    if (!nucleo_extdisp_screen_size(0, &w, &h) || w <= 0 || w > 320 || h <= 0) return false;
+    const bool mirror = nucleo_extdisp_screen_size(0, &w, &h);   // the ADV's driver; without it, the panel itself
+    if (!mirror) nucleo_ui_panel_size(&w, &h);
+    if (w <= 0 || w > 320 || h <= 0) return false;
     mkdir(VNC_DIR, 0777); mkdir(VNC_SHOTS, 0777);
     char path[96]; snprintf(path, sizeof path, VNC_SHOTS "/%s.bmp", name);
     FILE *f = fopen(path, "wb");
@@ -776,7 +779,7 @@ static bool save_shot(const char *name)
     fwrite(hd, 1, 54, f);
     static uint16_t row[320]; static uint8_t out[320 * 3 + 4];
     for (int y = h - 1; y >= 0; y--) {
-        if (!nucleo_extdisp_screen_row(0, y, w, row)) memset(row, 0, sizeof row);
+        if (!(mirror ? nucleo_extdisp_screen_row(0, y, w, row) : nucleo_ui_read_row(y, w, row))) memset(row, 0, sizeof row);
         memset(out, 0, rs);
         for (int x = 0; x < w; x++) {
             const uint16_t p = (uint16_t)((row[x] >> 8) | (row[x] << 8));

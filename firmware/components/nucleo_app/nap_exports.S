@@ -8,7 +8,7 @@ nap_abi_level:
     .word 7
     .global nap_exports_count
 nap_exports_count:
-    .word 284
+    .word 286
     .global nap_exports
 nap_exports:
     .word .Lnap_n0, THEME_ACC
@@ -251,50 +251,52 @@ nap_exports:
     .word .Lnap_n237, nucleo_touch_raw_read
     .word .Lnap_n238, nucleo_tr5
     .word .Lnap_n239, nucleo_ui_is_adv
-    .word .Lnap_n240, opendir
-    .word .Lnap_n241, pnet_channel
-    .word .Lnap_n242, pnet_name
-    .word .Lnap_n243, pnet_recv
-    .word .Lnap_n244, pnet_send
-    .word .Lnap_n245, pnet_start
-    .word .Lnap_n246, pnet_stop
-    .word .Lnap_n247, powf
-    .word .Lnap_n248, qsort
-    .word .Lnap_n249, readdir
-    .word .Lnap_n250, remove
-    .word .Lnap_n251, rename
-    .word .Lnap_n252, rewind
-    .word .Lnap_n253, roundf
-    .word .Lnap_n254, sinf
-    .word .Lnap_n255, snprintf
-    .word .Lnap_n256, sqrtf
-    .word .Lnap_n257, sscanf
-    .word .Lnap_n258, stat
-    .word .Lnap_n259, strcasecmp
-    .word .Lnap_n260, strcasestr
-    .word .Lnap_n261, strcat
-    .word .Lnap_n262, strchr
-    .word .Lnap_n263, strcmp
-    .word .Lnap_n264, strcpy
-    .word .Lnap_n265, strlen
-    .word .Lnap_n266, strncasecmp
-    .word .Lnap_n267, strncat
-    .word .Lnap_n268, strncmp
-    .word .Lnap_n269, strncpy
-    .word .Lnap_n270, strrchr
-    .word .Lnap_n271, strstr
-    .word .Lnap_n272, strtof
-    .word .Lnap_n273, strtol
-    .word .Lnap_n274, strtoul
-    .word .Lnap_n275, tanf
-    .word .Lnap_n276, time
-    .word .Lnap_n277, tinfl_decompress
-    .word .Lnap_n278, tolower
-    .word .Lnap_n279, toupper
-    .word .Lnap_n280, unlink
-    .word .Lnap_n281, vTaskDelay
-    .word .Lnap_n282, vfprintf
-    .word .Lnap_n283, vsnprintf
+    .word .Lnap_n240, nucleo_ui_panel_size
+    .word .Lnap_n241, nucleo_ui_read_row
+    .word .Lnap_n242, opendir
+    .word .Lnap_n243, pnet_channel
+    .word .Lnap_n244, pnet_name
+    .word .Lnap_n245, pnet_recv
+    .word .Lnap_n246, pnet_send
+    .word .Lnap_n247, pnet_start
+    .word .Lnap_n248, pnet_stop
+    .word .Lnap_n249, powf
+    .word .Lnap_n250, qsort
+    .word .Lnap_n251, readdir
+    .word .Lnap_n252, remove
+    .word .Lnap_n253, rename
+    .word .Lnap_n254, rewind
+    .word .Lnap_n255, roundf
+    .word .Lnap_n256, sinf
+    .word .Lnap_n257, snprintf
+    .word .Lnap_n258, sqrtf
+    .word .Lnap_n259, sscanf
+    .word .Lnap_n260, stat
+    .word .Lnap_n261, strcasecmp
+    .word .Lnap_n262, strcasestr
+    .word .Lnap_n263, strcat
+    .word .Lnap_n264, strchr
+    .word .Lnap_n265, strcmp
+    .word .Lnap_n266, strcpy
+    .word .Lnap_n267, strlen
+    .word .Lnap_n268, strncasecmp
+    .word .Lnap_n269, strncat
+    .word .Lnap_n270, strncmp
+    .word .Lnap_n271, strncpy
+    .word .Lnap_n272, strrchr
+    .word .Lnap_n273, strstr
+    .word .Lnap_n274, strtof
+    .word .Lnap_n275, strtol
+    .word .Lnap_n276, strtoul
+    .word .Lnap_n277, tanf
+    .word .Lnap_n278, time
+    .word .Lnap_n279, tinfl_decompress
+    .word .Lnap_n280, tolower
+    .word .Lnap_n281, toupper
+    .word .Lnap_n282, unlink
+    .word .Lnap_n283, vTaskDelay
+    .word .Lnap_n284, vfprintf
+    .word .Lnap_n285, vsnprintf
 
     .section .rodata.nap_export_names, "aMS", @progbits, 1
 .Lnap_n0: .asciz "THEME_ACC"
@@ -537,47 +539,49 @@ nap_exports:
 .Lnap_n237: .asciz "nucleo_touch_raw_read"
 .Lnap_n238: .asciz "nucleo_tr5"
 .Lnap_n239: .asciz "nucleo_ui_is_adv"
-.Lnap_n240: .asciz "opendir"
-.Lnap_n241: .asciz "pnet_channel"
-.Lnap_n242: .asciz "pnet_name"
-.Lnap_n243: .asciz "pnet_recv"
-.Lnap_n244: .asciz "pnet_send"
-.Lnap_n245: .asciz "pnet_start"
-.Lnap_n246: .asciz "pnet_stop"
-.Lnap_n247: .asciz "powf"
-.Lnap_n248: .asciz "qsort"
-.Lnap_n249: .asciz "readdir"
-.Lnap_n250: .asciz "remove"
-.Lnap_n251: .asciz "rename"
-.Lnap_n252: .asciz "rewind"
-.Lnap_n253: .asciz "roundf"
-.Lnap_n254: .asciz "sinf"
-.Lnap_n255: .asciz "snprintf"
-.Lnap_n256: .asciz "sqrtf"
-.Lnap_n257: .asciz "sscanf"
-.Lnap_n258: .asciz "stat"
-.Lnap_n259: .asciz "strcasecmp"
-.Lnap_n260: .asciz "strcasestr"
-.Lnap_n261: .asciz "strcat"
-.Lnap_n262: .asciz "strchr"
-.Lnap_n263: .asciz "strcmp"
-.Lnap_n264: .asciz "strcpy"
-.Lnap_n265: .asciz "strlen"
-.Lnap_n266: .asciz "strncasecmp"
-.Lnap_n267: .asciz "strncat"
-.Lnap_n268: .asciz "strncmp"
-.Lnap_n269: .asciz "strncpy"
-.Lnap_n270: .asciz "strrchr"
-.Lnap_n271: .asciz "strstr"
-.Lnap_n272: .asciz "strtof"
-.Lnap_n273: .asciz "strtol"
-.Lnap_n274: .asciz "strtoul"
-.Lnap_n275: .asciz "tanf"
-.Lnap_n276: .asciz "time"
-.Lnap_n277: .asciz "tinfl_decompress"
-.Lnap_n278: .asciz "tolower"
-.Lnap_n279: .asciz "toupper"
-.Lnap_n280: .asciz "unlink"
-.Lnap_n281: .asciz "vTaskDelay"
-.Lnap_n282: .asciz "vfprintf"
-.Lnap_n283: .asciz "vsnprintf"
+.Lnap_n240: .asciz "nucleo_ui_panel_size"
+.Lnap_n241: .asciz "nucleo_ui_read_row"
+.Lnap_n242: .asciz "opendir"
+.Lnap_n243: .asciz "pnet_channel"
+.Lnap_n244: .asciz "pnet_name"
+.Lnap_n245: .asciz "pnet_recv"
+.Lnap_n246: .asciz "pnet_send"
+.Lnap_n247: .asciz "pnet_start"
+.Lnap_n248: .asciz "pnet_stop"
+.Lnap_n249: .asciz "powf"
+.Lnap_n250: .asciz "qsort"
+.Lnap_n251: .asciz "readdir"
+.Lnap_n252: .asciz "remove"
+.Lnap_n253: .asciz "rename"
+.Lnap_n254: .asciz "rewind"
+.Lnap_n255: .asciz "roundf"
+.Lnap_n256: .asciz "sinf"
+.Lnap_n257: .asciz "snprintf"
+.Lnap_n258: .asciz "sqrtf"
+.Lnap_n259: .asciz "sscanf"
+.Lnap_n260: .asciz "stat"
+.Lnap_n261: .asciz "strcasecmp"
+.Lnap_n262: .asciz "strcasestr"
+.Lnap_n263: .asciz "strcat"
+.Lnap_n264: .asciz "strchr"
+.Lnap_n265: .asciz "strcmp"
+.Lnap_n266: .asciz "strcpy"
+.Lnap_n267: .asciz "strlen"
+.Lnap_n268: .asciz "strncasecmp"
+.Lnap_n269: .asciz "strncat"
+.Lnap_n270: .asciz "strncmp"
+.Lnap_n271: .asciz "strncpy"
+.Lnap_n272: .asciz "strrchr"
+.Lnap_n273: .asciz "strstr"
+.Lnap_n274: .asciz "strtof"
+.Lnap_n275: .asciz "strtol"
+.Lnap_n276: .asciz "strtoul"
+.Lnap_n277: .asciz "tanf"
+.Lnap_n278: .asciz "time"
+.Lnap_n279: .asciz "tinfl_decompress"
+.Lnap_n280: .asciz "tolower"
+.Lnap_n281: .asciz "toupper"
+.Lnap_n282: .asciz "unlink"
+.Lnap_n283: .asciz "vTaskDelay"
+.Lnap_n284: .asciz "vfprintf"
+.Lnap_n285: .asciz "vsnprintf"
