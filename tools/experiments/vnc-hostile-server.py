@@ -27,6 +27,19 @@ def hello(s, w=W, h=H, name=b"hostile", name_len=None, version=b"RFB 003.008\n",
     time.sleep(0.3)                       # let SetPixelFormat / SetEncodings / the first request arrive
 
 
+def wait_or_closed(s, secs):
+    """sleep, but return False as soon as the client hangs up (it must not be left waiting for the next case)"""
+    end = time.time() + secs
+    while (left := end - time.time()) > 0:
+        s.settimeout(left)
+        try:
+            if not s.recv(4096):
+                return False
+        except socket.timeout:
+            break
+    return True
+
+
 def update(rects):
     return struct.pack(">BxH", 0, len(rects)) + b"".join(rects)
 
@@ -70,7 +83,7 @@ def raw_short(s):
     """a big raw rectangle announced, a few bytes sent, then silence (read deadline)"""
     hello(s)
     s.sendall(update([rect(0, 0, 320, 240, 0, b"\x00" * 1000)]))
-    time.sleep(12)
+    wait_or_closed(s, 12)
 
 
 @case
@@ -80,7 +93,8 @@ def trickle(s):
     data = update([rect(0, 0, 320, 240, 0, b"\x00" * (320 * 240 * 2))])
     for b in data[:10]:
         s.sendall(bytes([b]))
-        time.sleep(5)
+        if not wait_or_closed(s, 5):
+            return
 
 
 @case
@@ -198,14 +212,21 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=5900)
     ap.add_argument("--allow", required=True, help="the Cardputer's IP")
+    ap.add_argument("--only", help="comma-separated case names (vnc.json retries = their count - 1)")
     args = ap.parse_args()
+    cases = CASES
+    if args.only:
+        want = args.only.split(",")
+        cases = [fn for fn in CASES if fn.__name__ in want]
+        if len(cases) != len(want):
+            ap.error("unknown case in --only; known: " + ", ".join(fn.__name__ for fn in CASES))
     srv = socket.socket()
     if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
     srv.bind(("0.0.0.0", args.port))
     srv.listen(1)
-    print(f"hostile VNC server on :{args.port}, {len(CASES)} cases (vnc.json retries = {len(CASES) - 1})")
-    for i, fn in enumerate(CASES, 1):
+    print(f"hostile VNC server on :{args.port}, {len(cases)} cases (vnc.json retries = {len(cases) - 1})")
+    for i, fn in enumerate(cases, 1):
         while True:
             s, addr = srv.accept()
             if addr[0] == args.allow:
