@@ -20,6 +20,7 @@ static const nucleo_app_def_t REG[] = {
     { "nesemu",  "NES",            "Games", "", 'N', 0xAD55, nop, nokey, nullptr, nop, nullptr },
     { "brawler", "Brawler",        "Games", "", 'B', 0xFBB6, nop, nokey, nullptr, nop, nullptr },
     { "reactor", "Reactor",        "Games", "", 'R', 0xFE8C, nop, nokey, nullptr, nop, nullptr },
+    { "pcaemu",  "Pocket Arcade",  "Games", "", 'A', 0xF81F, nop, nokey, nullptr, nop, nullptr },   // from the store: apps/pcaemu/console.txt
 };
 int nucleo_app_count(void) { return (int)(sizeof REG / sizeof REG[0]); }
 const nucleo_app_def_t *nucleo_app_at(int i) { return &REG[i]; }
@@ -49,7 +50,7 @@ static void draw(void)
 }
 static void draw_large(void) { gamefront_invalidate(); gamefront_render(); }
 // A tick (200 ms of the scene's clock): what the device's loop does meanwhile - the scrolling title moves on.
-static void tick(void) { if (nucleo_app_two_screens()) gamefront_render(); }
+static void tick(void) { gamefront_step(); if (nucleo_app_two_screens()) gamefront_render(); }   // the loop: idle work, then a frame
 
 extern "C" void nucleo_register_gamefront(void)
 {

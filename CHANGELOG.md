@@ -7,6 +7,21 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 ## [Unreleased]
 
 ### Added
+- **A Cyberdeck theme** for the native UI: cyan and magenta on blue-black, exact on the 8-bit screens too. The
+  launcher wears HUD accents on its top bar in every theme, and target corners on the focused tile of the panel.
+- **The screensaver clock as a cyberdeck HUD**: 7-segment digits with their unlit segments, a seconds rail, the date,
+  the ISO week, today's next calendar event with a countdown, battery, network, memory and uptime. With the panel
+  attached the panel has the time and the day and the Cardputer the deck's status, never the same thing twice.
+- **Drawn launcher icons** for Updates, Device Info and Presence (they showed a letter or a phone).
+- **Favorites and Recent in the Games gallery**, shared with the web Arcade (`GameShots/library.txt`): two collections
+  at the head of the systems when they hold something; `*` or a long press stars the selected cartridge; every start
+  (gallery, Files, /api/play) becomes the newest Recent.
+- **"Open with" knows the cartridges**: a ROM opened from Files or a notification starts in its emulator (the
+  firmware's consoles, and those an installed store emulator declares), in its Solo boot. `POST /api/play?path=...`
+  does the same for a paired client (the answer comes before the reboot).
+- **A store emulator brings its consoles to the Games gallery** from the app's own files (`/sd/apps/<id>/console.txt`
+  and `console-<key>.gfa`: name, extensions, colour, photo and mark): they are listed as systems, their cartridges
+  are found anywhere on the card and open in that app; uninstalling it takes its console away.
 - **ANIMA chooses the cloud model and its effort.** On the Cardputer, ANIMA's IA tab has Model (Sonnet 5.5,
   Opus 5.5, Haiku 5.5, Fable 5.1, and the other providers you have a key for) and Effort (low to max, medium by
   default); in the web OS, a model picker next to ANIMA's input (and `/model`) groups every model you can reach,
@@ -15,6 +30,26 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   setjmp/longjmp) and the JSON builders, for Nucleo Code, the coding agent coming to the Native C store.
 
 ### Changed
+- **No more flicker on the second screen**: the screensaver clock repaints by rectangles composed off-screen (the
+  whole panel once a minute, the seconds rail each second), and the launcher's clock on the panel repaints only when
+  the minute turns, its bar composed and pushed at once.
+- **The Store scrolls fast**: holding an arrow no longer reads the SD card at every step (icons and the card come
+  from RAM until the keys stop); the panel's card no longer flashes; with two screens the Cardputer shows the store's
+  state (section, position, counts, catalog age) instead of repeating the card.
+- **Games gallery, quicker and lighter.** A picture is read from the card once, at the stop, straight into a RAM
+  cache of the titles around the selection; the cache lives in one 8 KB block (nothing allocated while browsing) and
+  holds one console photo for every cartridge that shows it. Favourites, the store's consoles and a missing photo no
+  longer cost a card access per stop; the wheel settles sooner (120 ms turn, 40 ms stop). A browse measured on the
+  PC: card opens 137 -> 71, KB read 1023 -> 819, stops drawn from RAM 10 -> 20.
+- **The search line shows only while there is a search**, on the panel and on the Cardputer: typing a letter opens
+  it, emptying it or Esc closes it, and the wheel gets the room. The gallery's left column and title line open the
+  selection on touch.
+- **Firmware image -31 KB**: the Games gallery's console photos are on the card (`data/GameFront/atlas.bin`, in the SD
+  content); a card without it keeps the photos it already made, else shows the emulator's icon.
+
+### Fixed
+- Games gallery: a store console's photo or mark made without transparency no longer shows as a dark square on the
+  selected row or the background (its corner colour is taken as transparent).
 - **ANIMA answers with the model you chose.** With a key and the network up, the model answers every question that
   is not the device's own (time, battery, files, timers, apps stay local and instant); what the offline brain found
   becomes its notes, what you told ANIMA about yourself its memory, and when the model does not answer the next one

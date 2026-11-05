@@ -80,11 +80,14 @@ static void fmt_timer(char *sv, size_t n)            // "never", "45 sec", "1 mi
 
 // ==================== CYBERDECK CLOCK ========================================
 // A HUD, not a bouncing label: 7-segment hours with their unlit segments showing, a neon glow and CRT scanlines,
-// a 60-tick seconds rail, the date, and real telemetry (battery, Wi-Fi, free heap, uptime). A dot grid and a slow
-// scan beam move behind it; every ~7 s a two-frame glitch slices the digits sideways in magenta.
-// Technique 1: each frame is drawn whole on the canvas, one blit. Both canvases are 8-bit (RGB332), so every colour
-// below is an exact RGB332 value (R/G in steps of 36, B in steps of 85): nothing turns olive.
-// clock_frame is pure (lg::frame calls it once per strip): all motion is derived from cl_frame, stepped in clock_step.
+// a 60-tick seconds rail, the date, and what a deck owner wants at a glance (battery, network, memory, uptime,
+// today's next calendar event). Three looks, never the same information twice:
+//   - the Cardputer alone: the whole HUD; a dot grid and a slow scan beam behind it, a two-frame glitch every ~7 s,
+//     the bottom line turning through telemetry / network / next event;
+//   - two screens: the PANEL has the time and the day (big digits, seconds, date, week, next event), calm and
+//     repainted by rectangles; the CARDPUTER has the deck's status (battery, network, memory, uptime), no clock.
+// Both canvases are 8-bit (RGB332), so every colour below is an exact RGB332 value (R/G in steps of 36, B in steps
+// of 85): nothing turns olive. The draws are pure: all motion is derived from cl_frame, stepped in clock_step.
 
 // The view the effects step and draw in: the Cardputer (240x135) or, with the panel attached, the whole
 // 320x240 panel at its own resolution (never the compact frame scaled up). Set by saver_start.
@@ -104,16 +107,58 @@ static const uint16_t CK_TX   = RGB(109, 146, 170);  // labels
 static uint32_t cl_frame;                            // frames since the saver started
 static int      cl_last_sec = -1;
 static uint32_t cl_sec_frame;                        // the frame the current second began (colon blink)
-static int      cl_bat = -1, cl_rssi = 0;            // telemetry, sampled once a second
-static unsigned cl_heap_k = 0;
 
-extern "C" int nucleo_setup_rssi(void);              // dBm of the joined AP, 0 = not joined (nucleo_setup)
+// ---- what the HUD shows besides the time: sampled once a second (never inside a paint) --------------------------
+static int      cl_bat = -1, cl_mv = -1, cl_rssi = 0;
+static unsigned cl_heap_k = 0, cl_blk_k = 0;
+static char     cl_ip[16], cl_ssid[24], cl_name[20], cl_tz[28];
+static bool     cl_has_ev = false;                   // today's next calendar event
+static char     cl_ev_t[6], cl_ev_x[40];
+
+extern "C" int         nucleo_setup_rssi(void);      // dBm of the joined AP, 0 = not joined (nucleo_setup)
+extern "C" const char *nucleo_setup_ip(void);        // "" when not joined
+extern "C" const char *nucleo_setup_ssid(void);
+extern "C" const char *nucleo_setup_mode(void);      // "sta" when a client of a network
+extern "C" const char *nucleo_setup_device_name(void);
+extern "C" const char *nucleo_setup_tz_id(void);     // IANA id, "Europe/Rome"
+extern "C" bool        nucleo_calendar_next(char *hhmm, size_t hn, char *text, size_t tn);   // calendar_svc.cpp
+
+static const char *str_or(const char *s) { return s ? s : ""; }
+
+// Font0 is ASCII: fold the accented letters a calendar title is likely to carry, drop the rest of any UTF-8.
+static void ascii_fold(char *out, size_t n, const char *in)
+{
+    size_t o = 0;
+    for (const unsigned char *p = (const unsigned char *)in; *p && o + 1 < n; p++) {
+        if (*p < 0x80) { out[o++] = (char)*p; continue; }
+        if (*p == 0xC3 && p[1]) {
+            const unsigned char c = *++p;
+            const char *map = c < 0xA0 ? "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYTs" : "aaaaaaaceeeeiiiidnooooo/ouuuuyty";
+            out[o++] = map[(c & 0x1F)];
+            continue;
+        }
+        while ((p[1] & 0xC0) == 0x80) p++;           // another script: skip the sequence
+        out[o++] = '?';
+    }
+    out[o] = 0;
+}
 
 static void clock_sample(void)
 {
     cl_bat    = nucleo_power_battery_pct();
-    cl_rssi   = nucleo_setup_rssi();
+    cl_mv     = nucleo_power_battery_mv();
+    const bool sta = !strcmp(str_or(nucleo_setup_mode()), "sta") && str_or(nucleo_setup_ip())[0];
+    cl_rssi   = sta ? nucleo_setup_rssi() : 0;
+    snprintf(cl_ip, sizeof cl_ip, "%s", sta ? str_or(nucleo_setup_ip()) : "");
+    snprintf(cl_ssid, sizeof cl_ssid, "%s", sta ? str_or(nucleo_setup_ssid()) : "");
+    snprintf(cl_name, sizeof cl_name, "%s", str_or(nucleo_setup_device_name()));
+    snprintf(cl_tz, sizeof cl_tz, "%s", str_or(nucleo_setup_tz_id()));
+    for (char *p = cl_tz; *p; p++) if (*p >= 'a' && *p <= 'z') *p = (char)(*p - 32);
     cl_heap_k = (unsigned)(heap_caps_get_free_size(MALLOC_CAP_8BIT) / 1024);
+    cl_blk_k  = (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) / 1024);
+    char raw[64];
+    cl_has_ev = nucleo_calendar_next(cl_ev_t, sizeof cl_ev_t, raw, sizeof raw);
+    if (cl_has_ev) ascii_fold(cl_ev_x, sizeof cl_ev_x, raw); else cl_ev_x[0] = cl_ev_t[0] = 0;
 }
 
 static void clock_init(void)
@@ -151,6 +196,29 @@ static void fmt_date(char *out, size_t n, const struct tm *tm)
 
 static void upcase(char *s) { for (; *s; s++) if (*s >= 'a' && *s <= 'z') *s = (char)(*s - 32); }
 
+// ISO 8601 week of the year (1..53).
+static int iso_week(const struct tm *tm)
+{
+    auto weeks_in = [](int y) {
+        auto p = [](int v) { return (v + v / 4 - v / 100 + v / 400) % 7; };
+        return (p(y) == 4 || p(y - 1) == 3) ? 53 : 52;
+    };
+    const int y = tm->tm_year + 1900, wd = (tm->tm_wday + 6) % 7 + 1;   // Mon = 1 .. Sun = 7
+    const int w = (tm->tm_yday + 1 - wd + 10) / 7;
+    if (w < 1) return weeks_in(y - 1);
+    if (w > weeks_in(y)) return 1;
+    return w;
+}
+
+// Minutes from now to "HH:MM" today (0 when it is now or past).
+static int mins_until(const char *hhmm, const struct tm *tm)
+{
+    if (!hhmm || strlen(hhmm) < 5) return 0;
+    const int m = (hhmm[0] - '0') * 600 + (hhmm[1] - '0') * 60 + (hhmm[3] - '0') * 10 + (hhmm[4] - '0');
+    const int dm = m - (tm->tm_hour * 60 + tm->tm_min);
+    return dm > 0 ? dm : 0;
+}
+
 // ---- HUD pieces ------------------------------------------------------------------------------------------------
 static void hud_grid(int x0, int y0, int w, int h, int step)
 {
@@ -186,6 +254,13 @@ static void hud_battery(int x, int y, int w, int h, int pct)
     if (pct >= 0) d.fillRect(x + 2, y + 2, (w - 4) * (pct > 100 ? 100 : pct) / 100, h - 4, pct <= 20 ? CK_AM : CK_CY);
 }
 
+// Four signal bars, bottom-aligned at (x, y + 9), lit by the RSSI (0 = not joined: all dim).
+static void hud_signal(int x, int y, int rssi)
+{
+    const int lv = !rssi ? 0 : rssi > -55 ? 4 : rssi > -67 ? 3 : rssi > -75 ? 2 : rssi > -85 ? 1 : 0;
+    for (int i = 0; i < 4; i++) d.fillRect(x + i * 5, y + 9 - (3 + i * 2), 3, 3 + i * 2, i < lv ? (lv <= 1 ? CK_AM : CK_CY) : CK_GRID);
+}
+
 // A "label value" pair, label muted and value in col, from x; returns the x after it.
 static int hud_kv(int x, int y, int size, const char *k, const char *v, uint16_t col)
 {
@@ -196,7 +271,7 @@ static int hud_kv(int x, int y, int size, const char *k, const char *v, uint16_t
     return x + d.textWidth(v);
 }
 
-// The 7-segment "HH:MM" with its top-left at (x, y): unlit segments, neon bleed, the lit digits, CRT scanlines.
+// The 7-segment "HH:MM" with its top-left at (x, y): unlit segments, neon bleed, the lit digits.
 // Font7 digits share one width, so "88:88" is exactly the ghost of any time.
 static void hud_digits(int x, int y, int size, int hh, int mm, bool colon, uint16_t col, bool ghost)
 {
@@ -226,8 +301,8 @@ static void hud_scanlines(int x, int y, int w, int h, int pitch)
     for (int yy = y + pitch - 1; yy < y + h; yy += pitch) d.drawFastHLine(x, yy, w, 0x0000);
 }
 
-// The two-frame glitch: a band of the digits redrawn shifted in magenta. Deterministic from cl_frame, so every
-// strip of a lg::frame sees the same band. The strip's own clip is narrowed, then restored (never cleared).
+// The two-frame glitch (the Cardputer alone only): a band of the digits redrawn shifted in magenta. Deterministic
+// from cl_frame. The clip is narrowed, then restored (never cleared).
 static void hud_glitch(int x, int y, int size, int w, int h, int hh, int mm)
 {
     if (cl_frame < 20 || (cl_frame % 71) >= 2) return;   // ~7 s apart at 10 fps, two frames each
@@ -254,103 +329,294 @@ static void fmt_uptime(char *out, size_t n)
     else              snprintf(out, n, "%ud%02u", m / 1440, (m / 60) % 24);
 }
 
+// "in 2h15" / "in 25 min" to an event, in the system language.
+static void fmt_until(char *out, size_t n, int mins)
+{
+    const char *in = TR5("tra", "in", "en", "dans", "in");
+    if (mins <= 0)      snprintf(out, n, "%s", TR5("ora", "now", "ahora", "maint.", "jetzt"));
+    else if (mins < 60) snprintf(out, n, "%s %d min", in, mins);
+    else                snprintf(out, n, "%s %dh%02d", in, mins / 60, mins % 60);
+}
+
+// The Cardputer's top bar (mark, week, activity, battery) and its rule; returns the rule's y.
+static int compact_top(const struct tm *tm)
+{
+    d.fillRect(3, 2, 3, 8, CK_CY);
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left);
+    d.setTextColor(CK_CY); d.drawString("NUCLEO//OS", 8, 2);
+    if (tm) {
+        char wk[12]; snprintf(wk, sizeof wk, "%s %d", TR5("SETT", "WK", "SEM", "SEM", "KW"), iso_week(tm));
+        d.setTextColor(CK_TX); d.drawString(wk, 72, 2);
+    }
+    for (int i = 0; i < 8; i++) {
+        const int on = (int)(cl_frame % 14u), k = on < 8 ? on : 14 - on;   // ping-pong
+        d.fillRect(126 + i * 5, 5, 2, 2, i == k ? CK_MG : CK_GRID);
+    }
+    char v[8];
+    if (cl_bat >= 0) snprintf(v, sizeof v, "%d%%", cl_bat); else snprintf(v, sizeof v, "--");
+    d.setTextDatum(top_right); d.setTextColor(cl_bat >= 0 && cl_bat <= 20 ? CK_AM : CK_CY);
+    d.drawString(v, W - 3, 2);
+    hud_battery(W - 3 - d.textWidth(v) - 14 - 5, 2, 14, 8, cl_bat);
+    d.setTextDatum(top_left);
+    d.drawFastHLine(0, 13, W, CK_DIM);
+    d.fillRect(0, 12, 56, 2, CK_CY);
+    d.fillRect(W - 24, 12, 24, 2, CK_MG);
+    return 13;
+}
+
+// ==== the Cardputer ALONE: the whole HUD on 240x135 ===============================================================
+// One canvas, one blit per frame (Technique 1), so the beam and the glitch are safe here. The bottom line turns
+// every 5 s through the telemetry, the network and today's next event, so the little screen carries all of it.
 static void clock_frame(void)                        // pure: draws the state, never moves it
 {
-    const bool big = s_vw > W;
-    const int vw = s_vw, vh = s_vh;
-    d.fillRect(0, 0, vw, vh, 0x0000);
-    hud_grid(0, 0, vw, vh, big ? 10 : 8);
-    const int beam = (int)((cl_frame * (big ? 3 : 2)) % (uint32_t)(vh + 40)) - 20;   // the slow scan beam
-    d.drawFastHLine(0, beam - 1, vw, CK_GRID);
-    d.drawFastHLine(0, beam, vw, CK_DIM);
+    d.fillRect(0, 0, W, H, 0x0000);
+    hud_grid(0, 0, W, H, 8);
+    const int beam = (int)((cl_frame * 2) % (uint32_t)(H + 40)) - 20;   // the slow scan beam
+    d.drawFastHLine(0, beam - 1, W, CK_GRID);
+    d.drawFastHLine(0, beam, W, CK_DIM);
 
     const time_t t = time(NULL);
     const struct tm *tm = localtime(&t);
     const int hh = tm ? tm->tm_hour : 0, mm = tm ? tm->tm_min : 0, ss = tm ? tm->tm_sec : 0;
     const bool synced = tm && tm->tm_year + 1900 >= 2024;
     const bool colon = (cl_frame - cl_sec_frame) < 5;   // on for the first half of each second
-    char date[24], year[12], v[16];
+    const int rule = compact_top(tm);
+
+    d.setFont(&fonts::Font7); d.setTextSize(1);
+    const int dw = d.textWidth("88:88"), dh = 48, sw = 52;
+    const int dx = (W - dw - sw - 8) / 2, dy = rule + 9;
+    hud_brackets(dx - 8, dy - 6, dw + sw + 24, dh + 12, 6, CK_DIM);
+    hud_digits(dx, dy, 1, hh, mm, colon, CK_CY, true);
+    char sec2[4]; snprintf(sec2, sizeof sec2, "%02d", ss);
+    const int sx = dx + dw + 8;
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(CK_TX); d.drawString("SEC", sx + 2, dy + 2);
+    d.setTextSize(4); d.setTextColor(CK_MG); d.drawString(sec2, sx, dy + 16);
+    hud_scanlines(dx - 4, dy - 2, dw + sw + 16, dh + 4, 3);
+    hud_glitch(dx, dy, 1, dw, dh, hh, mm);
+
+    const int ry = dy + dh + 11, rw = dw + sw + 8;
+    hud_ticks(dx, ry, rw, 4, ss);
+
+    char date[24], year[12];
     if (tm) { fmt_date(date, sizeof date, tm); upcase(date); } else snprintf(date, sizeof date, "--- -- ---");
     if (synced) snprintf(year, sizeof year, "%04d", tm->tm_year + 1900); else snprintf(year, sizeof year, "NO SYNC");
-
-    // ---- top bar: the mark, a running activity strip, the battery
-    const int ts = big ? 2 : 1, th = 8 * ts;
-    d.fillRect(big ? 8 : 3, 2, 3 * ts, th, CK_CY);
-    d.setFont(&fonts::Font0); d.setTextSize(ts); d.setTextDatum(top_left);
-    d.setTextColor(CK_CY); d.drawString("NUCLEO//OS", big ? 16 : 8, 2);
-    d.setTextColor(CK_TX); d.drawString("IDLE", big ? 146 : 72, 2);
-    const int ax = big ? 200 : 100;
-    for (int i = 0; i < 8; i++) {
-        const int on = (int)(cl_frame % 14u), k = on < 8 ? on : 14 - on;   // ping-pong
-        d.fillRect(ax + i * (big ? 7 : 5), 2 + th / 2 - ts, 2 * ts, 2 * ts, i == k ? CK_MG : CK_GRID);
-    }
-    if (cl_bat >= 0) snprintf(v, sizeof v, "%d%%", cl_bat); else snprintf(v, sizeof v, "--");
-    d.setTextDatum(top_right); d.setTextColor(cl_bat >= 0 && cl_bat <= 20 ? CK_AM : CK_CY);
-    d.drawString(v, vw - (big ? 8 : 3), 2);
-    const int bw = big ? 24 : 14;
-    hud_battery(vw - (big ? 8 : 3) - d.textWidth(v) - bw - 3 * ts - 2, 2, bw, th, cl_bat);
-    d.setTextDatum(top_left);
-    const int rule = 2 + th + (big ? 5 : 3);
-    d.drawFastHLine(0, rule, vw, CK_DIM);
-    d.fillRect(0, rule - 1, big ? 90 : 56, 2, CK_CY);
-    d.fillRect(vw - (big ? 40 : 24), rule - 1, big ? 40 : 24, 2, CK_MG);
-
-    // ---- the digits (+ seconds beside them on the Cardputer, on the rail on the panel)
-    const int ds = big ? 2 : 1;
-    d.setFont(&fonts::Font7); d.setTextSize(ds);
-    const int dw = d.textWidth("88:88"), dh = 48 * ds;
-    const int sw = big ? 0 : 52;                         // the compact seconds column
-    const int dx = (vw - dw - (sw ? sw + 8 : 0)) / 2, dy = big ? rule + 18 : rule + 9;
-    hud_brackets(dx - 8, dy - 6, dw + 16 + (sw ? sw + 8 : 0), dh + 12, big ? 10 : 6, CK_DIM);
-    hud_digits(dx, dy, ds, hh, mm, colon, CK_CY, true);
-    char sec2[4]; snprintf(sec2, sizeof sec2, "%02d", ss);
-    if (sw) {
-        const int sx = dx + dw + 8;
-        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(CK_TX); d.drawString("SEC", sx + 2, dy + 2);
-        d.setTextSize(4); d.setTextColor(CK_MG); d.drawString(sec2, sx, dy + 16);
-    }
-    hud_scanlines(dx - 4, dy - 2, dw + 8 + (sw ? sw + 8 : 0), dh + 4, big ? 4 : 3);
-    hud_glitch(dx, dy, ds, dw, dh, hh, mm);
-
-    // ---- the seconds rail
-    const int ry = dy + dh + (big ? 16 : 11), rx = dx, rw = big ? dw - 50 : dw + sw + 8;
-    hud_ticks(rx, ry, rw, big ? 7 : 4, ss);
-    if (big) {
-        d.setFont(&fonts::Font0); d.setTextSize(3); d.setTextDatum(top_right);
-        d.setTextColor(CK_MG); d.drawString(sec2, dx + dw, ry - 8);
-        d.setTextDatum(top_left);
-    }
-
-    // ---- the date
-    const int dsz = 2, dty = ry + (big ? 22 : 12);
-    d.setFont(&fonts::Font0); d.setTextSize(dsz);
-    d.setTextColor(CK_HI); d.drawString(date, rx, dty);
-    d.setTextDatum(top_right); d.setTextColor(synced ? CK_TX : CK_AM);
-    d.drawString(year, big ? dx + dw : rx + rw, dty);
+    const int dty = ry + 12;
+    d.setFont(&fonts::Font0); d.setTextSize(2);
+    d.setTextColor(CK_HI); d.drawString(date, dx, dty);
+    d.setTextDatum(top_right); d.setTextColor(synced ? CK_TX : CK_AM); d.drawString(year, dx + rw, dty);
     d.setTextDatum(top_left);
 
-    // ---- bottom telemetry
-    const int by = vh - (big ? 30 : 14);
-    d.drawFastHLine(0, by - (big ? 6 : 4), vw, CK_DIM);
-    char sig[12], mem[12], up[12];
-    if (cl_rssi) snprintf(sig, sizeof sig, "%d", cl_rssi); else snprintf(sig, sizeof sig, "OFF");
-    snprintf(mem, sizeof mem, "%uK", cl_heap_k);
-    fmt_uptime(up, sizeof up);
-    const uint16_t sigc = !cl_rssi ? CK_TX : cl_rssi < -80 ? CK_AM : CK_CY;
-    if (big) {
-        static const char *const K[3] = { "SIGNAL", "MEMORY", "UPTIME" };
-        const char *val[3] = { sig, mem, up };
-        const uint16_t vc[3] = { sigc, CK_CY, CK_CY };
-        for (int i = 0; i < 3; i++) {
-            const int cx = 12 + i * 104;
-            d.fillRect(cx - 4, by, 2, 26, i == 0 ? CK_MG : CK_DIM);
-            d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(CK_TX); d.drawString(K[i], cx, by);
-            d.setTextSize(2); d.setTextColor(vc[i]); d.drawString(val[i], cx, by + 11);
-        }
-    } else {
-        int x = hud_kv(4, by + 2, 1, "SIG", sig, sigc);
+    const int by = H - 14;
+    d.drawFastHLine(0, by - 4, W, CK_DIM);
+    const int pages = cl_has_ev ? 3 : 2, page = (int)((t / 5) % pages);
+    if (page == 0) {
+        char sig[12], mem[12], up[12];
+        if (cl_rssi) snprintf(sig, sizeof sig, "%d", cl_rssi); else snprintf(sig, sizeof sig, "OFF");
+        snprintf(mem, sizeof mem, "%uK", cl_heap_k);
+        fmt_uptime(up, sizeof up);
+        int x = hud_kv(4, by + 2, 1, "SIG", sig, !cl_rssi ? CK_TX : cl_rssi < -80 ? CK_AM : CK_CY);
         x = hud_kv(x + 14, by + 2, 1, "MEM", mem, CK_CY);
         hud_kv(x + 14, by + 2, 1, "UP", up, CK_CY);
+    } else if (page == 1) {
+        if (cl_ip[0]) { const int x = hud_kv(4, by + 2, 1, "IP", cl_ip, CK_CY); hud_kv(x + 14, by + 2, 1, "NET", cl_ssid, CK_TX); }
+        else hud_kv(4, by + 2, 1, "NET", TR5("non connesso", "not connected", "sin conexion", "non connecte", "nicht verbunden"), CK_AM);
+    } else {
+        char lab[8], u[16]; snprintf(lab, sizeof lab, "%s", TR5("OGGI", "TODAY", "HOY", "AUJ.", "HEUTE"));
+        fmt_until(u, sizeof u, tm ? mins_until(cl_ev_t, tm) : 0);
+        int x = hud_kv(4, by + 2, 1, lab, cl_ev_t, CK_MG);
+        char ev[24]; snprintf(ev, sizeof ev, "%.20s", cl_ev_x);
+        d.setTextColor(CK_HI); d.drawString(ev, x + 6, by + 2);
+        d.setTextDatum(top_right); d.setTextColor(CK_TX); d.drawString(u, W - 4, by + 2); d.setTextDatum(top_left);
+    }
+}
+
+// ==== two screens, the Cardputer: the deck's status (no time, no date: the panel has them) ========================
+static void status_frame(void)
+{
+    d.fillRect(0, 0, W, H, 0x0000);
+    hud_grid(0, 0, W, H, 8);
+    d.fillRect(3, 2, 3, 8, CK_CY);
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left);
+    d.setTextColor(CK_CY); d.drawString("NUCLEO//OS", 8, 2);
+    d.setTextColor(CK_TX); d.drawString(TR5("STATO", "STATUS", "ESTADO", "ETAT", "STATUS"), 72, 2);
+    if (cl_name[0]) { char nm[16]; snprintf(nm, sizeof nm, "%.13s", cl_name); d.setTextDatum(top_right); d.drawString(nm, W - 3, 2); d.setTextDatum(top_left); }
+    d.drawFastHLine(0, 13, W, CK_DIM);
+    d.fillRect(0, 12, 56, 2, CK_CY);
+    d.fillRect(W - 24, 12, 24, 2, CK_MG);
+    d.drawFastVLine(118, 18, 58, CK_DIM);
+
+    // power
+    char v[16];
+    d.setTextColor(CK_TX); d.drawString(TR5("BATTERIA", "BATTERY", "BATERIA", "BATTERIE", "AKKU"), 4, 18);
+    if (cl_bat >= 0) snprintf(v, sizeof v, "%d%%", cl_bat); else snprintf(v, sizeof v, "--");
+    d.setTextSize(3); d.setTextColor(cl_bat >= 0 && cl_bat <= 20 ? CK_AM : CK_CY); d.drawString(v, 4, 30);
+    hud_battery(4, 57, 104, 8, cl_bat);
+    d.setTextSize(1); d.setTextColor(CK_TX);
+    if (cl_mv > 0) { snprintf(v, sizeof v, "%d mV", cl_mv); d.drawString(v, 4, 68); }
+
+    // network
+    d.setTextColor(CK_TX); d.drawString(TR5("RETE", "NETWORK", "RED", "RESEAU", "NETZ"), 124, 18);
+    hud_signal(W - 22, 17, cl_rssi);
+    if (cl_ip[0]) {
+        char ss[12]; snprintf(ss, sizeof ss, "%.9s", cl_ssid);
+        d.setTextSize(2); d.setTextColor(CK_HI); d.drawString(ss, 124, 30);
+        d.setTextSize(1); hud_kv(124, 52, 1, "IP", cl_ip, CK_CY);
+        snprintf(v, sizeof v, "%d dBm", cl_rssi);
+        d.setTextColor(cl_rssi < -80 ? CK_AM : CK_TX); d.drawString(v, 124, 66);
+    } else {
+        d.setTextSize(2); d.setTextColor(CK_AM); d.drawString("OFFLINE", 124, 30);
+        d.setTextSize(1); d.setTextColor(CK_TX); d.drawString(TR5("nessuna rete", "no network", "sin red", "aucun reseau", "kein Netz"), 124, 52);
+    }
+
+    // system
+    d.drawFastHLine(0, 81, W, CK_DIM);
+    char mem[12], blk[12], up[12];
+    snprintf(mem, sizeof mem, "%uK", cl_heap_k); snprintf(blk, sizeof blk, "%uK", cl_blk_k); fmt_uptime(up, sizeof up);
+    static const int CX[3] = { 4, 84, 164 };
+    const char *K[3] = { TR5("MEMORIA", "MEMORY", "MEMORIA", "MEMOIRE", "SPEICHER"), TR5("BLOCCO", "BLOCK", "BLOQUE", "BLOC", "BLOCK"),
+                         TR5("ACCESO DA", "UPTIME", "ACTIVO", "ACTIF", "LAUFZEIT") };
+    const char *V[3] = { mem, blk, up };
+    for (int i = 0; i < 3; i++) {
+        d.fillRect(CX[i] - 2, 86, 2, 24, i == 0 ? CK_MG : CK_DIM);
+        d.setTextSize(1); d.setTextColor(CK_TX); d.drawString(K[i], CX[i] + 3, 86);
+        d.setTextSize(2); d.setTextColor(CK_CY); d.drawString(V[i], CX[i] + 3, 96);
+    }
+    d.drawFastHLine(0, 118, W, CK_DIM);
+    d.setTextSize(1); d.setTextColor(CK_TX); d.setTextDatum(top_center);
+    d.drawString(TR5("un tasto per uscire", "any key to exit", "una tecla para salir", "une touche pour sortir", "Taste zum Beenden"), W / 2, 124);
+    d.setTextDatum(top_left);
+}
+
+// ==== two screens, the panel: the time and the day, 320x240 ======================================================
+// Calm by design and repainted by rectangles: the whole panel once (start, a new minute, a new event, a repaint
+// the OS asks for), then each second only the seconds rail, and twice a second only the colon. Every rectangle is
+// composed off-screen and pushed once (lg::frame / lg::frame_rect): nothing on the panel is ever cleared and
+// redrawn in place, and nothing moves that does not have to (no beam, no glitch here).
+// panel_paint draws in panel coordinates shifted by s_ox (frame_rect's x is relative to its rectangle) and skips the
+// blocks outside the window being painted.
+static int s_ox, s_wx0, s_wy0, s_wx1, s_wy1;
+static inline bool pn_vis(int x, int y, int w, int h) { return x < s_wx1 && x + w > s_wx0 && y < s_wy1 && y + h > s_wy0; }
+#define PXX(x) ((x) - s_ox)
+
+static struct { int dw, dx, dy, dh, xc, cw, ry; bool ok; } pl;
+static void panel_layout(void)
+{
+    if (pl.ok) return;
+    d.setFont(&fonts::Font7); d.setTextSize(2);
+    pl.dw = d.textWidth("88:88"); pl.dh = 96;
+    pl.dx = (320 - pl.dw) / 2; pl.dy = 40;
+    pl.xc = pl.dx + d.textWidth("88"); pl.cw = d.textWidth(":");
+    pl.ry = pl.dy + pl.dh + 16;
+    pl.ok = true;
+}
+#define PN_RAIL_X (pl.dx - 2)
+#define PN_RAIL_Y (pl.ry - 9)
+#define PN_RAIL_W (pl.dw + 4)
+#define PN_RAIL_H 26
+
+static void panel_paint(void *)
+{
+    panel_layout();
+    const time_t t = time(NULL);
+    const struct tm *tm = localtime(&t);
+    const int hh = tm ? tm->tm_hour : 0, mm = tm ? tm->tm_min : 0, ss = tm ? tm->tm_sec : 0;
+    const bool synced = tm && tm->tm_year + 1900 >= 2024;
+    const bool colon = (cl_frame - cl_sec_frame) < 5;
+    d.fillRect(PXX(s_wx0), s_wy0, s_wx1 - s_wx0, s_wy1 - s_wy0, 0x0000);
+    for (int y = 5; y < 240; y += 10)                    // the dot grid, inside the window only
+        if (y >= s_wy0 && y < s_wy1)
+            for (int x = 5; x < 320; x += 10) if (x >= s_wx0 && x < s_wx1) d.drawPixel(PXX(x), y, CK_GRID);
+
+    if (pn_vis(0, 0, 320, 28)) {                         // the top bar: the mark, the time zone
+        d.fillRect(PXX(8), 4, 5, 16, CK_CY);
+        d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextDatum(top_left);
+        d.setTextColor(CK_CY); d.drawString("NUCLEO//OS", PXX(18), 5);
+        if (cl_tz[0]) { d.setTextSize(1); d.setTextDatum(top_right); d.setTextColor(CK_TX); d.drawString(cl_tz, PXX(312), 9); d.setTextDatum(top_left); }
+        d.drawFastHLine(PXX(0), 26, 320, CK_DIM);
+        d.fillRect(PXX(0), 25, 90, 2, CK_CY);
+        d.fillRect(PXX(280), 25, 40, 2, CK_MG);
+    }
+    if (pn_vis(pl.dx - 8, pl.dy - 6, pl.dw + 16, pl.dh + 12)) {   // the digits
+        hud_brackets(PXX(pl.dx - 8), pl.dy - 6, pl.dw + 16, pl.dh + 12, 10, CK_DIM);
+        hud_digits(PXX(pl.dx), pl.dy, 2, hh, mm, colon, CK_CY, true);
+        hud_scanlines(PXX(pl.dx - 4), pl.dy - 2, pl.dw + 8, pl.dh + 4, 4);
+    }
+    if (pn_vis(PN_RAIL_X, PN_RAIL_Y, PN_RAIL_W, PN_RAIL_H)) {   // the seconds rail + the seconds
+        hud_ticks(PXX(pl.dx), pl.ry, pl.dw - 56, 7, ss);
+        char sec2[4]; snprintf(sec2, sizeof sec2, "%02d", ss);
+        d.setFont(&fonts::Font0); d.setTextSize(3); d.setTextDatum(top_right);
+        d.setTextColor(CK_MG); d.drawString(sec2, PXX(pl.dx + pl.dw), pl.ry - 8);
+        d.setTextDatum(top_left);
+    }
+    if (pn_vis(0, 172, 320, 33)) {                       // the date, the year, the week and the day of the year
+        char date[24], year[12], line[40];
+        if (tm) { fmt_date(date, sizeof date, tm); upcase(date); } else snprintf(date, sizeof date, "--- -- ---");
+        if (synced) snprintf(year, sizeof year, "%04d", tm->tm_year + 1900); else snprintf(year, sizeof year, "NO SYNC");
+        d.setFont(&fonts::Font0); d.setTextSize(2);
+        d.setTextColor(CK_HI); d.drawString(date, PXX(pl.dx), 176);
+        d.setTextDatum(top_right); d.setTextColor(synced ? CK_TX : CK_AM); d.drawString(year, PXX(pl.dx + pl.dw), 176);
+        d.setTextDatum(top_left);
+        if (tm) {
+            snprintf(line, sizeof line, "%s %d   %s %d/%d", TR5("SETTIMANA", "WEEK", "SEMANA", "SEMAINE", "WOCHE"), iso_week(tm),
+                     TR5("GIORNO", "DAY", "DIA", "JOUR", "TAG"), tm->tm_yday + 1,
+                     ((tm->tm_year + 1900) % 4 == 0 && ((tm->tm_year + 1900) % 100 != 0 || (tm->tm_year + 1900) % 400 == 0)) ? 366 : 365);
+            d.setTextSize(1); d.setTextColor(CK_TX); d.drawString(line, PXX(pl.dx), 197);
+        }
+    }
+    if (pn_vis(0, 205, 320, 35)) {                       // today's next event
+        d.drawFastHLine(PXX(0), 206, 320, CK_DIM);
+        d.fillRect(PXX(8), 211, 3, 26, CK_MG);
+        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(CK_TX);
+        d.drawString(TR5("PROSSIMO OGGI", "NEXT TODAY", "PROXIMO HOY", "PROCHAIN AUJ.", "HEUTE NOCH"), PXX(16), 211);
+        if (cl_has_ev && tm) {
+            char u[16]; fmt_until(u, sizeof u, mins_until(cl_ev_t, tm));
+            d.setTextDatum(top_right); d.drawString(u, PXX(312), 211); d.setTextDatum(top_left);
+            d.setTextSize(2); d.setTextColor(CK_MG); d.drawString(cl_ev_t, PXX(16), 222);
+            char ev[24]; snprintf(ev, sizeof ev, "%.18s", cl_ev_x);
+            d.setTextColor(CK_HI); d.drawString(ev, PXX(16 + 6 * 12), 222);
+        } else {
+            d.setTextSize(2); d.setTextColor(CK_GLOW); d.drawString("--:--", PXX(16), 222);
+            d.setTextSize(1); d.setTextColor(CK_TX);
+            d.drawString(TR5("nessun altro evento oggi", "no more events today", "no hay mas eventos hoy", "plus d'evenement aujourd'hui", "heute keine Termine mehr"), PXX(16 + 6 * 12), 226);
+        }
+    }
+}
+
+// One rectangle of the panel, composed and pushed once; false when there is no canvas (the caller repaints all).
+static bool panel_rect(int x, int y, int w, int h)
+{
+    s_ox = x; s_wx0 = x; s_wy0 = y; s_wx1 = x + w; s_wy1 = y + h;
+    const bool ok = lg::frame_rect(panel_paint, nullptr, x, y, w, h);
+    s_ox = 0; s_wx0 = 0; s_wy0 = 0; s_wx1 = 320; s_wy1 = 240;
+    return ok;
+}
+
+static struct { bool ok; unsigned gen; int key, sec; bool colon; char sig[96]; } pn;
+
+static void panel_update(void)
+{
+    panel_layout();
+    const time_t t = time(NULL);
+    const struct tm *tm = localtime(&t);
+    const int key = tm ? (tm->tm_yday * 1440 + tm->tm_hour * 60 + tm->tm_min) : 0, ss = tm ? tm->tm_sec : 0;
+    const bool colon = (cl_frame - cl_sec_frame) < 5;
+    char sig[96];                                        // what the slow parts show: a change repaints the panel
+    snprintf(sig, sizeof sig, "%d|%s|%s|%s|%d", tm && tm->tm_year + 1900 >= 2024, cl_tz, cl_ev_t, cl_ev_x, cl_has_ev);
+    const unsigned gen = nucleo_app_repaint_gen();
+    if (!pn.ok || gen != pn.gen || key != pn.key || strcmp(sig, pn.sig)) {
+        s_ox = 0; s_wx0 = 0; s_wy0 = 0; s_wx1 = 320; s_wy1 = 240;
+        lg::frame(panel_paint, nullptr);
+        pn.ok = true; pn.gen = gen; pn.key = key; pn.sec = ss; pn.colon = colon;
+        snprintf(pn.sig, sizeof pn.sig, "%s", sig);
+        return;
+    }
+    if (ss != pn.sec) {
+        if (!panel_rect(PN_RAIL_X, PN_RAIL_Y, PN_RAIL_W, PN_RAIL_H)) { pn.ok = false; return; }
+        pn.sec = ss;
+    }
+    if (colon != pn.colon) {
+        if (!panel_rect(pl.xc - 4, pl.dy - 4, pl.cw + 8, pl.dh + 8)) { pn.ok = false; return; }
+        pn.colon = colon;
     }
 }
 
@@ -526,14 +792,14 @@ static void fire_frame(void)                         // pure: the grid stretched
 // One effect: advance it one frame (once per frame), then draw it (pure: lg::frame paints it per strip).
 static void effect_step(void)
 {
-    if (g_mode == MODE_CLOCK) clock_step();
-    else if (g_mode == MODE_STARS) stars_step();
+    if (g_mode == MODE_CLOCK || nucleo_app_two_screens()) clock_step();   // the status deck samples it beside any effect
+    if (g_mode == MODE_STARS) stars_step();
     else if (g_mode == MODE_FIRE && fire_buf) { fire_seed(); fire_step(); }   // source always full: flame at the bottom
 }
 static void effect_draw(void *)
 {
     switch (g_mode) {
-        case MODE_CLOCK: clock_frame(); break;
+        case MODE_CLOCK: if (s_vw > W) panel_paint(nullptr); else clock_frame(); break;
         case MODE_STARS: stars_frame(); break;
         case MODE_FIRE:  fire_frame();  break;
         default:         d.fillRect(0, 0, s_vw, s_vh, 0x0000);   // off: a black panel (the Cardputer's backlight is off)
@@ -556,10 +822,13 @@ static void saver_start(void)
     } else if (g_mode == MODE_CLOCK) {
         clock_init();
     } else if (g_mode == MODE_STARS) {
+        if (big) clock_init();                       // the Cardputer's status deck beside the effect
         stars_init();
     } else {
+        if (big) clock_init();
         fire_init();
     }
+    pn.ok = false;                                   // the panel's clock: painted whole on its first frame
     s_frame_us = esp_timer_get_time();
     nucleo_app_request_draw();  // force the first frame immediately
 }
@@ -871,7 +1140,8 @@ static void draw_large(void)
     nucleo_touch_clear();
     if (s_running) {                                 // the saver itself, native on the panel; any tap ends it
         effect_step();
-        lg::frame(effect_draw, nullptr);
+        if (g_mode == MODE_CLOCK) panel_update();    // by rectangles: never a whole repaint per frame
+        else lg::frame(effect_draw, nullptr);
         nucleo_touch_commit();
         return;
     }
@@ -920,15 +1190,12 @@ static void draw_companion(void)
 
 // on_draw: for the saver, draws the full frame on the canvas (Technique 1).
 // For settings, redraws only when s_dirty.
-// Two screens, running: the Cardputer plays the same effect as the panel (the saver chosen in Settings), drawn for
-// its own 240x135 view from the panel's state (draw_large steps it).
+// Two screens, running: the Cardputer is the deck's status (battery, network, memory, uptime) whatever the effect,
+// never a second copy of what the panel shows.
 static void effect_draw_compact(void)
 {
     if (g_mode == MODE_OFF) { d.fillRect(0, 0, W, H, 0x0000); return; }   // backlight 0
-    const int vw = s_vw, vh = s_vh;
-    s_vw = W; s_vh = H;
-    effect_draw(nullptr);
-    s_vw = vw; s_vh = vh;
+    status_frame();                                  // the deck's status: the panel already shows the effect / the time
 }
 
 static void on_draw(void)

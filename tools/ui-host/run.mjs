@@ -218,7 +218,7 @@ for (const n of Object.keys(frames)) {
   const big = dims(frames[n])[0] === 320;                 // large frames get their own sheet (other size)
   (groups[`${surface}.${scene}${big ? '.large' : ''}`] ||= []).push(n);
 }
-const RANK = ['en.classic', 'it.classic', 'es.classic', 'fr.classic', 'de.classic', 'en.nano_banana', 'en.hacker', 'en.amoled', 'en.classic.direct'];
+const RANK = ['en.classic', 'it.classic', 'es.classic', 'fr.classic', 'de.classic', 'en.nano_banana', 'en.hacker', 'en.amoled', 'en.cyberdeck', 'en.classic.direct'];
 const rank = (n) => { const v = n.split('.').slice(2).join('.'); const i = RANK.indexOf(v); return i < 0 ? 99 : i; };
 for (const m of Object.values(groups)) m.sort((a, b) => rank(a) - rank(b));
 for (const [g, members] of Object.entries(groups)) {

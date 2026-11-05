@@ -1,0 +1,39 @@
+# NucleoOS game library — the Games gallery and the web Arcade share it
+F /data/ROMs/gb/Tetris (World).gb
+F /Giochi/Bubble Pop.pcb
+R 1 /data/ROMs/sms/River Strike.sms
+R 2 /data/ROMs/gb/Gone.gb
+R 3 /data/ROMs/gb/Deadeus.gb
+X something a newer version writes
+R 10 /old/gone10.gb
+R 11 /old/gone11.gb
+R 12 /old/gone12.gb
+R 13 /old/gone13.gb
+R 14 /old/gone14.gb
+R 15 /old/gone15.gb
+R 16 /old/gone16.gb
+R 17 /old/gone17.gb
+R 18 /old/gone18.gb
+R 19 /old/gone19.gb
+R 20 /old/gone20.gb
+R 21 /old/gone21.gb
+R 22 /old/gone22.gb
+R 23 /old/gone23.gb
+R 24 /old/gone24.gb
+R 25 /old/gone25.gb
+R 26 /old/gone26.gb
+R 27 /old/gone27.gb
+R 28 /old/gone28.gb
+R 29 /old/gone29.gb
+R 30 /old/gone30.gb
+R 31 /old/gone31.gb
+R 32 /old/gone32.gb
+R 33 /old/gone33.gb
+R 34 /old/gone34.gb
+R 35 /old/gone35.gb
+R 36 /old/gone36.gb
+R 37 /old/gone37.gb
+R 38 /old/gone38.gb
+R 39 /old/gone39.gb
+R 40 /old/gone40.gb
+R 41 /old/gone41.gb

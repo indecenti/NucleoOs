@@ -42,10 +42,20 @@ static int64_t s_loaded_us = 0;
 static char s_done_min[6] = "";
 static time_t s_file_mt = 0;        // calendar.json stamp of the loaded cache
 static long   s_file_sz = -1;    // HH:MM whose reminders were already dispatched (survives a same-day reload)
+// Readers on other tasks (nucleo_calendar_next) see the cache through a sequence counter: odd while
+// load_today rewrites it, bumped again when done. A reader that saw it change copies again: no lock, no RAM.
+static volatile uint32_t s_ev_seq = 0;
 
 
 // ---- load today's events (rare: day-change or >5 min stale) ----------------
+static void load_today_body(const char *key);
 static void load_today(const char *key)
+{
+    s_ev_seq = s_ev_seq + 1; __sync_synchronize();          // odd: being rewritten
+    load_today_body(key);
+    __sync_synchronize(); s_ev_seq = s_ev_seq + 1;          // even: stable
+}
+static void load_today_body(const char *key)
 {
     s_evn = 0; snprintf(s_day, sizeof s_day, "%s", key);
     FILE *f = fopen(CAL_PATH, "rb");
@@ -112,6 +122,34 @@ static void svc_task(void *)
         }
         vTaskDelay(pdMS_TO_TICKS(15000));
     }
+}
+
+// Today's next event at or after the current minute: its "HH:MM" and text. False when none is left today
+// (or the clock is not set yet). Safe from any task: the copy is retried if the cache changed under it.
+extern "C" bool nucleo_calendar_next(char *hhmm, size_t hn, char *text, size_t tn)
+{
+    time_t now = time(NULL);
+    if (now < 1672531200 || !hhmm || !text || !hn || !tn) return false;
+    struct tm tm; localtime_r(&now, &tm);
+    char key[12]; strftime(key, sizeof key, "%Y-%m-%d", &tm);
+    char cur[6]; snprintf(cur, sizeof cur, "%02d:%02d", tm.tm_hour, tm.tm_min);
+    for (int tries = 0; tries < 4; tries++) {
+        const uint32_t seq = s_ev_seq; __sync_synchronize();
+        if (seq & 1) continue;
+        int best = -1;
+        char bt[6] = "", bx[64] = "";
+        if (!strcmp(s_day, key))
+            for (int i = 0; i < s_evn && i < MAX_EV; i++)
+                if (strcmp(s_ev[i].t, cur) >= 0 && (best < 0 || strcmp(s_ev[i].t, bt) < 0)) {
+                    best = i; memcpy(bt, s_ev[i].t, sizeof bt); bt[5] = 0; memcpy(bx, s_ev[i].x, sizeof bx); bx[63] = 0;
+                }
+        __sync_synchronize();
+        if (s_ev_seq != seq) continue;                    // rewritten while copying: again
+        if (best < 0) return false;
+        snprintf(hhmm, hn, "%s", bt); snprintf(text, tn, "%s", bx);
+        return true;
+    }
+    return false;
 }
 
 extern "C" void nucleo_calendar_svc_start(void)

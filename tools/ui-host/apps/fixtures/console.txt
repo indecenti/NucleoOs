@@ -1,0 +1,2 @@
+# a store emulator's console (test fixture)
+console pca .pca,.pcb F81F Pocket Arcade|Test, 2026

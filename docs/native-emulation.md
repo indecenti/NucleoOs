@@ -335,12 +335,46 @@ is off. The render gate requires most lines, not all.
   flash/cache work first. GBC cartridges are covered today by the browser Arcade.
 - **The Games gallery lists the consoles, then their cartridges** (`gamefront.cpp`): Game Boy, Game Boy Color,
   Game Gear and Master System are four systems, shown when their emulator is installed. Their cartridges are found
-  anywhere on the card by a background walk (index `/data/GameShots/.cache/roms.idx`, text: `GIX1 <n> <hash>`, then
+  anywhere on the card by a background walk (index `/data/GameShots/.cache/roms.idx`, text: `GIX2 <n> <hash> <sig>`, then
   `D <folder>` and `<system digit> <file>` lines); the emulators open a cartridge by its full path. A cartridge opens straight in its emulator: the gallery hands its path over with the "open with"
   handoff (`nucleo_app_take_open_file`, carried across the Solo reboot), the emulator plays it from `shelf_poll()`
   and quitting it — or a cartridge the core refuses — closes the app, so the full OS boots back into the gallery on
   that cartridge (an RTC snapshot, `gamefront_take_return()`). The emulators themselves are not entries of the
   native games; their own shelf is still reached from launcher search.
+- **Favorites and Recent** are shared with the web Arcade through one text file, `/sd/data/GameShots/library.txt`:
+  `F <path>` a favourite, `R <n> <path>` played (the highest n is the last; 30 `R` lines at most), paths from the
+  card's root; unknown lines are kept, and it is rewritten whole into a `.tmp` and renamed. The gallery shows the two
+  collections at the head of the systems' wheel when they hold something (cartridges still on the card whose
+  emulator is installed; Favorites by title, Recent newest first, each title with its own console), marks or unmarks
+  the selected cartridge with `*` or a long press (a gold star), and adds an `R` line whenever a cartridge starts:
+  from the gallery, Files' "open with" or `POST /api/play`.
+- **Pictures, fast and in little RAM.** The selection's picture (a cartridge's screenshot `<folder>/.snaps/<rom>.pic`, a
+  native game's cover, a console photo `GameShots/.cache/con_<key>_<bg>.pic`; a cartridge without a screenshot shows
+  its console's) is read from the card once, at the stop, straight into a RAM cache, and the titles one and two steps
+  away follow while the player is still (the way the wheel turned first). The firmware consoles' photos are not in
+  the firmware (~31 KB of flash) but on the card, one read-only file shipped with the SD content
+  (`data/GameFront/atlas.bin`, from `tools/sd-sim/data/GameFront/`, written by `tools/gen-gallery-art.py`; the
+  `data/<game>/atlas.bin` rule every installer already allows): `GFT1`, a table of `key, w, h, offset, size`, then the
+  pictures in the `.gfa` encoding; the marks stay in the firmware. A card without it (SD content older than the
+  firmware) keeps the photos it made before, else shows the emulator's icon. The cache is keyed by file (one console
+  photo serves every cartridge that shows it), packs each row on its own (runs, a 64-colour index, small deltas: a
+  screenshot 5-12x smaller, a photo 2-3x) and lives in ONE arena block taken when first needed (8 KB, less when the
+  heap cannot spare it above 13 KB) and compacted on eviction, so browsing never allocates. Favourites are a bit per
+  shelf name (`library.txt` is read with the shelf, not at every stop); the store's `console.txt` files are found with
+  one listing of `/sd/apps`. The search line exists only while there is a search: typing a letter opens it, emptying
+  it or Esc closes it (both screens). `node tools/ui-host/gamefront-bench.mjs` measures a browse on the PC (card
+  opens and misses, KB read, frames and pixels, stops served from RAM; `--heap nocanvas|tight` for the ADV's worst
+  cases); on the device a slow frame logs the cache's fill and hits (`/api/logs`).
+- **A store emulator brings its consoles with it**, as files of its package (installed to `/sd/apps/<id>/`); the
+  firmware names none of them. `console.txt`: one line per console, `console <key> <ext>[,<ext>...] <RGB565 hex>
+  <name>|<maker, year>` (`#` = a comment); `console-<key>.gfa`: `GFA1`, then the photo (118x80 box) and the mark
+  (20x15 box), each `u8 w, u8 h, u32 size (LE)` + raw deflate of RGB565 (native order) and 4-bit alpha, the encoding of
+  `gamefront_art.h` (`tools/gen-gallery-art.py`'s `encode()`). The gallery reads them when it opens (up to 4 consoles,
+  freed when it closes; a key the firmware knows is ignored), lists each after the firmware's consoles (system digits
+  by key, stable while the set is), finds their extensions in the walk, and streams the pictures from the `.gfa`
+  (none: the app's icon stands in). The set's keys and extensions are in the index header
+  (`GIX2 <n> <hash> <sig>`): installing or removing such an emulator walks the card again. The app itself leaves the
+  native games; it opens a cartridge like the others (`nucleo_app_take_open_file`, ABI 5+).
 - **Chip-8** is the obvious next core: ~5 KB, no licence question, same app scaffolding.
 
 ## 7. The Game Gear (and the Master System it contains)

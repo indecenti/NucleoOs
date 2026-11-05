@@ -1,8 +1,8 @@
 {
   "id": "scoreboard",
   "name": "Scoreboard",
-  "version": "1.1.0",
-  "version_code": 5,
+  "version": "1.1.1",
+  "version_code": 6,
   "min_os": "0.7.5",
   "platforms": [
     "esp32s3"
