@@ -4940,7 +4940,7 @@
         de:'Ich finde auf dem PC keinen Modellserver (Ollama, LM Studio, llama.cpp, Jan, KoboldCpp). Öffne einen, dann nutze ich ihn von selbst: Hier ist nichts einzurichten.', zh:'我在 PC 上找不到任何模型服务器（Ollama、LM Studio、llama.cpp、Jan、KoboldCpp）。打开一个，我就会自己使用它：这里不需要任何设置。' }) });
     }
     // "che modelli ho sul pc?", "usa ollama", "local models", "modelos del PC", "modèles locaux", "lokale Modelle"
-    const PC_Q = /\b(ollama|lm ?studio|llama ?\.?cpp|koboldcpp)\b|\b(modell[oi]|models?|modelos?|mod[eè]les?|modelle)\b.{0,24}\b(pc|computer|ordinateur|rechner|locali|local|locales|locaux|lokal\w*)\b|\b(local|lokale) (models?|modelle)\b/i;
+    const PC_Q = /\b(ollama|lm ?studio|llama ?\.?cpp|koboldcpp)\b|\b(modell[oi]|models?|modelos?|mod[eè]les?|modelle)\b.{0,24}\b(pcs?|computer|ordinateur|rechner|locali|local|locales|locaux|lokal\w*)\b|\b(pcs?|computer|local|lokale)\s+(models?|modelle)\b/i;
     function pcHelperDownload(){
       try{
         const txt = _pcm.helperCmd(location.hostname, { open:'/apps/anima/' });
