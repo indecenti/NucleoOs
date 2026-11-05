@@ -115,6 +115,33 @@ Python still has a place: `run_python` sends the script to Anthropic's code-exec
 numpy, openpyxl, xlsxwriter, python-docx, pypdf, matplotlib preinstalled) and brings stdout and any file
 back to the SD card. That is also how real `.xlsx` / `.docx` / `.pdf` files are made.
 
+### 4.5 Apps with a screen, and visual tests
+
+Scripts get a small fantasy console: a 16-colour canvas, 4 bits a pixel, kept in strips of 16 rows (no block over
+2.5 KB: 240x135 is 16 KB, the external panel's 320x240 is 38 KB). Drawing marks the rows it touches; `gfx.flush()`
+converts only those to RGB565 and hands them to the platform in bands of 8 rows. `code_gfx.c` is platform-neutral:
+the host gate draws, flushes and decodes the PNG it writes (`npm run code:test`).
+
+| Object | Calls |
+|---|---|
+| `gfx` | `width() height() clear(c) pixel(x,y,c) get(x,y) rect frame line circle disc text(s,x,y,c,scale) flush()`, `BLACK`..`BEIGE` (0-15) |
+| `key` | `get()` -> `"up" "down" "left" "right" "enter" "del" "tab"` or the character, `null` when none; `down(name)` held now |
+| `touch` | `poll()` -> a sample was taken, then `x() y() down()` (the external panel) |
+
+- **The user runs an app** from `/files` (the workspace `work/main`): the real keys, the touch, no time limit; Esc
+  always stops it (it is never given to the script). With the external panel attached the canvas is 320x240 there and
+  the Cardputer shows what runs and how to stop it: never a mirror.
+- **The agent tests an app**: `run_js` with `screen` (small / large), `keys` (`"wait:300"` spaces them) and `taps`.
+  The user watches the frames live; an app loop ending at `timeout_ms` is a normal end. The last frame is written as a
+  PNG (indexed, 4 bits, every pixel 2x2, one fixed-Huffman deflate block with two match distances: a run and the row
+  above, 1-3 KB for a typical screen) to `.code/shots/<n>.png`, and the tool result carries it as an image block whose
+  data is a mark; `build_request` streams the file in base64 when it writes the request, so a screenshot never sits in
+  RAM however many the session holds. Only the session's own `shots/*.png` can be named by a mark.
+- **Esc and the limit, on time**: MicroQuickJS polls its interrupt handler every 10,000 instructions, and an app lives
+  in C (drawing, sleeping), so `sys.sleep` and `gfx.flush` ask for the poll at the next instruction
+  (`JS_NucleoInterruptSoon`, the engine patch): a 300 ms limit stops at 300 ms, uncatchable.
+- **RAM**: a script that draws gets a smaller arena (28 KB small, 20 KB large) so its canvas fits beside it.
+
 ## 5. The workspace on the SD card
 
 ```

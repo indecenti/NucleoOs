@@ -457,13 +457,11 @@ static void agent_open(void)
     mkdir(WS, 0775); mkdir(AWS, 0775);
     S->have_key = nucleo_llm_config(S->model, sizeof S->model, S->effort, sizeof S->effort);
     if (!S->have_key) return;
-    if (!S->toolbuf) S->toolbuf = (char *)malloc(TOOL_CAP);
-    if (!S->toolbuf) return;
     agent_cfg_t cfg = {};
     cfg.root = AWS; cfg.model = S->model; cfg.effort = S->effort;
     cfg.lang = L("Italian", "English", "Spanish", "French", "German");
     cfg.max_calls = 30; cfg.max_tokens = 16000; cfg.arena = nullptr; cfg.arena_size = 32768;
-    cfg.toolbuf = S->toolbuf; cfg.toolcap = TOOL_CAP; cfg.ask_writes = S->ask;
+    cfg.toolbuf = nullptr; cfg.toolcap = TOOL_CAP; cfg.ask_writes = S->ask;   // the agent holds it only while a reply streams
     agent_io_t io = {};
     io.on_text = ui_text; io.on_tool = ui_tool; io.on_tool_done = ui_tool_done; io.on_todo = ui_todo;
     io.now_ms = now_ms; io.sleep_ms = sleep_ms;
@@ -484,6 +482,7 @@ static void agent_tick(void)
     switch (agent_state(S->ag)) {
     case AG_SEND:
         if (nucleo_llm_busy()) break;
+        if (S->auto_run) trace("send");
         agent_begin_response(S->ag);
         if (!nucleo_llm_start(agent_request_path(S->ag))) agent_end_response(S->ag, -1, "the connection could not start");
         S->thinking = true;
@@ -498,7 +497,11 @@ static void agent_tick(void)
         }
         break;
     }
-    case AG_TOOLS: agent_step(S->ag); nucleo_app_request_draw(); break;
+    case AG_TOOLS:
+        if (S->auto_run) trace("tool");                     // the self-test logs the heap around every tool
+        agent_step(S->ag);
+        if (S->auto_run) trace("tool done");
+        nucleo_app_request_draw(); break;
     case AG_DONE: case AG_ERROR:
         if (S->was_running) {
             const agent_stats_t *st = agent_stats(S->ag);

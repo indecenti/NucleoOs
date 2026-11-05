@@ -54,6 +54,7 @@ struct agent {
     char          ask[160];        // the action waiting for the user's yes
     char          todo[1024];
     unsigned      shots;           // screenshots taken in this session (.code/shots/<n>.png)
+    char         *tb_own;          // the tool-input buffer while a reply streams (cfg.toolbuf NULL)
     char          shot_path[PATHCAP];   // the last run_js left one: the tool result carries it as an image
     // the run being tested (run_js): its scripted keys and taps, and where its frames go
     cJSON        *t_keys, *t_taps; int t_ki, t_ti; bool t_up; int64_t t_wait; bool t_large;
@@ -367,7 +368,7 @@ static bool tool_run(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t scap)
     bool draws = strstr(src, "gfx.") != NULL;
     void *arena = a->cfg.arena; size_t asz = a->cfg.arena_size;
     size_t cap = asz ? asz : 32768;
-    if (draws && !arena) cap = a->t_large ? 20480 : 28672;
+    if (draws && !arena) cap = a->t_large ? 18432 : 28672;
     if (!arena) for (size_t want = cap; want >= 12288 && !arena; want -= 4096) { arena = malloc(want); asz = want; }
     s_run = a;
     bool ok = arena && outb && code_run(arena, asz, src, len, rel, &env, &res);
@@ -726,7 +727,11 @@ void agent_begin_response(agent_t *a)
     a->s = calloc(1, sizeof *a->s);
     if (!a->s) { set_error(a, "no memory for the stream"); return; }
     anth_cb_t cb = { ev_text, ev_tool, ev_done, ev_error, ev_thinking };
-    anth_stream_init(a->s, &cb, a, a->cfg.toolbuf, a->cfg.toolcap);
+    // No buffer given: one of toolcap bytes exists only while a reply streams in (the tool inputs are parsed into the
+    // message as each one ends), so the tools that run next - an app's canvas - have those bytes back.
+    char *tb = a->cfg.toolbuf;
+    if (!tb && a->cfg.toolcap) { free(a->tb_own); tb = a->tb_own = malloc(a->cfg.toolcap); }
+    anth_stream_init(a->s, &cb, a, tb, tb ? a->cfg.toolcap : 0);
     cJSON_Delete(a->content);
     a->content = cJSON_CreateArray(); a->tlen = 0; a->stop[0] = 0; a->stream_error = false; memset(&a->usage, 0, sizeof a->usage);
     a->big_mask = 0;
@@ -741,6 +746,7 @@ void agent_end_response(agent_t *a, int status, const char *err)
     flush_text(a);
     bool ok = status == 200 && !a->stream_error && a->s && a->s->done;
     free(a->s); a->s = NULL;
+    free(a->tb_own); a->tb_own = NULL;
     a->st.calls++; a->calls_turn++;
     a->st.in += a->usage.in; a->st.out += a->usage.out; a->st.cache_read += a->usage.cache_read; a->st.cache_write += a->usage.cache_write;
     a->st.last_context = a->usage.in + a->usage.cache_read + a->usage.cache_write;
@@ -793,8 +799,9 @@ static void do_tool(agent_t *a, int i, bool declined)
     cJSON *b = cJSON_GetArrayItem(cJSON_GetObjectItem(a->amsg, "content"), i);
     const char *name = jstr(b, "name") ? jstr(b, "name") : "?";
     bool too_large = (a->big_mask >> (i & 31)) & 1u;
-    char *rb = malloc(VIEW_MAX + 256);
-    sb_t r = { rb, 0, (strcmp(name, "str_replace_based_edit_tool") ? RESULT_MAX : VIEW_MAX) + 256, false };
+    const size_t rcap = (strcmp(name, "str_replace_based_edit_tool") ? RESULT_MAX : VIEW_MAX) + 256;
+    char *rb = malloc(rcap);
+    sb_t r = { rb, 0, rcap, false };
     bool ok;
     if (!rb) ok = false;
     else if (declined) { rb[0] = 0; sb_printf(&r, "The user declined this action."); ok = false; if (a->io.on_tool_done) a->io.on_tool_done(a->io.ui_op, name, false, "declined"); }
@@ -890,7 +897,7 @@ agent_t *agent_new(const agent_cfg_t *cfg, const agent_io_t *io)
 void agent_free(agent_t *a)
 {
     if (!a) return;
-    cJSON_Delete(a->content); cJSON_Delete(a->amsg); cJSON_Delete(a->rmsg); free(a->s); free(a->text); free(a);
+    cJSON_Delete(a->content); cJSON_Delete(a->amsg); cJSON_Delete(a->rmsg); free(a->s); free(a->tb_own); free(a->text); free(a);
 }
 const agent_stats_t *agent_stats(const agent_t *a) { return &a->st; }
 const char *agent_todo(const agent_t *a) { return a->todo; }
