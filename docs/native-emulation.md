@@ -348,6 +348,18 @@ is off. The render gate requires most lines, not all.
   emulator is installed; Favorites by title, Recent newest first, each title with its own console), marks or unmarks
   the selected cartridge with `*` or a long press (a gold star), and adds an `R` line whenever a cartridge starts:
   from the gallery, Files' "open with" or `POST /api/play`.
+- **Pictures, fast and in little RAM.** The selection's picture (a cartridge's screenshot `<folder>/.snaps/<rom>.pic`, a
+  native game's cover, a console photo `GameShots/.cache/con_<key>_<bg>.pic`; a cartridge without a screenshot shows
+  its console's) is read from the card once, at the stop, straight into a RAM cache, and the titles one and two steps
+  away follow while the player is still (the way the wheel turned first). The cache is keyed by file (one console
+  photo serves every cartridge that shows it), packs each row on its own (runs, a 64-colour index, small deltas: a
+  screenshot 5-12x smaller, a photo 2-3x) and lives in ONE arena block taken when first needed (8 KB, less when the
+  heap cannot spare it above 13 KB) and compacted on eviction, so browsing never allocates. Favourites are a bit per
+  shelf name (`library.txt` is read with the shelf, not at every stop); the store's `console.txt` files are found with
+  one listing of `/sd/apps`. The search line exists only while there is a search: typing a letter opens it, emptying
+  it or Esc closes it (both screens). `node tools/ui-host/gamefront-bench.mjs` measures a browse on the PC (card
+  opens and misses, KB read, frames and pixels, stops served from RAM; `--heap nocanvas|tight` for the ADV's worst
+  cases); on the device a slow frame logs the cache's fill and hits (`/api/logs`).
 - **A store emulator brings its consoles with it**, as files of its package (installed to `/sd/apps/<id>/`); the
   firmware names none of them. `console.txt`: one line per console, `console <key> <ext>[,<ext>...] <RGB565 hex>
   <name>|<maker, year>` (`#` = a comment); `console-<key>.gfa`: `GFA1`, then the photo (118x80 box) and the mark

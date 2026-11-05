@@ -307,7 +307,7 @@ int search(int x, int y, int w, int h, const char *text, const char *hint, const
     font(0);
     int cw = 0;
     if (count && count[0]) {
-        d.setTextDatum(middle_right); d.setTextColor(ccol, cb);
+        d.setTextDatum(middle_right); d.setTextColor(ccol);   // no cell background: on a short line it would stick out
         d.drawString(count, x + w - 14, cy + 1);
         cw = d.textWidth(count) + 8;
     }
@@ -316,11 +316,12 @@ int search(int x, int y, int w, int h, const char *text, const char *hint, const
     if (text && text[0]) {
         const char *t = text;
         while (*t && d.textWidth(t) > room - 4) t++;          // the tail of a long query: what was typed last
-        d.setTextColor(FG, cb); d.drawString(t, tx, cy + 1);
-        d.fillRect(tx + 1 + d.textWidth(t), cy - ph / 2 + 5, 2, ph - 10, acc);
+        d.setTextColor(FG); d.drawString(t, tx, cy + 1);
+        const int in = ph >= 24 ? 5 : 2;                     // the cursor: as tall as the text on a short line too
+        d.fillRect(tx + 1 + d.textWidth(t), cy - ph / 2 + in, 2, ph - 2 * in, acc);
     } else if (hint) {
         char t[48]; fit(t, sizeof t, hint, room);
-        d.setTextColor(MUTED, cb); d.drawString(t, tx, cy + 1);
+        d.setTextColor(MUTED); d.drawString(t, tx, cy + 1);
     }
     d.setTextDatum(top_left);
     return y + h;
