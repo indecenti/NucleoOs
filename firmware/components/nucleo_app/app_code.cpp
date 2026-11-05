@@ -68,6 +68,7 @@ struct State {
     bool from_anima, inbox_task, outbox_done; char run_job[48];
     char last_js[48];           // the script the last task wrote: Enter on an empty line runs it
     char last_text[600]; int last_tlen;   // the model's last words, for ANIMA
+    char phase[32]; int64_t phase_t0;     // what the header says it is doing, since when
     int64_t auto_t0;     // the maintainer's self-test (work/main/.code/selftest.txt)
 };
 static State *S;
@@ -436,8 +437,31 @@ static void tr_add(const char *s, size_t n)
     nucleo_app_request_draw();
 }
 static void tr_puts(const char *s) { tr_add(s, strlen(s)); }
+// The conversation is lines that start with their role (ANIMA's chat: who said it decides how it looks); a line
+// without one continues the role above it. RM_TOOL is a step being done, rewritten to OK / FAIL when it ends.
+enum { RM_USER = 1, RM_TEXT, RM_TOOL, RM_OK, RM_FAIL, RM_META };
+static char s_role;                       // the role the transcript's last line has
+static void tr_role(char role)            // start a line of this role (a new line unless it continues one)
+{
+    if (s_role == role && role == RM_TEXT) return;   // the model's words stream into the same block
+    if (S->trlen && S->tr[S->trlen - 1] != '\n') tr_add("\n", 1);
+    tr_add(&role, 1);
+    s_role = role;
+}
+static void tr_line(char role, const char *t) { tr_role(role); tr_puts(t); tr_add("\n", 1); s_role = 0; }
+// a note of Code's own ("[no network...]"): one meta line, without the brackets and the blank lines around it
+static void tr_note(const char *t)
+{
+    while (*t == '\n' || *t == '[' || *t == ' ') t++;
+    char b[240]; snprintf(b, sizeof b, "%s", t);
+    size_t n = strlen(b); while (n && (b[n - 1] == '\n' || b[n - 1] == ']' || b[n - 1] == ' ')) b[--n] = 0;
+    if (n) tr_line(RM_META, b);
+}
 static void ui_text(void *, const char *s, size_t n)
 {
+    while (n && s_role != RM_TEXT && (*s == '\n' || *s == ' ')) { s++; n--; }   // no blank first line
+    if (!n) return;
+    tr_role(RM_TEXT);
     tr_add(s, n);
     size_t room = sizeof S->last_text - 1 - (size_t)S->last_tlen;
     if (n > room) n = room;
@@ -456,16 +480,31 @@ static void note_file(const char *summary)
     f[n] = 0;
     if (n > 3 && !strcmp(f + n - 3, ".js") && !strchr(f, '/')) snprintf(S->last_js, sizeof S->last_js, "%s", f);
 }
-static void ui_tool(void *, const char *, const char *summary) { char b[180]; snprintf(b, sizeof b, "\n  > %s", summary); tr_puts(b); }
+static int s_tool_at = -1;                // where the step being done starts in the transcript
+static void ui_tool(void *, const char *, const char *summary)
+{
+    tr_role(RM_TOOL); s_tool_at = S->trlen - 1;
+    tr_puts(summary); tr_add("\n", 1); s_role = 0;
+    snprintf(S->phase, sizeof S->phase, "%.30s", summary); S->phase_t0 = now_ms();
+}
 static void ui_tool_done(void *, const char *, bool ok, const char *summary)
 {
-    char b[180]; snprintf(b, sizeof b, "\n  %s %s\n", ok ? "ok" : "!!", summary); tr_puts(b);
+    if (s_tool_at >= 0 && s_tool_at < S->trlen && S->tr[s_tool_at] == RM_TOOL) { S->trlen = s_tool_at; S->tr[S->trlen] = 0; }   // the step, as it ended
+    s_tool_at = -1; s_role = 0;
+    tr_line(ok ? RM_OK : RM_FAIL, summary);
     if (ok) note_file(summary);
+    S->phase[0] = 0;
 }
 static void ui_todo(void *, const char *t) { snprintf(S->todo, sizeof S->todo, "%s", t); nucleo_app_request_draw(); }
 
+#ifdef NUCLEO_UI_HOST
+static bool s_host_running;               // the ui-host gallery's "at work" scene (no agent runs there)
+#endif
 static bool agent_running(void)
 {
+#ifdef NUCLEO_UI_HOST
+    if (s_host_running) return true;
+#endif
     agent_state_t s = S->ag ? agent_state(S->ag) : AG_IDLE;
     return s == AG_SEND || s == AG_RECV || s == AG_TOOLS || s == AG_ASK;
 }
@@ -547,8 +586,8 @@ static void run_script_here(const char *f)                  // from the conversa
     char b[160];
     if (S->res.ok) snprintf(b, sizeof b, "\n[%s: %s]\n", f, L("chiuso", "closed", "cerrado", "ferme", "beendet"));
     else snprintf(b, sizeof b, "\n[%s: %s %s]\n", f, S->res.where, S->res.error);
-    tr_puts(b);
-    if (S->olen) { tr_puts(S->out); tr_puts("\n"); }
+    tr_note(b);
+    if (S->olen) tr_line(RM_META, S->out);
 }
 static void agent_send(void);
 static void inbox_tick(void)
@@ -563,7 +602,7 @@ static void inbox_tick(void)
     if (!S->auto_t0) S->auto_t0 = now_ms();
     if (!nucleo_tcp_network_up() && now_ms() - S->auto_t0 < 40000) return;   // the Solo boot brings Wi-Fi up after us
     S->inbox_task = false;
-    if (!nucleo_tcp_network_up()) { tr_puts(L("\n[nessuna rete: il compito e' nell'input, Invio per riprovare]\n", "\n[no network: the task is in the input, Enter to retry]\n",
+    if (!nucleo_tcp_network_up()) { tr_note(L("\n[nessuna rete: il compito e' nell'input, Invio per riprovare]\n", "\n[no network: the task is in the input, Enter to retry]\n",
                                               "\n[sin red: Intro para reintentar]\n", "\n[pas de reseau : Entree pour reessayer]\n", "\n[kein Netz: Enter fuer neuen Versuch]\n")); return; }
     agent_send();
 }
@@ -576,6 +615,7 @@ static void agent_tick(void)
     case AG_SEND:
         if (nucleo_llm_busy()) break;
         if (S->auto_run) trace("send");
+        S->phase[0] = 0; S->phase_t0 = now_ms();
         agent_begin_response(S->ag);
         if (!nucleo_llm_start(agent_request_path(S->ag))) agent_end_response(S->ag, -1, "the connection could not start");
         S->thinking = true;
@@ -599,9 +639,8 @@ static void agent_tick(void)
         if (S->was_running) {
             const agent_stats_t *st = agent_stats(S->ag);
             char b[240];
-            if (agent_state(S->ag) == AG_ERROR) snprintf(b, sizeof b, "\n[%s]\n", st->error);
-            else snprintf(b, sizeof b, "\n");
-            tr_puts(b);
+            if (agent_state(S->ag) == AG_ERROR) { snprintf(b, sizeof b, "%s", st->error); tr_note(b); }
+            s_role = 0;
             S->was_running = false;
             if (S->from_anima && !S->outbox_done) code_outbox(agent_state(S->ag) == AG_ERROR ? st->error : nullptr);
         }
@@ -617,15 +656,15 @@ static void agent_send(void)
     S->in[S->inlen] = 0;
     if (S->in[0] == '/') {                                    // commands
         if (!strcmp(S->in, "/files")) { S->agent_view = false; scan(AWS); }
-        else if (!strcmp(S->in, "/new")) { if (S->ag) agent_reset(S->ag); S->trlen = 0; S->tr[0] = 0; S->todo[0] = 0; }
-        else if (!strcmp(S->in, "/mode")) { S->ask = !S->ask; agent_close(); agent_open(); tr_puts(S->ask ? "\n[mode: Ask]\n" : "\n[mode: Auto]\n"); }
-        else tr_puts(L("\n[comandi: /files /new /mode]\n", "\n[commands: /files /new /mode]\n", "\n[/files /new /mode]\n", "\n[/files /new /mode]\n", "\n[/files /new /mode]\n"));
+        else if (!strcmp(S->in, "/new")) { if (S->ag) agent_reset(S->ag); S->trlen = 0; S->tr[0] = 0; S->todo[0] = 0; S->last_js[0] = 0; s_role = 0; s_cleared = false; }
+        else if (!strcmp(S->in, "/mode")) { S->ask = !S->ask; agent_close(); agent_open(); tr_note(S->ask ? "mode: Ask" : "mode: Auto"); }
+        else tr_note(L("\n[comandi: /files /new /mode]\n", "\n[commands: /files /new /mode]\n", "\n[/files /new /mode]\n", "\n[/files /new /mode]\n", "\n[/files /new /mode]\n"));
         S->inlen = 0; S->in[0] = 0; nucleo_app_request_draw(); return;
     }
     agent_open();
-    if (!S->ag) { tr_puts(L("\n[nessuna chiave Claude: aggiungila nella web OS, Impostazioni > IA]\n", "\n[no Claude key: add one in the web OS, Settings > AI]\n",
+    if (!S->ag) { tr_note(L("\n[nessuna chiave Claude: aggiungila nella web OS, Impostazioni > IA]\n", "\n[no Claude key: add one in the web OS, Settings > AI]\n",
                             "\n[sin clave Claude: web OS, Ajustes > IA]\n", "\n[pas de cle Claude : web OS, Reglages > IA]\n", "\n[kein Claude-Schluessel: Web OS, Einstellungen > KI]\n")); return; }
-    tr_puts("\n> "); tr_puts(S->in); tr_puts("\n");
+    tr_line(RM_USER, S->in);
     S->last_tlen = 0; S->last_text[0] = 0; S->outbox_done = false;
     agent_submit(S->ag, S->in);
     S->inlen = 0; S->in[0] = 0;
@@ -633,30 +672,117 @@ static void agent_send(void)
     nucleo_app_request_draw();
 }
 
-// the conversation as plain lines of `cols` columns; the last `rows` lines (minus the scroll) are drawn
-static void draw_lines(int x, int y, int w, int rows, int lh, unsigned short bg)
+// ---- the agent view, drawn like ANIMA's chat (docs/nucleo-code.md 9) --------------------------------------------
+// A header with the model and what it is doing, the conversation by role (your lines on the right, Code's on the
+// left behind an accent bar, each step on a compact row with its mark), the input field. Straight on the panel
+// and flicker-free: every row paints its own background, nothing is cleared first.
+static const unsigned short C_USR = 0x6E1F, C_OK = 0x47E8, C_BAD = 0xF8A6, C_ASK = 0xFFE0;
+static lgfx::LovyanGFX *G_ = &d;          // the panel a view draws on
+#define G (*G_)
+// opaque text in the band [bx, bx+bw) x [by, by+bh): only what the glyphs leave uncovered is filled
+static int box_text(int bx, int by, int bw, int bh, int tx, int ty, const char *s, unsigned short fg, unsigned short bg)
 {
-    static char plain[TR_CAP];
-    code_md_plain(S->tr, plain, sizeof plain);
-    const int cols = w / 6 > 60 ? 60 : w / 6;
-    // count wrapped lines, then draw the window
-    int total = 0;
-    for (const char *p = plain; *p; ) { const char *e = p; int c = 0; while (*e && *e != '\n' && c < cols) { e++; c++; } total++; p = *e == '\n' ? e + 1 : e; }
-    int first = total - rows - S->tscroll; if (first < 0) first = 0;
-    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left);
-    int line = 0, yy = y;
-    for (const char *p = plain; *p && yy + lh <= y + rows * lh; ) {
-        const char *e = p; int c = 0; while (*e && *e != '\n' && c < cols) { e++; c++; }
-        if (line >= first) {
-            char t[64]; int tl = (int)(e - p); memcpy(t, p, (size_t)tl);
-            while (tl < cols) t[tl++] = ' ';             // padded to the width: it overwrites the old row, no fill needed
-            t[tl] = 0;
-            unsigned short col = t[0] == '>' ? ACCENT : (t[0] == ' ' && t[1] == ' ' && t[2] == '!') ? 0xF800 : (t[0] == ' ' && t[1] == ' ') ? C_DIM : t[0] == '[' ? 0xFFE0 : C_INK;
-            d.setTextColor(col, bg); d.drawString(t, x, yy); yy += lh;
-        }
-        line++; p = *e == '\n' ? e + 1 : e;
+    const int fh = (int)G.fontHeight(), w = (s && s[0]) ? (int)G.textWidth(s) : 0, bx1 = bx + bw, by1 = by + bh;
+    if (tx < bx) tx = bx;
+    const int gy0 = ty < by ? by : ty, gy1 = ty + fh > by1 ? by1 : ty + fh;
+    if (gy0 > by) G.fillRect(bx, by, bw, gy0 - by, bg);
+    if (gy1 < by1) G.fillRect(bx, gy1, bw, by1 - gy1, bg);
+    if (gy1 > gy0) {
+        if (tx > bx) G.fillRect(bx, gy0, tx - bx, gy1 - gy0, bg);
+        if (tx + w < bx1) G.fillRect(tx + w, gy0, bx1 - tx - w, gy1 - gy0, bg);
     }
-    if (yy < y + rows * lh) d.fillRect(x, yy, w, y + rows * lh - yy, bg);   // below a short conversation
+    if (w) { G.setTextColor(fg, bg); G.setCursor(tx, ty); G.print(s); }
+    return tx + w;
+}
+struct VRow { const char *p; unsigned short len; char role; bool first; };
+#define VROW_MAX 48
+static VRow s_vr[VROW_MAX]; static int s_vrn;
+static void vr_push(const char *p, int len, char role, bool first)
+{
+    if (s_vrn == VROW_MAX) { memmove(&s_vr[0], &s_vr[1], sizeof(VRow) * (VROW_MAX - 1)); s_vrn--; }
+    s_vr[s_vrn++] = VRow{ p, (unsigned short)len, role, first };
+}
+static const lgfx::IFont *role_font(char role, bool big)
+{
+    if (role == RM_USER || role == RM_TEXT) return big ? (const lgfx::IFont *)&fonts::FreeSans9pt7b : (const lgfx::IFont *)&fonts::Font2;
+    return big ? (const lgfx::IFont *)&fonts::Font2 : (const lgfx::IFont *)&fonts::Font0;
+}
+static int role_h(char role, bool big) { return (role == RM_USER || role == RM_TEXT) ? (big ? 20 : 15) : (big ? 15 : 11); }
+static int meas(const char *p, int n) { char t[200]; if (n > 199) n = 199; memcpy(t, p, (size_t)n); t[n] = 0; return (int)G.textWidth(t); }
+// The last part of the conversation, wrapped by pixel width (at most VROW_MAX rows are kept: the newest)
+static void wrap_view(const char *text, int w, bool big)
+{
+    s_vrn = 0;
+    const char *p = text; char role = RM_META;
+    while (*p) {
+        const char *e = strchr(p, '\n'); if (!e) e = p + strlen(p);
+        bool first = false;
+        if (*p >= RM_USER && *p <= RM_META) { role = *p++; first = true; }
+        G.setFont(role_font(role, big));
+        const int avail = role == RM_USER ? w - 30 : role == RM_TEXT ? w - 12 : w - 16;
+        const char *ls = p;
+        if (ls == e) vr_push(ls, 0, role, first);
+        while (ls < e) {                                    // greedy word wrap
+            const char *q = ls, *best = nullptr;
+            while (q < e) {
+                const char *we = q; while (we < e && *we == ' ') we++; while (we < e && *we != ' ') we++;
+                if (meas(ls, (int)(we - ls)) > avail) break;
+                best = we; q = we;
+            }
+            if (!best) { int take = 1; while (ls + take < e && meas(ls, take + 1) <= avail) take++; best = ls + take; }
+            vr_push(ls, (int)(best - ls), role, first); first = false;
+            ls = best; while (ls < e && *ls == ' ') ls++;
+        }
+        p = *e ? e + 1 : e;
+    }
+}
+// a step's mark: running (amber dot), done (green tick), failed (red cross)
+static void mark(int x, int y, int sz, char role)
+{
+    if (role == RM_OK) { G.drawLine(x, y + sz / 2, x + sz / 3, y + sz - 1, C_OK); G.drawLine(x + sz / 3, y + sz - 1, x + sz - 1, y + 1, C_OK);
+                         G.drawLine(x, y + sz / 2 + 1, x + sz / 3, y + sz, C_OK); G.drawLine(x + sz / 3, y + sz, x + sz - 1, y + 2, C_OK); }
+    else if (role == RM_FAIL) { G.drawLine(x + 1, y + 1, x + sz - 2, y + sz - 2, C_BAD); G.drawLine(x + sz - 2, y + 1, x + 1, y + sz - 2, C_BAD);
+                                G.drawLine(x + 2, y + 1, x + sz - 1, y + sz - 2, C_BAD); G.drawLine(x + sz - 1, y + 1, x + 2, y + sz - 2, C_BAD); }
+    else G.fillCircle(x + sz / 2, y + sz / 2, sz / 3, ACCENT);
+}
+// The conversation in [x, x+w) x [y, y+h): the newest rows at the bottom, S->tscroll rows back from there
+static void draw_convo(int x, int y, int w, int h, bool big)
+{
+    const char *text = S->tr;
+    if (S->trlen > 2400) { text = S->tr + S->trlen - 2400; while (*text && *text != '\n') text++; if (*text) text++; }   // the tail
+    static char plain[2600];                               // the model's markdown made plain (it is asked for plain text)
+    code_md_plain(text, plain, sizeof plain);
+    wrap_view(plain, w, big);
+    int hsum = 0, first = s_vrn;
+    const int skip = S->tscroll < s_vrn ? S->tscroll : s_vrn;
+    for (int i = s_vrn - 1 - skip; i >= 0; i--) { int rh = role_h(s_vr[i].role, big) + (s_vr[i].first ? 3 : 0); if (hsum + rh > h) break; hsum += rh; first = i; }
+    if (S->tscroll > s_vrn - 1) S->tscroll = s_vrn ? s_vrn - 1 : 0;
+    int yy = y;
+    for (int i = first; i < s_vrn - skip && yy < y + h; i++) {
+        const VRow &r = s_vr[i];
+        const int gap = r.first ? 3 : 0, rh = role_h(r.role, big) + gap;
+        if (gap) G.fillRect(x, yy, w, gap, C_BG);
+        G.setFont(role_font(r.role, big));
+        char t[200]; int n = r.len < 199 ? r.len : 199; memcpy(t, r.p, (size_t)n); t[n] = 0;
+        const int ty = yy + gap, fh = role_h(r.role, big);
+        if (r.role == RM_USER) {
+            int tw = (int)G.textWidth(t);
+            box_text(x, ty, w, fh, x + w - 6 - tw, ty, t, C_USR, C_BG);
+        } else if (r.role == RM_TEXT) {
+            G.fillRect(x, ty, 3, fh, C_BG); G.fillRect(x + 3, ty, 2, fh, ACCENT);            // Code's accent bar
+            box_text(x + 5, ty, w - 5, fh, x + 10, ty, t, C_INK, C_BG);
+        } else if (r.role == RM_META) {
+            box_text(x, ty, w, fh, x + 4, ty + 1, t, C_DIM, C_BG);
+        } else {
+            const int sz = big ? 11 : 8;
+            G.fillRect(x, ty, 12, fh, C_BG);
+            if (r.first) mark(x + 4, ty + (fh - sz) / 2, sz, r.role);
+            box_text(x + 12 + sz - 8, ty, w - 12 - (sz - 8), fh, x + 16 + (sz - 8), ty + (big ? 0 : 1), t,
+                     r.role == RM_FAIL ? C_BAD : C_DIM, C_BG);
+        }
+        yy += rh;
+    }
+    if (yy < y + h) G.fillRect(x, yy, w, y + h - yy, C_BG);
 }
 
 static void status_text(char *b, size_t n)
@@ -665,86 +791,154 @@ static void status_text(char *b, size_t n)
     char m[24]; const char *mm = S->model[0] ? S->model : "-";
     if (!strncmp(mm, "claude-", 7)) mm += 7;
     snprintf(m, sizeof m, "%s", mm);
-    snprintf(b, n, "main  %s  %s  ctx %uk  $%.3f  %s", m, S->effort[0] ? S->effort : "-", st ? (unsigned)(st->last_context / 1000) : 0u,
-             st ? st->usd : 0.0, S->ask ? "ASK" : "AUTO");
+    bool num = false;                                       // "sonnet-5-5" -> "sonnet 5.5"
+    for (char *c = m; *c; c++) if (*c == '-' && c[1] >= '0' && c[1] <= '9') { *c = num ? '.' : ' '; num = true; }
+    const char *ef = S->effort[0] ? S->effort : "-";
+    if (!strcmp(ef, "medium")) ef = "med";
+    if (agent_running()) {
+        const int sec = (int)((now_ms() - S->phase_t0) / 1000);
+        const char *ph = S->phase[0] ? S->phase : S->thinking ? L("pensa", "thinking", "piensa", "reflechit", "denkt") : L("lavora", "working", "trabaja", "travaille", "arbeitet");
+        snprintf(b, n, "%s  %ds", ph, sec < 0 ? 0 : sec);
+    } else snprintf(b, n, "%s %s  %uk  $%.2f%s", m, ef, st ? (unsigned)(st->last_context / 1000) : 0u,
+                    st ? st->usd : 0.0, S->ask ? "  ASK" : "");
 }
 
 static const char *agent_hint(void)
 {
     agent_state_t s = S->ag ? agent_state(S->ag) : AG_IDLE;
     if (s == AG_ASK) return L("y si  n no  (approva)", "y yes  n no  (approve)", "y si  n no", "y oui  n non", "y ja  n nein");
-    if (agent_running()) return L("lavoro...  del: ferma", "working...  del: stop", "trabajando...  del: parar", "travail...  del: stop", "arbeite...  del: stopp");
+    if (agent_running()) return L("del ferma  su/giu scorri", "del stops  up/dn scroll", "del para", "suppr arrete", "entf stoppt");
     static char h[64];
     if (!S->inlen && S->last_js[0]) {
         snprintf(h, sizeof h, "%s %s  %s", L("invio esegui", "enter run", "intro ejecuta", "entree lance", "enter startet"), S->last_js,
                  S->from_anima ? "esc ANIMA" : "/files");
         return h;
     }
+    if (!S->trlen && !S->inlen) return L("1-3 esempi  /files  /new  /mode", "1-3 examples  /files /new /mode", "1-3 ejemplos  /files", "1-3 exemples  /files", "1-3 Beispiele  /files");
     if (S->from_anima) return L("scrivi e invio  esc torna ad ANIMA", "type, enter  esc back to ANIMA", "escribe  esc a ANIMA", "ecris  esc vers ANIMA", "tippen  esc zu ANIMA");
     return L("scrivi e invio  /files /new /mode", "type, enter  /files /new /mode", "escribe e intro  /files /new", "ecris, entree  /files /new", "tippen, enter  /files /new");
 }
 
+// the empty conversation: what Code is for, and three tasks one key away (1-3 fill the input)
+static const char *example(int i)
+{
+    switch (i) {
+    case 0: return L("Scrivi un gioco del serpente per le frecce e provalo", "Write a snake game for the arrow keys and test it", "Escribe un juego de la serpiente y pruebalo",
+                     "Ecris un jeu du serpent et teste-le", "Schreib ein Snake-Spiel und teste es");
+    case 1: return L("Fai un'app che conta i giorni a una data, con lo schermo", "Make an app that counts the days to a date, on screen", "Haz una app que cuente los dias a una fecha",
+                     "Fais une app qui compte les jours jusqu'a une date", "Mach eine App, die die Tage bis zu einem Datum zaehlt");
+    default: return L("Scrivi note.txt con una lista della spesa e un riassunto", "Write notes.txt with a shopping list and a summary", "Escribe notes.txt con una lista de compras",
+                      "Ecris notes.txt avec une liste de courses", "Schreib notes.txt mit einer Einkaufsliste");
+    }
+}
+static void draw_welcome(int x, int y, int w, int h, bool big)
+{
+    G.fillRect(x, y, w, h, C_BG);
+    G.setFont(big ? (const lgfx::IFont *)&fonts::FreeSansBold9pt7b : (const lgfx::IFont *)&fonts::Font2);
+    G.setTextColor(ACCENT, C_BG); G.setCursor(x + 6, y + 4);
+    G.print(L("Cosa costruiamo?", "What shall we build?", "Que construimos?", "On construit quoi ?", "Was bauen wir?"));
+    G.setFont(big ? (const lgfx::IFont *)&fonts::Font2 : (const lgfx::IFont *)&fonts::Font0);
+    const int lh = big ? 22 : 15, y0 = y + (big ? 30 : 24);
+    for (int i = 0; i < 3 && y0 + i * lh + lh <= y + h; i++) {
+        const int yy = y0 + i * lh;
+        G.fillRoundRect(x + 6, yy, big ? 18 : 12, big ? 18 : 11, 3, lg::card());
+        G.setTextColor(ACCENT, lg::card()); G.setCursor(x + (big ? 11 : 9), yy + (big ? 2 : 2)); char k[2] = { (char)('1' + i), 0 }; G.print(k);
+        char t[80]; snprintf(t, sizeof t, "%s", example(i));
+        while ((int)G.textWidth(t) > w - (big ? 34 : 26) && strlen(t) > 4) { size_t n = strlen(t); t[n - 4] = '.'; t[n - 3] = '.'; t[n - 2] = 0; }
+        G.setTextColor(C_INK, C_BG); G.setCursor(x + (big ? 30 : 22), yy + (big ? 2 : 2)); G.print(t);
+        if (big) nucleo_touch_add(x, yy - 2, w, lh, NK_CHAR, (char)('1' + i));   // on the panel: tap the example
+    }
+}
+
+// the input field: what you type, the question waiting for y/n, or what Enter does now
+static void draw_input(int x, int y, int w, int h, bool big)
+{
+    const char *q = S->ag ? agent_question(S->ag) : nullptr;
+    G.fillRect(x, y, w, 1, C_BG);
+    G.fillRoundRect(x + 2, y + 1, w - 4, h - 1, 4, lg::card());
+    G.setFont(big ? (const lgfx::IFont *)&fonts::FreeSans9pt7b : (const lgfx::IFont *)&fonts::Font2);
+    char b[96]; unsigned short col = C_INK;
+    if (q) { snprintf(b, sizeof b, "%.60s?  y/n", q); col = C_ASK; }
+    else if (!S->inlen) {
+        col = C_DIM;
+        if (agent_running()) snprintf(b, sizeof b, "%s", L("Code lavora...", "Code is working...", "Code trabaja...", "Code travaille...", "Code arbeitet..."));
+        else if (S->last_js[0]) snprintf(b, sizeof b, "%s %s", L("Invio: esegui", "Enter: run", "Intro: ejecuta", "Entree : lance", "Enter: startet"), S->last_js);
+        else snprintf(b, sizeof b, "%s", L("Chiedi a Code...", "Ask Code...", "Pide a Code...", "Demande a Code...", "Frag Code..."));
+    } else {
+        int off = 0;                                       // the end of what you type stays in view
+        while (off < S->inlen && meas(S->in + off, S->inlen - off) > w - 24) off++;
+        snprintf(b, sizeof b, "%s%s", S->in + off, (esp_timer_get_time() / 500000) & 1 ? "_" : " ");
+    }
+    G.setTextColor(col, lg::card()); G.setCursor(x + 8, y + (h - (int)G.fontHeight()) / 2 + 1); G.print(b);
+}
+
+static void draw_header(int x, int y, int w, int h, bool big)
+{
+    G.fillRect(x, y, w, h, lg::card());
+    G.setFont(big ? (const lgfx::IFont *)&fonts::FreeSansBold9pt7b : (const lgfx::IFont *)&fonts::Font2);
+    G.setTextColor(ACCENT, lg::card()); G.setCursor(x + 6, y + (h - (int)G.fontHeight()) / 2 + 1); G.print("Code");
+    char st[64]; status_text(st, sizeof st);
+    G.setFont(big ? (const lgfx::IFont *)&fonts::Font2 : (const lgfx::IFont *)&fonts::Font0);
+    const int tw = (int)G.textWidth(st);
+    G.setTextColor(agent_running() ? ACCENT : C_DIM, lg::card()); G.setCursor(x + w - 6 - tw, y + (h - (int)G.fontHeight()) / 2 + 1); G.print(st);
+    if (agent_running()) {                                 // a slim progress pulse under the header while it works
+        const int t = (int)((now_ms() / 40) % (w + 40)) - 40;
+        G.fillRect(x, y + h - 1, w, 1, lg::card());
+        G.fillRect(x + (t < 0 ? 0 : t), y + h - 1, 40 + (t < 0 ? t : 0), 1, ACCENT);
+    }
+}
+
 static void agent_draw(void)
 {
-    char st[96]; status_text(st, sizeof st);
-    if (nucleo_app_two_screens()) {                          // companion: the status, the question or the input
-        d.fillRect(0, nucleo_app_content_top(), 240, nucleo_app_content_height(), C_BG);
-        int y = lg::comp_head("Code", ACCENT);
-        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left); d.setTextColor(C_DIM, C_BG); d.drawString(st, 4, y + 2);
-        d.setFont(&fonts::Font2);
-        const char *q = S->ag ? agent_question(S->ag) : nullptr;
-        char b[200];
-        if (q) { snprintf(b, sizeof b, "%s?", q); d.setTextColor(0xFFE0, C_BG); }
-        else { snprintf(b, sizeof b, "> %s_", S->in); d.setTextColor(C_INK, C_BG); }
-        lg::font(1); lg::wrap(b, 4, y + 16, 232, 16, 3);
-        lg::comp_keys(agent_hint());
+    G_ = &d;
+    if (nucleo_app_two_screens()) {                          // companion: the status and the input, the panel has the rest
+        const int top = nucleo_app_content_top(), H = nucleo_app_content_height();
+        if (!s_cleared) { s_cleared = true; d.fillRect(0, top, 240, H, C_BG); }
+        draw_header(0, top, 240, 18, false);
+        if (!S->trlen) { G.fillRect(0, top + 18, 240, H - 18 - 24, C_BG); G.setFont(&fonts::Font2); G.setTextColor(C_DIM, C_BG);
+                         G.setCursor(6, top + 26); G.print(L("Scrivi qui il compito:", "Type the task here:", "Escribe aqui la tarea:", "Ecris la tache ici :", "Aufgabe hier tippen:")); }
+        else draw_convo(0, top + 18, 240, H - 18 - 24, false);   // the newest rows, as you type the next task
+        draw_input(0, top + H - 24, 240, 24, false);
+        nucleo_app_set_hint(agent_hint());
         return;
     }
-    // Drawn straight on the panel (the 32 KB canvas is the model's TLS): every row overwrites itself, nothing is
-    // cleared first, so a redraw never flickers.
     const int top = nucleo_app_content_top(), bottom = top + nucleo_app_content_height();
-    if (!s_cleared) { s_cleared = true; d.fillRect(0, top, 240, bottom - top, C_BG); }   // once: the gaps between rows
-    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left);
-    { int sl = (int)strlen(st); while (sl < 40 && sl < (int)sizeof st - 1) st[sl++] = ' '; st[sl] = 0; }
-    // the status band (top .. top+9): its text row overwrites itself, the edges around it are filled
-    d.fillRect(0, top, 240, 1, lg::card()); d.fillRect(0, top + 1, 2, 8, lg::card()); d.fillRect(0, top + 9, 240, 1, lg::card());
-    d.setTextColor(C_DIM, lg::card()); d.drawString(st, 2, top + 1);
-    // the conversation (top+10 .. bottom-12): 39 padded columns from x 2, the margins filled
-    const int rows = (bottom - top - 10 - 12) / 9, lines_end = top + 11 + rows * 9;
-    d.fillRect(0, top + 10, 240, 1, C_BG);
-    d.fillRect(0, top + 11, 2, rows * 9, C_BG); d.fillRect(236, top + 11, 4, rows * 9, C_BG);
-    if (lines_end < bottom - 11) d.fillRect(0, lines_end, 240, bottom - 11 - lines_end, C_BG);
-    draw_lines(2, top + 11, 234, rows, 9, C_BG);
-    const char *q = S->ag ? agent_question(S->ag) : nullptr;
-    char b[64];
-    if (q) snprintf(b, sizeof b, "%.50s? y/n", q);
-    else { int off = S->inlen > 36 ? S->inlen - 36 : 0; snprintf(b, sizeof b, "> %s%s", S->in + off, (esp_timer_get_time() / 500000) & 1 ? "_" : " "); }
-    { int bl = (int)strlen(b); while (bl < 40 && bl < (int)sizeof b - 1) b[bl++] = ' '; b[bl] = 0; }
-    d.fillRect(0, bottom - 11, 240, 1, lg::card()); d.fillRect(0, bottom - 10, 2, 8, lg::card()); d.fillRect(0, bottom - 2, 240, 2, lg::card());
-    d.setTextColor(q ? 0xFFE0 : C_INK, lg::card()); d.drawString(b, 2, bottom - 10);
+    if (!s_cleared) { s_cleared = true; d.fillRect(0, top, 240, bottom - top, C_BG); }
+    draw_header(0, top, 240, 18, false);
+    const int ih = 22, cy = top + 18, ch = bottom - top - 18 - ih;
+    if (!S->trlen) draw_welcome(0, cy, 240, ch, false);
+    else draw_convo(0, cy, 240, ch, false);
+    draw_input(0, bottom - ih, 240, ih, false);
     nucleo_app_set_hint(agent_hint());
 }
 
 static void agent_draw_large(void)
 {
+    G_ = &d;
     nucleo_touch_clear();
     const int W = d.width(), H = d.height();
-    char st[96]; status_text(st, sizeof st);
-    int y = lg::header("Code", S->thinking ? L("pensa...", "thinking...", "piensa...", "reflechit...", "denkt...") : "main", ACCENT);
-    d.fillRect(0, y, W, H - y, C_BG);
-    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left); d.setTextColor(C_DIM, C_BG); d.drawString(st, 6, y + 2);
-    int ty = y + 14, plan_h = 0;
+    int y = lg::header("Code", S->thinking ? L("pensa...", "thinking...", "piensa...", "reflechit...", "denkt...") : "work/main", ACCENT);
+    char st[64]; status_text(st, sizeof st);
+    d.setFont(&fonts::Font2); d.setTextColor(agent_running() ? ACCENT : C_DIM, C_BG);
+    d.fillRect(0, y, W, 18, C_BG); d.setCursor(8, y + 2); d.print(st);
+    int ty = y + 20;
     if (S->todo[0]) {                                        // the plan, when the agent keeps one
         int nl = 0; for (const char *p = S->todo; *p; p++) if (*p == '\n') nl++;
-        if (nl > 5) nl = 5;
-        plan_h = nl * 10 + 4;
+        if (nl > 4) nl = 4;
+        const int plan_h = nl * 16 + 6;
         lg::panel(4, ty, W - 8, plan_h, lg::card());
-        d.setTextColor(0xFFE0, lg::card());
-        int yy = ty + 2, k = 0;
-        for (const char *p = S->todo; *p && k < 5; k++) { const char *e = strchr(p, '\n'); if (!e) e = p + strlen(p); char t[56]; size_t n = (size_t)(e - p) < 55 ? (size_t)(e - p) : 55; memcpy(t, p, n); t[n] = 0; d.drawString(t, 8, yy); yy += 10; p = *e ? e + 1 : e; }
+        d.setFont(&fonts::Font2);
+        int yy = ty + 3, k = 0;
+        for (const char *p = S->todo; *p && k < 4; k++) {
+            const char *e = strchr(p, '\n'); if (!e) e = p + strlen(p);
+            char t[64]; size_t n = (size_t)(e - p) < 63 ? (size_t)(e - p) : 63; memcpy(t, p, n); t[n] = 0;
+            d.setTextColor(t[1] == 'x' ? C_OK : t[1] == '>' ? ACCENT : C_DIM, lg::card()); d.setCursor(10, yy); d.print(t); yy += 16;
+            p = *e ? e + 1 : e;
+        }
         ty += plan_h + 4;
     }
-    draw_lines(6, ty, W - 12, (H - ty - 4) / 10, 10, C_BG);
+    if (!S->trlen) draw_welcome(0, ty, W, H - ty, true);
+    else draw_convo(2, ty, W - 4, H - ty - 2, true);
     nucleo_touch_commit();
 }
 
@@ -763,6 +957,9 @@ static void agent_key(int key, char ch)
         nucleo_app_request_draw(); return;
     }
     if (key == NK_ENTER && !S->inlen && S->last_js[0]) { run_script_here(S->last_js); nucleo_app_request_draw(); return; }
+    if (!S->trlen && !S->inlen && ch >= '1' && ch <= '3') {   // an example, ready to send or to edit
+        snprintf(S->in, sizeof S->in, "%s", example(ch - '1')); S->inlen = (int)strlen(S->in); nucleo_app_request_draw(); return;
+    }
     if (key == NK_ENTER) { agent_send(); return; }
     if (key == NK_DEL) { if (S->inlen) S->in[--S->inlen] = 0; }
     else if (key == NK_UP && !S->inlen) S->tscroll++;
@@ -770,6 +967,31 @@ static void agent_key(int key, char ch)
     else if (ch >= 32 && ch < 127 && S->inlen < (int)sizeof S->in - 1) { S->in[S->inlen++] = ch; S->in[S->inlen] = 0; }
     nucleo_app_request_draw();
 }
+
+#ifdef NUCLEO_UI_HOST
+// ui-host gallery scenes (tools/ui-host/apps/code.txt): 0 = the welcome, 1 = a finished task, 2 = a task at work,
+// 3 = a job from ANIMA, done. A fake conversation: what the callbacks would have written.
+extern "C" void ui_host_scene(int n)
+{
+    S->trlen = 0; S->tr[0] = 0; s_role = 0; s_cleared = false; S->tscroll = 0; S->last_js[0] = 0; S->phase[0] = 0;
+    s_host_running = n == 2; S->from_anima = n == 3; S->thinking = false;
+    snprintf(S->model, sizeof S->model, "claude-sonnet-5-5"); snprintf(S->effort, sizeof S->effort, "medium");
+    if (!n) return;
+    tr_line(RM_USER, n == 3 ? "scrivimi un gioco del serpente da giocare con le frecce" : "Scrivi un gioco del serpente per le frecce e provalo");
+    { const char *t = "Lo scrivo e lo provo sui due schermi."; ui_text(nullptr, t, strlen(t)); }
+    ui_tool(nullptr, "todo_write", "plan 0/3"); ui_tool_done(nullptr, "todo_write", true, "plan 0/3");
+    ui_tool(nullptr, "str_replace_based_edit_tool", "create snake.js");
+    if (n == 2) { snprintf(S->phase, sizeof S->phase, "create snake.js"); return; }
+    ui_tool_done(nullptr, "str_replace_based_edit_tool", true, "create snake.js +105");
+    ui_tool(nullptr, "run_js", "run snake.js"); ui_tool_done(nullptr, "run_js", false, "run snake.js FAILED 31ms snake.js:12");
+    ui_tool(nullptr, "str_replace_based_edit_tool", "edit snake.js"); ui_tool_done(nullptr, "str_replace_based_edit_tool", true, "edit snake.js:12 +2 -1");
+    ui_tool(nullptr, "run_js", "run snake.js"); ui_tool_done(nullptr, "run_js", true, "run snake.js ok 2500ms +screen");
+    s_role = 0;
+    const char *t = "Fatto: snake.js. Le frecce muovono il serpente, la mela lo fa crescere, invio ricomincia dopo il game over. "
+                    "L'ho provato sui due schermi guardando gli screenshot.";
+    ui_text(nullptr, t, strlen(t));
+}
+#endif
 
 // ---- routing --------------------------------------------------------------------------------------------
 static void on_draw(void) { static bool t1; if (!t1) { t1 = true; trace("first draw"); } if (S->agent_view) agent_draw(); else files_draw(); if (!S->traced_draw) { S->traced_draw = true; trace("first draw done"); } }
@@ -824,7 +1046,8 @@ static void on_tick(void)
 {
     agent_tick(); selftest_tick(); inbox_tick();
     static int64_t blink;                                   // the input cursor: two redraws a second, nothing more
-    if (S->agent_view && !nucleo_app_two_screens() && now_ms() - blink >= 500) { blink = now_ms(); nucleo_app_request_draw(); }
+    const int every = agent_running() ? 250 : 500;          // the cursor, and the header's pulse while it works
+    if (S->agent_view && !nucleo_app_two_screens() && now_ms() - blink >= every) { blink = now_ms(); nucleo_app_request_draw(); }
 }
 static void on_enter(void)
 {
@@ -837,14 +1060,10 @@ static void on_enter(void)
     if (!S->auto_run) inbox_read();                         // a job from ANIMA
     nucleo_app_set_back_handler(back_key);
     S->have_key = nucleo_llm_config(S->model, sizeof S->model, S->effort, sizeof S->effort);
-    tr_puts(S->have_key ? L("Nucleo Code. Chiedimi di scrivere, provare e correggere programmi o testi in work/main.\n",
-                            "Nucleo Code. Ask me to write, run and fix programs or texts in work/main.\n",
-                            "Nucleo Code. Pideme escribir, probar y corregir programas o textos.\n",
-                            "Nucleo Code. Demande-moi d'ecrire, tester et corriger programmes ou textes.\n",
-                            "Nucleo Code. Lass mich Programme oder Texte schreiben, testen, korrigieren.\n")
-                        : L("Serve una chiave Claude: web OS > Impostazioni > IA.\n", "A Claude key is needed: web OS > Settings > AI.\n",
-                            "Hace falta una clave Claude: web OS > Ajustes > IA.\n", "Une cle Claude est requise : web OS > Reglages > IA.\n",
-                            "Ein Claude-Schluessel fehlt: Web OS > Einstellungen > KI.\n"));
+    S->trlen = 0; S->tr[0] = 0; s_role = 0; S->tscroll = 0; S->phase[0] = 0;   // the welcome screen, or the job
+    if (!S->have_key) tr_note(L("Serve una chiave Claude: web OS > Impostazioni > IA.", "A Claude key is needed: web OS > Settings > AI.",
+                                "Hace falta una clave Claude: web OS > Ajustes > IA.", "Une cle Claude est requise : web OS > Reglages > IA.",
+                                "Ein Claude-Schluessel fehlt: Web OS > Einstellungen > KI."));
     trace("enter done");
     nucleo_app_request_draw();
 }

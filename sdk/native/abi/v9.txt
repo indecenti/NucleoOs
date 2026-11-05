@@ -345,3 +345,4 @@ nucleo_llm_status
 nucleo_llm_cancel
 nucleo_llm_busy
 nucleo_app_exit_to
+_ZN4lgfx2v15fonts13FreeSans9pt7bE                            # lgfx::v1::fonts::FreeSans9pt7b
