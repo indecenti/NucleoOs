@@ -351,7 +351,12 @@ is off. The render gate requires most lines, not all.
 - **Pictures, fast and in little RAM.** The selection's picture (a cartridge's screenshot `<folder>/.snaps/<rom>.pic`, a
   native game's cover, a console photo `GameShots/.cache/con_<key>_<bg>.pic`; a cartridge without a screenshot shows
   its console's) is read from the card once, at the stop, straight into a RAM cache, and the titles one and two steps
-  away follow while the player is still (the way the wheel turned first). The cache is keyed by file (one console
+  away follow while the player is still (the way the wheel turned first). The firmware consoles' photos are not in
+  the firmware (~31 KB of flash) but on the card, one read-only file shipped with the SD content
+  (`data/GameFront/atlas.bin`, from `tools/sd-sim/data/GameFront/`, written by `tools/gen-gallery-art.py`; the
+  `data/<game>/atlas.bin` rule every installer already allows): `GFT1`, a table of `key, w, h, offset, size`, then the
+  pictures in the `.gfa` encoding; the marks stay in the firmware. A card without it (SD content older than the
+  firmware) keeps the photos it made before, else shows the emulator's icon. The cache is keyed by file (one console
   photo serves every cartridge that shows it), packs each row on its own (runs, a 64-colour index, small deltas: a
   screenshot 5-12x smaller, a photo 2-3x) and lives in ONE arena block taken when first needed (8 KB, less when the
   heap cannot spare it above 13 KB) and compacted on eviction, so browsing never allocates. Favourites are a bit per

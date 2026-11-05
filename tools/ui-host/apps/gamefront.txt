@@ -28,6 +28,7 @@
 @sd system/firmware-test.gb x
 @sd data/ROMs/nes/Super%20Tilt%20Bro.nes x
 @sd Giochi/Nova%20the%20Squirrel%20(World).nes x
+@sdfile data/GameFront/atlas.bin ../sd-sim/data/GameFront/atlas.bin
 @sdfile data/GameShots/stelle.png apps/fixtures/cover.png
 @sdfile data/GameShots/library.txt apps/fixtures/library.txt
 @sdfile apps/pcaemu/console.txt apps/fixtures/console.txt

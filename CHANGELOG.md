@@ -6,6 +6,29 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+- **Favorites and Recent in the Games gallery**, shared with the web Arcade (`GameShots/library.txt`): two collections
+  at the head of the systems when they hold something; `*` or a long press stars the selected cartridge; every start
+  (gallery, Files, /api/play) becomes the newest Recent.
+- **"Open with" knows the cartridges**: a ROM opened from Files or a notification starts in its emulator (the
+  firmware's consoles, and those an installed store emulator declares), in its Solo boot. `POST /api/play?path=...`
+  does the same for a paired client (the answer comes before the reboot).
+- **A store emulator brings its consoles to the Games gallery** from the app's own files (`/sd/apps/<id>/console.txt`
+  and `console-<key>.gfa`: name, extensions, colour, photo and mark): they are listed as systems, their cartridges
+  are found anywhere on the card and open in that app; uninstalling it takes its console away.
+
+### Changed
+- **Games gallery, quicker and lighter.** A picture is read from the card once, at the stop, straight into a RAM
+  cache of the titles around the selection; the cache lives in one 8 KB block (nothing allocated while browsing) and
+  holds one console photo for every cartridge that shows it. Favourites, the store's consoles and a missing photo no
+  longer cost a card access per stop; the wheel settles sooner (120 ms turn, 40 ms stop). A browse measured on the
+  PC: card opens 137 -> 71, KB read 1023 -> 819, stops drawn from RAM 10 -> 20.
+- **The search line shows only while there is a search**, on the panel and on the Cardputer: typing a letter opens
+  it, emptying it or Esc closes it, and the wheel gets the room. The gallery's left column and title line open the
+  selection on touch.
+- **Firmware image -31 KB**: the Games gallery's console photos are on the card (`data/GameFront/atlas.bin`, in the SD
+  content); a card without it keeps the photos it already made, else shows the emulator's icon.
+
 ## [0.8.6] — 2026-11-04
 
 ### Added
@@ -120,24 +143,6 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   rendered on the PC from its source; a cover captured on the device still wins).
 - The selection's whole title has a line of its own across the panel, above the picture and the wheel; one too long
   for it scrolls (a pause, then round), redrawn alone; under the picture, its caption and what it is.
-- Gallery touch: the left column and the title line open the selection (a tap under the picture used to jump five
-  titles).
-- Games gallery, faster pictures: the ones of the titles around the selection are kept in RAM, packed (PackBits on
-  RGB565: a console screenshot 22.6 KB -> ~1.8 KB, a cover 14 KB -> ~1 KB), filled while the player is still and only
-  while the heap keeps 20 KB free (Wi-Fi stays on, no Solo boot): stopping on one draws it without reading the card,
-  which shares its bus with the panel. The wheel settles sooner (120 ms turn, 40 ms stop instead of 140 + 120).
-- Favorites and Recent in the Games gallery, shared with the web Arcade (`GameShots/library.txt`): two collections at
-  the head of the systems when they hold something; `*` or a long press stars the selected cartridge; every start
-  (gallery, Files, /api/play) becomes the newest Recent.
-- "Open with" knows the cartridges: a ROM opened from Files or a notification starts in its emulator (the firmware's
-  consoles, and those an installed store emulator declares), in its Solo boot. POST /api/play?path=... does the same
-  for a paired client (the answer comes before the reboot).
-- The Games gallery takes the consoles of an emulator installed from the store from the app's own files
-  (`/sd/apps/<id>/console.txt` and `console-<key>.gfa`: name, extensions, colour, photo and mark): it lists them as
-  systems, finds their cartridges anywhere on the card and opens them in that app; the app leaves the native games,
-  and uninstalling it takes its console away (the card is walked again when the set changes).
-- The search line shows only while there is a search (typing opens it, emptying it closes it): the wheel gets its
-  room, the position sits at the header's right; on the Cardputer alone the wheel takes the whole height.
 - One screensaver rule for the launcher and the Games gallery: after the time set in Settings > Display >
   Screensaver, its style ("off" = the screen sleeps and frees its 32 KB, the others open the screensaver). The launcher
   used to go dark after a fixed 30 s instead, before the chosen screensaver could start.

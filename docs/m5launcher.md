@@ -90,7 +90,9 @@ enforces it** (`npm run image:check`; run by `flash.ps1` before flashing and by 
 before packaging). History: the 5-language native strings pushed the image to 3,239,056 B, 27.8 KB over;
 recovered by moving ANIMA's which-person table to the SD (−38.5 KB, docs/anima.md) and trimming mbedTLS to
 what we negotiate (TLS client only, P-256/384/521 + X25519, no PEM write / CSR parse: −9.7 KB) →
-3,190,848 B, 19.9 KB free (2026-10-02).
+3,190,848 B, 19.9 KB free (2026-10-02). 2026-11-05: the Games gallery's Favorites / Recent / store consoles
+(+12 KB) would have put it 2.8 KB over; its console photos moved to the card (`data/GameFront/atlas.bin`, −31 KB,
+docs/native-emulation.md) → 3,183,344 B, 27.3 KB free.
 
 ## Publishing so it shows up in the Launcher's OTA list
 

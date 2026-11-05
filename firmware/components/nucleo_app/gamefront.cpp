@@ -121,7 +121,8 @@ static const Meta META[] = {
 
 // The consoles. Their index here is the system digit in the cartridge index (new ones go at the end); the gallery lists
 // them in SHOW_ORDER instead: by maker, then by year. Two share an emulator each, but every console is its own system.
-// RGB565 + 4-bit alpha, deflated: in the firmware (gamefront_art.h), or at `off` in a store app's console-<key>.gfa.
+// RGB565 + 4-bit alpha, deflated: in the firmware (gamefront_art.h: the marks), or at `off` in a file on the card (the
+// firmware consoles' photos in data/GameFront/atlas.bin, a store console's in its app's console-<key>.gfa).
 struct Art { const uint8_t *z; uint32_t n; uint8_t w, h; uint32_t off; const char *file; };
 // A console's NAME is never written in the gallery (it is searched by, not shown): its mark is drawn instead.
 struct System {
@@ -131,15 +132,17 @@ struct System {
 };
 static const System SYS[] = {
 #define GFA(k) { GFA_##k##_Z, sizeof GFA_##k##_Z, GFA_##k##_W, GFA_##k##_H, 0, nullptr }
-    { "gb",  "gbemu", "Game Boy",       "Nintendo, 1989", 0x8FF3, GFA(GB),  GFA(GB_S) },
-    { "gbc", "gbemu", "Game Boy Color", "Nintendo, 1998", 0xC5F5, GFA(GBC), GFA(GBC_S) },
-    { "gg",  "ggemu", "Game Gear",      "Sega, 1990",     0x5D7F, GFA(GG),  GFA(GG_S) },
-    { "sms", "ggemu", "Master System",  "Sega, 1986",     0xF96B, GFA(SMS), GFA(SMS_S) },
-    { "nes", "nesemu", "NES",           "Nintendo, 1985", 0xAD55, GFA(NES), GFA(NES_S) },
+#define ON_CARD { nullptr, 0, 0, 0, 0, nullptr }  // the photo: data/GameFront/atlas.bin (photos_load)
+    { "gb",  "gbemu", "Game Boy",       "Nintendo, 1989", 0x8FF3, ON_CARD, GFA(GB_S) },
+    { "gbc", "gbemu", "Game Boy Color", "Nintendo, 1998", 0xC5F5, ON_CARD, GFA(GBC_S) },
+    { "gg",  "ggemu", "Game Gear",      "Sega, 1990",     0x5D7F, ON_CARD, GFA(GG_S) },
+    { "sms", "ggemu", "Master System",  "Sega, 1986",     0xF96B, ON_CARD, GFA(SMS_S) },
+    { "nes", "nesemu", "NES",           "Nintendo, 1985", 0xAD55, ON_CARD, GFA(NES_S) },
 };
 // The native games' entry has a picture and a mark too (a pocket computer, painted for it): a "system" of its own.
-static const System NATIVE_SYS = { "native", "", "", "", 0xFB4D, GFA(NATIVE), GFA(NATIVE_S) };
+static const System NATIVE_SYS = { "native", "", "", "", 0xFB4D, ON_CARD, GFA(NATIVE_S) };
 #undef GFA
+#undef ON_CARD
 
 #define NB ((int)(sizeof SYS / sizeof SYS[0]))      // the consoles the firmware knows
 static const uint8_t SHOW_ORDER[] = { 4, 0, 1, 3, 2 };   // NES, Game Boy, Game Boy Color, Master System, Game Gear
@@ -165,6 +168,38 @@ static uint32_t s_xsig;                            // the store consoles' keys a
 static int nsys(void) { return NB + s_nx; }
 static const System &sysg(int g) { return g < 0 ? NATIVE_SYS : g < NB ? SYS[g] : s_ext[g - NB].s; }   // NATIVE included
 static int show_order(int o) { return o < NB ? SHOW_ORDER[o] : o; }   // the store's consoles after the firmware's
+
+// The firmware consoles' photos are not in the firmware (~31 KB of flash): they are on the card, shipped with the SD
+// content as ONE read-only file, "GFT1", u8 count, count x { char key[8], u8 w, u8 h, u32 off, u32 zlen } (LE), then
+// the deflated pictures (tools/gen-gallery-art.py). Its table is read when the gallery opens; a picture is inflated
+// from it once per card and theme (art_make), then the .pic it makes is what the gallery reads. No atlas (SD content
+// older than the firmware): a console photo made before still serves, else the emulator's icon stands in.
+#define ATLAS NUCLEO_SD_MOUNT "/data/GameFront/atlas.bin"
+static Art s_photo[NB + 1];                        // by system, the native games' last
+static void photos_load(void)
+{
+    memset(s_photo, 0, sizeof s_photo);
+    FILE *f = fopen(ATLAS, "rb");
+    if (!f) return;
+    uint8_t h[5];
+    long size = -1;
+    if (fread(h, 1, 5, f) == 5 && !memcmp(h, "GFT1", 4) && fseek(f, 0, SEEK_END) == 0) size = ftell(f);
+    for (int k = 0; size > 0 && k < h[4] && fseek(f, 5 + 18L * k, SEEK_SET) == 0; k++) {
+        uint8_t e[18];
+        if (fread(e, 1, sizeof e, f) != sizeof e) break;
+        const uint32_t off = e[10] | e[11] << 8 | (uint32_t)e[12] << 16 | (uint32_t)e[13] << 24;
+        const uint32_t n = e[14] | e[15] << 8 | (uint32_t)e[16] << 16 | (uint32_t)e[17] << 24;
+        if (!e[8] || !e[9] || e[8] > 160 || e[9] > 160 || !n || n >= 65536 || off + n > (uint32_t)size) continue;
+        char key[9];
+        memcpy(key, e, 8); key[8] = '\0';
+        const int g = !strcmp(key, NATIVE_SYS.key) ? NB : -1;
+        for (int s = 0; s < NB && g < 0; s++) if (!strcmp(key, SYS[s].key)) { s_photo[s] = { nullptr, n, e[8], e[9], off, ATLAS }; break; }
+        if (g == NB) s_photo[NB] = { nullptr, n, e[8], e[9], off, ATLAS };
+    }
+    fclose(f);
+}
+// A system's photo: the atlas's (a firmware console, the native games) or its store app's .gfa.
+static const Art &photo(int g) { return g < 0 ? s_photo[NB] : g < NB ? s_photo[g] : s_ext[g - NB].s.art; }
 #define NATIVE (-1)            // the group of the native games
 #define FAVG   (-2)            // the collections (EmulationStation's automatic ones): the favourite cartridges...
 #define RECG   (-3)            // ...and the ones played last, both from library.txt
@@ -1110,6 +1145,7 @@ void gamefront_open(void)
     s_full = true; s_turn_t0 = 0; s_settle_at = 0; s_settle_frame = false;
     s_cover_ready = 0; s_cover_ok = 0; s_art_failed = 0;
     extras_load();                                 // the store's consoles first: the index and the lists know them
+    photos_load();
     last_load();
     systems_build();
     covers_scan();
@@ -1580,32 +1616,37 @@ static bool art_inflate(const Art &a, uint8_t *out, size_t need, void *state)
 // made once per card and theme, then streamed like any picture (it stands straight on the background, no tile).
 static void art_path(const System &s, char *path, size_t n) { snprintf(path, n, "%s/con_%s_%04x.pic", CACHE, s.key, (unsigned)BG); }
 #define GBIT(g) (1u << ((g) + 1))                  // a group's bit (NATIVE = bit 0)
-static bool art_make(const System &s)
+static bool art_make(int g)
 {
+    const Art &a = photo(g);
     char path[PATHMAX];
-    art_path(s, path, sizeof path);
-    const size_t need = art_bytes(s.art), npx = (size_t)s.art.w * s.art.h;
+    art_path(sysg(g), path, sizeof path);
+    const size_t need = art_bytes(a), npx = (size_t)a.w * a.h;
     void *state = nullptr;
-    uint16_t *px = scratch(need, &state);
-    if (!px || !art_inflate(s.art, (uint8_t *)px, need, state)) return false;
+    uint16_t *px = need ? scratch(need, &state) : nullptr;
+    if (!px || !art_inflate(a, (uint8_t *)px, need, state)) return false;
     const uint8_t *al = (const uint8_t *)(px + npx);
     for (size_t i = 0; i < npx; i++) px[i] = blend565(px[i], BG, alpha_at(al, (int)i));
     swap_all(px, npx);
     mkdir(GF_DIR, 0775); mkdir(CACHE, 0775);
-    return pic_write(path, px, s.art.w, s.art.h, s.art.n, 1);
+    return pic_write(path, px, a.w, a.h, a.n, 1);
 }
 static uint16_t s_art_ready;                       // groups whose photo file is known to be made (GBIT)
 static bool art_pic(int g)
 {
     if (is_coll(g) || (s_art_failed & GBIT(g))) return false;
-    const System &s = sysg(g);
+    const Art &a = photo(g);
     char path[PATHMAX];
-    art_path(s, path, sizeof path);
-    if (!s.art.n) return false;                    // a store console without its picture: the app's icon stands in
-    if (pic_open(path, true, s.art.n, 1)) { s_art_ready |= GBIT(g); return true; }
-    if (!art_make(s)) { s_art_failed |= GBIT(g); return false; }
+    art_path(sysg(g), path, sizeof path);
+    if (!a.n) {                                    // no picture to make it from (no atlas, a store console without one):
+        if (pic_open(path, false, 0, 0)) { s_art_ready |= GBIT(g); return true; }   // one made before, else the icon
+        s_art_failed |= GBIT(g);
+        return false;
+    }
+    if (pic_open(path, true, a.n, 1)) { s_art_ready |= GBIT(g); return true; }
+    if (!art_make(g)) { s_art_failed |= GBIT(g); return false; }
     s_art_ready |= GBIT(g);
-    return pic_open(path, true, s.art.n, 1);
+    return pic_open(path, true, a.n, 1);
 }
 
 // A cartridge's screenshot: <folder>/.snaps/<file>.pic, or its .snp ("SNP1", u16 w, u16 h, u32 deflated size,
@@ -1660,7 +1701,7 @@ static bool pic_src(int i, char *path, size_t n, bool *dark, bool *art, bool rea
             if (have & (ready ? SN_PIC : SN_PIC | SN_SNP)) { snprintf(path, n, "%s/.snaps/%s.pic", rom_dir(i), rom_name(i)); return true; }
             if (ready && (have & SN_SNP)) return false;   // its screenshot is still to be made: not its console's photo
         }
-        if (is_coll(g) || !sysg(g).art.n || (ready && !(s_art_ready & GBIT(g)))) return false;
+        if (is_coll(g) || (ready && !(s_art_ready & GBIT(g))) || (s_art_failed & GBIT(g))) return false;
         art_path(sysg(g), path, n); *dark = false; *art = true;
         return true;
     }
@@ -1714,7 +1755,7 @@ static bool prefetch_one(void)
             if (is_coll(g) || (s_art_ready & GBIT(g))) continue;
             char path[PATHMAX]; struct stat st;
             art_path(sysg(g), path, sizeof path);
-            if (stat(path, &st) != 0 && !art_make(sysg(g))) { s_art_ready |= GBIT(g); continue; }   // could not: let be
+            if (stat(path, &st) != 0 && !art_make(g)) { s_art_ready |= GBIT(g); continue; }   // could not: let be
             s_art_ready |= GBIT(g);
             return true;
         }
