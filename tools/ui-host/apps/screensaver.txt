@@ -11,3 +11,4 @@ slider    row:5 tap:250,185
 running   D D D ENTER tick:20
 runclock  row:4 row:4 tick:3
 runstars  row:2 row:4 row:4 tick:8
+runclock-adv  row:4 row:4 tick:3 adv rows:130

@@ -111,7 +111,7 @@ static uint32_t cl_sec_frame;                        // the frame the current se
 // ---- what the HUD shows besides the time: sampled once a second (never inside a paint) --------------------------
 static int      cl_bat = -1, cl_mv = -1, cl_rssi = 0;
 static unsigned cl_heap_k = 0, cl_blk_k = 0;
-static char     cl_ip[16], cl_ssid[24], cl_name[20], cl_tz[28];
+static char     cl_ip[16], cl_ssid[33], cl_name[20], cl_tz[28];
 static bool     cl_has_ev = false;                   // today's next calendar event
 static char     cl_ev_t[6], cl_ev_x[40];
 
@@ -338,6 +338,10 @@ static void fmt_until(char *out, size_t n, int mins)
     else                snprintf(out, n, "%s %dh%02d", in, mins / 60, mins % 60);
 }
 
+// The rows the Cardputer frame really has: the ADV's back-buffer is fitted to its largest block (240x130), so a
+// bottom line laid out against H (135) loses its last rows there.
+static int canvas_h(void) { const int h = (int)d.height(); return h > 0 && h < H ? h : H; }
+
 // The Cardputer's top bar (mark, week, activity, battery) and its rule; returns the rule's y.
 static int compact_top(const struct tm *tm)
 {
@@ -406,7 +410,7 @@ static void clock_frame(void)                        // pure: draws the state, n
     d.setTextDatum(top_right); d.setTextColor(synced ? CK_TX : CK_AM); d.drawString(year, dx + rw, dty);
     d.setTextDatum(top_left);
 
-    const int by = H - 14;
+    const int by = canvas_h() - 14;                  // the ADV's fitted canvas is 130 rows, not 135
     d.drawFastHLine(0, by - 4, W, CK_DIM);
     const int pages = cl_has_ev ? 3 : 2, page = (int)((t / 5) % pages);
     if (page == 0) {
@@ -418,13 +422,17 @@ static void clock_frame(void)                        // pure: draws the state, n
         x = hud_kv(x + 14, by + 2, 1, "MEM", mem, CK_CY);
         hud_kv(x + 14, by + 2, 1, "UP", up, CK_CY);
     } else if (page == 1) {
-        if (cl_ip[0]) { const int x = hud_kv(4, by + 2, 1, "IP", cl_ip, CK_CY); hud_kv(x + 14, by + 2, 1, "NET", cl_ssid, CK_TX); }
+        if (cl_ip[0]) {
+            const int x = hud_kv(4, by + 2, 1, "IP", cl_ip, CK_CY) + 14;
+            char ss[40]; lg::fit(ss, sizeof ss, cl_ssid, W - 4 - (x + d.textWidth("NET") + 3));   // a long SSID: cut with ".."
+            hud_kv(x, by + 2, 1, "NET", ss, CK_TX);
+        }
         else hud_kv(4, by + 2, 1, "NET", TR5("non connesso", "not connected", "sin conexion", "non connecte", "nicht verbunden"), CK_AM);
     } else {
         char lab[8], u[16]; snprintf(lab, sizeof lab, "%s", TR5("OGGI", "TODAY", "HOY", "AUJ.", "HEUTE"));
         fmt_until(u, sizeof u, tm ? mins_until(cl_ev_t, tm) : 0);
         int x = hud_kv(4, by + 2, 1, lab, cl_ev_t, CK_MG);
-        char ev[24]; snprintf(ev, sizeof ev, "%.20s", cl_ev_x);
+        char ev[40]; lg::fit(ev, sizeof ev, cl_ev_x, W - 4 - d.textWidth(u) - 8 - (x + 6));   // never under "in 25 min"
         d.setTextColor(CK_HI); d.drawString(ev, x + 6, by + 2);
         d.setTextDatum(top_right); d.setTextColor(CK_TX); d.drawString(u, W - 4, by + 2); d.setTextDatum(top_left);
     }
@@ -458,8 +466,13 @@ static void status_frame(void)
     d.setTextColor(CK_TX); d.drawString(TR5("RETE", "NETWORK", "RED", "RESEAU", "NETZ"), 124, 18);
     hud_signal(W - 22, 17, cl_rssi);
     if (cl_ip[0]) {
-        char ss[12]; snprintf(ss, sizeof ss, "%.9s", cl_ssid);
-        d.setTextSize(2); d.setTextColor(CK_HI); d.drawString(ss, 124, 30);
+        // The SSID big when it fits, else small and cut with ".." (never chopped mid-word in silence).
+        char ss[40]; const int sw = W - 4 - 124;
+        d.setTextSize(2);
+        const bool big = d.textWidth(cl_ssid) <= sw;
+        if (!big) d.setTextSize(1);
+        lg::fit(ss, sizeof ss, cl_ssid, sw);
+        d.setTextColor(CK_HI); d.drawString(ss, 124, big ? 30 : 34);
         d.setTextSize(1); hud_kv(124, 52, 1, "IP", cl_ip, CK_CY);
         snprintf(v, sizeof v, "%d dBm", cl_rssi);
         d.setTextColor(cl_rssi < -80 ? CK_AM : CK_TX); d.drawString(v, 124, 66);
@@ -481,9 +494,10 @@ static void status_frame(void)
         d.setTextSize(1); d.setTextColor(CK_TX); d.drawString(K[i], CX[i] + 3, 86);
         d.setTextSize(2); d.setTextColor(CK_CY); d.drawString(V[i], CX[i] + 3, 96);
     }
-    d.drawFastHLine(0, 118, W, CK_DIM);
-    d.setTextSize(1); d.setTextColor(CK_TX); d.setTextDatum(top_center);
-    d.drawString(TR5("un tasto per uscire", "any key to exit", "una tecla para salir", "une touche pour sortir", "Taste zum Beenden"), W / 2, 124);
+    const int hb = canvas_h();
+    d.drawFastHLine(0, hb - 15, W, CK_DIM);
+    d.setTextSize(1); d.setTextColor(CK_CY); d.setTextDatum(top_center);   // the one action: lit, not muted
+    d.drawString(TR5("un tasto per uscire", "any key to exit", "una tecla para salir", "une touche pour sortir", "Taste zum Beenden"), W / 2, hb - 10);
     d.setTextDatum(top_left);
 }
 
@@ -567,12 +581,12 @@ static void panel_paint(void *)
         d.drawFastHLine(PXX(0), 206, 320, CK_DIM);
         d.fillRect(PXX(8), 211, 3, 26, CK_MG);
         d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(CK_TX);
-        d.drawString(TR5("PROSSIMO OGGI", "NEXT TODAY", "PROXIMO HOY", "PROCHAIN AUJ.", "HEUTE NOCH"), PXX(16), 211);
+        d.drawString(TR5("AGENDA DI OGGI", "TODAY", "HOY", "AUJOURD'HUI", "HEUTE"), PXX(16), 211);
         if (cl_has_ev && tm) {
             char u[16]; fmt_until(u, sizeof u, mins_until(cl_ev_t, tm));
             d.setTextDatum(top_right); d.drawString(u, PXX(312), 211); d.setTextDatum(top_left);
             d.setTextSize(2); d.setTextColor(CK_MG); d.drawString(cl_ev_t, PXX(16), 222);
-            char ev[24]; snprintf(ev, sizeof ev, "%.18s", cl_ev_x);
+            char ev[40]; lg::fit(ev, sizeof ev, cl_ev_x, 312 - (16 + 6 * 12));
             d.setTextColor(CK_HI); d.drawString(ev, PXX(16 + 6 * 12), 222);
         } else {
             d.setTextSize(2); d.setTextColor(CK_GLOW); d.drawString("--:--", PXX(16), 222);

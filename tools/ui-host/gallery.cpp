@@ -157,6 +157,8 @@ int main(int argc, char **argv)
     if (argc < 5) { fprintf(stderr, "usage: gallery <outdir> <shot> <compact|companion|large> <lang> [keys...]\n"); return 2; }
     const char *out = argv[1], *shot = argv[2], *variant = argv[3];
     for (int i = 5; i < argc; i++) if (!strcmp(argv[i], "adv")) g_host.adv = true;
+    // rows:<n> - the back-buffer fitted to n rows (the ADV's 240x130 canvas): what a fullscreen app draws below it is lost
+    for (int i = 5; i < argc; i++) if (!strncmp(argv[i], "rows:", 5)) g_host.canvas_rows = atoi(argv[i] + 5);
     g_host.large = !strcmp(variant, "large");
     g_host.two_screens = strcmp(variant, "compact") != 0;
     host_display_begin();
@@ -173,7 +175,7 @@ int main(int argc, char **argv)
     if (s_app->ram) for (const nucleo_app_ram_t *r = s_app->ram; r->ptr; r++) *r->ptr = calloc(1, r->bytes);
     if (s_app->on_enter) s_app->on_enter();
     tick(2);
-    for (int i = 5; i < argc; i++) if (strcmp(argv[i], "adv")) token(argv[i]);
+    for (int i = 5; i < argc; i++) if (strcmp(argv[i], "adv") && strncmp(argv[i], "rows:", 5)) token(argv[i]);
     tick(6);                                            // let toasts / eases settle
     s_gen++;
 
