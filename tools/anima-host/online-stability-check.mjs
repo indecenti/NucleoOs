@@ -43,9 +43,16 @@ ok(ht <= twdMs - 1000,
 // A path may bind the symbol directly, or `tmo` — the per-question/per-POST budget CLAMP, accepted only
 // while its helpers provably cap it at HTTP_TIMEOUT (so the TWDT bound above still holds).
 const symUses = (src.match(/\.timeout_ms\s*=\s*(HTTP_TIMEOUT|tmo)\b/g) || []).length;
-ok(symUses >= 3,
-   `expected >=3 chat TLS paths binding ".timeout_ms = HTTP_TIMEOUT" (or the clamped "tmo") (get/post/anthropic), ` +
+ok(symUses >= 2,
+   `expected >=2 chat TLS paths binding ".timeout_ms = HTTP_TIMEOUT" (or the clamped "tmo") (get/post), ` +
    `found ${symUses} — a raw numeric literal would dodge the TWDT bound`);
+// The Claude path is a STREAM (2026-11-04): each esp_http_client_read() blocks at most ANTH_READ_MS, the loop
+// pets the WDT between reads, and an effort-scaled wall clock bounds the turn. Same TWDT bound per read.
+const arM = src.match(/#define\s+ANTH_READ_MS\s+(\d+)/);
+ok(!!arM && /\.timeout_ms\s*=\s*ANTH_READ_MS\b/.test(src), 'the Claude stream must bind .timeout_ms = ANTH_READ_MS');
+ok(arM && Number(arM[1]) <= twdMs - 1000, `ANTH_READ_MS (${arM && arM[1]} ms) must be <= TWDT-1000 (${twdMs - 1000} ms)`);
+ok(/esp_http_client_read\(cli, rb, sizeof rb\);\s*\n\s*tls_wdt_pet\(\);/.test(src), 'the Claude stream must pet the WDT after every read');
+ok(/sent = true;/.test(src), 'the Claude stream must never retry a request that reached the server (sent flag)');
 if (/\.timeout_ms\s*=\s*tmo\b/.test(src)) {
   ok(/static\s+int\s+net_attempt_timeout[\s\S]*?return[^;]*HTTP_TIMEOUT[^;]*;/.test(src),
      'net_attempt_timeout() must cap the per-attempt timeout at HTTP_TIMEOUT (the TWDT-safe bound)');

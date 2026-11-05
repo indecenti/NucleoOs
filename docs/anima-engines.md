@@ -62,6 +62,23 @@ totali.csv"), made an empty `fib.txt` ("write and run a script… save its outpu
 ("il contenuto **del** file config.json": `del` was a delete verb). Now: a delete must be the whole request and asks
 first (`/api/fs/delete` is final), a write never empties an existing file, and with no agent a task is not run there.
 
+## Native ANIMA: how the layers cooperate (2026-11-04)
+
+With a cloud key and the network up (mode Ibrido or Solo online) the model the user chose answers, and
+the other layers feed it instead of competing with it (`nucleo_anima.c` `a_local_answer` + the hand-off at
+`done:`, `nucleo_anima_online.c` `grok_chat`):
+
+| Layer | Role | When it answers by itself |
+|---|---|---|
+| Device (L0 actions, system readings, tools, exact skills, live weather/FX/news, pending clarify) | the truth about the device | always: the model cannot read the clock or open an app |
+| Memory (`profile.tsv`, `user.tsv`) | `<memory>` in the model's system prompt | when the user asks about it and there is no model |
+| Offline knowledge (L0 FAQ, L1 cards, HDC/facet, Wikipedia/Wikidata) | `<notes>` for the model: use it if right, correct it if not | no model, or the model gave no answer |
+| Model | composes the answer: conversation + `<env>` (date, time, language, device) + memory + notes | every other turn |
+| Fallback chain | configured model -> the other Claude model on the key (Sonnet <-> Haiku) -> every other provider in `keys{}` | when the one before gave no answer (`CHAT_TRIES` 3) |
+
+Mode Off keeps the whole offline ladder. Hybrid answers are compact (3-4 sentences); Solo online gets the
+full budget. Code requests take the code path (fenced, verbatim).
+
 ## The web client carries the load (http:// has no service worker)
 NucleoOS is opened at `http://<cardputer-ip>`: not a secure origin, so `navigator.serviceWorker` does not exist and the
 SW's device gate (2 in flight, exclusive writes, app cache) never runs there. Page code must be device-friendly itself:

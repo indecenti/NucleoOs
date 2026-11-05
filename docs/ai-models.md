@@ -23,6 +23,24 @@ tool (the gpt-oss family — the successor of `groq/compound`); `need: 'image'` 
 model (Paint's Atelier). Code with its own model tables (the agent runtime) uses
 `servedModel(cfg, model)`: the same model if still served, else the best of the same kind.
 
+## Effort, and Claude on the Cardputer itself (2026-11-04)
+
+`teacher.json` carries `"effort"` (top level = the active teacher, optional `keys.<provider>.effort`):
+`low | medium | high | xhigh | max`, absent = `medium`. The web OS sets it in the ANIMA model picker and
+Settings ▸ AI; the native ANIMA sets it in its IA tab (rows **Modello** and **Impegno**: Enter steps to the next
+choice and saves the file, keeping every field it does not know). On Anthropic it is sent as
+`output_config.effort`, clamped to what the model accepts: Fable/Mythos and every 5.x take all five (and
+think, always); Opus 4.7/4.8 all five; Opus/Sonnet 4.6 no `xhigh`; Opus 4.5 only `low..high`; Haiku 4.5,
+Sonnet 4.5 and older get no field. No request sends `thinking` (`disabled` is a 400 on the 5.x models).
+
+On the device (`nucleo_anima_online.c` + `anima_claude.h`) the Claude call is a **stream**: thinking makes a
+turn last 5 s (low) to minutes (max), which one blocking POST under the 8 s Task-WDT could not survive.
+Each read waits at most `ANTH_READ_MS` (5 s) and pets the WDT; the whole turn has an effort-scaled clock
+(20 / 30 / 60 / 90 / 120 s); `max_tokens` = the caller's answer budget + a thinking allowance (1k / 3k / 8k /
+16k / 32k) while the answer itself is capped client-side; only `text_delta` events are kept (the RAM cost
+is a 1.5 KB line buffer); a request that reached the server is never retried (each retry was billed).
+The cross-verifier veto always runs `low`. Host gate: `npm run claude:test` (also in `anima:gate`).
+
 ## Errors the user can act on
 
 `AiError.kind` → `explainAiError(err, lang, { settings })` (it/en/es/fr/de). `settings` names where

@@ -1,0 +1,4 @@
+transactions.txt is a bank ledger. Write ledger.js that processes it in file order and prints the final balances.
+Lines: "<id> DEP <account> <amount>", "<id> WD <account> <amount>", "<id> TR <from> <to> <amount>". Every account starts at 0.
+Rules: skip blank lines and lines starting with #. An amount must be positive with at most 2 decimals, otherwise the line is rejected. A WD or TR that would make the paying account negative is rejected and changes nothing. Work in integer cents so no floating-point error creeps in.
+Output exactly: one line per account sorted by name, "BALANCE <account> <amount with 2 decimals>", then "REJECTED <number of rejected lines>". Run it and double-check the result with an independent check of your own (for example recompute one account by hand from the file).

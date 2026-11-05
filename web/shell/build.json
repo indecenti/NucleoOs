@@ -178,8 +178,8 @@
   },
   {
    "id": "scoreboard",
-   "version": "1.1.0",
-   "version_code": 5
+   "version": "1.1.1",
+   "version_code": 6
   },
   {
    "id": "settings",
@@ -257,13 +257,13 @@
  "budget": {
   "bytes": 75497472,
   "ok": true,
-  "used": 39091263
+  "used": 39091289
  },
- "bytes": 59978380,
+ "bytes": 59978406,
  "caps_row": {
   "after": "0.8.3"
  },
- "commit": "2a9712f5664714bb7d662ed266768d4356d45171",
+ "commit": "e9ac00dc38920c15a04b5234b4de35a1d82d7194",
  "edition": "cardputer",
  "externals": [
   {
@@ -555,7 +555,7 @@
  "format": 1,
  "generator": "nucleo-webos tools/build.py",
  "gz_twins": 769,
- "hash": "c6ab0435643e447cd0ebcf469d68b4d3534599480d997bddbfb262d4327f48b7",
+ "hash": "cc423556354738ce3033eb708263cceac8491125fa91357ade7f7ee77d84f9de",
  "left_out": [
   {
    "id": "cast",
@@ -586,7 +586,7 @@
   "pdf-editor"
  ],
  "never_shipped": {
-  "app sources, tests and docs outside www/ (only manifest.json and www/ ship)": 13,
+  "app sources, tests and docs outside www/ (only manifest.json and www/ ship)": 14,
   "build metadata: decides which apps enter a build, never read at runtime": 51,
   "build scripts": 1,
   "cardputer profile: a Store app (web channel, about 2 MB with pdf.js): installed from the Store, never built in": 18,
@@ -598,8 +598,8 @@
  },
  "profile_sha256": "f84fc128e9d0121dd7a732107ea112fac273696d36da3aa9fb35ff5d3c8948d8",
  "shell": {
-  "cache": "nucleo-shell-v165-15d86d406b44",
-  "hash": "15d86d406b44"
+  "cache": "nucleo-shell-v166-f6637455b754",
+  "hash": "f6637455b754"
  },
  "shell_dir": "www/shell",
  "uncommitted_files": 0,

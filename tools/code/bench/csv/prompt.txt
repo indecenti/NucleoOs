@@ -1,0 +1,5 @@
+sales.csv holds a shop's sales (date,region,product,qty,unit_price). Write report.js that reads it and prints exactly:
+- one line per region, sorted by region name: "REGION <name> <revenue with 2 decimals>" (revenue = qty * unit_price)
+- "GRAND <total revenue, 2 decimals>"
+- "TOP <product with the highest revenue> <its revenue, 2 decimals>"
+It must also write report.md: a title and a markdown table of the region revenues. Handle a trailing newline and blank lines in the CSV. Run it and check the numbers make sense.

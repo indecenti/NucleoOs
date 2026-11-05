@@ -16,6 +16,12 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 - **A store emulator brings its consoles to the Games gallery** from the app's own files (`/sd/apps/<id>/console.txt`
   and `console-<key>.gfa`: name, extensions, colour, photo and mark): they are listed as systems, their cartridges
   are found anywhere on the card and open in that app; uninstalling it takes its console away.
+- **ANIMA chooses the cloud model and its effort.** On the Cardputer, ANIMA's IA tab has Model (Sonnet 5.5,
+  Opus 5.5, Haiku 5.5, Fable 5.1, and the other providers you have a key for) and Effort (low to max, medium by
+  default); in the web OS, a model picker next to ANIMA's input (and `/model`) groups every model you can reach,
+  and Settings > AI has the effort too. Both write the same file, so the two stay in step.
+- **Native app ABI level 9**: what a language engine needs (double-precision and 64-bit arithmetic helpers,
+  setjmp/longjmp) and the JSON builders, for Nucleo Code, the coding agent coming to the Native C store.
 
 ### Changed
 - **Games gallery, quicker and lighter.** A picture is read from the card once, at the stop, straight into a RAM
@@ -28,6 +34,13 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   selection on touch.
 - **Firmware image -31 KB**: the Games gallery's console photos are on the card (`data/GameFront/atlas.bin`, in the SD
   content); a card without it keeps the photos it already made, else shows the emulator's icon.
+- **ANIMA answers with the model you chose.** With a key and the network up, the model answers every question that
+  is not the device's own (time, battery, files, timers, apps stay local and instant); what the offline brain found
+  becomes its notes, what you told ANIMA about yourself its memory, and when the model does not answer the next one
+  does (the other Claude model, then your other providers). Mode Off is still fully offline.
+- **Claude answers on the device are streamed**, so thinking at any effort no longer trips the watchdog, and a
+  request that reached Anthropic is never sent twice (each retry used to be billed).
+- **Native apps use less RAM**: constants holding pointers (C++ vtables, function tables) now stay in flash.
 
 ## [0.8.6] — 2026-11-04
 
