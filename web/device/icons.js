@@ -450,6 +450,16 @@ export function drawIcon(g, id, cx, cy, s) {
       g.bx(cx - s, cy + s * 0.06, 2 * s, T * 0.65, g.bg);
       break;
 
+    case 'favorites': {                              // the Games gallery's Favorites: a five-pointed star
+      const P = [[0, -1], [0.22, -0.31], [0.95, -0.31], [0.36, 0.12], [0.59, 0.81],
+                 [0, 0.38], [-0.59, 0.81], [-0.36, 0.12], [-0.95, -0.31], [-0.22, -0.31]];
+      for (let k = 0; k < 10; k++) {
+        const b2 = (k + 1) % 10, oy = cy + s * 0.08;
+        g.tri(cx, oy, cx + P[k][0] * s, oy + P[k][1] * s, cx + P[b2][0] * s, oy + P[b2][1] * s);
+      }
+      break;
+    }
+
     case 'presence': {                               // a person sensed by radio waves
       const ax = cx - s * 0.2, ay = cy - s * 0.1;
       g.fc(ax, ay, s * 1.0); g.fc(ax, ay, s * 1.0 - T * 0.7, g.bg);
