@@ -105,8 +105,9 @@ void nucleo_usbnet_start(void)
     // On this no-PSRAM chip the largest contiguous block after httpd is ~15 KB. NCM bring-up does NOT
     // need one huge block — its biggest single alloc is the ~4 KB USB task stack, the rest are small
     // (netif structs, DHCP, ~1.5 KB MTU buffers). So the floor only rejects a truly starved heap that
-    // can't even fit the USB task; anything above attempts, and a crash (if any) is caught by coredump
-    // and recovered by the next clean boot.
+    // can't even fit the USB task; anything above attempts. A crash (if any) leaves no coredump
+    // (CONFIG_ESP_COREDUMP_ENABLE_TO_NONE) and no serial log (the port is OTG now): the next boot is the
+    // normal OS (the flag is consumed), and /api/diag's sys.reset over Wi-Fi tells why the last one ended.
     if (large < 6000 || freeb < 16000) {
         ESP_LOGE(TAG, "usbnet: heap too low (free=%u largest=%u), skipping (no crash)", (unsigned)freeb, (unsigned)large);
         s_failed = true;

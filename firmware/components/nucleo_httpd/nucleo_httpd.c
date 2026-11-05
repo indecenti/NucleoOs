@@ -786,6 +786,8 @@ static esp_err_t diag_get(httpd_req_t *req)
     const nucleo_storage_info_t *st = nucleo_storage_info();
     cJSON_AddBoolToObject(sys, "sd", st->mounted);
     cJSON_AddNumberToObject(sys, "sd_free",  st->free_bytes);
+    cJSON_AddNumberToObject(sys, "sd_write_retries",  nucleo_storage_write_retries());
+    cJSON_AddNumberToObject(sys, "sd_write_failures", nucleo_storage_write_failures());
     cJSON_AddNumberToObject(sys, "sd_total", st->total_bytes);
 
     // ── mem: the no-PSRAM SRAM that everything fights over. min = worst-ever watermark; frag = bytes

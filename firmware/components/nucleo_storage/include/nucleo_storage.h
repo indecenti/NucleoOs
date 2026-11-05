@@ -16,6 +16,11 @@ void nucleo_storage_set_sd_pre(void (*fn)(void));
 extern "C" {
 #endif
 
+// SD sector writes that needed a retry since boot (the card answered a write late or garbled, see
+// nucleo_storage.c), and the ones that failed even after the retries. For /api/diag.
+uint32_t nucleo_storage_write_retries(void);
+uint32_t nucleo_storage_write_failures(void);
+
 typedef struct {
     bool     mounted;
     char     fs_type[8];     // "FAT32" | "exFAT" | "?"

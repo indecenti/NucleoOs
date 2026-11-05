@@ -14,6 +14,8 @@
 #include "driver/sdspi_host.h"
 #include "driver/spi_common.h"
 #include "ff.h"
+#include "diskio_impl.h"     // ff_diskio_register(): the SD write retry wraps IDF's sdmmc diskio
+#include "diskio_sdmmc.h"    // ff_diskio_get_pdrv_card()
 #include "esp_littlefs.h"
 
 static const char *TAG = "storage";
@@ -51,6 +53,45 @@ static esp_err_t sd_xfer(int slot, sdmmc_command_t *cmd)
     void (*pre)(void) = s_sd_pre;
     if (pre) pre();
     return s_sd_xfer(slot, cmd);
+}
+
+// ── Sector writes that survive a card's hiccup ──────────────────────────────────────────────────────────────
+// Under a sustained stream (the web OS over the USB cable writes ~470 kB/s, four times the Wi-Fi rate) some cards
+// answer a multi-block write late or garbled: sdspi reads the data-response byte at a fixed offset and reports
+// ESP_ERR_INVALID_RESPONSE (0x108), FATFS gets RES_ERROR, the file is poisoned and the upload's piece fails with
+// "write failed". The card itself is fine: the next write a moment later goes through. So the FATFS write is
+// wrapped: on an error, give the card a few ms and write the SAME sectors again (a sector write is idempotent).
+// The other operations stay IDF's own (non-static in diskio_sdmmc.c, not in its header).
+DSTATUS ff_sdmmc_initialize(BYTE pdrv);
+DSTATUS ff_sdmmc_status(BYTE pdrv);
+DRESULT ff_sdmmc_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count);
+DRESULT ff_sdmmc_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count);
+DRESULT ff_sdmmc_ioctl(BYTE pdrv, BYTE cmd, void *buff);
+static volatile uint32_t s_write_retries, s_write_failures;
+static DRESULT sd_write_retry(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
+{
+    DRESULT r = ff_sdmmc_write(pdrv, buff, sector, count);
+    for (int i = 0; r != RES_OK && i < 4; i++) {
+        vTaskDelay(pdMS_TO_TICKS(5 << i));                  // 5, 10, 20, 40 ms: the card finishes what it was busy with
+        if (s_card) for (int w = 0; w < 10 && sdmmc_get_status(s_card) != ESP_OK; w++) vTaskDelay(pdMS_TO_TICKS(5));
+        s_write_retries++;
+        r = ff_sdmmc_write(pdrv, buff, sector, count);
+        if (r == RES_OK) ESP_LOGW(TAG, "SD write of %u sector(s) at %lu went through on retry %d", count, (unsigned long)sector, i + 1);
+    }
+    if (r != RES_OK) s_write_failures++;
+    return r;
+}
+uint32_t nucleo_storage_write_retries(void)  { return s_write_retries; }
+uint32_t nucleo_storage_write_failures(void) { return s_write_failures; }
+static void install_write_retry(void)
+{
+    BYTE pdrv = ff_diskio_get_pdrv_card(s_card);
+    if (pdrv == 0xFF) { ESP_LOGW(TAG, "SD write retry: drive not found, IDF writes stay as they are"); return; }
+    static const ff_diskio_impl_t impl = {
+        .init = ff_sdmmc_initialize, .status = ff_sdmmc_status, .read = ff_sdmmc_read,
+        .write = sd_write_retry, .ioctl = ff_sdmmc_ioctl,
+    };
+    ff_diskio_register(pdrv, &impl);   // right after the mount, before any other task can reach this volume
 }
 
 static esp_err_t mount_ex(bool format_if_failed);
@@ -107,6 +148,7 @@ static esp_err_t mount_ex(bool format_if_failed)
     }
     s_info.mounted = true;
     s_info.mount_error = ESP_OK;
+    install_write_retry();
     ESP_LOGI(TAG, "SD mounted at %s", NUCLEO_SD_MOUNT);
     return ESP_OK;
 }

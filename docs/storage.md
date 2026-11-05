@@ -75,6 +75,10 @@ Live free space is **not** stored here (it changes constantly); it travels in
   `storage.ejected`. The OS itself keeps running from flash.
 - **Atomic writes:** system files (registry, volume record) use write-temp-then-rename plus
   a journal entry, so a power loss never leaves a half-written registry.
+- **Card hiccups:** under a sustained stream (the web OS over the USB cable writes ~470 kB/s) some cards
+  answer a write late and the SPI driver reports ESP_ERR_INVALID_RESPONSE. FATFS writes go through a
+  wrapper in `nucleo_storage.c` that waits a few ms and writes the same sectors again (up to 4 times);
+  `/api/diag` counts them (`sys.sd_write_retries`, `sys.sd_write_failures`).
 - **Low space:** below a threshold the OS emits a warning and blocks non-essential writes
   (logs rotate, caches purge) before the card fills.
 - **Corruption:** if the system tree is unreadable, boot continues from flash into recovery,
