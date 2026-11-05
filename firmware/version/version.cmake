@@ -54,6 +54,22 @@ if(_NV_GIT)
     if(NOT _nv_grc EQUAL 0 OR "${_nv_git}" STREQUAL "")
         set(_nv_git "nogit")
     endif()
+    # The hash is read at configure time only, so an incremental `idf.py build` after a commit kept the
+    # OLD hash in the app descriptor (a build of 69b9d81 reported g a4363e6). HEAD's reflog changes on every
+    # commit, checkout, merge and rebase: depend on it and any of those reconfigures. --git-path resolves
+    # it in a worktree too (there .git is a file pointing elsewhere).
+    if(NOT CMAKE_SCRIPT_MODE_FILE AND NOT "${_nv_git}" STREQUAL "nogit")
+        execute_process(
+            COMMAND "${_NV_GIT}" rev-parse --git-path logs/HEAD
+            WORKING_DIRECTORY "${_nv_repo}"
+            OUTPUT_VARIABLE _nv_reflog OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        if(NOT "${_nv_reflog}" STREQUAL "")
+            get_filename_component(_nv_reflog "${_nv_reflog}" ABSOLUTE BASE_DIR "${_nv_repo}")
+            if(EXISTS "${_nv_reflog}")
+                set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_nv_reflog}")
+            endif()
+        endif()
+    endif()
     # Dirty = any uncommitted change OUTSIDE firmware/version (the counter files change every build).
     execute_process(
         COMMAND "${_NV_GIT}" status --porcelain "--" ":(exclude)firmware/version"
