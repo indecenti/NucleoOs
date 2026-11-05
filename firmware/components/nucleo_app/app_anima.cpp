@@ -1554,6 +1554,7 @@ static void present_result(int ms)
 static void clear_chat(void);
 static void ask_clear(void);               // "Clear chat" behind the confirm card (defined with clear_chat)
 static void submit(void);
+static int s_last_turn_ms;                         // the last turn's engine time (the self-test reports it)
 static void chat_type(char ch);            // types one char into the chat line (defined with the key handlers)
 static void refresh_complications(void);   // watch-face glance strip; used by clear_chat() above its definition
 static const char *chat_hint(void);        // footer hint (used by cancel_query/submit before its definition)
@@ -1765,6 +1766,7 @@ static void submit(void)
     const int64_t t0 = esp_timer_get_time();
     ::new (static_cast<void *>(&s_ses->res)) anima_result_t(nucleo_anima_query(s_ses->req, nucleo_i18n_lang()));
     const int turn_ms = (int)((esp_timer_get_time() - t0) / 1000);
+    s_last_turn_ms = turn_ms;
     s_ses->cloud_note = false;
     { const char *lr = nucleo_anima_long_reply();
       ESP_LOGW(ATAG, "inline query DONE tier=%d action=%d stack_hw=%u free=%u reply_len=%u long_len=%u",   // tier 4=REMOTE; reply_len=clip, long_len=full overflow
@@ -2089,6 +2091,69 @@ static void reader_close(void);
 // Collapse the IDEE tree back to its category list (called when the menu (re)opens or pages away).
 static void reset_idee(void) { s_idee_cat = -1; s_form_leaf = -1; s_form_slot = 0; s_list_scroll = 0; }
 
+// SELF-TEST (maintainer only, no UI to reach it): when /data/anima/selftest.txt exists, ANIMA asks its lines one by
+// one through the very path a typed question takes (submit: the same cascade, model, context, follow-ups), with the
+// voice off, and writes /data/anima/selftest-report.txt: each answer in full, its tier, intent, time and the heap,
+// headed by the model and effort. The trigger file is removed first, so it runs once. "!reset" starts a fresh chat;
+// "#" lines are comments. The device's real answers, without anyone typing on its keyboard.
+#define SELFTEST_IN  NUCLEO_SD_MOUNT "/data/anima/selftest.txt"
+#define SELFTEST_OUT NUCLEO_SD_MOUNT "/data/anima/selftest-report.txt"
+static void run_selftest(void)
+{
+    FILE *in = fopen(SELFTEST_IN, "rb");
+    if (!in) return;
+    char *qs = (char *)malloc(4096);
+    size_t n = qs ? fread(qs, 1, 4095, in) : 0;
+    fclose(in);
+    remove(SELFTEST_IN);                                        // once, whatever happens next
+    if (!qs) return;
+    qs[n] = 0;
+    const bool leave_after = strstr(qs, "!exit") != nullptr;   // before strtok cuts the text
+    FILE *out = fopen(SELFTEST_OUT, "wb");
+    if (!out) { free(qs); return; }
+    // the Solo boot brings Wi-Fi up after ANIMA opens: give it time, or every answer would be the offline one
+    for (int w = 0; w < 40 && !nucleo_anima_online_available(); w++) {
+        vTaskDelay(pdMS_TO_TICKS(500));
+        if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();
+    }
+    nucleo_anima_models_refresh();
+    char model[48] = "", eff[8] = "";
+    nucleo_anima_model_label(nullptr, 0, model, sizeof model);
+    nucleo_anima_effort_get(eff, sizeof eff);
+    fprintf(out, "ANIMA self-test  model=%s effort=%s mode=%s online=%d\n\n", model[0] ? model : "-", eff[0] ? eff : "-",
+            s_omode == OM_OFF ? "off" : s_omode == OM_ONLY ? "only" : "hybrid", (int)nucleo_anima_online_available());
+    bool voice = nucleo_tts_enabled();
+    if (voice) nucleo_tts_set_enabled(false);
+    clear_chat();
+    int k = 0;
+    char line[A_INMAX];
+    for (const char *p = qs; *p; ) {                           // no strtok: the turn itself may use it
+        const char *e = p; while (*e && *e != '\n' && *e != '\r') e++;
+        size_t ln = (size_t)(e - p); if (ln >= sizeof line) ln = sizeof line - 1;
+        memcpy(line, p, ln); line[ln] = 0;
+        p = e; while (*p == '\n' || *p == '\r') p++;
+        char *q0 = line; while (*q0 == ' ') q0++;
+        if (q0 != line) memmove(line, q0, strlen(q0) + 1);
+        if (!*line || *line == '#') continue;
+        if (!strcmp(line, "!reset")) { clear_chat(); fprintf(out, "--- reset ---\n\n"); continue; }
+        if (!strcmp(line, "!exit")) continue;                  // handled after the run
+        snprintf(s_ses->input, sizeof s_ses->input, "%s", line); s_ilen = (int)strlen(s_ses->input);
+        const unsigned free0 = (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
+        submit();
+        const char *lr = nucleo_anima_long_reply();
+        fprintf(out, "Q%d: %s\nA: %s\n[tier=%d intent=%s action=%d %d ms  free %u -> %u  largest %u]\n\n", ++k, line,
+                (lr && lr[0]) ? lr : s_ses->res.reply, (int)s_ses->res.tier, s_ses->res.intent, (int)s_ses->res.action, s_last_turn_ms,
+                free0, (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+        fflush(out);
+        if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();
+    }
+    fprintf(out, "END %d questions\n", k);
+    fclose(out);
+    if (voice) nucleo_tts_set_enabled(true);
+    free(qs);
+    if (leave_after) nucleo_app_exit();          // back to the full OS (its web server), where the report is read
+}
+
 static void enter(void)
 {
     // ANIMA Solo (see nucleo_app.h): from the full OS, opening the assistant reboots into a dedicated
@@ -2165,6 +2230,7 @@ static void enter(void)
         snprintf(s_ses->input, sizeof s_ses->input, "%s", s_rtc_preset); s_ilen = (int)strlen(s_ses->input);
         submit();                                  // runs the turn inline, like a typed question
     }
+    run_selftest();                                // /data/anima/selftest.txt, when the maintainer put one there
     nucleo_app_set_hint(chat_hint());              // deck or chat hint, whichever is up
     mark_all_dirty();
     nucleo_app_request_draw();

@@ -1725,6 +1725,34 @@ enum { AG_LITERAL = 0, AG_AUTO = 1, AG_RETRIEVE = 2 };
 // a pending clarify/slot. Everything else the offline brain produced (L0 static FAQ, L1 cards, HDC/facet
 // reasoning, Wikipedia/Wikidata, dialogue glue, an honest miss) is handed to the model with the whole
 // conversation; the offline answer stays as the fallback when no model answers.
+static bool a_local_answer(const anima_result_t *r);
+// Words that make a request creative ("scrivi una poesia sulla neve"): a live tier that matched a word of it (the
+// weather took "neve in montagna", a city "Quattro") must leave it to the model. Seen in the device self-test.
+static bool a_creative(const char *q)
+{
+    static const char *const W[] = { "poesia", "poesie", "racconto", "raccont", "storia", "storie", "favola", "fiaba", "canzone",
+        "filastrocca", "haiku", "rima", "poem", "story", "stories", "song", "tale", "lyrics", "limerick", NULL };
+    char lo[200]; size_t n = 0;
+    for (const char *p = q; *p && n < sizeof lo - 1; p++) lo[n++] = (char)tolower((unsigned char)*p);
+    lo[n] = 0;
+    for (int i = 0; W[i]; i++) if (strstr(lo, W[i])) return true;
+    return false;
+}
+// A word problem ("ho 3 mele, ne mangio una e ne compro il doppio...") is reasoning, not an expression: the local
+// calculator keeps a request only while it is mostly numbers and operators. Seen in the device self-test.
+static bool a_wordy(const char *q)
+{
+    int letters = 0;
+    for (const char *p = q; *p; p++) if (isalpha((unsigned char)*p)) letters++;
+    return letters > 24;
+}
+static bool a_local_answer_q(const anima_result_t *r, const char *q)
+{
+    if (q && (!strcmp(r->intent, "weather") || !strcmp(r->intent, "news") || !strcmp(r->intent, "fx") || !strcmp(r->intent, "worldclock")
+              || !strcmp(r->intent, "add_event")) && a_creative(q)) return false;
+    if (q && (!strcmp(r->intent, "calc") || !strcmp(r->intent, "math") || !strcmp(r->intent, "percent")) && a_wordy(q)) return false;
+    return a_local_answer(r);
+}
 static bool a_local_answer(const anima_result_t *r)
 {
     if (r->action == ANIMA_ACT_LAUNCH || r->action == ANIMA_ACT_SYSTEM || r->action == ANIMA_ACT_TOOL) return true;
@@ -2476,7 +2504,9 @@ static int tool_teach(const char *raw, char tok[A_MAX_TOKENS][A_TOK_LEN], int nt
     if (!rem) return 0;                                // no explicit teach frame -> not ours
 
     // Split subject | fact on the FIRST binding copula in the remainder. "è" via its UTF-8 bytes.
-    static const char *const COP[] = { " \xC3\xA8 ", " sono ", " significa ", " vuol dire ", " is ", " are ", " means ", NULL };
+    // " e' " / " e` ": how the accented e is typed on the Cardputer's keyboard (no accented keys). The device self-test
+    // caught "ricorda che il mio colore preferito e' il verde" becoming a calendar reminder.
+    static const char *const COP[] = { " \xC3\xA8 ", " e' ", " e` ", " sono ", " significa ", " vuol dire ", " is ", " are ", " means ", NULL };
     const char *cop = NULL; size_t clen = 0;
     for (int i = 0; COP[i]; i++) {
         const char *p = strstr(rem, COP[i]);
@@ -3929,7 +3959,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
         bool avail = nucleo_anima_online_available();
         {   // the device's own answers first: the model cannot read the clock, the battery or open an app
             anima_result_t lr = l0_query(q, en);
-            if (lr.tier != ANIMA_TIER_NONE && a_local_answer(&lr)) { r = lr; mem_update(&r); goto done; }
+            if (lr.tier != ANIMA_TIER_NONE && a_local_answer_q(&lr, q)) { r = lr; mem_update(&r); goto done; }
         }
         // CODE even in online-only: take the dedicated code path (code prompt, bigger token budget,
         // verbatim long_reply) — the prose teacher's clip_reply sentence-truncates on '.' and so
@@ -4508,7 +4538,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
 done: {
         // MODEL FIRST (see a_local_answer): whatever the offline brain answered, the configured model answers
         // instead when the turn is not the device's own. The offline answer is the fallback.
-        if (q && q[0] && q[1] && !a_local_answer(&r) && nucleo_anima_online_available() && nucleo_anima_teacher_configured()) {
+        if (q && q[0] && q[1] && !a_local_answer_q(&r, q) && nucleo_anima_online_available() && nucleo_anima_teacher_configured()) {
             anima_result_t mr; memset(&mr, 0, sizeof mr);
             // the offline brain's finding becomes the model's <notes>: the two layers cooperate, not compete
             bool knew = r.reply[0] && (r.tier == ANIMA_TIER_FACT || r.tier == ANIMA_TIER_STITCH || r.tier == ANIMA_TIER_REMOTE);

@@ -1,4 +1,5 @@
-// app_code.cpp: Nucleo Code (docs/nucleo-code.md). PHASE 1 = the runtime and its bench on the device: the
+// app_code.cpp: Nucleo Code (docs/nucleo-code.md). The agent (default view: ask it to write, run and fix programs
+// or texts in work/main; code_agent.c, the firmware's LLM service) and, under /files, the runtime bench: the
 // workspace's .js files, run in a MicroQuickJS arena (nucleo_code/code_rt.c), with the output, the error and
 // file:line, the time, what the script really needed (live after a GC) and the system heap before/during/after.
 // "b" runs every script of /work/bench and writes /work/bench/report.txt, the figures section 8 is decided on.
@@ -10,6 +11,9 @@
 #include "launcher_theme.h"
 #include "nucleo_i18n.h"
 #include "code_rt.h"
+#include "code_agent.h"
+#include "nucleo_tcp.h"        // nucleo_tcp_network_up
+#include "nucleo_anima.h"      // nucleo_llm_*: the firmware streams the request (the key stays there)
 #include "nucleo_board.h"      // NUCLEO_SD_MOUNT
 #include "nucleo_exclusive.h"  // NX_SOLO
 #include "nucleo_theme.h"
@@ -47,6 +51,14 @@ struct State {
     code_result_t res;
     unsigned heap_before, block_before, heap_after, block_after, arena;
     char ran[40];
+    // the agent
+    bool agent_view, ask, have_key, thinking, was_running;
+    agent_t *ag; char *toolbuf;
+    char model[48], effort[8];
+    char tr[6144]; int trlen, tscroll;
+    char in[160]; int inlen;
+    char todo[512];
+    bool auto_run, auto_sent;     // the maintainer's self-test (work/main/.code/selftest.txt)
 };
 static State *S;
 
@@ -250,19 +262,20 @@ static void draw_companion(void)
     lg::comp_keys(L("invio esegui  b banco  su/giu", "enter run  b bench  up/dn", "intro ejecuta  b banco", "entree lancer  b banc", "enter starten  b Bench"));
 }
 
-static void on_draw(void)
+static void files_draw(void)
 {
     if (nucleo_app_two_screens()) { draw_companion(); return; }
-    int y = app_ui_title("Code", ACCENT, S->output ? S->ran : "phase 1: runtime");
+    int y = app_ui_title("Code", ACCENT, S->output ? S->ran : "work/bench");
     if (S->output) { draw_output(y); nucleo_app_set_hint(L("su/giu scorri  invio lista  b banco", "up/dn scroll  enter list  b bench", "arr/ab  intro lista  b banco", "haut/bas  entree liste  b banc", "auf/ab  enter Liste  b Bench")); return; }
     int bottom = nucleo_app_content_top() + nucleo_app_content_height();
     app_ui_list(y, bottom - y, S->nfiles, S->sel, row_label, row_right, row_color, nullptr);
-    nucleo_app_set_hint(L("invio esegui  b banco completo", "enter run  b full bench", "intro ejecuta  b banco", "entree lancer  b banc", "enter starten  b Bench"));
+    nucleo_app_set_hint(L("invio esegui  b banco  /agent", "enter run  b bench  /agent", "intro ejecuta  b banco", "entree lancer  b banc", "enter starten  b Bench"));
 }
 
-static void on_key(int key, char ch)
+static void files_key(int key, char ch)
 {
     if (ch == 'b' || ch == 'B') { bench_all(); nucleo_app_request_draw(); return; }
+    if (ch == '/') { S->agent_view = true; nucleo_app_request_draw(); return; }
     if (nucleo_app_two_screens()) {                          // taps on the panel's list arrive as keys
         int t = lg::row_tap(key, ch, s_lg_scroll, S->nfiles, &S->sel);
         if (t == 2 && S->nfiles) { run_file(S->files[S->sel], 5000); S->output = true; }
@@ -281,8 +294,286 @@ static void on_key(int key, char ch)
     nucleo_app_request_draw();
 }
 
-static void on_enter(void) { ensure_bench(); scan(); S->output = false; s_lg_scroll = 0; nucleo_app_request_draw(); }
-static void on_exit(void) {}
+// ==== the agent (docs/nucleo-code.md 9): status bar, the conversation, the input; driven from the tick ====
+#define AWS       WS "/main"            // the workspace the agent works in
+#define TR_CAP    6144                  // the conversation shown (raw; the oldest half goes when full)
+#define TOOL_CAP  (16 * 1024)           // one tool call's input (a whole file for create)
+
+static void tr_add(const char *s, size_t n)
+{
+    if (n >= TR_CAP / 2) { s += n - TR_CAP / 2; n = TR_CAP / 2; }
+    if ((size_t)S->trlen + n >= TR_CAP - 1) {                 // drop the oldest half, at a line start
+        int cut = S->trlen / 2; while (cut < S->trlen && S->tr[cut] != '\n') cut++;
+        memmove(S->tr, S->tr + cut, (size_t)(S->trlen - cut)); S->trlen -= cut;
+    }
+    memcpy(S->tr + S->trlen, s, n); S->trlen += (int)n; S->tr[S->trlen] = 0;
+    S->tscroll = 0;
+    nucleo_app_request_draw();
+}
+static void tr_puts(const char *s) { tr_add(s, strlen(s)); }
+static void ui_text(void *, const char *s, size_t n) { tr_add(s, n); }
+static void ui_tool(void *, const char *, const char *summary) { char b[180]; snprintf(b, sizeof b, "\n  > %s", summary); tr_puts(b); }
+static void ui_tool_done(void *, const char *, bool ok, const char *summary) { char b[180]; snprintf(b, sizeof b, "\n  %s %s\n", ok ? "ok" : "!!", summary); tr_puts(b); }
+static void ui_todo(void *, const char *t) { snprintf(S->todo, sizeof S->todo, "%s", t); nucleo_app_request_draw(); }
+
+static bool agent_running(void)
+{
+    agent_state_t s = S->ag ? agent_state(S->ag) : AG_IDLE;
+    return s == AG_SEND || s == AG_RECV || s == AG_TOOLS || s == AG_ASK;
+}
+
+static void agent_open(void)
+{
+    if (S->ag) return;
+    mkdir(WS, 0775); mkdir(AWS, 0775);
+    S->have_key = nucleo_llm_config(S->model, sizeof S->model, S->effort, sizeof S->effort);
+    if (!S->have_key) return;
+    if (!S->toolbuf) S->toolbuf = (char *)malloc(TOOL_CAP);
+    if (!S->toolbuf) return;
+    agent_cfg_t cfg = {};
+    cfg.root = AWS; cfg.model = S->model; cfg.effort = S->effort;
+    cfg.lang = L("Italian", "English", "Spanish", "French", "German");
+    cfg.max_calls = 30; cfg.max_tokens = 16000; cfg.arena = nullptr; cfg.arena_size = 32768;
+    cfg.toolbuf = S->toolbuf; cfg.toolcap = TOOL_CAP; cfg.ask_writes = S->ask;
+    agent_io_t io = {};
+    io.on_text = ui_text; io.on_tool = ui_tool; io.on_tool_done = ui_tool_done; io.on_todo = ui_todo;
+    io.now_ms = now_ms; io.sleep_ms = sleep_ms;
+    S->ag = agent_new(&cfg, &io);
+}
+static void agent_close(void)
+{
+    if (nucleo_llm_busy()) { nucleo_llm_cancel(); for (int i = 0; i < 40 && nucleo_llm_busy(); i++) vTaskDelay(pdMS_TO_TICKS(50)); }
+    if (S->ag) { agent_free(S->ag); S->ag = nullptr; }
+    free(S->toolbuf); S->toolbuf = nullptr;
+}
+
+// the tick: the request goes out, its bytes come in, one tool runs, a question waits
+static void agent_tick(void)
+{
+    if (!S->ag) return;
+    switch (agent_state(S->ag)) {
+    case AG_SEND:
+        if (nucleo_llm_busy()) break;
+        agent_begin_response(S->ag);
+        if (!nucleo_llm_start(agent_request_path(S->ag))) agent_end_response(S->ag, -1, "the connection could not start");
+        S->thinking = true;
+        break;
+    case AG_RECV: {
+        char b[1024];
+        for (int k = 0; k < 16; k++) {
+            int n = nucleo_llm_read(b, sizeof b);
+            if (n > 0) { agent_feed(S->ag, b, n); continue; }
+            if (n < 0) { char err[200] = ""; int st = nucleo_llm_status(err, sizeof err); agent_end_response(S->ag, st, err); S->thinking = false; }
+            break;
+        }
+        break;
+    }
+    case AG_TOOLS: agent_step(S->ag); nucleo_app_request_draw(); break;
+    case AG_DONE: case AG_ERROR:
+        if (S->was_running) {
+            const agent_stats_t *st = agent_stats(S->ag);
+            char b[240];
+            if (agent_state(S->ag) == AG_ERROR) snprintf(b, sizeof b, "\n[%s]\n", st->error);
+            else snprintf(b, sizeof b, "\n");
+            tr_puts(b);
+            S->was_running = false;
+        }
+        break;
+    default: break;
+    }
+    if (agent_running()) S->was_running = true;
+}
+
+static void agent_send(void)
+{
+    if (!S->inlen) return;
+    S->in[S->inlen] = 0;
+    if (S->in[0] == '/') {                                    // commands
+        if (!strcmp(S->in, "/files")) S->agent_view = false;
+        else if (!strcmp(S->in, "/new")) { if (S->ag) agent_reset(S->ag); S->trlen = 0; S->tr[0] = 0; S->todo[0] = 0; }
+        else if (!strcmp(S->in, "/mode")) { S->ask = !S->ask; agent_close(); agent_open(); tr_puts(S->ask ? "\n[mode: Ask]\n" : "\n[mode: Auto]\n"); }
+        else tr_puts(L("\n[comandi: /files /new /mode]\n", "\n[commands: /files /new /mode]\n", "\n[/files /new /mode]\n", "\n[/files /new /mode]\n", "\n[/files /new /mode]\n"));
+        S->inlen = 0; S->in[0] = 0; nucleo_app_request_draw(); return;
+    }
+    agent_open();
+    if (!S->ag) { tr_puts(L("\n[nessuna chiave Claude: aggiungila nella web OS, Impostazioni > IA]\n", "\n[no Claude key: add one in the web OS, Settings > AI]\n",
+                            "\n[sin clave Claude: web OS, Ajustes > IA]\n", "\n[pas de cle Claude : web OS, Reglages > IA]\n", "\n[kein Claude-Schluessel: Web OS, Einstellungen > KI]\n")); return; }
+    char b[200]; snprintf(b, sizeof b, "\n> %s\n", S->in); tr_puts(b);
+    agent_submit(S->ag, S->in);
+    S->inlen = 0; S->in[0] = 0;
+    S->was_running = true;
+    nucleo_app_request_draw();
+}
+
+// the conversation as plain lines of `cols` columns; the last `rows` lines (minus the scroll) are drawn
+static void draw_lines(int x, int y, int w, int rows, int lh, unsigned short bg)
+{
+    static char plain[TR_CAP];
+    code_md_plain(S->tr, plain, sizeof plain);
+    const int cols = w / 6 > 60 ? 60 : w / 6;
+    // count wrapped lines, then draw the window
+    int total = 0;
+    for (const char *p = plain; *p; ) { const char *e = p; int c = 0; while (*e && *e != '\n' && c < cols) { e++; c++; } total++; p = *e == '\n' ? e + 1 : e; }
+    int first = total - rows - S->tscroll; if (first < 0) first = 0;
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left);
+    int line = 0, yy = y;
+    for (const char *p = plain; *p && yy + lh <= y + rows * lh; ) {
+        const char *e = p; int c = 0; while (*e && *e != '\n' && c < cols) { e++; c++; }
+        if (line >= first) {
+            char t[64]; memcpy(t, p, (size_t)(e - p)); t[e - p] = 0;
+            unsigned short col = t[0] == '>' ? ACCENT : (t[0] == ' ' && t[1] == ' ' && t[2] == '!') ? 0xF800 : (t[0] == ' ' && t[1] == ' ') ? C_DIM : t[0] == '[' ? 0xFFE0 : C_INK;
+            d.setTextColor(col, bg); d.drawString(t, x, yy); yy += lh;
+        }
+        line++; p = *e == '\n' ? e + 1 : e;
+    }
+}
+
+static void status_text(char *b, size_t n)
+{
+    const agent_stats_t *st = S->ag ? agent_stats(S->ag) : nullptr;
+    char m[24]; const char *mm = S->model[0] ? S->model : "-";
+    if (!strncmp(mm, "claude-", 7)) mm += 7;
+    snprintf(m, sizeof m, "%s", mm);
+    snprintf(b, n, "main  %s  %s  ctx %uk  $%.3f  %s", m, S->effort[0] ? S->effort : "-", st ? (unsigned)(st->last_context / 1000) : 0u,
+             st ? st->usd : 0.0, S->ask ? "ASK" : "AUTO");
+}
+
+static const char *agent_hint(void)
+{
+    agent_state_t s = S->ag ? agent_state(S->ag) : AG_IDLE;
+    if (s == AG_ASK) return L("y si  n no  (approva)", "y yes  n no  (approve)", "y si  n no", "y oui  n non", "y ja  n nein");
+    if (agent_running()) return L("lavoro...  del: ferma", "working...  del: stop", "trabajando...  del: parar", "travail...  del: stop", "arbeite...  del: stopp");
+    return L("scrivi e invio  /files /new /mode", "type, enter  /files /new /mode", "escribe e intro  /files /new", "ecris, entree  /files /new", "tippen, enter  /files /new");
+}
+
+static void agent_draw(void)
+{
+    char st[96]; status_text(st, sizeof st);
+    if (nucleo_app_two_screens()) {                          // companion: the status, the question or the input
+        d.fillRect(0, nucleo_app_content_top(), 240, nucleo_app_content_height(), C_BG);
+        int y = lg::comp_head("Code", ACCENT);
+        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left); d.setTextColor(C_DIM, C_BG); d.drawString(st, 4, y + 2);
+        d.setFont(&fonts::Font2);
+        const char *q = S->ag ? agent_question(S->ag) : nullptr;
+        char b[200];
+        if (q) { snprintf(b, sizeof b, "%s?", q); d.setTextColor(0xFFE0, C_BG); }
+        else { snprintf(b, sizeof b, "> %s_", S->in); d.setTextColor(C_INK, C_BG); }
+        lg::font(1); lg::wrap(b, 4, y + 16, 232, 16, 3);
+        lg::comp_keys(agent_hint());
+        return;
+    }
+    const int top = nucleo_app_content_top(), bottom = top + nucleo_app_content_height();
+    d.fillRect(0, top, 240, bottom - top, C_BG);
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left);
+    d.fillRect(0, top, 240, 10, lg::card()); d.setTextColor(C_DIM, lg::card()); d.drawString(st, 2, top + 1);
+    const int rows = (bottom - top - 10 - 12) / 9;
+    draw_lines(2, top + 11, 236, rows, 9, C_BG);
+    const char *q = S->ag ? agent_question(S->ag) : nullptr;
+    char b[64];
+    if (q) snprintf(b, sizeof b, "%.50s? y/n", q);
+    else { int off = S->inlen > 36 ? S->inlen - 36 : 0; snprintf(b, sizeof b, "> %s%s", S->in + off, (esp_timer_get_time() / 500000) & 1 ? "_" : " "); }
+    d.fillRect(0, bottom - 11, 240, 11, lg::card()); d.setTextColor(q ? 0xFFE0 : C_INK, lg::card()); d.drawString(b, 2, bottom - 10);
+    nucleo_app_set_hint(agent_hint());
+}
+
+static void agent_draw_large(void)
+{
+    nucleo_touch_clear();
+    const int W = d.width(), H = d.height();
+    char st[96]; status_text(st, sizeof st);
+    int y = lg::header("Code", S->thinking ? L("pensa...", "thinking...", "piensa...", "reflechit...", "denkt...") : "main", ACCENT);
+    d.fillRect(0, y, W, H - y, C_BG);
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left); d.setTextColor(C_DIM, C_BG); d.drawString(st, 6, y + 2);
+    int ty = y + 14, plan_h = 0;
+    if (S->todo[0]) {                                        // the plan, when the agent keeps one
+        int nl = 0; for (const char *p = S->todo; *p; p++) if (*p == '\n') nl++;
+        if (nl > 5) nl = 5;
+        plan_h = nl * 10 + 4;
+        lg::panel(4, ty, W - 8, plan_h, lg::card());
+        d.setTextColor(0xFFE0, lg::card());
+        int yy = ty + 2, k = 0;
+        for (const char *p = S->todo; *p && k < 5; k++) { const char *e = strchr(p, '\n'); if (!e) e = p + strlen(p); char t[56]; size_t n = (size_t)(e - p) < 55 ? (size_t)(e - p) : 55; memcpy(t, p, n); t[n] = 0; d.drawString(t, 8, yy); yy += 10; p = *e ? e + 1 : e; }
+        ty += plan_h + 4;
+    }
+    draw_lines(6, ty, W - 12, (H - ty - 4) / 10, 10, C_BG);
+    nucleo_touch_commit();
+}
+
+static void agent_key(int key, char ch)
+{
+    agent_state_t s = S->ag ? agent_state(S->ag) : AG_IDLE;
+    if (s == AG_ASK) {
+        if (ch == 'y' || ch == 'Y' || key == NK_ENTER) agent_answer(S->ag, true);
+        else if (ch == 'n' || ch == 'N') agent_answer(S->ag, false);
+        nucleo_app_request_draw(); return;
+    }
+    if (agent_running()) {
+        if (key == NK_DEL) { nucleo_llm_cancel(); agent_cancel(S->ag, nullptr); }
+        else if (key == NK_UP) S->tscroll++;
+        else if (key == NK_DOWN && S->tscroll > 0) S->tscroll--;
+        nucleo_app_request_draw(); return;
+    }
+    if (key == NK_ENTER) { agent_send(); return; }
+    if (key == NK_DEL) { if (S->inlen) S->in[--S->inlen] = 0; }
+    else if (key == NK_UP && !S->inlen) S->tscroll++;
+    else if (key == NK_DOWN && S->tscroll > 0 && !S->inlen) S->tscroll--;
+    else if (ch >= 32 && ch < 127 && S->inlen < (int)sizeof S->in - 1) { S->in[S->inlen++] = ch; S->in[S->inlen] = 0; }
+    nucleo_app_request_draw();
+}
+
+// ---- routing --------------------------------------------------------------------------------------------
+static void on_draw(void) { if (S->agent_view) agent_draw(); else files_draw(); }
+static void on_draw_large(void) { if (S->agent_view) agent_draw_large(); else draw_large(); }
+static void on_key(int key, char ch) { if (S->agent_view) agent_key(key, ch); else files_key(key, ch); }
+// SELF-TEST (maintainer only): work/main/.code/selftest.txt holds one task; Code sends it once on open, then saves the
+// conversation and the figures to work/main/.code/selftest-report.txt and goes back to the full OS (where the report
+// can be read). The trigger is removed first.
+#define SELFTEST_IN  AWS "/.code/selftest.txt"
+#define SELFTEST_OUT AWS "/.code/selftest-report.txt"
+static void selftest_tick(void)
+{
+    if (!S->auto_run) return;
+    if (!S->auto_sent) {
+        if (!nucleo_tcp_network_up()) return;                     // Wi-Fi first (the Solo boot brings it up after us)
+        FILE *f = fopen(SELFTEST_IN, "rb"); if (!f) { S->auto_run = false; return; }
+        size_t n = fread(S->in, 1, sizeof S->in - 1, f); fclose(f); remove(SELFTEST_IN);
+        while (n && (S->in[n - 1] == '\n' || S->in[n - 1] == '\r')) n--;
+        S->in[n] = 0; S->inlen = (int)n; S->auto_sent = true;
+        agent_send();
+        return;
+    }
+    if (agent_running() || !S->ag) return;
+    FILE *o = fopen(SELFTEST_OUT, "wb");
+    if (o) {
+        const agent_stats_t *st = agent_stats(S->ag);
+        fprintf(o, "Code self-test  model=%s effort=%s  state=%d  calls=%u tools=%u errors=%u  in=%llu out=%llu cache=%llu  $%.4f\n"
+                   "error: %s\nfree %u largest %u\n\n%s\n\nplan:\n%s\n",
+                S->model, S->effort, (int)agent_state(S->ag), (unsigned)st->calls, (unsigned)st->tools, (unsigned)st->tool_errors, (unsigned long long)st->in,
+                (unsigned long long)st->out, (unsigned long long)st->cache_read, st->usd, st->error,
+                (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), S->tr, S->todo);
+        fclose(o);
+    }
+    S->auto_run = false;
+    nucleo_app_exit();
+}
+static void on_tick(void) { agent_tick(); selftest_tick(); if (S->agent_view) nucleo_app_request_draw(); }
+static void on_enter(void)
+{
+    ensure_bench(); scan(); S->output = false; s_lg_scroll = 0;
+    S->agent_view = true; S->ask = false;
+    { struct stat sst; S->auto_run = stat(SELFTEST_IN, &sst) == 0; S->auto_sent = false; }
+    S->have_key = nucleo_llm_config(S->model, sizeof S->model, S->effort, sizeof S->effort);
+    tr_puts(S->have_key ? L("Nucleo Code. Chiedimi di scrivere, provare e correggere programmi o testi in work/main.\n",
+                            "Nucleo Code. Ask me to write, run and fix programs or texts in work/main.\n",
+                            "Nucleo Code. Pideme escribir, probar y corregir programas o textos.\n",
+                            "Nucleo Code. Demande-moi d'ecrire, tester et corriger programmes ou textes.\n",
+                            "Nucleo Code. Lass mich Programme oder Texte schreiben, testen, korrigieren.\n")
+                        : L("Serve una chiave Claude: web OS > Impostazioni > IA.\n", "A Claude key is needed: web OS > Settings > AI.\n",
+                            "Hace falta una clave Claude: web OS > Ajustes > IA.\n", "Une cle Claude est requise : web OS > Reglages > IA.\n",
+                            "Ein Claude-Schluessel fehlt: Web OS > Einstellungen > KI.\n"));
+    nucleo_app_request_draw();
+}
+static void on_exit(void) { agent_close(); }
 
 static const nucleo_app_ram_t APP_RAM[] = { { (void **)&S, sizeof(State) }, { nullptr, 0 } };
 
@@ -290,9 +581,9 @@ extern "C" void nucleo_register_code(void)
 {
     static const nucleo_app_def_t app = {
         "code", "Code", "Tools", "Nucleo Code",
-        'C', ACCENT, on_enter, on_key, nullptr, on_draw, on_exit,
+        'C', ACCENT, on_enter, on_key, on_tick, on_draw, on_exit,
         NX_SOLO,          // a fresh heap with Wi-Fi up: the model's TLS and the engine's arena take turns
-        APP_RAM, draw_large
+        APP_RAM, on_draw_large
     };
     nucleo_app_register(&app);
 }

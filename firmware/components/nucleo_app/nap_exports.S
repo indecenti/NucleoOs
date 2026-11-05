@@ -8,7 +8,7 @@ nap_abi_level:
     .word 9
     .global nap_exports_count
 nap_exports_count:
-    .word 337
+    .word 343
     .global nap_exports
 nap_exports:
     .word .Lnap_n0, THEME_ACC
@@ -272,82 +272,88 @@ nap_exports:
     .word .Lnap_n258, nucleo_kbd_char_down
     .word .Lnap_n259, nucleo_kbd_mods
     .word .Lnap_n260, nucleo_kbd_read
-    .word .Lnap_n261, nucleo_power_battery_pct
-    .word .Lnap_n262, nucleo_power_perf_begin
-    .word .Lnap_n263, nucleo_power_perf_end
-    .word .Lnap_n264, nucleo_prefs_save
-    .word .Lnap_n265, nucleo_rom_map
-    .word .Lnap_n266, nucleo_rom_unmap
-    .word .Lnap_n267, nucleo_secret_get
-    .word .Lnap_n268, nucleo_secret_set
-    .word .Lnap_n269, nucleo_setup_mode
-    .word .Lnap_n270, nucleo_surface_large
-    .word .Lnap_n271, nucleo_surface_large_ok
-    .word .Lnap_n272, nucleo_surface_set_large
-    .word .Lnap_n273, nucleo_tcp_close
-    .word .Lnap_n274, nucleo_tcp_connect
-    .word .Lnap_n275, nucleo_tcp_network_up
-    .word .Lnap_n276, nucleo_tcp_readable
-    .word .Lnap_n277, nucleo_tcp_recv
-    .word .Lnap_n278, nucleo_tcp_send
-    .word .Lnap_n279, nucleo_touch_add
-    .word .Lnap_n280, nucleo_touch_add_pad
-    .word .Lnap_n281, nucleo_touch_add_scroll
-    .word .Lnap_n282, nucleo_touch_clear
-    .word .Lnap_n283, nucleo_touch_commit
-    .word .Lnap_n284, nucleo_touch_last
-    .word .Lnap_n285, nucleo_touch_raw
-    .word .Lnap_n286, nucleo_touch_raw_read
-    .word .Lnap_n287, nucleo_tr5
-    .word .Lnap_n288, nucleo_ui_is_adv
-    .word .Lnap_n289, nucleo_ui_panel_size
-    .word .Lnap_n290, nucleo_ui_read_row
-    .word .Lnap_n291, opendir
-    .word .Lnap_n292, pnet_channel
-    .word .Lnap_n293, pnet_name
-    .word .Lnap_n294, pnet_recv
-    .word .Lnap_n295, pnet_send
-    .word .Lnap_n296, pnet_start
-    .word .Lnap_n297, pnet_stop
-    .word .Lnap_n298, powf
-    .word .Lnap_n299, qsort
-    .word .Lnap_n300, readdir
-    .word .Lnap_n301, realloc
-    .word .Lnap_n302, remove
-    .word .Lnap_n303, rename
-    .word .Lnap_n304, rewind
-    .word .Lnap_n305, roundf
-    .word .Lnap_n306, setjmp
-    .word .Lnap_n307, sinf
-    .word .Lnap_n308, snprintf
-    .word .Lnap_n309, sqrtf
-    .word .Lnap_n310, sscanf
-    .word .Lnap_n311, stat
-    .word .Lnap_n312, strcasecmp
-    .word .Lnap_n313, strcasestr
-    .word .Lnap_n314, strcat
-    .word .Lnap_n315, strchr
-    .word .Lnap_n316, strcmp
-    .word .Lnap_n317, strcpy
-    .word .Lnap_n318, strlen
-    .word .Lnap_n319, strncasecmp
-    .word .Lnap_n320, strncat
-    .word .Lnap_n321, strncmp
-    .word .Lnap_n322, strncpy
-    .word .Lnap_n323, strrchr
-    .word .Lnap_n324, strstr
-    .word .Lnap_n325, strtof
-    .word .Lnap_n326, strtol
-    .word .Lnap_n327, strtoul
-    .word .Lnap_n328, tanf
-    .word .Lnap_n329, time
-    .word .Lnap_n330, tinfl_decompress
-    .word .Lnap_n331, tolower
-    .word .Lnap_n332, toupper
-    .word .Lnap_n333, unlink
-    .word .Lnap_n334, vTaskDelay
-    .word .Lnap_n335, vfprintf
-    .word .Lnap_n336, vsnprintf
+    .word .Lnap_n261, nucleo_llm_busy
+    .word .Lnap_n262, nucleo_llm_cancel
+    .word .Lnap_n263, nucleo_llm_config
+    .word .Lnap_n264, nucleo_llm_read
+    .word .Lnap_n265, nucleo_llm_start
+    .word .Lnap_n266, nucleo_llm_status
+    .word .Lnap_n267, nucleo_power_battery_pct
+    .word .Lnap_n268, nucleo_power_perf_begin
+    .word .Lnap_n269, nucleo_power_perf_end
+    .word .Lnap_n270, nucleo_prefs_save
+    .word .Lnap_n271, nucleo_rom_map
+    .word .Lnap_n272, nucleo_rom_unmap
+    .word .Lnap_n273, nucleo_secret_get
+    .word .Lnap_n274, nucleo_secret_set
+    .word .Lnap_n275, nucleo_setup_mode
+    .word .Lnap_n276, nucleo_surface_large
+    .word .Lnap_n277, nucleo_surface_large_ok
+    .word .Lnap_n278, nucleo_surface_set_large
+    .word .Lnap_n279, nucleo_tcp_close
+    .word .Lnap_n280, nucleo_tcp_connect
+    .word .Lnap_n281, nucleo_tcp_network_up
+    .word .Lnap_n282, nucleo_tcp_readable
+    .word .Lnap_n283, nucleo_tcp_recv
+    .word .Lnap_n284, nucleo_tcp_send
+    .word .Lnap_n285, nucleo_touch_add
+    .word .Lnap_n286, nucleo_touch_add_pad
+    .word .Lnap_n287, nucleo_touch_add_scroll
+    .word .Lnap_n288, nucleo_touch_clear
+    .word .Lnap_n289, nucleo_touch_commit
+    .word .Lnap_n290, nucleo_touch_last
+    .word .Lnap_n291, nucleo_touch_raw
+    .word .Lnap_n292, nucleo_touch_raw_read
+    .word .Lnap_n293, nucleo_tr5
+    .word .Lnap_n294, nucleo_ui_is_adv
+    .word .Lnap_n295, nucleo_ui_panel_size
+    .word .Lnap_n296, nucleo_ui_read_row
+    .word .Lnap_n297, opendir
+    .word .Lnap_n298, pnet_channel
+    .word .Lnap_n299, pnet_name
+    .word .Lnap_n300, pnet_recv
+    .word .Lnap_n301, pnet_send
+    .word .Lnap_n302, pnet_start
+    .word .Lnap_n303, pnet_stop
+    .word .Lnap_n304, powf
+    .word .Lnap_n305, qsort
+    .word .Lnap_n306, readdir
+    .word .Lnap_n307, realloc
+    .word .Lnap_n308, remove
+    .word .Lnap_n309, rename
+    .word .Lnap_n310, rewind
+    .word .Lnap_n311, roundf
+    .word .Lnap_n312, setjmp
+    .word .Lnap_n313, sinf
+    .word .Lnap_n314, snprintf
+    .word .Lnap_n315, sqrtf
+    .word .Lnap_n316, sscanf
+    .word .Lnap_n317, stat
+    .word .Lnap_n318, strcasecmp
+    .word .Lnap_n319, strcasestr
+    .word .Lnap_n320, strcat
+    .word .Lnap_n321, strchr
+    .word .Lnap_n322, strcmp
+    .word .Lnap_n323, strcpy
+    .word .Lnap_n324, strlen
+    .word .Lnap_n325, strncasecmp
+    .word .Lnap_n326, strncat
+    .word .Lnap_n327, strncmp
+    .word .Lnap_n328, strncpy
+    .word .Lnap_n329, strrchr
+    .word .Lnap_n330, strstr
+    .word .Lnap_n331, strtof
+    .word .Lnap_n332, strtol
+    .word .Lnap_n333, strtoul
+    .word .Lnap_n334, tanf
+    .word .Lnap_n335, time
+    .word .Lnap_n336, tinfl_decompress
+    .word .Lnap_n337, tolower
+    .word .Lnap_n338, toupper
+    .word .Lnap_n339, unlink
+    .word .Lnap_n340, vTaskDelay
+    .word .Lnap_n341, vfprintf
+    .word .Lnap_n342, vsnprintf
 
     .section .rodata.nap_export_names, "aMS", @progbits, 1
 .Lnap_n0: .asciz "THEME_ACC"
@@ -611,79 +617,85 @@ nap_exports:
 .Lnap_n258: .asciz "nucleo_kbd_char_down"
 .Lnap_n259: .asciz "nucleo_kbd_mods"
 .Lnap_n260: .asciz "nucleo_kbd_read"
-.Lnap_n261: .asciz "nucleo_power_battery_pct"
-.Lnap_n262: .asciz "nucleo_power_perf_begin"
-.Lnap_n263: .asciz "nucleo_power_perf_end"
-.Lnap_n264: .asciz "nucleo_prefs_save"
-.Lnap_n265: .asciz "nucleo_rom_map"
-.Lnap_n266: .asciz "nucleo_rom_unmap"
-.Lnap_n267: .asciz "nucleo_secret_get"
-.Lnap_n268: .asciz "nucleo_secret_set"
-.Lnap_n269: .asciz "nucleo_setup_mode"
-.Lnap_n270: .asciz "nucleo_surface_large"
-.Lnap_n271: .asciz "nucleo_surface_large_ok"
-.Lnap_n272: .asciz "nucleo_surface_set_large"
-.Lnap_n273: .asciz "nucleo_tcp_close"
-.Lnap_n274: .asciz "nucleo_tcp_connect"
-.Lnap_n275: .asciz "nucleo_tcp_network_up"
-.Lnap_n276: .asciz "nucleo_tcp_readable"
-.Lnap_n277: .asciz "nucleo_tcp_recv"
-.Lnap_n278: .asciz "nucleo_tcp_send"
-.Lnap_n279: .asciz "nucleo_touch_add"
-.Lnap_n280: .asciz "nucleo_touch_add_pad"
-.Lnap_n281: .asciz "nucleo_touch_add_scroll"
-.Lnap_n282: .asciz "nucleo_touch_clear"
-.Lnap_n283: .asciz "nucleo_touch_commit"
-.Lnap_n284: .asciz "nucleo_touch_last"
-.Lnap_n285: .asciz "nucleo_touch_raw"
-.Lnap_n286: .asciz "nucleo_touch_raw_read"
-.Lnap_n287: .asciz "nucleo_tr5"
-.Lnap_n288: .asciz "nucleo_ui_is_adv"
-.Lnap_n289: .asciz "nucleo_ui_panel_size"
-.Lnap_n290: .asciz "nucleo_ui_read_row"
-.Lnap_n291: .asciz "opendir"
-.Lnap_n292: .asciz "pnet_channel"
-.Lnap_n293: .asciz "pnet_name"
-.Lnap_n294: .asciz "pnet_recv"
-.Lnap_n295: .asciz "pnet_send"
-.Lnap_n296: .asciz "pnet_start"
-.Lnap_n297: .asciz "pnet_stop"
-.Lnap_n298: .asciz "powf"
-.Lnap_n299: .asciz "qsort"
-.Lnap_n300: .asciz "readdir"
-.Lnap_n301: .asciz "realloc"
-.Lnap_n302: .asciz "remove"
-.Lnap_n303: .asciz "rename"
-.Lnap_n304: .asciz "rewind"
-.Lnap_n305: .asciz "roundf"
-.Lnap_n306: .asciz "setjmp"
-.Lnap_n307: .asciz "sinf"
-.Lnap_n308: .asciz "snprintf"
-.Lnap_n309: .asciz "sqrtf"
-.Lnap_n310: .asciz "sscanf"
-.Lnap_n311: .asciz "stat"
-.Lnap_n312: .asciz "strcasecmp"
-.Lnap_n313: .asciz "strcasestr"
-.Lnap_n314: .asciz "strcat"
-.Lnap_n315: .asciz "strchr"
-.Lnap_n316: .asciz "strcmp"
-.Lnap_n317: .asciz "strcpy"
-.Lnap_n318: .asciz "strlen"
-.Lnap_n319: .asciz "strncasecmp"
-.Lnap_n320: .asciz "strncat"
-.Lnap_n321: .asciz "strncmp"
-.Lnap_n322: .asciz "strncpy"
-.Lnap_n323: .asciz "strrchr"
-.Lnap_n324: .asciz "strstr"
-.Lnap_n325: .asciz "strtof"
-.Lnap_n326: .asciz "strtol"
-.Lnap_n327: .asciz "strtoul"
-.Lnap_n328: .asciz "tanf"
-.Lnap_n329: .asciz "time"
-.Lnap_n330: .asciz "tinfl_decompress"
-.Lnap_n331: .asciz "tolower"
-.Lnap_n332: .asciz "toupper"
-.Lnap_n333: .asciz "unlink"
-.Lnap_n334: .asciz "vTaskDelay"
-.Lnap_n335: .asciz "vfprintf"
-.Lnap_n336: .asciz "vsnprintf"
+.Lnap_n261: .asciz "nucleo_llm_busy"
+.Lnap_n262: .asciz "nucleo_llm_cancel"
+.Lnap_n263: .asciz "nucleo_llm_config"
+.Lnap_n264: .asciz "nucleo_llm_read"
+.Lnap_n265: .asciz "nucleo_llm_start"
+.Lnap_n266: .asciz "nucleo_llm_status"
+.Lnap_n267: .asciz "nucleo_power_battery_pct"
+.Lnap_n268: .asciz "nucleo_power_perf_begin"
+.Lnap_n269: .asciz "nucleo_power_perf_end"
+.Lnap_n270: .asciz "nucleo_prefs_save"
+.Lnap_n271: .asciz "nucleo_rom_map"
+.Lnap_n272: .asciz "nucleo_rom_unmap"
+.Lnap_n273: .asciz "nucleo_secret_get"
+.Lnap_n274: .asciz "nucleo_secret_set"
+.Lnap_n275: .asciz "nucleo_setup_mode"
+.Lnap_n276: .asciz "nucleo_surface_large"
+.Lnap_n277: .asciz "nucleo_surface_large_ok"
+.Lnap_n278: .asciz "nucleo_surface_set_large"
+.Lnap_n279: .asciz "nucleo_tcp_close"
+.Lnap_n280: .asciz "nucleo_tcp_connect"
+.Lnap_n281: .asciz "nucleo_tcp_network_up"
+.Lnap_n282: .asciz "nucleo_tcp_readable"
+.Lnap_n283: .asciz "nucleo_tcp_recv"
+.Lnap_n284: .asciz "nucleo_tcp_send"
+.Lnap_n285: .asciz "nucleo_touch_add"
+.Lnap_n286: .asciz "nucleo_touch_add_pad"
+.Lnap_n287: .asciz "nucleo_touch_add_scroll"
+.Lnap_n288: .asciz "nucleo_touch_clear"
+.Lnap_n289: .asciz "nucleo_touch_commit"
+.Lnap_n290: .asciz "nucleo_touch_last"
+.Lnap_n291: .asciz "nucleo_touch_raw"
+.Lnap_n292: .asciz "nucleo_touch_raw_read"
+.Lnap_n293: .asciz "nucleo_tr5"
+.Lnap_n294: .asciz "nucleo_ui_is_adv"
+.Lnap_n295: .asciz "nucleo_ui_panel_size"
+.Lnap_n296: .asciz "nucleo_ui_read_row"
+.Lnap_n297: .asciz "opendir"
+.Lnap_n298: .asciz "pnet_channel"
+.Lnap_n299: .asciz "pnet_name"
+.Lnap_n300: .asciz "pnet_recv"
+.Lnap_n301: .asciz "pnet_send"
+.Lnap_n302: .asciz "pnet_start"
+.Lnap_n303: .asciz "pnet_stop"
+.Lnap_n304: .asciz "powf"
+.Lnap_n305: .asciz "qsort"
+.Lnap_n306: .asciz "readdir"
+.Lnap_n307: .asciz "realloc"
+.Lnap_n308: .asciz "remove"
+.Lnap_n309: .asciz "rename"
+.Lnap_n310: .asciz "rewind"
+.Lnap_n311: .asciz "roundf"
+.Lnap_n312: .asciz "setjmp"
+.Lnap_n313: .asciz "sinf"
+.Lnap_n314: .asciz "snprintf"
+.Lnap_n315: .asciz "sqrtf"
+.Lnap_n316: .asciz "sscanf"
+.Lnap_n317: .asciz "stat"
+.Lnap_n318: .asciz "strcasecmp"
+.Lnap_n319: .asciz "strcasestr"
+.Lnap_n320: .asciz "strcat"
+.Lnap_n321: .asciz "strchr"
+.Lnap_n322: .asciz "strcmp"
+.Lnap_n323: .asciz "strcpy"
+.Lnap_n324: .asciz "strlen"
+.Lnap_n325: .asciz "strncasecmp"
+.Lnap_n326: .asciz "strncat"
+.Lnap_n327: .asciz "strncmp"
+.Lnap_n328: .asciz "strncpy"
+.Lnap_n329: .asciz "strrchr"
+.Lnap_n330: .asciz "strstr"
+.Lnap_n331: .asciz "strtof"
+.Lnap_n332: .asciz "strtol"
+.Lnap_n333: .asciz "strtoul"
+.Lnap_n334: .asciz "tanf"
+.Lnap_n335: .asciz "time"
+.Lnap_n336: .asciz "tinfl_decompress"
+.Lnap_n337: .asciz "tolower"
+.Lnap_n338: .asciz "toupper"
+.Lnap_n339: .asciz "unlink"
+.Lnap_n340: .asciz "vTaskDelay"
+.Lnap_n341: .asciz "vfprintf"
+.Lnap_n342: .asciz "vsnprintf"

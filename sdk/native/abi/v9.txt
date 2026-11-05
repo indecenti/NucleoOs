@@ -1,5 +1,5 @@
 # NucleoOS native app ABI, level 9 = level 8 + the C runtime a language engine needs (Nucleo Code, docs/nucleo-code.md):
-# cJSON's builders (the agent's requests), libgcc's double-precision and 64-bit helpers (the ESP32-S3 FPU is single precision), setjmp/longjmp and abort.
+# the LLM service (nucleo_llm_*: a request file streamed to Anthropic with the user's key), cJSON's builders (the agent's requests), libgcc's double-precision and 64-bit helpers (the ESP32-S3 FPU is single precision), setjmp/longjmp and abort.
 # Same rules as v1.txt.
 THEME_BG
 THEME_DIM
@@ -338,3 +338,9 @@ cJSON_GetStringValue
 cJSON_IsObject
 cJSON_free
 cJSON_GetObjectItemCaseSensitive
+nucleo_llm_config
+nucleo_llm_start
+nucleo_llm_read
+nucleo_llm_status
+nucleo_llm_cancel
+nucleo_llm_busy

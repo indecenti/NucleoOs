@@ -35,14 +35,22 @@ typedef struct { const char *q, *a; } anima_turn_t;   // anima_claude.h's chat h
 struct agent {
     agent_cfg_t   cfg;
     agent_io_t    io;
-    cJSON        *msgs;            // the conversation (user / assistant messages, Anthropic format)
     agent_stats_t st;
+    agent_state_t state;
+    char          hist[PATHCAP], req[PATHCAP];   // the session (JSONL) and the request being sent, on the SD card
+    int           calls_turn;
     // the reply being streamed
+    anth_stream_t *s;
     cJSON        *content;         // the assistant message's content blocks, in order
     char         *text; size_t tlen, tcap;   // the text block being written
     char          stop[24];
     anth_usage_t  usage;
     bool          stream_error; char stream_msg[160];
+    // the tool calls being answered
+    cJSON        *amsg, *rmsg;     // the assistant message with the calls, the user message with the results
+    int           tool_i;
+    uint32_t      big_mask;        // blocks whose input did not fit the device
+    char          ask[160];        // the action waiting for the user's yes
     char          todo[1024];
 };
 
@@ -226,7 +234,7 @@ static bool tool_editor(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t sc
         const char *it = jstr(in, "insert_text"); cJSON *ln = cJSON_GetObjectItem(in, "insert_line");
         if (!it || !cJSON_IsNumber(ln)) { sb_printf(r, "error: insert_line and insert_text are required"); return false; }
         size_t len = 0; char *t = read_file(p, FILE_MAX, &len);
-        if (!t) { t = strdup(""); len = 0; }
+        if (!t) { t = calloc(1, 1); len = 0; if (!t) { sb_printf(r, "error: no memory"); return false; } }
         int at = (int)ln->valuedouble, line = 0; size_t pos = 0;
         while (line < at && pos < len) { char *e = memchr(t + pos, '\n', len - pos); if (!e) { pos = len; break; } pos = (size_t)(e - t) + 1; line++; }
         size_t il = strlen(it); bool nl = il && it[il - 1] != '\n';
@@ -260,9 +268,14 @@ static bool tool_run(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t scap)
     char *outb = malloc(4096); sb_t o = { outb, 0, 4096, false }; if (outb) outb[0] = 0;
     code_env_t env = { a->cfg.root, run_out, &o, a->io.now_ms, a->io.sleep_ms, run_cancel, tmo };
     code_result_t res;
-    bool ok = a->cfg.arena && outb && code_run(a->cfg.arena, a->cfg.arena_size, src, len, rel, &env, &res);
+    // The arena: the configured one, or (on the device) one taken now and given back after the run, so the engine
+    // and the model's TLS session never hold RAM at the same time. It shrinks until a block is there.
+    void *arena = a->cfg.arena; size_t asz = a->cfg.arena_size;
+    if (!arena) for (size_t want = asz ? asz : 32768; want >= 12288 && !arena; want -= 4096) { arena = malloc(want); asz = want; }
+    bool ok = arena && outb && code_run(arena, asz, src, len, rel, &env, &res);
+    if (arena && arena != a->cfg.arena) free(arena);
     free(src);
-    if (!a->cfg.arena || !outb) { free(outb); sb_printf(r, "error: no memory for the engine"); return false; }
+    if (!arena || !outb) { free(outb); sb_printf(r, "error: no memory for the engine"); return false; }
     if (o.n) { sb_printf(r, "output:\n"); sb_add(r, outb, o.n); if (o.cut) sb_printf(r, "\n[output cut at 4 KB]"); sb_printf(r, "\n"); }
     else sb_printf(r, "output: (none)\n");
     if (ok) sb_printf(r, "exit: ok in %u ms, memory %u bytes of %u", (unsigned)res.ms, (unsigned)res.live_max, (unsigned)res.arena);
@@ -409,7 +422,6 @@ static void ev_tool(void *op, const char *id, const char *name, const char *json
 }
 static void ev_done(void *op, const char *stop, const anth_usage_t *u) { agent_t *a = op; snprintf(a->stop, sizeof a->stop, "%s", stop); a->usage = *u; }
 static void ev_error(void *op, const char *m) { agent_t *a = op; a->stream_error = true; snprintf(a->stream_msg, sizeof a->stream_msg, "%s", m); }
-static void on_bytes(void *op, const char *b, int n) { anth_stream_feed((anth_stream_t *)op, b, n); }
 
 // price per million tokens: input, output (cache read 10% of input, cache write 125%)
 static void price(const char *model, double *in, double *out)
@@ -422,16 +434,44 @@ static void price(const char *model, double *in, double *out)
     else if (strstr(model, "fable")) { *in = 10.0; *out = 50.0; }
 }
 
-static char *build_body(agent_t *a)
+// ---- the conversation lives on the SD card ---------------------------------------------------------------
+// <root>/.code/session.jsonl: one Anthropic message per line, appended. The request is WRITTEN TO A FILE
+// (<root>/.code/request.json) by streaming that history through, so RAM holds one message at a time however
+// long the session is; the transport sends the file. The last message gets the moving cache breakpoint.
+static bool hist_append(agent_t *a, cJSON *msg)
 {
+    char *t = cJSON_PrintUnformatted(msg);
+    if (!t) return false;
+    FILE *f = fopen(a->hist, "ab");
+    bool ok = f && fputs(t, f) >= 0 && fputc('\n', f) != EOF;
+    if (f) ok = (fclose(f) == 0) && ok;
+    cJSON_free(t);
+    return ok;
+}
+// one line of any length (realloc as it grows); NULL at the end
+static char *read_line(FILE *f, char **buf, size_t *cap)
+{
+    size_t n = 0;
+    if (!*buf) { *cap = 4096; *buf = malloc(*cap); if (!*buf) return NULL; }
+    for (;;) {
+        if (!fgets(*buf + n, (int)(*cap - n), f)) return n ? *buf : NULL;
+        n += strlen(*buf + n);
+        if (n && (*buf)[n - 1] == '\n') { (*buf)[--n] = 0; return *buf; }
+        if (n + 1 >= *cap) { size_t nc = *cap * 2; char *g = realloc(*buf, nc); if (!g) return NULL; *buf = g; *cap = nc; }
+    }
+}
+
+static bool build_request(agent_t *a)
+{
+    FILE *out = fopen(a->req, "wb");
+    if (!out) { snprintf(a->st.error, sizeof a->st.error, "cannot write the request on the SD card"); return false; }
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "model", a->cfg.model);
     cJSON_AddNumberToObject(root, "max_tokens", a->cfg.max_tokens ? a->cfg.max_tokens : 16000);
     cJSON_AddBoolToObject(root, "stream", true);
     bool th; const char *eff = anth_effort_for(a->cfg.model, a->cfg.effort, &th);
     if (eff) { cJSON *oc = cJSON_AddObjectToObject(root, "output_config"); cJSON_AddStringToObject(oc, "effort", eff); }
-    // system: the instructions (cached) + the environment
-    char env[400];
+    char env[480];
     snprintf(env, sizeof env, "<env>\nWorkspace: %s\nModel: %s\nAnswer in: %s (code, file names and identifiers stay as they are)\n</env>",
              a->cfg.root, a->cfg.model, a->cfg.lang ? a->cfg.lang : "the language of the user's message");
     cJSON *sys = cJSON_AddArrayToObject(root, "system");
@@ -443,58 +483,223 @@ static char *build_body(agent_t *a)
     cJSON_AddItemToObject(root, "tools", cJSON_Parse(TOOLS_JSON));
     char *head = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
-    // the conversation, with a moving cache breakpoint on its last block: each call reads the previous prefix.
-    // cJSON objects are child lists, so the marker added last is removed again by index after printing.
-    cJSON *last = cJSON_GetArrayItem(a->msgs, cJSON_GetArraySize(a->msgs) - 1);
-    cJSON *lc = last ? cJSON_GetObjectItem(last, "content") : NULL;
-    cJSON *lb = cJSON_IsArray(lc) ? cJSON_GetArrayItem(lc, cJSON_GetArraySize(lc) - 1) : NULL;
-    if (lb) { cJSON *c2 = cJSON_AddObjectToObject(lb, "cache_control"); cJSON_AddStringToObject(c2, "type", "ephemeral"); }
-    char *msgs = cJSON_PrintUnformatted(a->msgs);
-    if (lb) cJSON_DeleteItemFromArray(lb, cJSON_GetArraySize(lb) - 1);
-    char *body = NULL;
-    if (head && msgs) {
-        size_t hl = strlen(head), ml = strlen(msgs);
-        body = malloc(hl + ml + 16);
-        if (body) { memcpy(body, head, hl - 1); memcpy(body + hl - 1, ",\"messages\":", 12); memcpy(body + hl + 11, msgs, ml); body[hl + 11 + ml] = '}'; body[hl + 12 + ml] = 0; }
+    bool ok = head != NULL;
+    if (ok) { size_t hl = strlen(head); ok = fwrite(head, 1, hl - 1, out) == hl - 1 && fputs(",\"messages\":[", out) >= 0; }
+    cJSON_free(head);
+    FILE *h = ok ? fopen(a->hist, "rb") : NULL;
+    char *cur = NULL, *nxt = NULL; size_t ccap = 0, ncap = 0;
+    bool first = true;
+    if (h) {
+        char *l = read_line(h, &cur, &ccap);
+        while (ok && l) {
+            char *m = read_line(h, &nxt, &ncap);                 // look ahead: is `cur` the last line?
+            if (!first) ok = fputc(',', out) != EOF;
+            first = false;
+            if (m) ok = ok && fputs(cur, out) >= 0;
+            else {                                              // the last message: the cache breakpoint on its last block
+                cJSON *msg = cJSON_Parse(cur);
+                cJSON *ct = msg ? cJSON_GetObjectItem(msg, "content") : NULL;
+                cJSON *lb = cJSON_IsArray(ct) ? cJSON_GetArrayItem(ct, cJSON_GetArraySize(ct) - 1) : NULL;
+                if (lb) { cJSON *c2 = cJSON_AddObjectToObject(lb, "cache_control"); cJSON_AddStringToObject(c2, "type", "ephemeral"); }
+                char *t = msg ? cJSON_PrintUnformatted(msg) : NULL;
+                ok = ok && fputs(t ? t : cur, out) >= 0;
+                cJSON_free(t); cJSON_Delete(msg);
+            }
+            char *sw = cur; size_t sc = ccap; cur = nxt; ccap = ncap; nxt = sw; ncap = sc;   // next becomes current
+            l = m ? cur : NULL;
+        }
+        fclose(h);
     }
-    cJSON_free(head); cJSON_free(msgs);
-    return body;
+    free(cur); free(nxt);
+    ok = ok && fputs("]}", out) >= 0;
+    ok = (fclose(out) == 0) && ok;
+    if (!ok) snprintf(a->st.error, sizeof a->st.error, "cannot write the request on the SD card");
+    return ok;
 }
 
-static bool one_call(agent_t *a)
+// ---- the state machine -----------------------------------------------------------------------------------
+static void set_error(agent_t *a, const char *m) { snprintf(a->st.error, sizeof a->st.error, "%s", m); a->state = AG_ERROR; }
+
+// every tool call of the current assistant message still unanswered gets an answer, so the history stays valid
+static void answer_pending(agent_t *a, const char *why)
 {
-    char *body = build_body(a);
-    if (!body) { snprintf(a->st.error, sizeof a->st.error, "no memory for the request"); return false; }
-    anth_stream_t *s = calloc(1, sizeof *s);
-    if (!s) { free(body); snprintf(a->st.error, sizeof a->st.error, "no memory for the stream"); return false; }
+    if (!a->amsg) return;
+    cJSON *ac = cJSON_GetObjectItem(a->amsg, "content");
+    int n = cJSON_GetArraySize(ac);
+    for (int i = a->tool_i; i < n; i++) {
+        cJSON *b = cJSON_GetArrayItem(ac, i);
+        const char *ty = jstr(b, "type");
+        if (!ty || strcmp(ty, "tool_use")) continue;
+        cJSON *tr = cJSON_CreateObject();
+        cJSON_AddStringToObject(tr, "type", "tool_result");
+        cJSON_AddStringToObject(tr, "tool_use_id", jstr(b, "id") ? jstr(b, "id") : "");
+        cJSON_AddStringToObject(tr, "content", why);
+        cJSON_AddBoolToObject(tr, "is_error", true);
+        cJSON_AddItemToArray(cJSON_GetObjectItem(a->rmsg, "content"), tr);
+    }
+    hist_append(a, a->rmsg);
+    cJSON_Delete(a->amsg); a->amsg = NULL;
+    cJSON_Delete(a->rmsg); a->rmsg = NULL;
+}
+
+static void next_request(agent_t *a)
+{
+    if (a->calls_turn >= (a->cfg.max_calls ? a->cfg.max_calls : 30)) { set_error(a, "stopped after the model-call limit of this turn"); return; }
+    if (!build_request(a)) { a->state = AG_ERROR; return; }
+    a->state = AG_SEND;
+}
+
+bool agent_submit(agent_t *a, const char *user_text)
+{
+    if (a->state == AG_SEND || a->state == AG_RECV || a->state == AG_TOOLS || a->state == AG_ASK) return false;
+    a->st.error[0] = 0; a->calls_turn = 0;
+    cJSON *u = cJSON_CreateObject();
+    cJSON_AddStringToObject(u, "role", "user");
+    cJSON *uc = cJSON_AddArrayToObject(u, "content");
+    cJSON *ut = cJSON_CreateObject(); cJSON_AddStringToObject(ut, "type", "text"); cJSON_AddStringToObject(ut, "text", user_text);
+    cJSON_AddItemToArray(uc, ut);
+    bool ok = hist_append(a, u);
+    cJSON_Delete(u);
+    if (!ok) { set_error(a, "cannot write the session on the SD card"); return false; }
+    next_request(a);
+    return a->state == AG_SEND;
+}
+
+const char *agent_request_path(const agent_t *a) { return a->req; }
+
+void agent_begin_response(agent_t *a)
+{
+    free(a->s);
+    a->s = calloc(1, sizeof *a->s);
+    if (!a->s) { set_error(a, "no memory for the stream"); return; }
     anth_cb_t cb = { ev_text, ev_tool, ev_done, ev_error, ev_thinking };
-    anth_stream_init(s, &cb, a, a->cfg.toolbuf, a->cfg.toolcap);
+    anth_stream_init(a->s, &cb, a, a->cfg.toolbuf, a->cfg.toolcap);
+    cJSON_Delete(a->content);
     a->content = cJSON_CreateArray(); a->tlen = 0; a->stop[0] = 0; a->stream_error = false; memset(&a->usage, 0, sizeof a->usage);
-    char err[256]; err[0] = 0;
-    int status = a->io.post(a->io.post_op, body, strlen(body), on_bytes, s, err, sizeof err);
-    free(body);
+    a->big_mask = 0;
+    a->state = AG_RECV;
+}
+
+void agent_feed(agent_t *a, const char *b, int n) { if (a->state == AG_RECV && a->s) anth_stream_feed(a->s, b, n); }
+
+void agent_end_response(agent_t *a, int status, const char *err)
+{
+    if (a->state != AG_RECV) return;
     flush_text(a);
-    bool ok = status == 200 && !a->stream_error && s->done;
-    free(s);
-    a->st.calls++;
+    bool ok = status == 200 && !a->stream_error && a->s && a->s->done;
+    free(a->s); a->s = NULL;
+    a->st.calls++; a->calls_turn++;
     a->st.in += a->usage.in; a->st.out += a->usage.out; a->st.cache_read += a->usage.cache_read; a->st.cache_write += a->usage.cache_write;
+    a->st.last_context = a->usage.in + a->usage.cache_read + a->usage.cache_write;
     double pi, po; price(a->cfg.model, &pi, &po);
     a->st.usd += (a->usage.in * pi + a->usage.cache_read * pi * 0.1 + a->usage.cache_write * pi * 1.25 + a->usage.out * po) / 1e6;
     snprintf(a->st.stop, sizeof a->st.stop, "%s", a->stop);
     if (!ok) {
-        snprintf(a->st.error, sizeof a->st.error, "%s", a->stream_error ? a->stream_msg : status != 200 ? (err[0] ? err : "HTTP error") : "the stream ended early");
-        if (status != 200 && status > 0) { char t[160]; snprintf(t, sizeof t, "HTTP %d: %s", status, a->st.error); snprintf(a->st.error, sizeof a->st.error, "%s", t); }
+        char m[200];
+        if (a->stream_error) snprintf(m, sizeof m, "%s", a->stream_msg);
+        else if (status != 200) snprintf(m, sizeof m, "HTTP %d: %s", status, err && err[0] ? err : (status < 0 ? "no connection" : "error"));
+        else snprintf(m, sizeof m, "the answer was cut off");
         cJSON_Delete(a->content); a->content = NULL;
-        return false;
+        set_error(a, m);
+        return;
     }
-    // the assistant message joins the history (thinking blocks with their signatures, text, tool calls)
-    cJSON *m = cJSON_CreateObject();
-    cJSON_AddStringToObject(m, "role", "assistant");
+    cJSON *msg = cJSON_CreateObject();
+    cJSON_AddStringToObject(msg, "role", "assistant");
     if (cJSON_GetArraySize(a->content) == 0) { cJSON *t = cJSON_CreateObject(); cJSON_AddStringToObject(t, "type", "text"); cJSON_AddStringToObject(t, "text", "(no answer)"); cJSON_AddItemToArray(a->content, t); }
-    cJSON_AddItemToObject(m, "content", a->content); a->content = NULL;
-    cJSON_AddItemToArray(a->msgs, m);
-    return true;
+    // our own "_too_large" marker never reaches the history
+    int n = cJSON_GetArraySize(a->content);
+    for (int i = 0; i < n; i++) {
+        cJSON *b = cJSON_GetArrayItem(a->content, i), *big = cJSON_GetObjectItem(b, "_too_large");
+        if (big) for (int k = 0; k < cJSON_GetArraySize(b); k++) if (cJSON_GetArrayItem(b, k) == big) { cJSON_DeleteItemFromArray(b, k); a->big_mask |= 1u << (i & 31); break; }
+    }
+    cJSON_AddItemToObject(msg, "content", a->content); a->content = NULL;
+    hist_append(a, msg);
+    if (!strcmp(a->stop, "tool_use")) {
+        a->amsg = msg; a->tool_i = 0;
+        a->rmsg = cJSON_CreateObject(); cJSON_AddStringToObject(a->rmsg, "role", "user"); cJSON_AddArrayToObject(a->rmsg, "content");
+        a->state = AG_TOOLS;
+        return;
+    }
+    cJSON_Delete(msg);
+    a->big_mask = 0;
+    if (strcmp(a->stop, "end_turn") && strcmp(a->stop, "stop_sequence")) { char m[64]; snprintf(m, sizeof m, "the model stopped: %s", a->stop); set_error(a, m); return; }
+    a->state = AG_DONE;
 }
+
+// the tool at a->tool_i, or -1 when none is left
+static int next_tool(agent_t *a)
+{
+    cJSON *ac = cJSON_GetObjectItem(a->amsg, "content");
+    int n = cJSON_GetArraySize(ac);
+    while (a->tool_i < n) { const char *ty = jstr(cJSON_GetArrayItem(ac, a->tool_i), "type"); if (ty && !strcmp(ty, "tool_use")) return a->tool_i; a->tool_i++; }
+    return -1;
+}
+
+static void do_tool(agent_t *a, int i, bool declined)
+{
+    cJSON *b = cJSON_GetArrayItem(cJSON_GetObjectItem(a->amsg, "content"), i);
+    const char *name = jstr(b, "name") ? jstr(b, "name") : "?";
+    bool too_large = (a->big_mask >> (i & 31)) & 1u;
+    char *rb = malloc(VIEW_MAX + 256);
+    sb_t r = { rb, 0, (strcmp(name, "str_replace_based_edit_tool") ? RESULT_MAX : VIEW_MAX) + 256, false };
+    bool ok;
+    if (!rb) ok = false;
+    else if (declined) { rb[0] = 0; sb_printf(&r, "The user declined this action."); ok = false; if (a->io.on_tool_done) a->io.on_tool_done(a->io.ui_op, name, false, "declined"); }
+    else { rb[0] = 0; ok = run_tool(a, name, too_large ? NULL : cJSON_GetObjectItem(b, "input"), &r); }
+    a->st.tools++; if (!ok) a->st.tool_errors++;
+    cJSON *tr = cJSON_CreateObject();
+    cJSON_AddStringToObject(tr, "type", "tool_result");
+    cJSON_AddStringToObject(tr, "tool_use_id", jstr(b, "id") ? jstr(b, "id") : "");
+    cJSON_AddStringToObject(tr, "content", rb && rb[0] ? rb : "(no memory for the result)");
+    if (!ok) cJSON_AddBoolToObject(tr, "is_error", true);
+    cJSON_AddItemToArray(cJSON_GetObjectItem(a->rmsg, "content"), tr);
+    free(rb);
+    a->tool_i++;
+}
+
+static bool needs_approval(agent_t *a, int i)
+{
+    if (!a->cfg.ask_writes) return false;
+    cJSON *b = cJSON_GetArrayItem(cJSON_GetObjectItem(a->amsg, "content"), i);
+    const char *name = jstr(b, "name");
+    cJSON *in = cJSON_GetObjectItem(b, "input");
+    return name && in && tool_mutates(name, in);
+}
+
+agent_state_t agent_step(agent_t *a)
+{
+    if (a->state == AG_TOOLS) {
+        int i = next_tool(a);
+        if (i < 0) {                                          // all answered: they go in one user message
+            hist_append(a, a->rmsg);
+            cJSON_Delete(a->amsg); a->amsg = NULL; cJSON_Delete(a->rmsg); a->rmsg = NULL; a->big_mask = 0;
+            if (a->io.cancel && a->io.cancel(a->io.ui_op)) { set_error(a, "stopped by the user"); return a->state; }
+            next_request(a);
+        } else if (needs_approval(a, i)) {
+            cJSON *b = cJSON_GetArrayItem(cJSON_GetObjectItem(a->amsg, "content"), i);
+            cJSON *in = cJSON_GetObjectItem(b, "input");
+            const char *nm = jstr(b, "name"), *c = jstr(in, "command"), *p = jstr(in, "path");
+            snprintf(a->ask, sizeof a->ask, "%s %s", !strcmp(nm, "run_js") ? "run" : (c ? c : nm), p ? p : "");
+            a->state = AG_ASK;
+        } else do_tool(a, i, false);
+    }
+    return a->state;
+}
+const char *agent_question(const agent_t *a) { return a->state == AG_ASK ? a->ask : NULL; }
+void agent_answer(agent_t *a, bool yes)
+{
+    if (a->state != AG_ASK) return;
+    a->state = AG_TOOLS;
+    do_tool(a, a->tool_i, !yes);
+}
+void agent_cancel(agent_t *a, const char *why)
+{
+    if (a->state == AG_TOOLS || a->state == AG_ASK) answer_pending(a, "stopped by the user");
+    if (a->state == AG_SEND || a->state == AG_RECV || a->state == AG_TOOLS || a->state == AG_ASK) set_error(a, why ? why : "stopped by the user");
+    free(a->s); a->s = NULL;
+}
+agent_state_t agent_state(const agent_t *a) { return a->state; }
+void agent_reset(agent_t *a) { remove(a->hist); a->st = (agent_stats_t){0}; a->state = AG_IDLE; a->todo[0] = 0; }
 
 // ---- public ---------------------------------------------------------------------------------------------
 agent_t *agent_new(const agent_cfg_t *cfg, const agent_io_t *io)
@@ -502,66 +707,38 @@ agent_t *agent_new(const agent_cfg_t *cfg, const agent_io_t *io)
     agent_t *a = calloc(1, sizeof *a);
     if (!a) return NULL;
     a->cfg = *cfg; a->io = *io;
-    a->msgs = cJSON_CreateArray();
     a->tcap = 1024; a->text = malloc(a->tcap);
-    if (!a->msgs || !a->text) { agent_free(a); return NULL; }
+    char dir[PATHCAP]; snprintf(dir, sizeof dir, "%s/.code", cfg->root); mkdir(dir, 0775);
+    snprintf(a->hist, sizeof a->hist, "%s/.code/session.jsonl", cfg->root);
+    snprintf(a->req, sizeof a->req, "%s/.code/request.json", cfg->root);
+    if (!a->text) { agent_free(a); return NULL; }
     return a;
 }
 void agent_free(agent_t *a)
 {
     if (!a) return;
-    cJSON_Delete(a->msgs); cJSON_Delete(a->content); free(a->text); free(a);
+    cJSON_Delete(a->content); cJSON_Delete(a->amsg); cJSON_Delete(a->rmsg); free(a->s); free(a->text); free(a);
 }
 const agent_stats_t *agent_stats(const agent_t *a) { return &a->st; }
+const char *agent_todo(const agent_t *a) { return a->todo; }
 
+// The whole turn, blocking: the host bench (and any caller with a blocking transport).
 bool agent_turn(agent_t *a, const char *user_text)
 {
-    a->st.error[0] = 0;
-    cJSON *u = cJSON_CreateObject();
-    cJSON_AddStringToObject(u, "role", "user");
-    cJSON *uc = cJSON_AddArrayToObject(u, "content");
-    cJSON *ut = cJSON_CreateObject(); cJSON_AddStringToObject(ut, "type", "text"); cJSON_AddStringToObject(ut, "text", user_text);
-    cJSON_AddItemToArray(uc, ut);
-    cJSON_AddItemToArray(a->msgs, u);
-    int max = a->cfg.max_calls ? a->cfg.max_calls : 30;
-    char *rb = malloc(VIEW_MAX + 256);
-    if (!rb) { snprintf(a->st.error, sizeof a->st.error, "no memory"); return false; }
-    bool ended = false;
-    for (int call = 0; call < max; call++) {
-        if (a->io.cancel && a->io.cancel(a->io.ui_op)) { snprintf(a->st.error, sizeof a->st.error, "stopped by the user"); break; }
-        if (!one_call(a)) break;
-        if (strcmp(a->stop, "tool_use")) { ended = !strcmp(a->stop, "end_turn") || !strcmp(a->stop, "stop_sequence");
-            if (!ended) snprintf(a->st.error, sizeof a->st.error, "the model stopped: %s", a->stop);
-            break; }
-        // run every tool call of that message, answer them all in one user message
-        cJSON *am = cJSON_GetArrayItem(a->msgs, cJSON_GetArraySize(a->msgs) - 1), *ac = cJSON_GetObjectItem(am, "content");
-        cJSON *res = cJSON_CreateObject(); cJSON_AddStringToObject(res, "role", "user");
-        cJSON *rc = cJSON_AddArrayToObject(res, "content");
-        int n = cJSON_GetArraySize(ac);
-        for (int i = 0; i < n; i++) {
-            cJSON *b = cJSON_GetArrayItem(ac, i);
-            const char *ty = jstr(b, "type");
-            if (!ty || strcmp(ty, "tool_use")) continue;
-            cJSON *big = cJSON_GetObjectItem(b, "_too_large");
-            bool too_large = big != NULL;
-            if (too_large) { /* remove our marker so the history stays valid */
-                for (int k = 0; k < cJSON_GetArraySize(b); k++) { cJSON *f = cJSON_GetArrayItem(b, k); if (f == big) { cJSON_DeleteItemFromArray(b, k); break; } }
-            }
-            sb_t r = { rb, 0, RESULT_MAX + 256, false }; rb[0] = 0;
-            if (!strcmp(jstr(b, "name") ? jstr(b, "name") : "", "str_replace_based_edit_tool")) r.cap = VIEW_MAX + 256;
-            bool ok = run_tool(a, jstr(b, "name") ? jstr(b, "name") : "?", too_large ? NULL : cJSON_GetObjectItem(b, "input"), &r);
-            a->st.tools++; if (!ok) a->st.tool_errors++;
-            cJSON *tr = cJSON_CreateObject();
-            cJSON_AddStringToObject(tr, "type", "tool_result");
-            cJSON_AddStringToObject(tr, "tool_use_id", jstr(b, "id") ? jstr(b, "id") : "");
-            cJSON_AddStringToObject(tr, "content", rb[0] ? rb : "(empty)");
-            if (!ok) cJSON_AddBoolToObject(tr, "is_error", true);
-            cJSON_AddItemToArray(rc, tr);
-        }
-        cJSON_AddItemToArray(a->msgs, res);
-        if (call == max - 1) snprintf(a->st.error, sizeof a->st.error, "stopped after %d model calls", max);
+    if (!agent_submit(a, user_text)) return false;
+    char err[256];
+    for (;;) {
+        agent_state_t s = agent_state(a);
+        if (s == AG_SEND) {
+            agent_begin_response(a);
+            if (a->state != AG_RECV) break;
+            err[0] = 0;
+            int status = a->io.post_file(a->io.post_op, a->req, (agent_bytes_fn)agent_feed, a, err, sizeof err);
+            agent_end_response(a, status, err);
+        } else if (s == AG_TOOLS) agent_step(a);
+        else if (s == AG_ASK) agent_answer(a, a->io.approve ? a->io.approve(a->io.ui_op, "tool", a->ask) : true);
+        else break;
     }
-    free(rb);
-    return ended;
+    return a->state == AG_DONE;
 }
 #endif
