@@ -1412,34 +1412,78 @@ static bool a_is_code_request(const char *input)
 // the device runs JavaScript only.
 static char s_code_file[48];                       // code_run: the script to open ("snake.js")
 const char *nucleo_anima_code_file(void) { return s_code_file; }
+// Is Code installed? (the app says, at each enter). Without it there is nothing to offer: code is answered in the chat.
+#ifdef ESP_PLATFORM
+static bool s_code_app;
+#else
+static bool s_code_app = true;                     // the host harness: as on a device with Code
+#endif
+void nucleo_anima_set_code_app(bool on) { s_code_app = on; }
+// An ambiguous request ("scrivimi il codice di pong") asks first: Code on the device, or the code here. The question
+// waits one turn: yes -> the job for Code (this text), "qui" -> the snippet in the chat.
+static char s_code_offer[240];
+static char s_code_task[240];                      // the request Code gets (the offer's, when it was a yes)
+const char *nucleo_anima_code_task(void) { return s_code_task; }
 static bool a_code_task(const char *input, bool en, anima_result_t *r)
 {
     char tok[A_MAX_TOKENS][A_TOK_LEN];
     int n = a_tokenize(input, tok);
     if (n < 2) return false;
-    static const char *verb[] = { "scrivi","scrivimi","scrivere","crea","creami","creare","fammi","fai","fare","programma",
-                                  "programmami","sviluppa","sviluppami","costruisci","costruiscimi","realizza","realizzami",
-                                  "inventa","inventami","prepara","preparami","scrivermi","crearmi","farmi","programmarmi","realizzarmi",
-                                  "svilupparmi","write","make","build","create","develop","code",
-                                  "program", NULL };
-    static const char *noun[] = { "gioco","giochino","videogioco","game","app","applicazione","applicazioni","programma",
-                                  "programmino","script","tool","utility","simulazione","animazione","demo","calcolatrice",
-                                  "javascript", NULL };
-    static const char *run[]  = { "esegui","eseguimi","avvia","lancia","apri","gioca","run","start","launch","open","play", NULL };
+    // what makes something: the imperative / infinitive forms people use with ANIMA
+    static const char *verb[] = { "scrivi","scrivimi","scrivere","scrivermi","crea","creami","creare","crearmi","fammi","fai",
+                                  "fare","farmi","programma","programmami","programmare","programmarmi","sviluppa","sviluppami",
+                                  "sviluppare","svilupparmi","costruisci","costruiscimi","realizza","realizzami","realizzarmi",
+                                  "inventa","inventami","prepara","preparami","implementa","implementami","codifica","voglio","vorrei",
+                                  "write","make","build","create","develop","code","program","implement", NULL };
+    // an artifact that can only be a program: with a verb above it is a job for Code
+    static const char *strong[] = { "gioco","giochino","videogioco","videogame","game","app","applicazione","applicazioni",
+                                    "programma","programmino","script","javascript","simulazione","animazione","demo", NULL };
+    // a classic game by name: most likely a program, but "fammi un sudoku" may want a puzzle - ANIMA asks
+    static const char *named[] = { "pong","tetris","snake","serpente","breakout","arkanoid","flappy","asteroids","invaders",
+                                   "pacman","2048","sudoku","tris","minesweeper","labirinto","maze","platform","platformer", NULL };
+    // a tool ANIMA or the OS may already be: asked about only without a number or a time ("fammi un timer di 5 minuti")
+    static const char *weak[] = { "timer","cronometro","contatore","counter","stopwatch","calcolatrice","calculator",
+                                  "convertitore","converter","orologio", NULL };
+    static const char *codew[] = { "codice","esempio","example","snippet","sorgente","source", NULL };
+    static const char *timew[] = { "minuti","minuto","secondi","secondo","ore","ora","domani","oggi","stasera","alle","minutes",
+                                   "minute","seconds","hours","tomorrow","today", NULL };
+    static const char *run[]  = { "esegui","eseguimi","avvia","lancia","apri","gioca","run","start","launch","open","play",
+                                  "aprire","avviare","lanciare","usare","usa","giocare","eseguire", NULL };
+    static const char *tell[] = { "dire","dimmi","sai","sapere","spiegami","spiega","spiegare","racconta","raccontami","parlami",
+                                  "tell","explain", NULL };
+    static const char *show[] = { "dammi","mostrami","mostra","esempio","example","snippet","give","show", NULL };
     static const char *other[] = { "python","typescript","golang","kotlin","java","rust","php","swift","bash","sql","html",
-                                   "css","cpp","arduino", NULL };
-    static const char *ask[] = { "cos","cosa","che","come","quale","quali","perche","quando","dove","chi","what","how","why",
-                                 "which","when","where","who","is","are","does", NULL };
-    for (int i = 0; ask[i]; i++) if (!strcmp(ask[i], tok[0])) return false;   // a question about programs, not a job
-    bool v = false, o = false, rv = false; int nn = -1, js = -1, vt = -1;
+                                   "css","cpp","arduino","micropython","lua","basic", NULL };
+    static const char *notcode[] = { "fiscale","postale","pin","iban","sconto","cap","colore","morse","promo","promemoria",
+                                     "evento","appuntamento","poesia","storia","racconto","lettera","email","mail","canzone", NULL };
+    static const char *ask[] = { "cos","cosa","che","come","quale","quali","perche","quando","dove","chi","quanto","quanti",
+                                 "quanta","quante","what","how","why","which","when","where","who","is","are","does","do", NULL };
+    // a question about programs, not a job: an ask word first, or after a polite opening ("mi puoi dire quante...");
+    // later it is a relative ("uno script che rinomina i file")
+    static const char *lead[] = { "mi","ti","puoi","potresti","scusa","ehi","ciao","senti","dimmi","sai", NULL };
+    int q0 = 0;
+    while (q0 < n && q0 < 3) { bool l = false; for (int i = 0; lead[i]; i++) if (!strcmp(lead[i], tok[q0])) l = true; if (!l) break; q0++; }
+    for (int i = 0; ask[i]; i++) if (q0 < n && !strcmp(ask[i], tok[q0])) return false;
+    int vt = -1, st = -1, nt = -1, wt = -1, js = -1;
+    bool cw = false, o = false, rv = false, digits = false, tw = false, sh = false;
     for (int t = 0; t < n; t++) {
-        for (int i = 0; verb[i]; i++) if (!strcmp(verb[i], tok[t]) && vt < 0) { v = true; vt = t; }
-        for (int i = 0; noun[i]; i++) if (!strcmp(noun[i], tok[t]) && nn < 0 && t != vt) nn = t;
-        for (int i = 0; run[i]; i++) if (!strcmp(run[i], tok[t])) rv = true;
-        for (int i = 0; other[i]; i++) if (!strcmp(other[i], tok[t])) o = true;
-        if (t > 0 && !strcmp(tok[t], "js") && js < 0) js = t;
+        const char *w = tok[t];
+        for (int i = 0; verb[i]; i++) if (!strcmp(verb[i], w) && vt < 0) vt = t;
+        for (int i = 0; strong[i]; i++) if (!strcmp(strong[i], w) && st < 0 && t != vt) st = t;
+        for (int i = 0; named[i]; i++) if (!strcmp(named[i], w) && nt < 0) nt = t;
+        for (int i = 0; weak[i]; i++) if (!strcmp(weak[i], w) && wt < 0) wt = t;
+        for (int i = 0; codew[i]; i++) if (!strcmp(codew[i], w)) cw = true;
+        for (int i = 0; timew[i]; i++) if (!strcmp(timew[i], w)) tw = true;
+        for (int i = 0; run[i]; i++) if (!strcmp(run[i], w)) rv = true;
+        for (int i = 0; tell[i]; i++) if (!strcmp(tell[i], w)) return false;      // "dimmi", "sai": a question
+        for (int i = 0; show[i]; i++) if (!strcmp(show[i], w)) sh = true;
+        for (int i = 0; other[i]; i++) if (!strcmp(other[i], w)) o = true;
+        for (int i = 0; notcode[i]; i++) if (!strcmp(notcode[i], w)) return false;   // "il codice fiscale", "una poesia"
+        bool num = w[0] != 0; for (const char *c = w; *c; c++) if (*c < '0' || *c > '9') num = false;
+        if (num && strcmp(w, "2048")) digits = true;
+        if (t > 0 && !strcmp(w, "js") && js < 0) js = t;
     }
-    if (rv && js > 0 && !v) {                       // "esegui snake.js": open it in Code
+    if (rv && js > 0 && vt < 0) {                    // "esegui snake.js": open it in Code
         snprintf(s_code_file, sizeof s_code_file, "%s.js", tok[js - 1]);
         r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 90;
         snprintf(r->intent, sizeof r->intent, "code_run");
@@ -1447,14 +1491,68 @@ static bool a_code_task(const char *input, bool en, anima_result_t *r)
         snprintf(r->reply, sizeof r->reply, en ? "Opening %s in Code." : "Apro %s in Code.", s_code_file);
         return true;
     }
-    if (!v || nn < 0 || o) return false;
+    if (o) return false;                             // another language: a snippet, the device runs JavaScript only
+    if (rv) return false;                            // "vorrei aprire la calcolatrice": using a thing, not making one
     s_code_file[0] = 0;
-    r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 85;
-    snprintf(r->intent, sizeof r->intent, "code_task");
-    snprintf(r->arg, sizeof r->arg, "code");
-    snprintf(r->reply, sizeof r->reply, en ? "Code can write it, run it and test it on the device."
-                                           : "Code puo' scriverlo, eseguirlo e provarlo sul dispositivo.");
-    return true;
+    const bool v = vt >= 0;
+    const bool sure = v && st >= 0 && !cw;           // "scrivimi un gioco", "fammi un'app per le spese"
+    const bool maybe = (v && (nt >= 0 || (wt >= 0 && !digits && !tw) || (st >= 0 && cw)))   // "fammi pong", "il codice di un gioco"
+                    || (!v && cw && sh && a_is_code_request(input));                        // "dammi un esempio di codice javascript"
+    if (sure && s_code_app) {
+        snprintf(s_code_task, sizeof s_code_task, "%s", input);
+        r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 85;
+        snprintf(r->intent, sizeof r->intent, "code_task");
+        snprintf(r->arg, sizeof r->arg, "code");
+        snprintf(r->reply, sizeof r->reply, en ? "Code can write it, run it and test it on the device."
+                                               : "Code puo' scriverlo, eseguirlo e provarlo sul dispositivo.");
+        return true;
+    }
+    if (sure && !s_code_app) {                       // the app offers the Store
+        r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 80;
+        snprintf(r->intent, sizeof r->intent, "code_task");
+        snprintf(r->arg, sizeof r->arg, "code");
+        r->reply[0] = 0;
+        return true;
+    }
+    if (maybe && s_code_app) {                       // ask: Code on the device, or the code here
+        snprintf(s_code_offer, sizeof s_code_offer, "%s", input);
+        r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 80;
+        snprintf(r->intent, sizeof r->intent, "code_offer");
+        snprintf(r->arg, sizeof r->arg, "code");
+        snprintf(r->reply, sizeof r->reply, en ? "Shall Code write it and test it here on the Cardputer? Enter = yes. Or type \"here\" for an answer in the chat."
+                                               : "Lo faccio scrivere e provare a Code qui sul Cardputer? Invio = si'. Oppure scrivi \"qui\" e ti rispondo in chat.");
+        return true;
+    }
+    return false;
+}
+// The turn after an offer: yes -> the job for Code; "qui" / "here" / no -> 1 (the caller answers the offer's text as
+// code in the chat); anything else drops the offer (0, handled as usual). *q gets the offer's text for the chat case.
+static int a_code_offer_reply(const char *input, bool en, anima_result_t *r, const char **q)
+{
+    if (!s_code_offer[0]) return 0;
+    char tok[A_MAX_TOKENS][A_TOK_LEN];
+    int n = a_tokenize(input, tok);
+    static const char *yes[] = { "si","ok","okay","vai","certo","code","1","yes","sure","go","usa","fallo","dai", NULL };
+    static const char *here[] = { "qui","chat","here","no","2","codice","testo","solo","text", NULL };
+    int k = 0;
+    if (n >= 1 && n <= 4) for (int t = 0; t < n && !k; t++) {
+        for (int i = 0; yes[i] && !k; i++) if (!strcmp(yes[i], tok[t])) k = 1;
+        for (int i = 0; here[i] && !k; i++) if (!strcmp(here[i], tok[t])) k = 2;
+    }
+    static char saved[240];
+    snprintf(saved, sizeof saved, "%s", s_code_offer);
+    s_code_offer[0] = 0;
+    if (k == 1) {
+        snprintf(s_code_task, sizeof s_code_task, "%s", saved);
+        r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 90;
+        snprintf(r->intent, sizeof r->intent, "code_task");
+        snprintf(r->arg, sizeof r->arg, "code");
+        snprintf(r->reply, sizeof r->reply, en ? "Code can write it, run it and test it on the device."
+                                               : "Code puo' scriverlo, eseguirlo e provarlo sul dispositivo.");
+        return 2;
+    }
+    if (k == 2) { *q = saved; return 1; }
+    return 0;
 }
 
 static bool a_is_more_request(const char *input)
@@ -4006,7 +4104,15 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     if (!s_session.pending_tool[0] && !s_session.clarify_opt[0][0] && a_dialogue_act(q, en, &r)) goto done;
 
     // A program to write or run on the device: Nucleo Code's work, before every other tier (a game is not a fact)
-    if (!s_session.pending_tool[0] && a_code_task(q, en, &r)) goto done;
+    bool force_code = false;                        // "qui": the offered request, answered as code in the chat
+    s_code_task[0] = 0;
+    {
+        const char *oq = NULL;
+        int k = a_code_offer_reply(q, en, &r, &oq);
+        if (k == 2) goto done;
+        if (k == 1) { q = oq; force_code = true; }
+    }
+    if (!force_code && !s_session.pending_tool[0] && a_code_task(q, en, &r)) goto done;
 
     // Online-only mode: bypass the offline cascade entirely and answer ONLY via PURE Grok — a direct
     // chat passthrough (no JSON classification, no Wikipedia truth gate, no learning). Honest miss if
@@ -4020,7 +4126,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
         // CODE even in online-only: take the dedicated code path (code prompt, bigger token budget,
         // verbatim long_reply) — the prose teacher's clip_reply sentence-truncates on '.' and so
         // mangles a snippet mid-statement (cuts "pygame.display." in half).
-        if (avail && a_is_code_request(q) && nucleo_anima_online_code(q, en, &r)) {
+        if (avail && (force_code || a_is_code_request(q)) && nucleo_anima_online_code(q, en, &r)) {
             mem_update(&r);
             snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);
             s_session.dirty = true;
@@ -4134,7 +4240,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // card. Routed here (before the entity/L1 tiers) with a code prompt + a larger reply budget so the
     // fenced ```block isn't truncated. Online+key only; offline/no-key falls through (we never fabricate
     // code). Frees L1 first (the TLS handshake needs the contiguous heap on this PSRAM-less chip).
-    if (online_llm && a_is_code_request(q)) {   // LLM-only: code is generated, never wiki-searched
+    if (online_llm && (force_code || a_is_code_request(q))) {   // LLM-only: code is generated, never wiki-searched
         nucleo_anima_l1_unload();
         if (nucleo_anima_online_code(q, en, &r)) { mem_update(&r); s_session.dirty = true; goto done; }
     }

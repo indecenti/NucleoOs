@@ -1520,11 +1520,17 @@ static void present_result(int ms)
         // "success" via the generic reply (which would confirm a file that was never written).
         snprintf(reply, sizeof(reply), s_en ? "Invalid file path." : "Percorso file non valido.");
         nucleo_anima_observe("create_file", false); tool_ok = false;
+    } else if (s_ses->res.action == ANIMA_ACT_LAUNCH && !strcmp(s_ses->res.intent, "code_offer")) {
+        // Code or the chat? Enter = Code (the offered request), "qui" = the code in the chat (the engine's next turn)
+        snprintf(s_code_job, sizeof s_code_job, "task\n%s", s_ses->req);
+        snprintf(s_ses->launch, sizeof s_ses->launch, "code");
+        snprintf(reply, sizeof(reply), "%s", s_ses->res.reply);
     } else if (s_ses->res.action == ANIMA_ACT_LAUNCH && (!strcmp(s_ses->res.intent, "code_task") || !strcmp(s_ses->res.intent, "code_run"))) {
         const bool run = !strcmp(s_ses->res.intent, "code_run");
         if (code_installed()) {
+            const char *task = nucleo_anima_code_task()[0] ? nucleo_anima_code_task() : s_ses->req;
             if (run) snprintf(s_code_job, sizeof s_code_job, "run\n%s", nucleo_anima_code_file());
-            else snprintf(s_code_job, sizeof s_code_job, "task\n%s", s_ses->req);
+            else snprintf(s_code_job, sizeof s_code_job, "task\n%s", task);
             snprintf(s_ses->launch, sizeof s_ses->launch, "code");
             if (run) snprintf(reply, sizeof(reply), s_en ? "Enter = open %s in Code" : "Invio = apro %s in Code", nucleo_anima_code_file());
             else snprintf(reply, sizeof(reply), "%s", s_en ? "Code writes it, runs it and tests it here. Enter = start, then it comes back to me."
@@ -2304,6 +2310,7 @@ static void enter(void)
         snprintf(s_ses->input, sizeof s_ses->input, "%s", s_rtc_preset); s_ilen = (int)strlen(s_ses->input);
         submit();                                  // runs the turn inline, like a typed question
     }
+    nucleo_anima_set_code_app(code_installed());   // offer Code only when it is there
     code_outbox_show();                            // back from a job given to Code: what it did
     if (s_mcount) rebuild_rows();
     run_selftest();                                // /data/anima/selftest.txt, when the maintainer put one there

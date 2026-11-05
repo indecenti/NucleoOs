@@ -189,6 +189,8 @@ const gates = [
     // shapes that caused the defect (a reworded restatement slipping past the 40-char head check);
     // sweep half asserts the invariant over eval_describe, so a future index can't reintroduce it.
     ok: (code) => code === 0, summary: (o) => (o.match(/\[stitch-dedup\] sweep[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'code-task (Code or the chat)', cmd: 'node', args: ['tools/anima-host/code-task-check.mjs'],
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[code-task\][^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'decline (honest abstain)', cmd: 'node', args: ['tools/anima-host/decline-check.mjs'],
     // An abstention must SAY so: no query returns an empty reply, tier=NONE still means NONE (so the
     // hallucination gates are untouched), the refusal follows the session language, and it never

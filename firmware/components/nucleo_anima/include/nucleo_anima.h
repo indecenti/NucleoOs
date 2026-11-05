@@ -214,6 +214,10 @@ void nucleo_llm_cancel(void);
 bool nucleo_llm_busy(void);
 // code_run (ANIMA "esegui snake.js"): the script to open in Code; "" for code_task
 const char *nucleo_anima_code_file(void);
+// code_task: the request Code gets (a "yes" to an offer: the offered one); "" = the question itself
+const char *nucleo_anima_code_task(void);
+// Code is installed (the app says at each enter): ANIMA may offer it
+void nucleo_anima_set_code_app(bool on);
 const char *nucleo_anima_online_last(void);     // the last Claude call, for diagnosis (self-test)
 
 // Content channel for multi-step "compose THEN act": when the controller computes a payload too
