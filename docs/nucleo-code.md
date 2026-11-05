@@ -142,6 +142,18 @@ the host gate draws, flushes and decodes the PNG it writes (`npm run code:test`)
   (`JS_NucleoInterruptSoon`, the engine patch): a 300 ms limit stops at 300 ms, uncatchable.
 - **RAM**: a script that draws gets a smaller arena (28 KB small, 20 KB large) so its canvas fits beside it.
 
+### 4.6 ANIMA gives programs to Code
+
+ANIMA and Code each get a whole Solo heap, so they never run together; a job goes through the card.
+- ANIMA's engine names the intent before every other tier (`a_code_task`): a generation verb and an artifact noun
+  ("scrivimi un gioco", "fammi un'app", "sviluppa una calcolatrice") is `code_task`; a run verb with a `.js` name
+  ("esegui snake.js") is `code_run`. Questions about programs and programs in another language stay answers.
+- The app answers "Lo scrive Code... Invio = inizia" (the Store when Code is not installed). Enter writes
+  `work/main/.code/inbox.txt` (`task` + the request, or `run` + the script) and opens Code (the RTC launch slot).
+- Code takes the job once, sends it (waiting up to 40 s for Wi-Fi), and when it ends writes `outbox.txt`: the first
+  two sentences of its answer and ` [snake.js]`. Enter on an empty line runs the script it wrote; Esc goes back
+  to ANIMA (`nucleo_app_exit_to`, ABI 9), which shows "Code: ..." and offers "Invio = apri snake.js".
+
 ## 5. The workspace on the SD card
 
 ```

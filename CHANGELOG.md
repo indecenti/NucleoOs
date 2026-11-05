@@ -29,6 +29,11 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 - **Nucleo Code runs on the Cardputer**: ask it in plain words and Claude writes, runs and checks JavaScript programs
   and text files in `work/main` on the SD card, from the Code app (status bar with model, effort, context and cost;
   approvals in Ask mode; two screens). The firmware sends each request with your key, the app never sees it.
+- **Code writes apps with a screen**: games and tools with a 16-colour canvas, the keys and the touch, on the Cardputer
+  and on the external panel. Code tests each app itself (it sees the screenshots) and you watch it; Enter runs it.
+- **Ask ANIMA for a program**: "scrivimi un gioco del serpente" goes to Code, which writes and tests it, then comes back
+  to ANIMA with what it did and "Enter = open snake.js".
+- **Code looks like ANIMA**: the conversation by role, each step with its mark, what it is doing in the header.
 - **Native app ABI level 9**: what a language engine needs (double-precision and 64-bit arithmetic helpers,
   setjmp/longjmp) and the JSON builders, for Nucleo Code, the coding agent coming to the Native C store.
 
