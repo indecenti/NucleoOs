@@ -2639,7 +2639,9 @@ void nucleo_app_run(void)
                         nucleo_extdisp_draw_internal(compact_cb);
                         s_compact_cv = nullptr;
                     }
-                } else if (s_app_direct && def->on_draw) {
+                } else if (s_app_direct && def->on_draw && def->on_draw != def->on_draw_large) {
+                    // (an app whose one painter serves both screens - ANIMA - draws its compact frame itself: calling it
+                    // here too spent its dirty flags on the small panel and repainted the large one whole: flicker)
                     s_compact_def = def;
                     nucleo_extdisp_draw_internal(compact_direct_cb);
                     s_compact_def = nullptr;
