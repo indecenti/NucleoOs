@@ -794,7 +794,17 @@ static bool app_ram_alloc(const nucleo_app_def_t *def)
 static void companion_cb(void *g) { launcher_render_companion((lgfx::LovyanGFX *)g); }
 // Two-screen apps: their compact frame (composited in the shared canvas) goes to the Cardputer's panel.
 static M5Canvas *s_compact_cv = nullptr;
-static void compact_cb(void *g) { if (s_compact_cv) s_compact_cv->pushSprite((lgfx::LovyanGFX *)g, 0, 0); }
+// The ADV's canvas is fitted to 130 rows (nucleo_screen_acquire): the Cardputer's last rows lie below it and kept
+// whatever was drawn there before (the launcher's companion keys under the screensaver's status). They get the
+// colour of the canvas' own bottom row, so the frame reads as one piece. No-op with a full-height canvas.
+static void compact_cb(void *g)
+{
+    if (!s_compact_cv) return;
+    lgfx::LovyanGFX *panel = (lgfx::LovyanGFX *)g;
+    s_compact_cv->pushSprite(panel, 0, 0);
+    const int ch = s_compact_cv->height(), ph = panel->height();
+    if (ch > 0 && ch < ph) panel->fillRect(0, ch, panel->width(), ph - ch, (uint16_t)s_compact_cv->readPixel(0, ch - 1));
+}
 
 static void open_app_def(const nucleo_app_def_t *def)
 {

@@ -196,7 +196,15 @@ int main(int argc, char **argv)
         if (s_app->on_draw) s_app->on_draw();
         nucleo_touch_commit();
         nucleo_app_set_gfx(nullptr);
-        if (g_host.two_screens) cv->pushSprite(0, 0);   // the companion: the whole canvas, no footer (compact_cb)
+        if (g_host.two_screens) {                       // the companion: the whole canvas, no footer (compact_cb)
+            d.fillRect(0, 0, 240, 135, 0xF81F);          // a stale frame: whatever compact_cb leaves stays magenta
+            cv->pushSprite(0, 0);
+            const int ch = cv->height();
+            if (ch < 135) d.fillRect(0, ch, 240, 135 - ch, (uint16_t)cv->readPixel(0, ch - 1));
+            int stale = 0;
+            for (int y = ch; y < 135; y++) for (int x = 0; x < 240; x++) if ((uint16_t)d.readPixel(x, y) == 0xF81F) stale++;   // below the canvas
+            if (stale) printf("gallery-check: %s: %d px of the Cardputer never repainted (companion)\n", shot, stale);
+        }
         else {
             if (!s_fullscreen) d.setClipRect(0, 0, 240, 135 - 14);
             cv->pushSprite(0, 0);

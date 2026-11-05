@@ -135,6 +135,15 @@ static const Scene SCENES[] = {
     { "home",        [] { launcher_reset(); draw_launcher(); } },
     { "home-row3",   [] { launcher_reset(); launcher_set_sel(3); draw_launcher(); } },
     { "home-end",    [] { launcher_reset(); launcher_set_sel(launcher_visible_count() - 1); draw_launcher(); } },   // the last tile: scrolled
+    // The minute turns on the idle Home: the panel's bar is composed off-screen (frame_rect) in the canvas that still
+    // holds the grid's last strip. Drawn on the panel instead, the bar was covered by those stale bytes: the bottom
+    // row of tiles, cut in half, above the first one.
+    { "home-minute", [] { launcher_reset(); draw_launcher(); launcher_render_clock_tick(); g_host.wall += 60;
+                          launcher_render_clock_tick(); } },
+    // A drag on the panel grid (Games: five rows) that stops 42 px down (more than half a row), then the finger lifts: the grid settles
+    // on the next whole row instead of leaving the top row cut in half (the band always shows three whole rows).
+    { "games-drag",  [] { go_category("Games", 0); draw_launcher(); for (int i = 0; i < 7; i++) launcher_render_grid_view(1);
+                          g_host.now_us += 250000; draw_launcher(); } },
     { "cat-office",  [] { go_category("Office", 0); draw_launcher(); } },
     { "cat-system",  [] { go_category("System", 0); draw_launcher(); } },
     { "cat-media",   [] { go_category("Media", 0); draw_launcher(); } },             // long two-line titles (Voice Recorder)
@@ -517,7 +526,7 @@ static const Scene *find_scene(const char *surface, const char *scene)
     return nullptr;
 }
 
-static const char *const LARGE_SCENES[] = { "home", "home-row3", "home-end", "cat-office", "cat-media", "cat-games", "cat-games-end", "search-set", "search-none",
+static const char *const LARGE_SCENES[] = { "home", "home-row3", "home-end", "home-minute", "games-drag", "cat-office", "cat-media", "cat-games", "cat-games-end", "search-set", "search-none",
                                               "menu", "menu-store", "menu-info", "menu-confirm",
                                               "cc", "cc-xbright", "cc-volume", "cc-web", "cc-restart" };
 

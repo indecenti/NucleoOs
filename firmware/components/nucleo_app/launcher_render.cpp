@@ -291,8 +291,17 @@ static const char *node_label(const MenuNode *n)
 // = amber; bars above the measured level are drawn dim so the glyph reads as a strength gauge (the
 // smartwatch idiom) rather than a flat icon. rssi 0 (not associated) -> 1 amber bar. There is no
 // battery on bare M5GFX, so the top-right is spent entirely on this. Occupies a 19x9 box at (x,y).
+// The status bar's draw target. This file draws on the real panel `d` (it does not include app_gfx.h), so a
+// paint run by lg::frame_rect must be pointed at the canvas window explicitly: drawn on the panel, the bar
+// flashed and frame_rect then pushed the canvas's stale bytes over it - the last strip of the grid, i.e. the
+// bottom row of tiles cut in half above the first one, until the next full repaint. nullptr = the panel.
+LovyanGFX *nucleo_app_gfx(void);                    // nucleo_ui.cpp: the current draw target (frame_rect's window)
+static LovyanGFX *s_bar_g = nullptr;
+static inline LovyanGFX &bar_g(void) { return s_bar_g ? *s_bar_g : (LovyanGFX &)d; }
+
 static void draw_wifi(int x, int y, bool online, int rssi)
 {
+    LovyanGFX &G = bar_g();
     // Lit bars are GREEN when we truly have a link, RED when offline (no STA IP / not associated) — so
     // the gauge alone tells the real state at a glance, never a green "connected" glyph on a dead link.
     unsigned short on = online ? C_GREEN : C_RED;
@@ -305,7 +314,7 @@ static void draw_wifi(int x, int y, bool online, int rssi)
     else                   lvl = 1;
     for (int i = 0; i < 4; i++) {
         int bh = 2 + i * 2;                                  // 2,4,6,8 px tall
-        d.fillRect(x + i * 5, y + 9 - bh, 3, bh, i < lvl ? on : LINE);
+        G.fillRect(x + i * 5, y + 9 - bh, 3, bh, i < lvl ? on : LINE);
     }
 }
 
@@ -314,11 +323,12 @@ static void draw_wifi(int x, int y, bool online, int rssi)
 // Drawn only on a real reading (pct >= 0). Colour matches the Control Center battery row.
 static void draw_battery_pip(int x, int y, int pct)
 {
+    LovyanGFX &G = bar_g();
     unsigned short c = (pct < 20) ? C_RED : (pct < 50) ? C_YELLOW : C_GREEN;
-    d.drawRoundRect(x, y, 12, 8, 1, MUTED);            // body outline
-    d.fillRect(x + 12, y + 3, 2, 3, MUTED);            // + terminal nub
+    G.drawRoundRect(x, y, 12, 8, 1, MUTED);            // body outline
+    G.fillRect(x + 12, y + 3, 2, 3, MUTED);            // + terminal nub
     int fw = (10 * pct) / 100; if (fw < 1 && pct > 0) fw = 1; if (fw > 10) fw = 10;
-    if (fw > 0) d.fillRect(x + 1, y + 1, fw, 6, c);    // proportional fill
+    if (fw > 0) G.fillRect(x + 1, y + 1, fw, 6, c);    // proportional fill
 }
 
 // ---- launcher icon set (bold filled silhouettes) ---------------------------------------
@@ -756,77 +766,80 @@ static uint16_t mix565(uint16_t a, uint16_t b, float t);   // below, with the ca
 static uint16_t bar_shade(int y) { return mix565(mix565(INK, LINE, 0.55f), INK, (float)y / (BAR - 1)); }
 static void bar_band(int x, int w)
 {
-    for (int y = 0; y < BAR - 1; y++) d.drawFastHLine(x, y, w, bar_shade(y));
-    d.drawFastHLine(x, BAR - 1, w, LINE);
+    LovyanGFX &G = bar_g();
+    for (int y = 0; y < BAR - 1; y++) G.drawFastHLine(x, y, w, bar_shade(y));
+    G.drawFastHLine(x, BAR - 1, w, LINE);
     // HUD accents on the rule: a long one under the left end, a short one under the right (a band that only
     // covers the clock cell repaints its own part of the left one).
-    if (x < 90) d.fillRect(x, BAR - 2, (90 < x + w ? 90 : x + w) - x, 2, THEME_SEL);
-    if (x + w >= W) d.fillRect(W - 28, BAR - 2, 28, 2, THEME_ACC);
+    if (x < 90) G.fillRect(x, BAR - 2, (90 < x + w ? 90 : x + w) - x, 2, THEME_SEL);
+    if (x + w >= W) G.fillRect(W - 28, BAR - 2, 28, 2, THEME_ACC);
 }
 static char s_bar_clock[8];                         // the HH:MM the panel's bar shows now (the tick repaints on a change only)
 static void bar_clock_large(void)
 {
+    LovyanGFX &G = bar_g();
     time_t now = time(NULL); struct tm *tm = localtime(&now);
     char t[8]; snprintf(t, sizeof(t), "%02d:%02d", tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
     memcpy(s_bar_clock, t, sizeof s_bar_clock);
     bar_band(0, 72);
-    d.setFont(&fonts::FreeSansBold12pt7b); d.setTextSize(1); d.setTextColor(FG);
-    d.setTextDatum(middle_left); d.drawString(t, 8, BAR / 2); d.setTextDatum(top_left);
-    d.setFont(&fonts::Font0);
+    G.setFont(&fonts::FreeSansBold12pt7b); G.setTextSize(1); G.setTextColor(FG);
+    G.setTextDatum(middle_left); G.drawString(t, 8, BAR / 2); G.setTextDatum(top_left);
+    G.setFont(&fonts::Font0);
 }
 static void status_large(bool sta)
 {
+    LovyanGFX &G = bar_g();
     bar_band(0, W);
     const MenuNode *node = launcher_node();
-    d.setFont(&fonts::Font2); d.setTextSize(1);
+    G.setFont(&fonts::Font2); G.setTextSize(1);
     int rx = W - 6;
     draw_wifi(rx - 19, BAR / 2 - 4, sta, nucleo_setup_rssi()); rx -= 19 + 8;
     if (launcher_depth() > 0) {
         const int py = 4, ph = BAR - 9, pw = 46;                                   // the raised Back pill
-        d.fillRoundRect(4, py + 2, pw, ph, ph / 2, mix565(INK, 0x0000, 0.5f));      // its shadow
+        G.fillRoundRect(4, py + 2, pw, ph, ph / 2, mix565(INK, 0x0000, 0.5f));      // its shadow
         const uint16_t body = mix565(LINE, FG, 0.16f);
-        d.fillRoundRect(4, py, pw, ph, ph / 2, body);
-        d.drawFastHLine(4 + ph / 2, py + 1, pw - ph, mix565(body, 0xFFFF, 0.25f)); // a highlight along its top
+        G.fillRoundRect(4, py, pw, ph, ph / 2, body);
+        G.drawFastHLine(4 + ph / 2, py + 1, pw - ph, mix565(body, 0xFFFF, 0.25f)); // a highlight along its top
         const int ay = py + ph / 2;
-        for (int k = 0; k < 3; k++) { d.drawLine(31 + k, ay - 7, 24 + k, ay, FG); d.drawLine(24 + k, ay, 31 + k, ay + 7, FG); }
+        for (int k = 0; k < 3; k++) { G.drawLine(31 + k, ay - 7, 24 + k, ay, FG); G.drawLine(24 + k, ay, 31 + k, ay + 7, FG); }
         const int cx = 58, cs = 20, cy = (BAR - cs) / 2 - 1;                        // the category chip
-        d.fillRoundRect(cx, cy, cs, cs, 5, node->color);
-        ui_icon(&d, cx + cs / 2, cy + cs / 2, 8, strcmp(node->id, LAUNCHER_RECENT_ID) ? node->id : "clock", node->icon, INK, node->color);
+        G.fillRoundRect(cx, cy, cs, cs, 5, node->color);
+        ui_icon(&G, cx + cs / 2, cy + cs / 2, 8, strcmp(node->id, LAUNCHER_RECENT_ID) ? node->id : "clock", node->icon, INK, node->color);
         int cnt = node_child_count(node);
         if (cnt > 0) {
             char cc[12]; snprintf(cc, sizeof cc, "%d app", cnt);
-            d.setFont(&fonts::Font2); d.setTextColor(MUTED); d.setTextDatum(middle_right); d.drawString(cc, rx, BAR / 2);
-            rx -= (int)d.textWidth(cc) + 10;
+            G.setFont(&fonts::Font2); G.setTextColor(MUTED); G.setTextDatum(middle_right); G.drawString(cc, rx, BAR / 2);
+            rx -= (int)G.textWidth(cc) + 10;
         }
         char b[24]; snprintf(b, sizeof b, "%s", node_label(node));
-        d.setFont(&fonts::FreeSansBold9pt7b);
-        while (b[0] && (int)d.textWidth(b) > rx - (cx + cs + 8)) b[strlen(b) - 1] = 0;
-        d.setTextColor(FG); d.setTextDatum(middle_left); d.drawString(b, cx + cs + 7, BAR / 2);
+        G.setFont(&fonts::FreeSansBold9pt7b);
+        while (b[0] && (int)G.textWidth(b) > rx - (cx + cs + 8)) b[strlen(b) - 1] = 0;
+        G.setTextColor(FG); G.setTextDatum(middle_left); G.drawString(b, cx + cs + 7, BAR / 2);
     } else {
         bar_clock_large();
-        d.setFont(&fonts::Font2);
+        G.setFont(&fonts::Font2);
         if (!launcher_filter()[0]) {
             int bpct = nucleo_power_battery_pct();
             if (bpct >= 0) { draw_battery_pip(rx - 14, BAR / 2 - 4, bpct); rx -= 14 + 10; }
             char dt[16]; time_t now = time(NULL); struct tm *tm = localtime(&now);
             day_month(dt, sizeof dt, now, tm);
-            d.setFont(&fonts::Font2); d.setTextDatum(middle_right);
-            if (dt[0]) { d.setTextColor(C_YELLOW); d.drawString(dt, rx, BAR / 2); rx -= (int)d.textWidth(dt) + 12; }
+            G.setFont(&fonts::Font2); G.setTextDatum(middle_right);
+            if (dt[0]) { G.setTextColor(C_YELLOW); G.drawString(dt, rx, BAR / 2); rx -= (int)G.textWidth(dt) + 12; }
             char net[16]; snprintf(net, sizeof net, "%.12s", sta ? nucleo_setup_ssid() : "offline");
-            if (rx - (int)d.textWidth(net) > 80) { d.setTextColor(sta ? MUTED : C_RED); d.drawString(net, rx, BAR / 2); }
+            if (rx - (int)G.textWidth(net) > 80) { G.setTextColor(sta ? MUTED : C_RED); G.drawString(net, rx, BAR / 2); }
         }
     }
     if (launcher_filter()[0]) {                                                    // the search, as a green chip
         char fb[20]; snprintf(fb, sizeof fb, "/%.12s", launcher_filter());
-        d.setFont(&fonts::Font2);
-        const int fw = (int)d.textWidth(fb) + 14, fx = W - fw - 32;
-        d.fillRoundRect(fx, 5, fw, BAR - 11, (BAR - 11) / 2, 0x1926);
-        d.setTextColor(C_GREEN); d.setTextDatum(middle_center); d.drawString(fb, fx + fw / 2, BAR / 2 - 1);
+        G.setFont(&fonts::Font2);
+        const int fw = (int)G.textWidth(fb) + 14, fx = W - fw - 32;
+        G.fillRoundRect(fx, 5, fw, BAR - 11, (BAR - 11) / 2, 0x1926);
+        G.setTextColor(C_GREEN); G.setTextDatum(middle_center); G.drawString(fb, fx + fw / 2, BAR / 2 - 1);
     }
-    d.setTextDatum(top_left); d.setFont(&fonts::Font0); d.setTextSize(1);
+    G.setTextDatum(top_left); G.setFont(&fonts::Font0); G.setTextSize(1);
 }
 
-static void status_large_paint(void *sta) { status_large(*(const bool *)sta); }
+static void status_large_paint(void *sta) { s_bar_g = nucleo_app_gfx(); status_large(*(const bool *)sta); s_bar_g = nullptr; }
 
 void launcher_render_status_bar(void)
 {
@@ -1045,10 +1058,18 @@ static float car_cdist(int i, float pos, int n, bool wrap)
     return d;
 }
 
+static bool grid_settle(void);                    // the panel grid: a drag left between rows settles on one
+static bool carousel_step(void);
+bool launcher_render_step_scroll(void)
+{
+    const bool grid = grid_settle();
+    return carousel_step() || grid;
+}
+
 // Ease the carousel toward the focused index. Returns true while still moving (the run loop keeps
 // requesting redraws), false once settled (so an idle rail stops repainting — anti-flicker #4). For a
 // wrapping rail it eases along the SHORTEST way round, so stepping past either end glides one slot.
-bool launcher_render_step_scroll(void)
+static bool carousel_step(void)
 {
     int n = launcher_visible_count();
     if (n <= 0) { s_carousel = 0.0f; return false; }
@@ -1186,12 +1207,32 @@ int launcher_render_large_cols(void) { return lr_large() ? GRID_COLS : 0; }
 int launcher_render_grid_first(void) { return grid_first(); }
 
 // A drag on the grid: move the content by one step. True when it moved (repaint).
+static int64_t s_grid_drag_us = 0;                // when the last drag step landed (0 = no drag to settle)
 bool launcher_render_grid_view(int dir)
 {
+    s_grid_drag_us = esp_timer_get_time();
     int o = s_grid_off + dir * GRID_STEP;
     o = o < 0 ? 0 : o > s_grid_max ? s_grid_max : o;
     if (o == s_grid_off) return false;
     s_grid_off = o;
+    return true;
+}
+
+// A drag (or its fling) that stopped between rows left the top row cut in half, and nothing moved it again:
+// a key whose row was already in view keeps the offset. Once the steps stop for GRID_SETTLE_US the content
+// glides to the nearest whole row (snaps on the direct path, where an eased glide would flicker). Every
+// row offset is a multiple of GRID_RH and so is s_grid_max (the band is exactly three rows). True = repaint.
+#define GRID_SETTLE_US 180000
+static bool grid_settle(void)
+{
+    if (!s_grid_drag_us || !lr_large()) { s_grid_drag_us = 0; return false; }
+    if (esp_timer_get_time() - s_grid_drag_us < GRID_SETTLE_US) return false;   // the finger may still be on it
+    int t = (s_grid_off - GRID_TOP + GRID_RH / 2) / GRID_RH * GRID_RH + GRID_TOP;
+    t = t < 0 ? 0 : t > s_grid_max ? s_grid_max : t;
+    const int dl = t - s_grid_off;
+    if (dl == 0) { s_grid_drag_us = 0; return false; }
+    if (!s_band_buffered || (dl >= -2 && dl <= 2)) s_grid_off = t;
+    else s_grid_off += dl / 3 ? dl / 3 : (dl > 0 ? 1 : -1);
     return true;
 }
 
