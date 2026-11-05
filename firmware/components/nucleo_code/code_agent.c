@@ -163,6 +163,7 @@ static bool write_file(const char *path, const char *s, size_t n)
 typedef struct { char *b; size_t n, cap; bool cut; } sb_t;
 static void sb_add(sb_t *s, const char *t, size_t n)
 {
+    if (!s->b && !(s->b = malloc(s->cap))) return;       // allocated at the first write (see do_tool)
     if (s->n + n >= s->cap) { n = s->cap > s->n + 1 ? s->cap - s->n - 1 : 0; s->cut = true; }
     memcpy(s->b + s->n, t, n); s->n += n; s->b[s->n] = 0;
 }
@@ -351,7 +352,7 @@ static bool tool_run(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t scap)
     if (!src) { no_file(r, rel, p); return false; }
     cJSON *t = cJSON_GetObjectItem(in, "timeout_ms");
     uint32_t tmo = cJSON_IsNumber(t) && t->valuedouble > 0 ? (uint32_t)t->valuedouble : 10000; if (tmo > 10000) tmo = 10000;
-    char *outb = malloc(4096); sb_t o = { outb, 0, 4096, false }; if (outb) outb[0] = 0;
+    char *outb = malloc(3072); sb_t o = { outb, 0, 3072, false }; if (outb) outb[0] = 0;
     char shot[PATHCAP];
     snprintf(shot, sizeof shot, "%s/.code/shots", a->cfg.root); mkdir(shot, 0775);
     snprintf(shot, sizeof shot, "%s/.code/shots/%u.png", a->cfg.root, a->shots + 1);
@@ -368,7 +369,7 @@ static bool tool_run(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t scap)
     bool draws = strstr(src, "gfx.") != NULL;
     void *arena = a->cfg.arena; size_t asz = a->cfg.arena_size;
     size_t cap = asz ? asz : 32768;
-    if (draws && !arena) cap = a->t_large ? 18432 : 28672;
+    if (draws && !arena) cap = a->t_large ? 14336 : 24576;    // a 32-bit engine: snake lives in ~8 KB
     if (!arena) for (size_t want = cap; want >= 12288 && !arena; want -= 4096) { arena = malloc(want); asz = want; }
     s_run = a;
     bool ok = arena && outb && code_run(arena, asz, src, len, rel, &env, &res);
@@ -381,7 +382,7 @@ static bool tool_run(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t scap)
     // an app's loop runs until the limit: with a screen that is how a test ends, not a failure
     bool app_end = !ok && res.timeout && res.drew;
     if (app_end) ok = true;
-    if (o.n) { sb_printf(r, "output:\n"); sb_add(r, outb, o.n); if (o.cut) sb_printf(r, "\n[output cut at 4 KB]"); sb_printf(r, "\n"); }
+    if (o.n) { sb_printf(r, "output:\n"); sb_add(r, outb, o.n); if (o.cut) sb_printf(r, "\n[output cut at 3 KB]"); sb_printf(r, "\n"); }
     else sb_printf(r, "output: (none)\n");
     if (app_end) sb_printf(r, "exit: ok, stopped at the %u ms limit (an app loop), memory %u bytes of %u", (unsigned)tmo, (unsigned)res.live_max, (unsigned)res.arena);
     else if (ok) sb_printf(r, "exit: ok in %u ms, memory %u bytes of %u", (unsigned)res.ms, (unsigned)res.live_max, (unsigned)res.arena);
@@ -799,13 +800,13 @@ static void do_tool(agent_t *a, int i, bool declined)
     cJSON *b = cJSON_GetArrayItem(cJSON_GetObjectItem(a->amsg, "content"), i);
     const char *name = jstr(b, "name") ? jstr(b, "name") : "?";
     bool too_large = (a->big_mask >> (i & 31)) & 1u;
+    // the result's buffer comes at its first write: a run_js writes it after the script, whose canvas has the heap
     const size_t rcap = (strcmp(name, "str_replace_based_edit_tool") ? RESULT_MAX : VIEW_MAX) + 256;
-    char *rb = malloc(rcap);
-    sb_t r = { rb, 0, rcap, false };
+    sb_t r = { NULL, 0, rcap, false };
     bool ok;
-    if (!rb) ok = false;
-    else if (declined) { rb[0] = 0; sb_printf(&r, "The user declined this action."); ok = false; if (a->io.on_tool_done) a->io.on_tool_done(a->io.ui_op, name, false, "declined"); }
-    else { rb[0] = 0; a->shot_path[0] = 0; ok = run_tool(a, name, too_large ? NULL : cJSON_GetObjectItem(b, "input"), &r); }
+    if (declined) { sb_printf(&r, "The user declined this action."); ok = false; if (a->io.on_tool_done) a->io.on_tool_done(a->io.ui_op, name, false, "declined"); }
+    else { a->shot_path[0] = 0; ok = run_tool(a, name, too_large ? NULL : cJSON_GetObjectItem(b, "input"), &r); }
+    char *rb = r.b;
     a->st.tools++; if (!ok) a->st.tool_errors++;
     cJSON *tr = cJSON_CreateObject();
     cJSON_AddStringToObject(tr, "type", "tool_result");

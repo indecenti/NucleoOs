@@ -64,6 +64,10 @@ struct State {
     char in[512]; int inlen;   // a task can be a paragraph
     char todo[512];
     bool auto_run, auto_sent, traced_draw, traced_net;
+    // a job from ANIMA (work/main/.code/inbox.txt): a task to send, or a script to open; Esc goes back to ANIMA
+    bool from_anima, inbox_task, outbox_done; char run_job[48];
+    char last_js[48];           // the script the last task wrote: Enter on an empty line runs it
+    char last_text[600]; int last_tlen;   // the model's last words, for ANIMA
     int64_t auto_t0;     // the maintainer's self-test (work/main/.code/selftest.txt)
 };
 static State *S;
@@ -242,7 +246,7 @@ static bool run_file(const char *dir, const char *name, uint32_t timeout_ms, boo
     S->block_before = (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
     size_t arena = S->block_before > 4096 ? S->block_before - 2048 : 0;
     // a script that draws leaves the heap room for its canvas (strips: 20 KB at 240x135, 43 KB at 320x240)
-    const size_t amax = !draws ? ARENA_MAX : large ? 20 * 1024 : 28 * 1024;
+    const size_t amax = !draws ? ARENA_MAX : large ? 14 * 1024 : 24 * 1024;
     if (arena > amax) arena = amax;
     arena &= ~(size_t)7;
     void *mem = arena ? heap_caps_malloc(arena, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) : NULL;
@@ -432,9 +436,32 @@ static void tr_add(const char *s, size_t n)
     nucleo_app_request_draw();
 }
 static void tr_puts(const char *s) { tr_add(s, strlen(s)); }
-static void ui_text(void *, const char *s, size_t n) { tr_add(s, n); }
+static void ui_text(void *, const char *s, size_t n)
+{
+    tr_add(s, n);
+    size_t room = sizeof S->last_text - 1 - (size_t)S->last_tlen;
+    if (n > room) n = room;
+    memcpy(S->last_text + S->last_tlen, s, n); S->last_tlen += (int)n; S->last_text[S->last_tlen] = 0;
+}
+// "create /sd/work/main/snake.js +105", "edit snake.js:12 ..." -> "snake.js" when it is a script
+static void note_file(const char *summary)
+{
+    const char *p = strchr(summary, ' ');
+    if (!p || (strncmp(summary, "create", 6) && strncmp(summary, "rewrite", 7) && strncmp(summary, "edit", 4))) return;
+    p++;
+    if (!strncmp(p, AWS "/", strlen(AWS) + 1)) p += strlen(AWS) + 1;
+    while (p[0] == '.' && p[1] == '/') p += 2;
+    char f[48]; size_t n = 0;
+    while (p[n] && p[n] != ' ' && p[n] != ':' && n < sizeof f - 1) { f[n] = p[n]; n++; }
+    f[n] = 0;
+    if (n > 3 && !strcmp(f + n - 3, ".js") && !strchr(f, '/')) snprintf(S->last_js, sizeof S->last_js, "%s", f);
+}
 static void ui_tool(void *, const char *, const char *summary) { char b[180]; snprintf(b, sizeof b, "\n  > %s", summary); tr_puts(b); }
-static void ui_tool_done(void *, const char *, bool ok, const char *summary) { char b[180]; snprintf(b, sizeof b, "\n  %s %s\n", ok ? "ok" : "!!", summary); tr_puts(b); }
+static void ui_tool_done(void *, const char *, bool ok, const char *summary)
+{
+    char b[180]; snprintf(b, sizeof b, "\n  %s %s\n", ok ? "ok" : "!!", summary); tr_puts(b);
+    if (ok) note_file(summary);
+}
 static void ui_todo(void *, const char *t) { snprintf(S->todo, sizeof S->todo, "%s", t); nucleo_app_request_draw(); }
 
 static bool agent_running(void)
@@ -475,6 +502,72 @@ static void agent_close(void)
     free(S->toolbuf); S->toolbuf = nullptr;
 }
 
+// ---- a job from ANIMA (docs/nucleo-code.md 4.6) ----------------------------------------------------------------
+#define INBOX  AWS "/.code/inbox.txt"
+#define OUTBOX AWS "/.code/outbox.txt"
+static void code_outbox(const char *error)
+{
+    S->outbox_done = true;
+    FILE *f = fopen(OUTBOX, "wb");
+    if (!f) return;
+    static char plain[sizeof S->last_text];
+    code_md_plain(S->last_text, plain, sizeof plain);
+    for (char *c = plain; *c; c++) if (*c == '\n') *c = ' ';
+    if (error) fprintf(f, "%s %s", L("non ho finito:", "I did not finish:", "no termine:", "pas fini :", "nicht fertig:"), error);
+    else fputs(plain[0] ? plain : L("fatto.", "done.", "hecho.", "fait.", "fertig."), f);
+    if (S->last_js[0]) fprintf(f, " [%s]", S->last_js);
+    fclose(f);
+}
+static void inbox_read(void)
+{
+    FILE *f = fopen(INBOX, "rb");
+    if (!f) return;
+    char b[sizeof S->in + 8]; size_t n = fread(b, 1, sizeof b - 1, f); fclose(f); b[n] = 0;
+    remove(INBOX);                                          // a job is taken once
+    char *nl = strchr(b, '\n'); if (!nl) return;
+    *nl = 0; const char *arg = nl + 1;
+    size_t al = strlen(arg); while (al && (arg[al - 1] == '\n' || arg[al - 1] == '\r')) al--;
+    S->from_anima = true;
+    if (!strcmp(b, "task") && al) { snprintf(S->in, sizeof S->in, "%.*s", (int)al, arg); S->inlen = (int)strlen(S->in); S->inbox_task = true; }
+    else if (!strcmp(b, "run") && al && al < sizeof S->run_job) { memcpy(S->run_job, arg, al); S->run_job[al] = 0; }
+}
+// Esc: back to ANIMA when it asked (a running task stops first, so the history stays whole)
+static bool back_key(int key)
+{
+    if (key != NK_BACK || !S->from_anima) return false;
+    if (agent_running()) { nucleo_llm_cancel(); agent_cancel(S->ag, "stopped by the user"); }
+    if (!S->outbox_done && S->last_tlen) code_outbox(nullptr);
+    agent_close();
+    nucleo_app_exit_to("anima");
+    return true;
+}
+static void run_script_here(const char *f)                  // from the conversation: the app, then back to it
+{
+    run_file(AWS, f, 0, true);
+    char b[160];
+    if (S->res.ok) snprintf(b, sizeof b, "\n[%s: %s]\n", f, L("chiuso", "closed", "cerrado", "ferme", "beendet"));
+    else snprintf(b, sizeof b, "\n[%s: %s %s]\n", f, S->res.where, S->res.error);
+    tr_puts(b);
+    if (S->olen) { tr_puts(S->out); tr_puts("\n"); }
+}
+static void agent_send(void);
+static void inbox_tick(void)
+{
+    if (S->run_job[0]) {                                    // "esegui snake.js": the app, then ANIMA again
+        char f[48]; snprintf(f, sizeof f, "%s", S->run_job); S->run_job[0] = 0;
+        run_script_here(f);
+        if (S->from_anima && S->res.ok) { agent_close(); nucleo_app_exit_to("anima"); }
+        return;
+    }
+    if (!S->inbox_task) return;
+    if (!S->auto_t0) S->auto_t0 = now_ms();
+    if (!nucleo_tcp_network_up() && now_ms() - S->auto_t0 < 40000) return;   // the Solo boot brings Wi-Fi up after us
+    S->inbox_task = false;
+    if (!nucleo_tcp_network_up()) { tr_puts(L("\n[nessuna rete: il compito e' nell'input, Invio per riprovare]\n", "\n[no network: the task is in the input, Enter to retry]\n",
+                                              "\n[sin red: Intro para reintentar]\n", "\n[pas de reseau : Entree pour reessayer]\n", "\n[kein Netz: Enter fuer neuen Versuch]\n")); return; }
+    agent_send();
+}
+
 // the tick: the request goes out, its bytes come in, one tool runs, a question waits
 static void agent_tick(void)
 {
@@ -510,6 +603,7 @@ static void agent_tick(void)
             else snprintf(b, sizeof b, "\n");
             tr_puts(b);
             S->was_running = false;
+            if (S->from_anima && !S->outbox_done) code_outbox(agent_state(S->ag) == AG_ERROR ? st->error : nullptr);
         }
         break;
     default: break;
@@ -532,6 +626,7 @@ static void agent_send(void)
     if (!S->ag) { tr_puts(L("\n[nessuna chiave Claude: aggiungila nella web OS, Impostazioni > IA]\n", "\n[no Claude key: add one in the web OS, Settings > AI]\n",
                             "\n[sin clave Claude: web OS, Ajustes > IA]\n", "\n[pas de cle Claude : web OS, Reglages > IA]\n", "\n[kein Claude-Schluessel: Web OS, Einstellungen > KI]\n")); return; }
     tr_puts("\n> "); tr_puts(S->in); tr_puts("\n");
+    S->last_tlen = 0; S->last_text[0] = 0; S->outbox_done = false;
     agent_submit(S->ag, S->in);
     S->inlen = 0; S->in[0] = 0;
     S->was_running = true;
@@ -579,6 +674,13 @@ static const char *agent_hint(void)
     agent_state_t s = S->ag ? agent_state(S->ag) : AG_IDLE;
     if (s == AG_ASK) return L("y si  n no  (approva)", "y yes  n no  (approve)", "y si  n no", "y oui  n non", "y ja  n nein");
     if (agent_running()) return L("lavoro...  del: ferma", "working...  del: stop", "trabajando...  del: parar", "travail...  del: stop", "arbeite...  del: stopp");
+    static char h[64];
+    if (!S->inlen && S->last_js[0]) {
+        snprintf(h, sizeof h, "%s %s  %s", L("invio esegui", "enter run", "intro ejecuta", "entree lance", "enter startet"), S->last_js,
+                 S->from_anima ? "esc ANIMA" : "/files");
+        return h;
+    }
+    if (S->from_anima) return L("scrivi e invio  esc torna ad ANIMA", "type, enter  esc back to ANIMA", "escribe  esc a ANIMA", "ecris  esc vers ANIMA", "tippen  esc zu ANIMA");
     return L("scrivi e invio  /files /new /mode", "type, enter  /files /new /mode", "escribe e intro  /files /new", "ecris, entree  /files /new", "tippen, enter  /files /new");
 }
 
@@ -660,6 +762,7 @@ static void agent_key(int key, char ch)
         else if (key == NK_DOWN && S->tscroll > 0) S->tscroll--;
         nucleo_app_request_draw(); return;
     }
+    if (key == NK_ENTER && !S->inlen && S->last_js[0]) { run_script_here(S->last_js); nucleo_app_request_draw(); return; }
     if (key == NK_ENTER) { agent_send(); return; }
     if (key == NK_DEL) { if (S->inlen) S->in[--S->inlen] = 0; }
     else if (key == NK_UP && !S->inlen) S->tscroll++;
@@ -719,7 +822,7 @@ static void selftest_tick(void)
 }
 static void on_tick(void)
 {
-    agent_tick(); selftest_tick();
+    agent_tick(); selftest_tick(); inbox_tick();
     static int64_t blink;                                   // the input cursor: two redraws a second, nothing more
     if (S->agent_view && !nucleo_app_two_screens() && now_ms() - blink >= 500) { blink = now_ms(); nucleo_app_request_draw(); }
 }
@@ -730,6 +833,9 @@ static void on_enter(void)
     ensure_bench(); mkdir(AWS, 0775); scan(AWS); S->output = false; s_lg_scroll = 0;
     S->agent_view = true; S->ask = false;
     { struct stat sst; S->auto_run = stat(SELFTEST_IN, &sst) == 0; S->auto_sent = false; }
+    S->from_anima = S->inbox_task = S->outbox_done = false; S->run_job[0] = 0; S->last_js[0] = 0; S->last_tlen = 0;
+    if (!S->auto_run) inbox_read();                         // a job from ANIMA
+    nucleo_app_set_back_handler(back_key);
     S->have_key = nucleo_llm_config(S->model, sizeof S->model, S->effort, sizeof S->effort);
     tr_puts(S->have_key ? L("Nucleo Code. Chiedimi di scrivere, provare e correggere programmi o testi in work/main.\n",
                             "Nucleo Code. Ask me to write, run and fix programs or texts in work/main.\n",

@@ -212,6 +212,8 @@ int  nucleo_llm_read(char *buf, int cap);       // bytes; 0 = none yet; -1 = ove
 int  nucleo_llm_status(char *err, int cap);     // 0 = running; else the HTTP status (< 0 = no answer)
 void nucleo_llm_cancel(void);
 bool nucleo_llm_busy(void);
+// code_run (ANIMA "esegui snake.js"): the script to open in Code; "" for code_task
+const char *nucleo_anima_code_file(void);
 const char *nucleo_anima_online_last(void);     // the last Claude call, for diagnosis (self-test)
 
 // Content channel for multi-step "compose THEN act": when the controller computes a payload too

@@ -95,6 +95,9 @@ void nucleo_app_release_buffers(void);         // free launcher off-screen buffe
 void nucleo_app_request_remote_listen(bool on);
 bool nucleo_app_remote_listen_ready(void);
 void nucleo_app_exit(void);                    // close the current app and return to launcher
+// Close the current app and open `id` next (from a Solo app: in the full OS its reboot lands in; Code going back to
+// the ANIMA that asked it for a program). Only our own reboot honours it, like ANIMA's "Enter = open".
+void nucleo_app_exit_to(const char *id);
 
 // Let the foreground app claim TAB for its own overlay (e.g. ANIMA settings). Set in on_enter;
 // auto-cleared when any app opens or closes, so it never leaks across apps. When set (and the

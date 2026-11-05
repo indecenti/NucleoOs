@@ -1405,6 +1405,58 @@ static bool a_is_code_request(const char *input)
     return hasLang && hasGen;
 }
 
+// A program to WRITE or RUN on the device is Nucleo Code's work (docs/nucleo-code.md 4.6), not a snippet in the
+// chat: "scrivimi un gioco del serpente", "fammi un'app per le spese", "esegui snake.js". The engine names the
+// intent (code_task / code_run, LAUNCH "code"); the app decides: Code installed -> "Enter = Code writes it",
+// else the Store. A program in another language ("scrivi un programma in python") stays a snippet from the model:
+// the device runs JavaScript only.
+static char s_code_file[48];                       // code_run: the script to open ("snake.js")
+const char *nucleo_anima_code_file(void) { return s_code_file; }
+static bool a_code_task(const char *input, bool en, anima_result_t *r)
+{
+    char tok[A_MAX_TOKENS][A_TOK_LEN];
+    int n = a_tokenize(input, tok);
+    if (n < 2) return false;
+    static const char *verb[] = { "scrivi","scrivimi","scrivere","crea","creami","creare","fammi","fai","fare","programma",
+                                  "programmami","sviluppa","sviluppami","costruisci","costruiscimi","realizza","realizzami",
+                                  "inventa","inventami","prepara","preparami","scrivermi","crearmi","farmi","programmarmi","realizzarmi",
+                                  "svilupparmi","write","make","build","create","develop","code",
+                                  "program", NULL };
+    static const char *noun[] = { "gioco","giochino","videogioco","game","app","applicazione","applicazioni","programma",
+                                  "programmino","script","tool","utility","simulazione","animazione","demo","calcolatrice",
+                                  "javascript", NULL };
+    static const char *run[]  = { "esegui","eseguimi","avvia","lancia","apri","gioca","run","start","launch","open","play", NULL };
+    static const char *other[] = { "python","typescript","golang","kotlin","java","rust","php","swift","bash","sql","html",
+                                   "css","cpp","arduino", NULL };
+    static const char *ask[] = { "cos","cosa","che","come","quale","quali","perche","quando","dove","chi","what","how","why",
+                                 "which","when","where","who","is","are","does", NULL };
+    for (int i = 0; ask[i]; i++) if (!strcmp(ask[i], tok[0])) return false;   // a question about programs, not a job
+    bool v = false, o = false, rv = false; int nn = -1, js = -1, vt = -1;
+    for (int t = 0; t < n; t++) {
+        for (int i = 0; verb[i]; i++) if (!strcmp(verb[i], tok[t]) && vt < 0) { v = true; vt = t; }
+        for (int i = 0; noun[i]; i++) if (!strcmp(noun[i], tok[t]) && nn < 0 && t != vt) nn = t;
+        for (int i = 0; run[i]; i++) if (!strcmp(run[i], tok[t])) rv = true;
+        for (int i = 0; other[i]; i++) if (!strcmp(other[i], tok[t])) o = true;
+        if (t > 0 && !strcmp(tok[t], "js") && js < 0) js = t;
+    }
+    if (rv && js > 0 && !v) {                       // "esegui snake.js": open it in Code
+        snprintf(s_code_file, sizeof s_code_file, "%s.js", tok[js - 1]);
+        r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 90;
+        snprintf(r->intent, sizeof r->intent, "code_run");
+        snprintf(r->arg, sizeof r->arg, "code");
+        snprintf(r->reply, sizeof r->reply, en ? "Opening %s in Code." : "Apro %s in Code.", s_code_file);
+        return true;
+    }
+    if (!v || nn < 0 || o) return false;
+    s_code_file[0] = 0;
+    r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 85;
+    snprintf(r->intent, sizeof r->intent, "code_task");
+    snprintf(r->arg, sizeof r->arg, "code");
+    snprintf(r->reply, sizeof r->reply, en ? "Code can write it, run it and test it on the device."
+                                           : "Code puo' scriverlo, eseguirlo e provarlo sul dispositivo.");
+    return true;
+}
+
 static bool a_is_more_request(const char *input)
 {
     char tok[A_MAX_TOKENS][A_TOK_LEN];
@@ -3952,6 +4004,9 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // "grazie", "no") resolved from working memory — the agent-like turn-taking glue. Skipped while a
     // tool slot or app clarify is pending, so a "no" there resolves the FSM, not the dialogue layer.
     if (!s_session.pending_tool[0] && !s_session.clarify_opt[0][0] && a_dialogue_act(q, en, &r)) goto done;
+
+    // A program to write or run on the device: Nucleo Code's work, before every other tier (a game is not a fact)
+    if (!s_session.pending_tool[0] && a_code_task(q, en, &r)) goto done;
 
     // Online-only mode: bypass the offline cascade entirely and answer ONLY via PURE Grok — a direct
     // chat passthrough (no JSON classification, no Wikipedia truth gate, no learning). Honest miss if

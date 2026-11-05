@@ -1090,6 +1090,8 @@ static void close_app(void)
     if (s_gf_return) { s_gf_return = false; gamefront_open(); s_gamefront = true; }
 }
 void nucleo_app_exit(void) { close_app(); }
+extern "C" void nucleo_anima_stage_launch(const char *id);   // app_anima.cpp: the RTC slot of "Enter = open <app>"
+void nucleo_app_exit_to(const char *id) { if (id && id[0]) nucleo_anima_stage_launch(id); close_app(); }
 const char *nucleo_app_active_id(void) { return s_active >= 0 ? s_apps[s_active].id : nullptr; }
 
 // Global flashlight overlay (G0 quick-tap). Unlike opening the Torch app, this paints a solid light

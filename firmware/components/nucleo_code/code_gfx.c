@@ -8,7 +8,7 @@
 
 #define STRIP     16            // rows a strip
 #define MAXSTRIPS 16            // 256 rows at most
-#define BAND      8             // rows converted and sent at once
+#define BAND      4             // rows converted and sent at once (2.5 KB at 320 wide, a strip's size)
 
 // Sixteen colours, chosen to read well on both panels: the darks are not pure black, the lights are not neon.
 const uint32_t GFX_PALETTE[GFX_COLORS] = {

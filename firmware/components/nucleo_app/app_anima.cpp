@@ -874,6 +874,12 @@ extern "C" void nucleo_anima_app_ask(const char *q)
 // A stale handoff (an OS without the consumer hook) is cleared by the next ANIMA Solo enter().
 #define ANIMA_LAUNCH_MAGIC 0xA11A0A6Cu
 #define LAUNCH_ID_MAX 16
+// The same slot for any app that wants another opened after it closes (nucleo_app_exit_to): Code back to ANIMA.
+extern "C" void nucleo_anima_stage_launch(const char *id)
+{
+    snprintf(s_rtc_preset, LAUNCH_ID_MAX, "%s", id ? id : "");
+    s_rtc_preset_magic = ANIMA_LAUNCH_MAGIC;
+}
 extern "C" const char *nucleo_anima_take_launch(void)
 {
     if (s_rtc_preset_magic != ANIMA_LAUNCH_MAGIC) return nullptr;
@@ -1368,6 +1374,33 @@ static const struct { const char *id, *it, *en; } APP_PROPER[] = {
 };
 // The NATIVE launcher id for an ANIMA/registry app id ("media-player" -> "music") and its display name in
 // the OS language, or NULL when the app has no native screen (web-only: paint, spreadsheet, ...).
+// ---- Nucleo Code: a program to write or run goes to it (docs/nucleo-code.md 4.6) -------------------------------
+// ANIMA and Code each get a whole Solo heap, so they never run together: ANIMA writes the job on the card
+// (work/main/.code/inbox.txt: "task" + the request, or "run" + a script), opens Code, and Code goes back to ANIMA
+// when it is done, leaving what it did in outbox.txt, which the next ANIMA shows.
+#define CODE_INBOX  NUCLEO_SD_MOUNT "/work/main/.code/inbox.txt"
+#define CODE_OUTBOX NUCLEO_SD_MOUNT "/work/main/.code/outbox.txt"
+static char s_code_job[A_INMAX + 8];          // "task\n<request>" / "run\n<file>", written at Enter
+static bool code_installed(void) { struct stat st; return stat(NUCLEO_SD_MOUNT "/apps/code/app.nap", &st) == 0; }
+static void code_job_write(void)
+{
+    mkdir(NUCLEO_SD_MOUNT "/work", 0775); mkdir(NUCLEO_SD_MOUNT "/work/main", 0775); mkdir(NUCLEO_SD_MOUNT "/work/main/.code", 0775);
+    FILE *f = fopen(CODE_INBOX, "wb");
+    if (f) { fputs(s_code_job, f); fclose(f); }
+    s_code_job[0] = 0;
+}
+static void code_outbox_show(void)             // what Code did for the last job, once
+{
+    FILE *f = fopen(CODE_OUTBOX, "rb");
+    if (!f) return;
+    char b[480]; size_t n = fread(b, 1, sizeof b - 1, f); fclose(f); b[n] = 0;
+    remove(CODE_OUTBOX);
+    while (n && (b[n - 1] == '\n' || b[n - 1] == '\r')) b[--n] = 0;
+    if (!n) return;
+    char t[520]; snprintf(t, sizeof t, "Code: %s", b);
+    push_anima(t, ACC);                            // as an answer of ANIMA's, in Code's own words
+}
+
 static const char *launch_target(const char *arg, char *nm, size_t n)
 {
     if (!arg || !arg[0]) return nullptr;
@@ -1473,6 +1506,20 @@ static void present_result(int ms)
         // "success" via the generic reply (which would confirm a file that was never written).
         snprintf(reply, sizeof(reply), s_en ? "Invalid file path." : "Percorso file non valido.");
         nucleo_anima_observe("create_file", false); tool_ok = false;
+    } else if (s_ses->res.action == ANIMA_ACT_LAUNCH && (!strcmp(s_ses->res.intent, "code_task") || !strcmp(s_ses->res.intent, "code_run"))) {
+        const bool run = !strcmp(s_ses->res.intent, "code_run");
+        if (code_installed()) {
+            if (run) snprintf(s_code_job, sizeof s_code_job, "run\n%s", nucleo_anima_code_file());
+            else snprintf(s_code_job, sizeof s_code_job, "task\n%s", s_ses->req);
+            snprintf(s_ses->launch, sizeof s_ses->launch, "code");
+            if (run) snprintf(reply, sizeof(reply), s_en ? "Enter = open %s in Code" : "Invio = apro %s in Code", nucleo_anima_code_file());
+            else snprintf(reply, sizeof(reply), "%s", s_en ? "Code writes it, runs it and tests it here. Enter = start, then it comes back to me."
+                                                           : "Lo scrive Code, lo esegue e lo prova qui. Invio = inizia, poi torna da me.");
+        } else {
+            snprintf(s_ses->launch, sizeof s_ses->launch, "store");
+            snprintf(reply, sizeof(reply), "%s", s_en ? "Writing and running programs here takes Code, from the Store (Native C). Enter = open the Store"
+                                                      : "Per scrivere ed eseguire programmi qui serve Code, dallo Store (Native C). Invio = apri lo Store");
+        }
     } else if (s_ses->res.action == ANIMA_ACT_LAUNCH) {
         // ANIMA Solo hosts no other app, so the answer OFFERS the launch: Enter on the empty line stages the
         // native id in RTC and reboots into the full OS, which opens it (launch_now / nucleo_anima_take_launch).
@@ -1577,6 +1624,7 @@ static void launch_now(void)
 {
     char nm[32] = "", t[48];
     if (!launch_target(s_ses->launch, nm, sizeof nm)) snprintf(nm, sizeof nm, "%s", s_ses->launch);
+    if (!strcmp(s_ses->launch, "code") && s_code_job[0]) code_job_write();   // the job Code finds when it opens
     snprintf(s_rtc_preset, sizeof s_rtc_preset, "%s", s_ses->launch);
     s_rtc_preset_magic = ANIMA_LAUNCH_MAGIC;
     s_ses->launch[0] = 0;
@@ -2138,6 +2186,13 @@ static void run_selftest(void)
         if (!*line || *line == '#') continue;
         if (!strcmp(line, "!reset")) { clear_chat(); fprintf(out, "--- reset ---\n\n"); continue; }
         if (!strcmp(line, "!exit")) continue;                  // handled after the run
+        if (!strcmp(line, "!enter")) {                         // Enter on an "Enter = open <app>" answer: the handoff itself
+            if (!s_ses->launch[0]) { fprintf(out, "--- enter: nothing offered ---\n\n"); continue; }
+            fprintf(out, "--- enter: open %s ---\nEND %d questions\n", s_ses->launch, k);
+            fclose(out); free(qs);
+            if (voice) nucleo_tts_set_enabled(true);
+            launch_now();                                      // never returns (the reboot into the app)
+        }
         snprintf(s_ses->input, sizeof s_ses->input, "%s", line); s_ilen = (int)strlen(s_ses->input);
         const unsigned free0 = (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
         static char prev_llm[260];
@@ -2235,6 +2290,8 @@ static void enter(void)
         snprintf(s_ses->input, sizeof s_ses->input, "%s", s_rtc_preset); s_ilen = (int)strlen(s_ses->input);
         submit();                                  // runs the turn inline, like a typed question
     }
+    code_outbox_show();                            // back from a job given to Code: what it did
+    if (s_mcount) rebuild_rows();
     run_selftest();                                // /data/anima/selftest.txt, when the maintainer put one there
     nucleo_app_set_hint(chat_hint());              // deck or chat hint, whichever is up
     mark_all_dirty();
