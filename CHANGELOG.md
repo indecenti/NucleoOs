@@ -46,6 +46,10 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   selection on touch.
 - **Firmware image -31 KB**: the Games gallery's console photos are on the card (`data/GameFront/atlas.bin`, in the SD
   content); a card without it keeps the photos it already made, else shows the emulator's icon.
+
+### Fixed
+- Games gallery: a store console's photo or mark made without transparency no longer shows as a dark square on the
+  selected row or the background (its corner colour is taken as transparent).
 - **ANIMA answers with the model you chose.** With a key and the network up, the model answers every question that
   is not the device's own (time, battery, files, timers, apps stay local and instant); what the offline brain found
   becomes its notes, what you told ANIMA about yourself its memory, and when the model does not answer the next one

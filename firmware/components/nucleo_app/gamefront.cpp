@@ -1601,6 +1601,15 @@ static uint16_t blend565(uint16_t fg, uint16_t bg, int a)       // a = 0..15
 }
 static inline int alpha_at(const uint8_t *al, int i) { return i & 1 ? al[i >> 1] & 15 : al[i >> 1] >> 4; }
 static size_t art_bytes(const Art &a) { return (size_t)a.w * a.h * 2 + ((size_t)a.w * a.h + 1) / 2; }
+// A picture with no transparency at all (a store package's photo or mark flattened on a background): its corner's
+// colour is taken as that background and made transparent, so it never sits on the wheel's pill or the theme as a
+// square of another colour. Pictures with their own alpha (every firmware console's) are left as they are.
+static void art_key_opaque(uint16_t *px, uint8_t *al, size_t npx)
+{
+    for (size_t i = 0; i < npx; i++) if (alpha_at(al, (int)i) < 15) return;
+    const uint16_t k = px[0];
+    for (size_t i = 0; i < npx; i++) if (px[i] == k) al[i >> 1] &= (uint8_t)(i & 1 ? 0xF0 : 0x0F);
+}
 // A picture inflated into out: from the firmware, or streamed from its .gfa. False = none (or unreadable).
 static bool art_inflate(const Art &a, uint8_t *out, size_t need, void *state)
 {
@@ -1625,7 +1634,8 @@ static bool art_make(int g)
     void *state = nullptr;
     uint16_t *px = need ? scratch(need, &state) : nullptr;
     if (!px || !art_inflate(a, (uint8_t *)px, need, state)) return false;
-    const uint8_t *al = (const uint8_t *)(px + npx);
+    uint8_t *al = (uint8_t *)(px + npx);
+    art_key_opaque(px, al, npx);
     for (size_t i = 0; i < npx; i++) px[i] = blend565(px[i], BG, alpha_at(al, (int)i));
     swap_all(px, npx);
     mkdir(GF_DIR, 0775); mkdir(CACHE, 0775);
@@ -2069,7 +2079,11 @@ static void marks_prepare(void)
         void *state = nullptr;
         uint16_t *sc = scratch(need, &state);
         uint16_t *px = (uint16_t *)malloc(need);
-        if (px && sc && art_inflate(a, (uint8_t *)sc, need, state)) { memcpy(px, sc, need); s_mark[g + 1] = px; }
+        if (px && sc && art_inflate(a, (uint8_t *)sc, need, state)) {
+            memcpy(px, sc, need);
+            art_key_opaque(px, (uint8_t *)(px + (size_t)a.w * a.h), (size_t)a.w * a.h);
+            s_mark[g + 1] = px;
+        }
         else { free(px); s_mark_failed[g + 1] = true; }
     }
 }
