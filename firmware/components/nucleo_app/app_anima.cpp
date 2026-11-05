@@ -2126,6 +2126,7 @@ static void run_selftest(void)
     if (voice) nucleo_tts_set_enabled(false);
     clear_chat();
     int k = 0;
+    (void)nucleo_anima_online_last;
     char line[A_INMAX];
     for (const char *p = qs; *p; ) {                           // no strtok: the turn itself may use it
         const char *e = p; while (*e && *e != '\n' && *e != '\r') e++;
@@ -2139,11 +2140,15 @@ static void run_selftest(void)
         if (!strcmp(line, "!exit")) continue;                  // handled after the run
         snprintf(s_ses->input, sizeof s_ses->input, "%s", line); s_ilen = (int)strlen(s_ses->input);
         const unsigned free0 = (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
+        static char prev_llm[260];
+        snprintf(prev_llm, sizeof prev_llm, "%s", nucleo_anima_online_last());
         submit();
         const char *lr = nucleo_anima_long_reply();
         fprintf(out, "Q%d: %s\nA: %s\n[tier=%d intent=%s action=%d %d ms  free %u -> %u  largest %u]\n\n", ++k, line,
                 (lr && lr[0]) ? lr : s_ses->res.reply, (int)s_ses->res.tier, s_ses->res.intent, (int)s_ses->res.action, s_last_turn_ms,
                 free0, (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+        { const char *ll = nucleo_anima_online_last();
+          fprintf(out, "[llm: %s]\n\n", (ll && ll[0] && strcmp(ll, prev_llm)) ? ll : "no model call this turn"); }
         fflush(out);
         if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();
     }

@@ -1212,6 +1212,10 @@ static bool teacher_load(teacher_cfg_t *c)
 // anything else / absent = medium. Utility calls (the cross-verifier veto) always run low.
 // ===========================================================================
 #define ANTH_READ_MS 5000           // one blocking read, < the 8 s Task-WDT
+// The last Claude call, for diagnosis (the ANIMA self-test writes it next to each answer): model, status, length,
+// stop reason, time, the heap after; the head of the error body when it failed.
+static char s_llm_last[260], s_llm_last_err[160];
+const char *nucleo_anima_online_last(void) { return s_llm_last; }
 #include "anima_claude.h"          // effort per model, request body, SSE reader (host-tested)
 
 // One Claude turn -> assistant text (malloc'd in *out_text, caller frees). Returns text length, or <0.
@@ -1281,13 +1285,19 @@ static int anthropic_chat_eff(const teacher_cfg_t *c, const char *sys, const ani
             int n = esp_http_client_read(cli, rb, sizeof rb - 1);
             rb[n > 0 ? n : 0] = 0;
             ESP_LOGW(TAG, "Claude HTTP %d: %.200s", status, rb);
-        }
+            snprintf(s_llm_last_err, sizeof s_llm_last_err, "%.150s", rb);
+        } else snprintf(s_llm_last_err, sizeof s_llm_last_err, "no headers (%lld)", (long long)hl);
         esp_http_client_close(cli); esp_http_client_cleanup(cli);
         nucleo_arb_release(tk);
     }
     free(body);
     ESP_LOGI(TAG, "Claude %s effort=%s status=%d %u chars stop=%s in %lld ms", c->model, eff ? eff : "-", status,
              (unsigned)s->len, s->stop[0] ? s->stop : (s->done ? "done" : "cut"), (long long)((esp_timer_get_time() - t0) / 1000));
+    snprintf(s_llm_last, sizeof s_llm_last, "%s %s HTTP %d, %u chars, %s, %lld ms, sent=%d, free %u largest %u%s%s", c->model, eff ? eff : "-",
+             status, (unsigned)s->len, s->err ? "stream error" : s->stop[0] ? s->stop : (s->done ? "done" : "cut"),
+             (long long)((esp_timer_get_time() - t0) / 1000), (int)sent, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), status == 200 ? "" : ": ", status == 200 ? "" : s_llm_last_err);
+    s_llm_last_err[0] = 0;
     int n = -1;
     if (!s->err && s->txt && s->len) { *out_text = s->txt; s->txt = NULL; n = (int)s->len; }
     free(s->txt); free(s);
@@ -3888,6 +3898,7 @@ static void chat_env(char *out, size_t cap)
 // extraction (clip_code, newlines preserved) instead of the prose clip_reply.
 static int grok_chat(const char *input, const anima_turn_t *turns, int nturns, bool en, bool code_mode, anima_result_t *out)
 {
+    snprintf(s_llm_last, sizeof s_llm_last, "chat: no call (offline or no key)");
     if (!input || !*input || !nucleo_anima_online_available()) return 0;
     (void)en;
     nucleo_anima_l1_unload();   // free the L1 index so the mbedTLS handshake has a contiguous block

@@ -58,11 +58,19 @@ struct State {
     char tr[6144]; int trlen, tscroll;
     char in[160]; int inlen;
     char todo[512];
-    bool auto_run, auto_sent;     // the maintainer's self-test (work/main/.code/selftest.txt)
+    bool auto_run, auto_sent, traced_draw, traced_net;     // the maintainer's self-test (work/main/.code/selftest.txt)
 };
 static State *S;
 
 static int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
+// Breadcrumbs on the SD card (work/main/.code/trace.txt): the Solo boot has no web server and a panic loses the log,
+// so the last line written says where a crash happened. Cheap: one append per stage, the first time only.
+static void trace(const char *what)
+{
+    FILE *f = fopen(NUCLEO_SD_MOUNT "/work/main/.code/trace.txt", "ab");
+    if (f) { fprintf(f, "%lld %s free %u largest %u\n", (long long)(esp_timer_get_time() / 1000), what,
+                     (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)); fclose(f); }
+}
 static void sleep_ms(uint32_t ms) { vTaskDelay(pdMS_TO_TICKS(ms ? ms : 1)); }
 static void out_fn(void *op, const char *s, size_t n)
 {
@@ -522,7 +530,7 @@ static void agent_key(int key, char ch)
 }
 
 // ---- routing --------------------------------------------------------------------------------------------
-static void on_draw(void) { if (S->agent_view) agent_draw(); else files_draw(); }
+static void on_draw(void) { static bool t1; if (!t1) { t1 = true; trace("first draw"); } if (S->agent_view) agent_draw(); else files_draw(); if (!S->traced_draw) { S->traced_draw = true; trace("first draw done"); } }
 static void on_draw_large(void) { if (S->agent_view) agent_draw_large(); else draw_large(); }
 static void on_key(int key, char ch) { if (S->agent_view) agent_key(key, ch); else files_key(key, ch); }
 // SELF-TEST (maintainer only): work/main/.code/selftest.txt holds one task; Code sends it once on open, then saves the
@@ -535,11 +543,14 @@ static void selftest_tick(void)
     if (!S->auto_run) return;
     if (!S->auto_sent) {
         if (!nucleo_tcp_network_up()) return;                     // Wi-Fi first (the Solo boot brings it up after us)
+        if (!S->traced_net) { S->traced_net = true; trace("net up"); }
         FILE *f = fopen(SELFTEST_IN, "rb"); if (!f) { S->auto_run = false; return; }
         size_t n = fread(S->in, 1, sizeof S->in - 1, f); fclose(f); remove(SELFTEST_IN);
         while (n && (S->in[n - 1] == '\n' || S->in[n - 1] == '\r')) n--;
         S->in[n] = 0; S->inlen = (int)n; S->auto_sent = true;
+        trace("submit");
         agent_send();
+        trace("submitted");
         return;
     }
     if (agent_running() || !S->ag) return;
@@ -559,6 +570,7 @@ static void selftest_tick(void)
 static void on_tick(void) { agent_tick(); selftest_tick(); if (S->agent_view) nucleo_app_request_draw(); }
 static void on_enter(void)
 {
+    trace("enter");
     ensure_bench(); scan(); S->output = false; s_lg_scroll = 0;
     S->agent_view = true; S->ask = false;
     { struct stat sst; S->auto_run = stat(SELFTEST_IN, &sst) == 0; S->auto_sent = false; }
@@ -571,9 +583,10 @@ static void on_enter(void)
                         : L("Serve una chiave Claude: web OS > Impostazioni > IA.\n", "A Claude key is needed: web OS > Settings > AI.\n",
                             "Hace falta una clave Claude: web OS > Ajustes > IA.\n", "Une cle Claude est requise : web OS > Reglages > IA.\n",
                             "Ein Claude-Schluessel fehlt: Web OS > Einstellungen > KI.\n"));
+    trace("enter done");
     nucleo_app_request_draw();
 }
-static void on_exit(void) { agent_close(); }
+static void on_exit(void) { trace("exit"); agent_close(); }
 
 static const nucleo_app_ram_t APP_RAM[] = { { (void **)&S, sizeof(State) }, { nullptr, 0 } };
 

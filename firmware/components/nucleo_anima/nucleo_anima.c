@@ -1750,7 +1750,8 @@ static bool a_local_answer_q(const anima_result_t *r, const char *q)
 {
     if (q && (!strcmp(r->intent, "weather") || !strcmp(r->intent, "news") || !strcmp(r->intent, "fx") || !strcmp(r->intent, "worldclock")
               || !strcmp(r->intent, "add_event")) && a_creative(q)) return false;
-    if (q && (!strcmp(r->intent, "calc") || !strcmp(r->intent, "math") || !strcmp(r->intent, "percent")) && a_wordy(q)) return false;
+    if (q && (!strcmp(r->intent, "calc") || !strcmp(r->intent, "math") || !strcmp(r->intent, "percent") || !strcmp(r->intent, "convert"))
+        && a_wordy(q)) return false;
     return a_local_answer(r);
 }
 static bool a_local_answer(const anima_result_t *r)
@@ -4024,6 +4025,10 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // online_llm is effectively false through this hybrid section, which is exactly the intent.)
     const bool online_llm = nucleo_anima_online_available() && nucleo_anima_teacher_configured()
                             && nucleo_anima_online_only_enabled();
+    // MODEL FIRST (the hand-off at done:): with a model to answer, the keyless network knowledge tiers below
+    // (Wikidata facts, Wikipedia summaries) are not run: their answer would be handed to the model anyway, and
+    // on the ADV they cost 2-5 s of every turn before the model was even called (measured by the self-test).
+    const bool model_first = nucleo_anima_online_available() && nucleo_anima_teacher_configured();
 
     // Classify once up-front: the F_* feature flags drive the live/weather routing below AND the
     // later spellfix gate. (Pure function of q; q is stable from here on.)
@@ -4098,7 +4103,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // every Stalin question yields the same bio). Online-only and gated to actual fact-questions, so a
     // non-fact query never pays a net round-trip; offline -> 0 here and the L1 bio (whose prose holds
     // the fact) answers. Free L1 first — the TLS claim fetch needs the contiguous heap.
-    if (askable && nucleo_anima_online_available() && nucleo_anima_online_is_fact(q, en)) {
+    if (askable && !model_first && nucleo_anima_online_available() && nucleo_anima_online_is_fact(q, en)) {
         nucleo_anima_l1_unload();
         fact_tried = true;
         if (nucleo_anima_online_fact(q, en, &r)) {
@@ -4422,7 +4427,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // online (policy above); keyless devices still use it.
     // (Not again if the structured-fact priority above already asked Wikidata this turn and missed —
     // that was a second TLS round-trip per miss for the same answer.)
-    if (!online_llm && !fact_tried && nucleo_anima_online_fact(q, en, &r)) {
+    if (!online_llm && !model_first && !fact_tried && nucleo_anima_online_fact(q, en, &r)) {
         mem_update(&r);
         snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);
         s_session.dirty = true;
@@ -4443,7 +4448,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
                     s_session.dirty = true;
                     goto done;
                 }
-            } else if (nucleo_anima_online_answer(entity, slug, en, &r)) {
+            } else if (!model_first && nucleo_anima_online_answer(entity, slug, en, &r)) {
                 mem_update(&r);
                 snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);   // enable "tell me more"
                 s_session.dirty = true;
@@ -4511,7 +4516,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // owns online (it'll answer below); keyless devices still use it. The clarify band just above
     // reloads the L1 index, so free it again before this TLS fetch needs the contiguous heap.
     if (!online_llm && nucleo_anima_online_available()) nucleo_anima_l1_unload();
-    if (!online_llm && nucleo_anima_online_entity_bare(q, en, &r)) {
+    if (!online_llm && !model_first && nucleo_anima_online_entity_bare(q, en, &r)) {
         mem_update(&r);
         snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);
         s_session.dirty = true;
