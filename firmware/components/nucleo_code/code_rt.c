@@ -8,6 +8,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include "mquickjs.h"
+#include "code_gfx.h"
 
 #define FS_READ_MAX   (64 * 1024)          // a script reads at most this much of one file
 #define FS_WRITE_MAX  (256 * 1024)         // and writes at most this much to one
@@ -18,6 +19,10 @@ typedef struct {
     const code_env_t *env;
     int64_t deadline;
     bool timeout, cancelled;
+    gfx_t *g;                       // the screen, once the script draws
+    bool g_failed;
+    uint32_t frames;
+    int tx, ty; bool tdown;         // the last touch sample touch.poll() took
 } rt_t;
 
 static rt_t *RT(JSContext *ctx) { return (rt_t *)JS_GetContextOpaque(ctx); }
@@ -76,9 +81,13 @@ JSValue js_nc_fs_read(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv
     if (argc < 1 || !arg_path(ctx, argv[0], p, sizeof p)) return JS_ThrowTypeError(ctx, "fs.read: path outside the workspace");
     FILE *f = fopen(p, "rb");
     if (!f) return JS_NULL;
-    char *buf = malloc(FS_READ_MAX);
+    // a block of the file's own size: the engine's arena holds most of the heap, a 64 KB block never exists on the
+    // device (every fs.read was "out of memory")
+    fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+    size_t want = sz > 0 ? (size_t)sz : 0; if (want > FS_READ_MAX) want = FS_READ_MAX;
+    char *buf = malloc(want ? want : 1);
     if (!buf) { fclose(f); return JS_ThrowOutOfMemory(ctx); }
-    size_t n = fread(buf, 1, FS_READ_MAX, f); fclose(f);
+    size_t n = want ? fread(buf, 1, want, f) : 0; fclose(f);
     JSValue s = JS_NewStringLen(ctx, buf, n);
     free(buf);
     return s;
@@ -154,12 +163,111 @@ JSValue js_nc_sys_sleep(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
         int s = ms > 50 ? 50 : ms;
         if (r->env->sleep_ms) r->env->sleep_ms((uint32_t)s);
         ms -= s;
-        if ((r->env->cancel && r->env->cancel(r->env->op)) || (r->env->now_ms && r->env->now_ms() > r->deadline)) break;
+        if ((r->env->cancel && r->env->cancel(r->env->op)) || (r->env->now_ms && r->env->now_ms() > r->deadline)) {
+            JS_NucleoInterruptSoon(ctx);                 // the handler stops the script at its next instruction
+            break;
+        }
     }
     return JS_UNDEFINED;
 }
 JSValue js_nc_sys_time(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
 { (void)this_val; (void)argc; (void)argv; return JS_NewInt64(ctx, RT(ctx)->env->now_ms ? RT(ctx)->env->now_ms() : 0); }
+
+// ---- the screen: gfx (16 colours), key, touch (docs/nucleo-code.md 4.5) ----------------------------------------
+// The canvas is made at the first gfx call, outside the engine's arena (strips of the system heap).
+static gfx_t *screen(JSContext *ctx)
+{
+    rt_t *r = RT(ctx);
+    if (r->g) return r->g;
+    if (!r->env->scr_w || !r->env->scr_h) { JS_ThrowTypeError(ctx, "gfx: no screen in this run"); return NULL; }
+    if (r->g_failed || !(r->g = gfx_new(r->env->scr_w, r->env->scr_h))) {
+        r->g_failed = true;
+        JS_ThrowTypeError(ctx, "gfx: no memory for the %dx%d screen", r->env->scr_w, r->env->scr_h);
+        return NULL;
+    }
+    return r->g;
+}
+// the first `n` arguments as integers (missing ones = 0); false = an exception is pending
+static bool ints(JSContext *ctx, int argc, JSValue *argv, int n, int *out)
+{
+    for (int i = 0; i < n; i++) {
+        out[i] = 0;
+        if (i < argc && !JS_IsUndefined(argv[i]) && JS_ToInt32Sat(ctx, &out[i], argv[i])) return false;
+    }
+    return true;
+}
+#define GFX_FN(name, nargs, body)                                                                  \
+    JSValue name(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)                       \
+    {                                                                                              \
+        (void)this_val; int a[8]; gfx_t *g = screen(ctx);                                         \
+        if (!g || !ints(ctx, argc, argv, nargs, a)) return JS_EXCEPTION;                           \
+        body;                                                                                      \
+        return JS_UNDEFINED;                                                                       \
+    }
+JSValue js_nc_gfx_width(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
+{ (void)this_val; (void)argc; (void)argv; gfx_t *g = screen(ctx); return g ? JS_NewInt32(ctx, gfx_w(g)) : JS_EXCEPTION; }
+JSValue js_nc_gfx_height(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
+{ (void)this_val; (void)argc; (void)argv; gfx_t *g = screen(ctx); return g ? JS_NewInt32(ctx, gfx_h(g)) : JS_EXCEPTION; }
+GFX_FN(js_nc_gfx_clear, 1, gfx_clear(g, a[0]))
+GFX_FN(js_nc_gfx_pixel, 3, gfx_pixel(g, a[0], a[1], a[2]))
+GFX_FN(js_nc_gfx_rect, 5, gfx_rect(g, a[0], a[1], a[2], a[3], a[4]))
+GFX_FN(js_nc_gfx_frame, 5, gfx_frame(g, a[0], a[1], a[2], a[3], a[4]))
+GFX_FN(js_nc_gfx_line, 5, gfx_line(g, a[0], a[1], a[2], a[3], a[4]))
+GFX_FN(js_nc_gfx_circle, 4, gfx_circle(g, a[0], a[1], a[2], a[3], false))
+GFX_FN(js_nc_gfx_disc, 4, gfx_circle(g, a[0], a[1], a[2], a[3], true))
+JSValue js_nc_gfx_get(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
+{
+    (void)this_val; int a[2]; gfx_t *g = screen(ctx);
+    if (!g || !ints(ctx, argc, argv, 2, a)) return JS_EXCEPTION;
+    return JS_NewInt32(ctx, gfx_get(g, a[0], a[1]));
+}
+// gfx.text(s, x, y, colour, scale) -> the width drawn
+JSValue js_nc_gfx_text(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
+{
+    (void)this_val; int a[4]; gfx_t *g = screen(ctx);
+    if (!g) return JS_EXCEPTION;
+    if (argc < 1) return JS_NewInt32(ctx, 0);
+    if (!ints(ctx, argc - 1, argv + 1, 4, a)) return JS_EXCEPTION;
+    JSCStringBuf b; size_t len = 0;
+    const char *s = JS_ToCStringLen(ctx, &len, argv[0], &b);
+    if (!s) return JS_EXCEPTION;
+    return JS_NewInt32(ctx, gfx_text(g, a[0], a[1], s, len, argc >= 4 ? a[2] : 1, a[3] ? a[3] : 1));
+}
+JSValue js_nc_gfx_flush(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
+{
+    (void)this_val; (void)argc; (void)argv; rt_t *r = RT(ctx); gfx_t *g = screen(ctx);
+    if (!g) return JS_EXCEPTION;
+    gfx_flush(g, r->env->blit, r->env->op);
+    r->frames++;
+    // an app spends its time here and in sys.sleep, not in JS: Esc and the limit are checked at every frame
+    if ((r->env->cancel && r->env->cancel(r->env->op)) || (r->env->now_ms && r->env->now_ms() > r->deadline)) JS_NucleoInterruptSoon(ctx);
+    return JS_UNDEFINED;
+}
+JSValue js_nc_key_get(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
+{
+    (void)this_val; (void)argc; (void)argv; rt_t *r = RT(ctx);
+    const char *k = r->env->key ? r->env->key(r->env->op) : NULL;
+    return k ? JS_NewString(ctx, k) : JS_NULL;
+}
+JSValue js_nc_key_down(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
+{
+    (void)this_val; rt_t *r = RT(ctx);
+    if (argc < 1 || !r->env->key_down) return JS_NewBool(0);
+    JSCStringBuf b; const char *s = JS_ToCString(ctx, argv[0], &b);
+    if (!s) return JS_EXCEPTION;
+    return JS_NewBool(r->env->key_down(r->env->op, s));
+}
+JSValue js_nc_touch_poll(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
+{
+    (void)this_val; (void)argc; (void)argv; rt_t *r = RT(ctx);
+    int x, y; bool d;
+    if (!r->env->touch || !r->env->touch(r->env->op, &x, &y, &d)) return JS_NewBool(0);
+    r->tx = x; r->ty = y; r->tdown = d;
+    return JS_NewBool(1);
+}
+JSValue js_nc_touch_x(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) { (void)this_val; (void)argc; (void)argv; return JS_NewInt32(ctx, RT(ctx)->tx); }
+JSValue js_nc_touch_y(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) { (void)this_val; (void)argc; (void)argv; return JS_NewInt32(ctx, RT(ctx)->ty); }
+JSValue js_nc_touch_down(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) { (void)this_val; (void)argc; (void)argv; return JS_NewBool(RT(ctx)->tdown); }
 
 
 size_t code_md_plain(const char *in, char *out, size_t cap)
@@ -242,9 +350,9 @@ bool code_run(void *arena, size_t arena_size, const char *src, size_t len, const
 {
     memset(res, 0, sizeof *res);
     res->arena = (uint32_t)arena_size;
-    rt_t r = { env, 0, false, false };
+    rt_t r; memset(&r, 0, sizeof r); r.env = env;
     int64_t t0 = env->now_ms ? env->now_ms() : 0;
-    r.deadline = t0 + (env->timeout_ms ? env->timeout_ms : 10000);
+    r.deadline = env->timeout_ms == CODE_NO_LIMIT ? INT64_MAX : t0 + (env->timeout_ms ? env->timeout_ms : 10000);
     JSContext *ctx = JS_NewContext(arena, arena_size, &js_stdlib);
     if (!ctx) { snprintf(res->error, sizeof res->error, "the arena is too small for the engine (%u B)", (unsigned)arena_size); res->oom = true; return false; }
     JS_SetContextOpaque(ctx, &r);
@@ -270,6 +378,12 @@ bool code_run(void *arena, size_t arena_size, const char *src, size_t len, const
     if (r.timeout) snprintf(res->error, sizeof res->error, "stopped: more than %u ms", (unsigned)(env->timeout_ms ? env->timeout_ms : 10000));
     if (r.cancelled) snprintf(res->error, sizeof res->error, "stopped by the user");
     if (r.timeout || r.cancelled) res->ok = false;
+    if (r.g) {                                           // the last frame on the screen, and in the PNG a test asked for
+        gfx_flush(r.g, env->blit, env->op);
+        res->drew = true; res->frames = r.frames; res->scr_w = gfx_w(r.g); res->scr_h = gfx_h(r.g);
+        if (env->shot) res->shot_ok = gfx_png(r.g, env->shot, gfx_w(r.g) <= 320 ? 2 : 1);
+        gfx_free(r.g); r.g = NULL;
+    }
     res->used_end = JS_NucleoUsedNow(ctx);
     JS_GC(ctx);                                          // one last compacting GC: what was really live
     res->live_max = JS_NucleoLiveMax(ctx);

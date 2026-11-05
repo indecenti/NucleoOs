@@ -36,6 +36,31 @@ static code_result_t run(size_t arena_kb, const char *src, uint32_t timeout)
     return r;
 }
 
+// A run with a screen: rows blitted are counted, keys come from a list, the cancel fires after 400 ms.
+static int g_blit_rows, g_blit_maxw; static uint16_t g_first_px; static int g_kpos; static const char **g_keys; static int64_t g_t0;
+static void blit(void *op, int x, int y, int w, int h, const uint16_t *px)
+{
+    (void)op; (void)x;
+    if (y == 0 && !g_blit_rows) g_first_px = px[0];
+    g_blit_rows += h; if (w > g_blit_maxw) g_blit_maxw = w;
+}
+static const char *key(void *op) { (void)op; return g_keys && g_keys[g_kpos] ? g_keys[g_kpos++] : NULL; }
+static bool cancel_late(void *op) { (void)op; return now_ms() - g_t0 > 400; }
+static code_result_t run_screen(int w, int h, const char *src, uint32_t timeout, const char **keys, const char *shot)
+{
+    static code_env_t env;
+    memset(&env, 0, sizeof env);
+    env.root = "build/code-rt/ws"; env.out = out; env.now_ms = now_ms; env.sleep_ms = sleep_ms; env.timeout_ms = timeout;
+    env.scr_w = w; env.scr_h = h; env.blit = blit; env.key = key; env.shot = shot;
+    env.cancel = timeout == CODE_NO_LIMIT ? cancel_late : NULL;
+    g_blit_rows = g_blit_maxw = 0; g_first_px = 0; g_keys = keys; g_kpos = 0; g_t0 = now_ms();
+    void *arena = malloc(32 * 1024);
+    code_result_t r; g_len = 0; g_out[0] = 0;
+    code_run(arena, 32 * 1024, src, strlen(src), "app.js", &env, &r);
+    free(arena);
+    return r;
+}
+
 // Programs like the ones the agent writes (a few hundred lines at most), to size the default arena.
 static const char *P_FIZZ = "for (var i = 1; i <= 30; i++) print(i % 15 == 0 ? 'FizzBuzz' : i % 3 == 0 ? 'Fizz' : i % 5 == 0 ? 'Buzz' : i);";
 static const char *P_SORT =
@@ -106,6 +131,31 @@ int main(void)
     CHECK(r.ok && strstr(g_out, "true 2 7 05 1"), "compat: %s [%s]", r.error, g_out);
     r = run(24, "gc(); print(sys.mem().used);", 2000);
     { int plain = atoi(g_out); CHECK(plain > 0 && plain < 6000, "no compat cost for a plain script: %d", plain); }
+    // the screen (docs/nucleo-code.md 4.5): no screen -> a clear error; a scene -> rows blitted and a PNG (rt-check.mjs
+    // decodes it and checks its pixels); scripted keys; an app loop with no time limit, stopped by the cancel
+    r = run(24, "gfx.clear(0);", 2000);
+    CHECK(!r.ok && strstr(r.error, "no screen"), "gfx without a screen: %s", r.error);
+    r = run_screen(240, 135, "var W = gfx.width(), H = gfx.height(); gfx.clear(gfx.DARKBLUE); gfx.rect(0, 0, 20, 20, gfx.RED);"
+                   "gfx.frame(30, 10, 40, 30, gfx.WHITE); gfx.line(0, H - 1, W - 1, 0, gfx.YELLOW); gfx.disc(120, 70, 15, gfx.GREEN);"
+                   "gfx.circle(120, 70, 25, gfx.CYAN); var w = gfx.text('Ciao!', 150, 100, gfx.WHITE, 2); gfx.pixel(239, 134, gfx.PINK);"
+                   "print(W, H, w, gfx.get(5, 5), gfx.get(239, 134), gfx.get(-1, 0)); gfx.flush();", 2000, NULL, "build/code-rt/shot.png");
+    CHECK(r.ok && strstr(g_out, "240 135 60 4 13 -1"), "gfx scene: %s [%s]", r.error, g_out);
+    CHECK(r.drew && r.shot_ok && r.frames == 1 && r.scr_w == 240, "gfx result: drew=%d shot=%d frames=%u", r.drew, r.shot_ok, (unsigned)r.frames);
+    CHECK(g_blit_rows >= 135 && g_blit_maxw == 240, "blit: %d rows, width %d", g_blit_rows, g_blit_maxw);
+    CHECK(g_first_px == 0xE1C7, "rgb565 of red at (0,0): %04x", (unsigned)g_first_px);
+    static const char *KEYS[] = { "right", "right", "enter", "a", NULL };
+    r = run_screen(240, 135, "var k, seen = []; while ((k = key.get()) !== null) seen.push(k); print(seen.join(','), key.down('a'), touch.poll());",
+                   2000, KEYS, NULL);
+    CHECK(r.ok && strstr(g_out, "right,right,enter,a false false"), "keys: %s [%s]", r.error, g_out);
+    r = run_screen(320, 240, "var x = 0; while (true) { gfx.clear(0); gfx.rect(x % 300, 100, 20, 20, gfx.ORANGE); gfx.flush(); x += 4; sys.sleep(5); }",
+                   CODE_NO_LIMIT, NULL, "build/code-rt/shot-large.png");
+    CHECK(!r.ok && r.cancelled && r.drew && r.frames > 3 && r.shot_ok && r.scr_w == 320, "app loop: cancelled=%d frames=%u shot=%d %s",
+          r.cancelled, (unsigned)r.frames, r.shot_ok, r.error);
+    // an app loop is stopped on time even though it lives in C (flush + sleep): the 300 ms limit, not seconds later
+    r = run_screen(240, 135, "while (true) { gfx.clear(1); gfx.flush(); sys.sleep(20); }", 300, NULL, NULL);
+    CHECK(r.timeout && r.drew && r.ms < 450, "app loop limit: timeout=%d ms=%u", r.timeout, (unsigned)r.ms);
+    r = run_screen(240, 135, "while (true) { try { gfx.flush(); sys.sleep(10); } catch (e1) { print('caught'); } }", 300, NULL, NULL);
+    CHECK(r.timeout && !strstr(g_out, "caught"), "the stop is not catchable: [%s]", g_out);
     printf(fails ? "FAILED %d\n" : "ALL OK\n", fails);
     return fails != 0;
 }

@@ -31,19 +31,33 @@ typedef struct { const char *q, *a; } anima_turn_t;   // anima_claude.h's chat h
 #define FILE_MAX     (256 * 1024)  // a file the agent may write
 #define SEARCH_MAX   40            // matches a search returns
 #define PATHCAP      256
+#define FILE_MARK    "@@nc-file:"   // in a stored message: "this file, in base64, goes here" (build_request)
 
 struct agent {
     agent_cfg_t   cfg;
     agent_io_t    io;
-    cJSON        *msgs;            // the conversation (user / assistant messages, Anthropic format)
     agent_stats_t st;
+    agent_state_t state;
+    char          hist[PATHCAP], req[PATHCAP];   // the session (JSONL) and the request being sent, on the SD card
+    int           calls_turn;
     // the reply being streamed
+    anth_stream_t *s;
     cJSON        *content;         // the assistant message's content blocks, in order
     char         *text; size_t tlen, tcap;   // the text block being written
     char          stop[24];
     anth_usage_t  usage;
     bool          stream_error; char stream_msg[160];
+    // the tool calls being answered
+    cJSON        *amsg, *rmsg;     // the assistant message with the calls, the user message with the results
+    int           tool_i;
+    uint32_t      big_mask;        // blocks whose input did not fit the device
+    char          ask[160];        // the action waiting for the user's yes
     char          todo[1024];
+    unsigned      shots;           // screenshots taken in this session (.code/shots/<n>.png)
+    char         *tb_own;          // the tool-input buffer while a reply streams (cfg.toolbuf NULL)
+    char          shot_path[PATHCAP];   // the last run_js left one: the tool result carries it as an image
+    // the run being tested (run_js): its scripted keys and taps, and where its frames go
+    cJSON        *t_keys, *t_taps; int t_ki, t_ti; bool t_up; int64_t t_wait; bool t_large;
 };
 
 // ---- the system prompt and the tools -------------------------------------------------------------------
@@ -58,8 +72,9 @@ static const char *SYS =
     "until it works. Never say a program works without having run it.\n"
     "- Keep programs small, clear and commented where it helps; one file unless the task needs more.\n"
     "- If the task itself looks wrong (contradictory, impossible, a typo in the data), say so and propose the fix instead of forcing it.\n"
-    "- When you are done, answer in 2-4 short lines: what you made, the file names, and how the user runs it (in Code: select "
-    "the file and press Enter). The screen is 240x135: plain text only, no markdown (no **, no backticks, no headings, no "
+    "- When you are done, answer in 2-4 short lines: what you made, the file names, and how to use it (Enter in Code runs the "
+    "script you wrote last; others are under /files). Start with the result in one sentence. The screen is 240x135: plain "
+    "text only, no markdown (no **, no backticks, no headings, no "
     "tables), no long prose, and never name your internal tools.\n\n"
     "JavaScript on this device is MicroQuickJS, a strict ES5 subset. Follow it exactly:\n"
     "- Use var and function declarations only. NOT available: let, const, arrow functions, template literals, classes, "
@@ -80,14 +95,34 @@ static const char *SYS =
     "sys.mem() -> {used, liveMax} bytes.\n"
     "- Limits: a run stops after 10 s, and the engine has about 24-40 KB of memory: no huge arrays or strings, print at most a "
     "few hundred lines.\n"
-    "Text files (notes, chapters, CSV) are written with the editor tool directly: no code needed.";
+    "Text files (notes, chapters, CSV) are written with the editor tool directly: no code needed.\n\n"
+    "Apps with a screen (games, tools, demos): the device API has a 16-colour canvas.\n"
+    "- gfx.width(), gfx.height(): 240x135 on the Cardputer, 320x240 on the external panel; lay out for both, never assume one.\n"
+    "- gfx.clear(c); gfx.pixel(x, y, c); gfx.get(x, y); gfx.rect(x, y, w, h, c) filled; gfx.frame(x, y, w, h, c) outline; "
+    "gfx.line(x0, y0, x1, y1, c); gfx.circle(x, y, r, c); gfx.disc(x, y, r, c) filled; gfx.text(s, x, y, c, scale) draws ASCII "
+    "in a 6x8 cell times scale and returns the width; gfx.flush() shows the frame (once per frame, after drawing it).\n"
+    "- Colours: gfx.BLACK WHITE GRAY DARKGRAY RED ORANGE YELLOW GREEN DARKGREEN CYAN BLUE DARKBLUE PURPLE PINK BROWN BEIGE (0-15).\n"
+    "- key.get() -> the next key or null: 'up' 'down' 'left' 'right' 'enter' 'del' 'tab' or the character ('a', ' '); "
+    "key.down(name) -> held now. Esc always quits the app: never wait for it.\n"
+    "- touch.poll() -> true when the panel had a touch sample, then touch.x(), touch.y(), touch.down() (false = lifted).\n"
+    "- An app is a loop: read input, update, draw, gfx.flush(), sys.sleep(16 to 33). It runs until Esc when the user opens it.\n"
+    "- Test every app you write: run_js it with keys (and taps on the large screen), look at the frame you get back, fix what "
+    "looks wrong (cut text, overlaps, things off screen, unreadable colours) and test again; test screen large too.";
 
 static const char *TOOLS_JSON =
     "[{\"type\":\"text_editor_20250728\",\"name\":\"str_replace_based_edit_tool\",\"max_characters\":12000},"
     "{\"name\":\"run_js\",\"description\":\"Run a JavaScript file of the workspace on the device (MicroQuickJS) and return its output, "
-    "the error with file:line if it failed, the time and the memory it needed.\",\"input_schema\":{\"type\":\"object\",\"properties\":"
+    "the error with file:line if it failed, the time and the memory it needed. A script that draws (gfx) is a visual test: it runs on a "
+    "virtual screen the user watches, and the result carries its last frame as an image. An app loop ends at timeout_ms: a normal end "
+    "for a test.\",\"input_schema\":{\"type\":\"object\",\"properties\":"
     "{\"path\":{\"type\":\"string\",\"description\":\"file to run, relative to the workspace\"},\"timeout_ms\":{\"type\":\"integer\","
-    "\"description\":\"wall clock limit, at most 10000\"}},\"required\":[\"path\"]}},"
+    "\"description\":\"wall clock limit, at most 10000; 1500 to 3000 for an app test\"},"
+    "\"screen\":{\"type\":\"string\",\"enum\":[\"small\",\"large\"],\"description\":\"small = the Cardputer, 240x135 (default); "
+    "large = the external panel, 320x240 with touch\"},"
+    "\"keys\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"what key.get() returns, in order, e.g. "
+    "right, right, enter; wait:300 holds the next ones back 300 ms\"},"
+    "\"taps\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"}},\"description\":"
+    "\"[x, y] taps on the large screen, each a press then a lift for touch.poll()\"}},\"required\":[\"path\"]}},"
     "{\"name\":\"search\",\"description\":\"Find a text (case-insensitive) in the workspace's files; returns file:line: line, at most 40.\","
     "\"input_schema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"path\":{\"type\":\"string\","
     "\"description\":\"folder to search, relative to the workspace (default: all)\"}},\"required\":[\"text\"]}},"
@@ -105,9 +140,13 @@ static char *read_file(const char *path, size_t max, size_t *len)
 {
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;
-    char *b = malloc(max + 1);
+    // the file's own size, not the cap: on the device a 64 KB block never exists, and asking for one made every
+    // run_js answer "does not exist"
+    fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+    size_t want = sz > 0 ? (size_t)sz : 0; if (want > max) want = max;
+    char *b = malloc(want + 1);
     if (!b) { fclose(f); return NULL; }
-    size_t n = fread(b, 1, max, f); fclose(f);
+    size_t n = want ? fread(b, 1, want, f) : 0; fclose(f);
     b[n] = 0; if (len) *len = n;
     return b;
 }
@@ -125,6 +164,7 @@ static bool write_file(const char *path, const char *s, size_t n)
 typedef struct { char *b; size_t n, cap; bool cut; } sb_t;
 static void sb_add(sb_t *s, const char *t, size_t n)
 {
+    if (!s->b && !(s->b = malloc(s->cap))) return;       // allocated at the first write (see do_tool)
     if (s->n + n >= s->cap) { n = s->cap > s->n + 1 ? s->cap - s->n - 1 : 0; s->cut = true; }
     memcpy(s->b + s->n, t, n); s->n += n; s->b[s->n] = 0;
 }
@@ -137,9 +177,19 @@ static void sb_printf(sb_t *s, const char *fmt, ...)
 }
 
 // ---- tools ----------------------------------------------------------------------------------------------
+// why read_file gave nothing: the file is not there, or there is no block for it right now
+static void no_file(sb_t *r, const char *rel, const char *path)
+{
+    struct stat st;
+    if (stat(path, &st) != 0) sb_printf(r, "error: %s does not exist", rel);
+    else sb_printf(r, "error: no memory to read %s (%ld bytes) right now", rel, (long)st.st_size);
+}
 static bool resolve(agent_t *a, const char *rel, char *out)
 {
     if (!rel) return false;
+    // the workspace's own absolute path ("/sd/work/main/a.js"): the model sometimes uses the one it saw in <env>
+    size_t rl = strlen(a->cfg.root);
+    if (!strncmp(rel, a->cfg.root, rl) && (rel[rl] == '/' || !rel[rl])) { rel += rl; while (*rel == '/') rel++; }
     while (rel[0] == '.' && rel[1] == '/') rel += 2;                 // "./a.js"
     if (!strcmp(rel, ".") || !rel[0]) { snprintf(out, PATHCAP, "%s", a->cfg.root); return true; }
     return code_path(a->cfg.root, rel, out, PATHCAP);
@@ -168,7 +218,7 @@ static bool tool_editor(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t sc
             return true;
         }
         size_t len; char *t = read_file(p, FILE_MAX, &len);
-        if (!t) { sb_printf(r, "error: %s does not exist", rel); return false; }
+        if (!t) { no_file(r, rel, p); return false; }
         int from = 1, to = 1 << 30;
         cJSON *vr = cJSON_GetObjectItem(in, "view_range");
         if (cJSON_IsArray(vr) && cJSON_GetArraySize(vr) == 2) {
@@ -204,7 +254,7 @@ static bool tool_editor(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t sc
         if (!o || !*o) { sb_printf(r, "error: old_str is required"); return false; }
         if (!nw) nw = "";
         size_t len; char *t = read_file(p, FILE_MAX, &len);
-        if (!t) { sb_printf(r, "error: %s does not exist", rel); return false; }
+        if (!t) { no_file(r, rel, p); return false; }
         char *hit = strstr(t, o);
         if (!hit) { free(t); sb_printf(r, "error: old_str not found in %s (it must match exactly, whitespace included)", rel); return false; }
         if (strstr(hit + 1, o)) { free(t); sb_printf(r, "error: old_str matches more than once in %s: add context", rel); return false; }
@@ -226,7 +276,7 @@ static bool tool_editor(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t sc
         const char *it = jstr(in, "insert_text"); cJSON *ln = cJSON_GetObjectItem(in, "insert_line");
         if (!it || !cJSON_IsNumber(ln)) { sb_printf(r, "error: insert_line and insert_text are required"); return false; }
         size_t len = 0; char *t = read_file(p, FILE_MAX, &len);
-        if (!t) { t = strdup(""); len = 0; }
+        if (!t) { t = calloc(1, 1); len = 0; if (!t) { sb_printf(r, "error: no memory"); return false; } }
         int at = (int)ln->valuedouble, line = 0; size_t pos = 0;
         while (line < at && pos < len) { char *e = memchr(t + pos, '\n', len - pos); if (!e) { pos = len; break; } pos = (size_t)(e - t) + 1; line++; }
         size_t il = strlen(it); bool nl = il && it[il - 1] != '\n';
@@ -246,28 +296,107 @@ static bool tool_editor(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t sc
 }
 
 static void run_out(void *op, const char *s, size_t n) { sb_add((sb_t *)op, s, n); }
-static bool run_cancel(void *op) { (void)op; return false; }
+static agent_t *s_run;                   // the agent whose run_js is running (the runtime's callbacks carry the output)
+static bool run_cancel(void *op) { (void)op; return s_run && s_run->io.cancel && s_run->io.cancel(s_run->io.ui_op); }
+// A visual test's input: the keys of "keys" one at a time ("wait:300" holds them back 300 ms), then nothing.
+static const char *run_key(void *op)
+{
+    (void)op; agent_t *a = s_run;
+    if (!a || !a->t_keys) return NULL;
+    int64_t now = a->io.now_ms ? a->io.now_ms() : 0;
+    if (now < a->t_wait) return NULL;
+    for (;;) {
+        cJSON *k = cJSON_GetArrayItem(a->t_keys, a->t_ki);
+        if (!k) return NULL;
+        a->t_ki++;
+        if (!cJSON_IsString(k)) continue;
+        if (!strncmp(k->valuestring, "wait:", 5)) { a->t_wait = now + atoi(k->valuestring + 5); return NULL; }
+        return k->valuestring;
+    }
+}
+// ... and each tap of "taps" ([x, y]) as a press and a lift there
+static bool run_touch(void *op, int *x, int *y, bool *down)
+{
+    (void)op; agent_t *a = s_run;
+    cJSON *t = a && a->t_taps ? cJSON_GetArrayItem(a->t_taps, a->t_ti) : NULL;
+    if (!t) return false;
+    *x = (int)cJSON_GetArrayItem(t, 0)->valuedouble; *y = (int)cJSON_GetArrayItem(t, 1)->valuedouble;
+    *down = !a->t_up;
+    if (a->t_up) a->t_ti++;
+    a->t_up = !a->t_up;
+    return true;
+}
+static void run_blit(void *op, int x, int y, int w, int h, const uint16_t *px)
+{
+    (void)op; agent_t *a = s_run;
+    if (a && a->io.show) a->io.show(a->io.ui_op, a->t_large, x, y, w, h, px);
+}
+static bool taps_ok(cJSON *t)
+{
+    if (!t) return true;
+    if (!cJSON_IsArray(t)) return false;
+    cJSON *e; cJSON_ArrayForEach(e, t) if (!cJSON_IsArray(e) || cJSON_GetArraySize(e) != 2 || !cJSON_IsNumber(cJSON_GetArrayItem(e, 0)) || !cJSON_IsNumber(cJSON_GetArrayItem(e, 1))) return false;
+    return true;
+}
 
 static bool tool_run(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t scap)
 {
     const char *rel = jstr(in, "path"); char p[PATHCAP];
+    a->shot_path[0] = 0;
     if (!rel || !resolve(a, rel, p)) { sb_printf(r, "error: a path inside the workspace is required"); return false; }
     snprintf(summary, scap, "run %s", rel);
+    cJSON *keys = cJSON_GetObjectItem(in, "keys"), *taps = cJSON_GetObjectItem(in, "taps");
+    if ((keys && !cJSON_IsArray(keys)) || !taps_ok(taps)) { sb_printf(r, "error: keys is an array of key names, taps an array of [x, y]"); return false; }
+    const char *scr = jstr(in, "screen");
+    a->t_large = scr && !strcmp(scr, "large");
     size_t len; char *src = read_file(p, 64 * 1024, &len);
-    if (!src) { sb_printf(r, "error: %s does not exist", rel); return false; }
+    if (!src) { no_file(r, rel, p); return false; }
     cJSON *t = cJSON_GetObjectItem(in, "timeout_ms");
     uint32_t tmo = cJSON_IsNumber(t) && t->valuedouble > 0 ? (uint32_t)t->valuedouble : 10000; if (tmo > 10000) tmo = 10000;
-    char *outb = malloc(4096); sb_t o = { outb, 0, 4096, false }; if (outb) outb[0] = 0;
-    code_env_t env = { a->cfg.root, run_out, &o, a->io.now_ms, a->io.sleep_ms, run_cancel, tmo };
-    code_result_t res;
-    bool ok = a->cfg.arena && outb && code_run(a->cfg.arena, a->cfg.arena_size, src, len, rel, &env, &res);
+    char *outb = malloc(3072); sb_t o = { outb, 0, 3072, false }; if (outb) outb[0] = 0;
+    char shot[PATHCAP];
+    snprintf(shot, sizeof shot, "%s/.code/shots", a->cfg.root); mkdir(shot, 0775);
+    snprintf(shot, sizeof shot, "%s/.code/shots/%u.png", a->cfg.root, a->shots + 1);
+    code_env_t env; memset(&env, 0, sizeof env);
+    env.root = a->cfg.root; env.out = run_out; env.op = &o; env.now_ms = a->io.now_ms; env.sleep_ms = a->io.sleep_ms;
+    env.cancel = run_cancel; env.timeout_ms = tmo;
+    env.scr_w = a->t_large ? 320 : 240; env.scr_h = a->t_large ? 240 : 135;
+    env.blit = run_blit; env.key = run_key; env.touch = run_touch; env.shot = shot;
+    a->t_keys = keys; a->t_taps = taps; a->t_ki = a->t_ti = 0; a->t_up = false; a->t_wait = 0;
+    code_result_t res; memset(&res, 0, sizeof res);
+    // The arena: the configured one, or (on the device) one taken now and given back after the run, so the engine
+    // and the model's TLS session never hold RAM at the same time. It shrinks until a block is there; a script that
+    // draws leaves room for its canvas (strips of 2.5 KB: 20 KB for 240x135, 43 KB for 320x240).
+    bool draws = strstr(src, "gfx.") != NULL;
+    void *arena = a->cfg.arena; size_t asz = a->cfg.arena_size;
+    size_t cap = asz ? asz : 32768;
+    if (draws && !arena) cap = a->t_large ? 14336 : 24576;    // a 32-bit engine: snake lives in ~8 KB
+    if (!arena) for (size_t want = cap; want >= 12288 && !arena; want -= 4096) { arena = malloc(want); asz = want; }
+    s_run = a;
+    bool ok = arena && outb && code_run(arena, asz, src, len, rel, &env, &res);
+    s_run = NULL;
+    if (arena && arena != a->cfg.arena) free(arena);
     free(src);
-    if (!a->cfg.arena || !outb) { free(outb); sb_printf(r, "error: no memory for the engine"); return false; }
-    if (o.n) { sb_printf(r, "output:\n"); sb_add(r, outb, o.n); if (o.cut) sb_printf(r, "\n[output cut at 4 KB]"); sb_printf(r, "\n"); }
+    a->t_keys = a->t_taps = NULL;
+    if (res.drew && a->io.shown) a->io.shown(a->io.ui_op);
+    if (!arena || !outb) { free(outb); sb_printf(r, "error: no memory for the engine"); return false; }
+    // an app's loop runs until the limit: with a screen that is how a test ends, not a failure
+    bool app_end = !ok && res.timeout && res.drew;
+    if (app_end) ok = true;
+    if (o.n) { sb_printf(r, "output:\n"); sb_add(r, outb, o.n); if (o.cut) sb_printf(r, "\n[output cut at 3 KB]"); sb_printf(r, "\n"); }
     else sb_printf(r, "output: (none)\n");
-    if (ok) sb_printf(r, "exit: ok in %u ms, memory %u bytes of %u", (unsigned)res.ms, (unsigned)res.live_max, (unsigned)res.arena);
+    if (app_end) sb_printf(r, "exit: ok, stopped at the %u ms limit (an app loop), memory %u bytes of %u", (unsigned)tmo, (unsigned)res.live_max, (unsigned)res.arena);
+    else if (ok) sb_printf(r, "exit: ok in %u ms, memory %u bytes of %u", (unsigned)res.ms, (unsigned)res.live_max, (unsigned)res.arena);
     else sb_printf(r, "exit: FAILED %s%s%s (after %u ms)", res.where, res.where[0] ? ": " : "", res.error, (unsigned)res.ms);
-    snprintf(summary, scap, "run %s %s %ums%s%s", rel, ok ? "ok" : "FAILED", (unsigned)res.ms, ok ? "" : " ", ok ? "" : res.where);
+    if (res.drew) {
+        sb_printf(r, "\nscreen: %dx%d, %u frames flushed", res.scr_w, res.scr_h, (unsigned)res.frames);
+        if (keys) sb_printf(r, ", %d of %d keys read", a->t_ki, cJSON_GetArraySize(keys));
+        if (res.shot_ok) { a->shots++; snprintf(a->shot_path, sizeof a->shot_path, "%s", shot); sb_printf(r, "; the last frame is attached (shown at 2x)"); }
+        else sb_printf(r, "; no screenshot (no room on the card or in RAM)");
+        if (!res.frames) sb_printf(r, "\nnote: nothing was flushed: call gfx.flush() after drawing a frame, or the screen never shows it");
+    }
+    snprintf(summary, scap, "run %s %s %ums%s%s%s", rel, ok ? "ok" : "FAILED", (unsigned)res.ms, ok ? "" : " ", ok ? "" : res.where,
+             res.drew ? (res.shot_ok ? " +screen" : " screen") : "");
     free(outb);
     return ok;
 }
@@ -409,7 +538,6 @@ static void ev_tool(void *op, const char *id, const char *name, const char *json
 }
 static void ev_done(void *op, const char *stop, const anth_usage_t *u) { agent_t *a = op; snprintf(a->stop, sizeof a->stop, "%s", stop); a->usage = *u; }
 static void ev_error(void *op, const char *m) { agent_t *a = op; a->stream_error = true; snprintf(a->stream_msg, sizeof a->stream_msg, "%s", m); }
-static void on_bytes(void *op, const char *b, int n) { anth_stream_feed((anth_stream_t *)op, b, n); }
 
 // price per million tokens: input, output (cache read 10% of input, cache write 125%)
 static void price(const char *model, double *in, double *out)
@@ -422,16 +550,83 @@ static void price(const char *model, double *in, double *out)
     else if (strstr(model, "fable")) { *in = 10.0; *out = 50.0; }
 }
 
-static char *build_body(agent_t *a)
+// ---- the conversation lives on the SD card ---------------------------------------------------------------
+// <root>/.code/session.jsonl: one Anthropic message per line, appended. The request is WRITTEN TO A FILE
+// (<root>/.code/request.json) by streaming that history through, so RAM holds one message at a time however
+// long the session is; the transport sends the file. The last message gets the moving cache breakpoint.
+static bool hist_append(agent_t *a, cJSON *msg)
 {
+    char *t = cJSON_PrintUnformatted(msg);
+    if (!t) return false;
+    FILE *f = fopen(a->hist, "ab");
+    bool ok = f && fputs(t, f) >= 0 && fputc('\n', f) != EOF;
+    if (f) ok = (fclose(f) == 0) && ok;
+    cJSON_free(t);
+    return ok;
+}
+// one line of any length (realloc as it grows); NULL at the end
+static char *read_line(FILE *f, char **buf, size_t *cap)
+{
+    size_t n = 0;
+    if (!*buf) { *cap = 4096; *buf = malloc(*cap); if (!*buf) return NULL; }
+    for (;;) {
+        if (!fgets(*buf + n, (int)(*cap - n), f)) return n ? *buf : NULL;
+        n += strlen(*buf + n);
+        if (n && (*buf)[n - 1] == '\n') { (*buf)[--n] = 0; return *buf; }
+        if (n + 1 >= *cap) { size_t nc = *cap * 2; char *g = realloc(*buf, nc); if (!g) return NULL; *buf = g; *cap = nc; }
+    }
+}
+
+// A message line as it goes into the request: every FILE_MARK "<path>@@" becomes that file in base64, streamed from
+// the card (a screenshot never sits in RAM, however many the session holds); a missing file becomes a 1x1 PNG.
+static const char B64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static const char PNG_1X1[] = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+static bool put_b64_file(FILE *out, const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+    unsigned char in[384]; char enc[512]; size_t n; bool ok = true, any = false;
+    while (ok && (n = fread(in, 1, sizeof in, f)) > 0) {
+        size_t o = 0;
+        for (size_t i = 0; i < n; i += 3) {
+            unsigned v = (unsigned)in[i] << 16 | (i + 1 < n ? (unsigned)in[i + 1] << 8 : 0) | (i + 2 < n ? in[i + 2] : 0);
+            enc[o++] = B64[v >> 18 & 63]; enc[o++] = B64[v >> 12 & 63];
+            enc[o++] = i + 1 < n ? B64[v >> 6 & 63] : '=';
+            enc[o++] = i + 2 < n ? B64[v & 63] : '=';
+        }
+        ok = fwrite(enc, 1, o, out) == o; any = true;
+    }
+    fclose(f);
+    return ok && any;
+}
+static bool put_line(FILE *out, const char *s, const char *shots)   // `shots`: the only folder a mark may name
+{
+    for (;;) {
+        const char *m = strstr(s, FILE_MARK);
+        if (!m) return fputs(s, out) >= 0;
+        if (fwrite(s, 1, (size_t)(m - s), out) != (size_t)(m - s)) return false;
+        const char *p = m + strlen(FILE_MARK), *e = strstr(p, "@@");
+        if (!e) return fputs(m, out) >= 0;
+        char path[PATHCAP]; size_t n = 0;                    // the mark sits in JSON: undo its escapes (a Windows root has \\)
+        for (const char *q = p; q < e && n < sizeof path - 1; q++) { if (*q == '\\' && q + 1 < e) q++; path[n++] = *q; }
+        path[n] = 0;
+        bool mine = !strncmp(path, shots, strlen(shots)) && !strstr(path, "..") && n > 4 && !strcmp(path + n - 4, ".png");
+        if (!(mine && put_b64_file(out, path)) && fputs(PNG_1X1, out) < 0) return false;
+        s = e + 2;
+    }
+}
+
+static bool build_request(agent_t *a)
+{
+    FILE *out = fopen(a->req, "wb");
+    if (!out) { snprintf(a->st.error, sizeof a->st.error, "cannot write the request on the SD card"); return false; }
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "model", a->cfg.model);
     cJSON_AddNumberToObject(root, "max_tokens", a->cfg.max_tokens ? a->cfg.max_tokens : 16000);
     cJSON_AddBoolToObject(root, "stream", true);
     bool th; const char *eff = anth_effort_for(a->cfg.model, a->cfg.effort, &th);
     if (eff) { cJSON *oc = cJSON_AddObjectToObject(root, "output_config"); cJSON_AddStringToObject(oc, "effort", eff); }
-    // system: the instructions (cached) + the environment
-    char env[400];
+    char env[480];
     snprintf(env, sizeof env, "<env>\nWorkspace: %s\nModel: %s\nAnswer in: %s (code, file names and identifiers stay as they are)\n</env>",
              a->cfg.root, a->cfg.model, a->cfg.lang ? a->cfg.lang : "the language of the user's message");
     cJSON *sys = cJSON_AddArrayToObject(root, "system");
@@ -443,57 +638,246 @@ static char *build_body(agent_t *a)
     cJSON_AddItemToObject(root, "tools", cJSON_Parse(TOOLS_JSON));
     char *head = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
-    // the conversation, with a moving cache breakpoint on its last block: each call reads the previous prefix.
-    // cJSON objects are child lists, so the marker added last is removed again by index after printing.
-    cJSON *last = cJSON_GetArrayItem(a->msgs, cJSON_GetArraySize(a->msgs) - 1);
-    cJSON *lc = last ? cJSON_GetObjectItem(last, "content") : NULL;
-    cJSON *lb = cJSON_IsArray(lc) ? cJSON_GetArrayItem(lc, cJSON_GetArraySize(lc) - 1) : NULL;
-    if (lb) { cJSON *c2 = cJSON_AddObjectToObject(lb, "cache_control"); cJSON_AddStringToObject(c2, "type", "ephemeral"); }
-    char *msgs = cJSON_PrintUnformatted(a->msgs);
-    if (lb) cJSON_DeleteItemFromArray(lb, cJSON_GetArraySize(lb) - 1);
-    char *body = NULL;
-    if (head && msgs) {
-        size_t hl = strlen(head), ml = strlen(msgs);
-        body = malloc(hl + ml + 16);
-        if (body) { memcpy(body, head, hl - 1); memcpy(body + hl - 1, ",\"messages\":", 12); memcpy(body + hl + 11, msgs, ml); body[hl + 11 + ml] = '}'; body[hl + 12 + ml] = 0; }
+    bool ok = head != NULL;
+    if (ok) { size_t hl = strlen(head); ok = fwrite(head, 1, hl - 1, out) == hl - 1 && fputs(",\"messages\":[", out) >= 0; }
+    cJSON_free(head);
+    char shots[PATHCAP]; snprintf(shots, sizeof shots, "%s/.code/shots/", a->cfg.root);
+    FILE *h = ok ? fopen(a->hist, "rb") : NULL;
+    char *cur = NULL, *nxt = NULL; size_t ccap = 0, ncap = 0;
+    bool first = true;
+    if (h) {
+        char *l = read_line(h, &cur, &ccap);
+        while (ok && l) {
+            char *m = read_line(h, &nxt, &ncap);                 // look ahead: is `cur` the last line?
+            if (!first) ok = fputc(',', out) != EOF;
+            first = false;
+            if (m) ok = ok && put_line(out, cur, shots);
+            else {                                              // the last message: the cache breakpoint on its last block
+                cJSON *msg = cJSON_Parse(cur);
+                cJSON *ct = msg ? cJSON_GetObjectItem(msg, "content") : NULL;
+                cJSON *lb = cJSON_IsArray(ct) ? cJSON_GetArrayItem(ct, cJSON_GetArraySize(ct) - 1) : NULL;
+                if (lb) { cJSON *c2 = cJSON_AddObjectToObject(lb, "cache_control"); cJSON_AddStringToObject(c2, "type", "ephemeral"); }
+                char *t = msg ? cJSON_PrintUnformatted(msg) : NULL;
+                ok = ok && put_line(out, t ? t : cur, shots);
+                cJSON_free(t); cJSON_Delete(msg);
+            }
+            char *sw = cur; size_t sc = ccap; cur = nxt; ccap = ncap; nxt = sw; ncap = sc;   // next becomes current
+            l = m ? cur : NULL;
+        }
+        fclose(h);
     }
-    cJSON_free(head); cJSON_free(msgs);
-    return body;
+    free(cur); free(nxt);
+    ok = ok && fputs("]}", out) >= 0;
+    ok = (fclose(out) == 0) && ok;
+    if (!ok) snprintf(a->st.error, sizeof a->st.error, "cannot write the request on the SD card");
+    return ok;
 }
 
-static bool one_call(agent_t *a)
+// ---- the state machine -----------------------------------------------------------------------------------
+static void set_error(agent_t *a, const char *m) { snprintf(a->st.error, sizeof a->st.error, "%s", m); a->state = AG_ERROR; }
+
+// every tool call of the current assistant message still unanswered gets an answer, so the history stays valid
+static void answer_pending(agent_t *a, const char *why)
 {
-    char *body = build_body(a);
-    if (!body) { snprintf(a->st.error, sizeof a->st.error, "no memory for the request"); return false; }
-    anth_stream_t *s = calloc(1, sizeof *s);
-    if (!s) { free(body); snprintf(a->st.error, sizeof a->st.error, "no memory for the stream"); return false; }
+    if (!a->amsg) return;
+    cJSON *ac = cJSON_GetObjectItem(a->amsg, "content");
+    int n = cJSON_GetArraySize(ac);
+    for (int i = a->tool_i; i < n; i++) {
+        cJSON *b = cJSON_GetArrayItem(ac, i);
+        const char *ty = jstr(b, "type");
+        if (!ty || strcmp(ty, "tool_use")) continue;
+        cJSON *tr = cJSON_CreateObject();
+        cJSON_AddStringToObject(tr, "type", "tool_result");
+        cJSON_AddStringToObject(tr, "tool_use_id", jstr(b, "id") ? jstr(b, "id") : "");
+        cJSON_AddStringToObject(tr, "content", why);
+        cJSON_AddBoolToObject(tr, "is_error", true);
+        cJSON_AddItemToArray(cJSON_GetObjectItem(a->rmsg, "content"), tr);
+    }
+    hist_append(a, a->rmsg);
+    cJSON_Delete(a->amsg); a->amsg = NULL;
+    cJSON_Delete(a->rmsg); a->rmsg = NULL;
+}
+
+static void next_request(agent_t *a)
+{
+    if (a->calls_turn >= (a->cfg.max_calls ? a->cfg.max_calls : 30)) { set_error(a, "stopped after the model-call limit of this turn"); return; }
+    if (!build_request(a)) { a->state = AG_ERROR; return; }
+    a->state = AG_SEND;
+}
+
+bool agent_submit(agent_t *a, const char *user_text)
+{
+    if (a->state == AG_SEND || a->state == AG_RECV || a->state == AG_TOOLS || a->state == AG_ASK) return false;
+    a->st.error[0] = 0; a->calls_turn = 0;
+    cJSON *u = cJSON_CreateObject();
+    cJSON_AddStringToObject(u, "role", "user");
+    cJSON *uc = cJSON_AddArrayToObject(u, "content");
+    cJSON *ut = cJSON_CreateObject(); cJSON_AddStringToObject(ut, "type", "text"); cJSON_AddStringToObject(ut, "text", user_text);
+    cJSON_AddItemToArray(uc, ut);
+    bool ok = hist_append(a, u);
+    cJSON_Delete(u);
+    if (!ok) { set_error(a, "cannot write the session on the SD card"); return false; }
+    next_request(a);
+    return a->state == AG_SEND;
+}
+
+const char *agent_request_path(const agent_t *a) { return a->req; }
+
+void agent_begin_response(agent_t *a)
+{
+    free(a->s);
+    a->s = calloc(1, sizeof *a->s);
+    if (!a->s) { set_error(a, "no memory for the stream"); return; }
     anth_cb_t cb = { ev_text, ev_tool, ev_done, ev_error, ev_thinking };
-    anth_stream_init(s, &cb, a, a->cfg.toolbuf, a->cfg.toolcap);
+    // No buffer given: one of toolcap bytes exists only while a reply streams in (the tool inputs are parsed into the
+    // message as each one ends), so the tools that run next - an app's canvas - have those bytes back.
+    char *tb = a->cfg.toolbuf;
+    if (!tb && a->cfg.toolcap) { free(a->tb_own); tb = a->tb_own = malloc(a->cfg.toolcap); }
+    anth_stream_init(a->s, &cb, a, tb, tb ? a->cfg.toolcap : 0);
+    cJSON_Delete(a->content);
     a->content = cJSON_CreateArray(); a->tlen = 0; a->stop[0] = 0; a->stream_error = false; memset(&a->usage, 0, sizeof a->usage);
-    char err[256]; err[0] = 0;
-    int status = a->io.post(a->io.post_op, body, strlen(body), on_bytes, s, err, sizeof err);
-    free(body);
+    a->big_mask = 0;
+    a->state = AG_RECV;
+}
+
+void agent_feed(agent_t *a, const char *b, int n) { if (a->state == AG_RECV && a->s) anth_stream_feed(a->s, b, n); }
+
+void agent_end_response(agent_t *a, int status, const char *err)
+{
+    if (a->state != AG_RECV) return;
     flush_text(a);
-    bool ok = status == 200 && !a->stream_error && s->done;
-    free(s);
-    a->st.calls++;
+    bool ok = status == 200 && !a->stream_error && a->s && a->s->done;
+    free(a->s); a->s = NULL;
+    free(a->tb_own); a->tb_own = NULL;
+    a->st.calls++; a->calls_turn++;
     a->st.in += a->usage.in; a->st.out += a->usage.out; a->st.cache_read += a->usage.cache_read; a->st.cache_write += a->usage.cache_write;
+    a->st.last_context = a->usage.in + a->usage.cache_read + a->usage.cache_write;
     double pi, po; price(a->cfg.model, &pi, &po);
     a->st.usd += (a->usage.in * pi + a->usage.cache_read * pi * 0.1 + a->usage.cache_write * pi * 1.25 + a->usage.out * po) / 1e6;
     snprintf(a->st.stop, sizeof a->st.stop, "%s", a->stop);
     if (!ok) {
-        snprintf(a->st.error, sizeof a->st.error, "%s", a->stream_error ? a->stream_msg : status != 200 ? (err[0] ? err : "HTTP error") : "the stream ended early");
-        if (status != 200 && status > 0) { char t[160]; snprintf(t, sizeof t, "HTTP %d: %s", status, a->st.error); snprintf(a->st.error, sizeof a->st.error, "%s", t); }
+        char m[200];
+        if (a->stream_error) snprintf(m, sizeof m, "%s", a->stream_msg);
+        else if (status != 200) snprintf(m, sizeof m, "HTTP %d: %s", status, err && err[0] ? err : (status < 0 ? "no connection" : "error"));
+        else snprintf(m, sizeof m, "the answer was cut off");
         cJSON_Delete(a->content); a->content = NULL;
-        return false;
+        set_error(a, m);
+        return;
     }
-    // the assistant message joins the history (thinking blocks with their signatures, text, tool calls)
-    cJSON *m = cJSON_CreateObject();
-    cJSON_AddStringToObject(m, "role", "assistant");
+    cJSON *msg = cJSON_CreateObject();
+    cJSON_AddStringToObject(msg, "role", "assistant");
     if (cJSON_GetArraySize(a->content) == 0) { cJSON *t = cJSON_CreateObject(); cJSON_AddStringToObject(t, "type", "text"); cJSON_AddStringToObject(t, "text", "(no answer)"); cJSON_AddItemToArray(a->content, t); }
-    cJSON_AddItemToObject(m, "content", a->content); a->content = NULL;
-    cJSON_AddItemToArray(a->msgs, m);
-    return true;
+    // our own "_too_large" marker never reaches the history
+    int n = cJSON_GetArraySize(a->content);
+    for (int i = 0; i < n; i++) {
+        cJSON *b = cJSON_GetArrayItem(a->content, i), *big = cJSON_GetObjectItem(b, "_too_large");
+        if (big) for (int k = 0; k < cJSON_GetArraySize(b); k++) if (cJSON_GetArrayItem(b, k) == big) { cJSON_DeleteItemFromArray(b, k); a->big_mask |= 1u << (i & 31); break; }
+    }
+    cJSON_AddItemToObject(msg, "content", a->content); a->content = NULL;
+    hist_append(a, msg);
+    if (!strcmp(a->stop, "tool_use")) {
+        a->amsg = msg; a->tool_i = 0;
+        a->rmsg = cJSON_CreateObject(); cJSON_AddStringToObject(a->rmsg, "role", "user"); cJSON_AddArrayToObject(a->rmsg, "content");
+        a->state = AG_TOOLS;
+        return;
+    }
+    cJSON_Delete(msg);
+    a->big_mask = 0;
+    if (strcmp(a->stop, "end_turn") && strcmp(a->stop, "stop_sequence")) { char m[64]; snprintf(m, sizeof m, "the model stopped: %s", a->stop); set_error(a, m); return; }
+    a->state = AG_DONE;
+}
+
+// the tool at a->tool_i, or -1 when none is left
+static int next_tool(agent_t *a)
+{
+    cJSON *ac = cJSON_GetObjectItem(a->amsg, "content");
+    int n = cJSON_GetArraySize(ac);
+    while (a->tool_i < n) { const char *ty = jstr(cJSON_GetArrayItem(ac, a->tool_i), "type"); if (ty && !strcmp(ty, "tool_use")) return a->tool_i; a->tool_i++; }
+    return -1;
+}
+
+static void do_tool(agent_t *a, int i, bool declined)
+{
+    cJSON *b = cJSON_GetArrayItem(cJSON_GetObjectItem(a->amsg, "content"), i);
+    const char *name = jstr(b, "name") ? jstr(b, "name") : "?";
+    bool too_large = (a->big_mask >> (i & 31)) & 1u;
+    // the result's buffer comes at its first write: a run_js writes it after the script, whose canvas has the heap
+    const size_t rcap = (strcmp(name, "str_replace_based_edit_tool") ? RESULT_MAX : VIEW_MAX) + 256;
+    sb_t r = { NULL, 0, rcap, false };
+    bool ok;
+    if (declined) { sb_printf(&r, "The user declined this action."); ok = false; if (a->io.on_tool_done) a->io.on_tool_done(a->io.ui_op, name, false, "declined"); }
+    else { a->shot_path[0] = 0; ok = run_tool(a, name, too_large ? NULL : cJSON_GetObjectItem(b, "input"), &r); }
+    char *rb = r.b;
+    a->st.tools++; if (!ok) a->st.tool_errors++;
+    cJSON *tr = cJSON_CreateObject();
+    cJSON_AddStringToObject(tr, "type", "tool_result");
+    cJSON_AddStringToObject(tr, "tool_use_id", jstr(b, "id") ? jstr(b, "id") : "");
+    if (a->shot_path[0] && !declined) {                    // a visual test: the words and the last frame
+        cJSON *ct = cJSON_AddArrayToObject(tr, "content");
+        cJSON *tx = cJSON_CreateObject(); cJSON_AddStringToObject(tx, "type", "text");
+        cJSON_AddStringToObject(tx, "text", rb && rb[0] ? rb : "(no memory for the result)"); cJSON_AddItemToArray(ct, tx);
+        cJSON *im = cJSON_CreateObject(); cJSON_AddStringToObject(im, "type", "image");
+        cJSON *so = cJSON_AddObjectToObject(im, "source");
+        cJSON_AddStringToObject(so, "type", "base64"); cJSON_AddStringToObject(so, "media_type", "image/png");
+        char mark[PATHCAP + 16]; snprintf(mark, sizeof mark, FILE_MARK "%s@@", a->shot_path);
+        cJSON_AddStringToObject(so, "data", mark);         // the PNG stays on the card: build_request streams it in
+        cJSON_AddItemToArray(ct, im);
+        a->shot_path[0] = 0;
+    } else cJSON_AddStringToObject(tr, "content", rb && rb[0] ? rb : "(no memory for the result)");
+    if (!ok) cJSON_AddBoolToObject(tr, "is_error", true);
+    cJSON_AddItemToArray(cJSON_GetObjectItem(a->rmsg, "content"), tr);
+    free(rb);
+    a->tool_i++;
+}
+
+static bool needs_approval(agent_t *a, int i)
+{
+    if (!a->cfg.ask_writes) return false;
+    cJSON *b = cJSON_GetArrayItem(cJSON_GetObjectItem(a->amsg, "content"), i);
+    const char *name = jstr(b, "name");
+    cJSON *in = cJSON_GetObjectItem(b, "input");
+    return name && in && tool_mutates(name, in);
+}
+
+agent_state_t agent_step(agent_t *a)
+{
+    if (a->state == AG_TOOLS) {
+        int i = next_tool(a);
+        if (i < 0) {                                          // all answered: they go in one user message
+            hist_append(a, a->rmsg);
+            cJSON_Delete(a->amsg); a->amsg = NULL; cJSON_Delete(a->rmsg); a->rmsg = NULL; a->big_mask = 0;
+            if (a->io.cancel && a->io.cancel(a->io.ui_op)) { set_error(a, "stopped by the user"); return a->state; }
+            next_request(a);
+        } else if (needs_approval(a, i)) {
+            cJSON *b = cJSON_GetArrayItem(cJSON_GetObjectItem(a->amsg, "content"), i);
+            cJSON *in = cJSON_GetObjectItem(b, "input");
+            const char *nm = jstr(b, "name"), *c = jstr(in, "command"), *p = jstr(in, "path");
+            snprintf(a->ask, sizeof a->ask, "%s %s", !strcmp(nm, "run_js") ? "run" : (c ? c : nm), p ? p : "");
+            a->state = AG_ASK;
+        } else do_tool(a, i, false);
+    }
+    return a->state;
+}
+const char *agent_question(const agent_t *a) { return a->state == AG_ASK ? a->ask : NULL; }
+void agent_answer(agent_t *a, bool yes)
+{
+    if (a->state != AG_ASK) return;
+    a->state = AG_TOOLS;
+    do_tool(a, a->tool_i, !yes);
+}
+void agent_cancel(agent_t *a, const char *why)
+{
+    if (a->state == AG_TOOLS || a->state == AG_ASK) answer_pending(a, "stopped by the user");
+    if (a->state == AG_SEND || a->state == AG_RECV || a->state == AG_TOOLS || a->state == AG_ASK) set_error(a, why ? why : "stopped by the user");
+    free(a->s); a->s = NULL;
+}
+agent_state_t agent_state(const agent_t *a) { return a->state; }
+void agent_reset(agent_t *a)
+{
+    remove(a->hist); a->st = (agent_stats_t){0}; a->state = AG_IDLE; a->todo[0] = 0;
+    char p[PATHCAP];                                         // the session's screenshots go with it
+    for (unsigned i = 1; i <= a->shots; i++) { snprintf(p, sizeof p, "%s/.code/shots/%u.png", a->cfg.root, i); remove(p); }
+    a->shots = 0;
 }
 
 // ---- public ---------------------------------------------------------------------------------------------
@@ -502,66 +886,41 @@ agent_t *agent_new(const agent_cfg_t *cfg, const agent_io_t *io)
     agent_t *a = calloc(1, sizeof *a);
     if (!a) return NULL;
     a->cfg = *cfg; a->io = *io;
-    a->msgs = cJSON_CreateArray();
     a->tcap = 1024; a->text = malloc(a->tcap);
-    if (!a->msgs || !a->text) { agent_free(a); return NULL; }
+    char dir[PATHCAP]; snprintf(dir, sizeof dir, "%s/.code", cfg->root); mkdir(dir, 0775);
+    snprintf(a->hist, sizeof a->hist, "%s/.code/session.jsonl", cfg->root);
+    snprintf(a->req, sizeof a->req, "%s/.code/request.json", cfg->root);
+    snprintf(dir, sizeof dir, "%s/.code/shots", cfg->root);   // a resumed session numbers its screenshots on
+    DIR *sd = opendir(dir);
+    if (sd) { struct dirent *e; while ((e = readdir(sd))) { unsigned n = (unsigned)atoi(e->d_name); if (n > a->shots) a->shots = n; } closedir(sd); }
+    if (!a->text) { agent_free(a); return NULL; }
     return a;
 }
 void agent_free(agent_t *a)
 {
     if (!a) return;
-    cJSON_Delete(a->msgs); cJSON_Delete(a->content); free(a->text); free(a);
+    cJSON_Delete(a->content); cJSON_Delete(a->amsg); cJSON_Delete(a->rmsg); free(a->s); free(a->tb_own); free(a->text); free(a);
 }
 const agent_stats_t *agent_stats(const agent_t *a) { return &a->st; }
+const char *agent_todo(const agent_t *a) { return a->todo; }
 
+// The whole turn, blocking: the host bench (and any caller with a blocking transport).
 bool agent_turn(agent_t *a, const char *user_text)
 {
-    a->st.error[0] = 0;
-    cJSON *u = cJSON_CreateObject();
-    cJSON_AddStringToObject(u, "role", "user");
-    cJSON *uc = cJSON_AddArrayToObject(u, "content");
-    cJSON *ut = cJSON_CreateObject(); cJSON_AddStringToObject(ut, "type", "text"); cJSON_AddStringToObject(ut, "text", user_text);
-    cJSON_AddItemToArray(uc, ut);
-    cJSON_AddItemToArray(a->msgs, u);
-    int max = a->cfg.max_calls ? a->cfg.max_calls : 30;
-    char *rb = malloc(VIEW_MAX + 256);
-    if (!rb) { snprintf(a->st.error, sizeof a->st.error, "no memory"); return false; }
-    bool ended = false;
-    for (int call = 0; call < max; call++) {
-        if (a->io.cancel && a->io.cancel(a->io.ui_op)) { snprintf(a->st.error, sizeof a->st.error, "stopped by the user"); break; }
-        if (!one_call(a)) break;
-        if (strcmp(a->stop, "tool_use")) { ended = !strcmp(a->stop, "end_turn") || !strcmp(a->stop, "stop_sequence");
-            if (!ended) snprintf(a->st.error, sizeof a->st.error, "the model stopped: %s", a->stop);
-            break; }
-        // run every tool call of that message, answer them all in one user message
-        cJSON *am = cJSON_GetArrayItem(a->msgs, cJSON_GetArraySize(a->msgs) - 1), *ac = cJSON_GetObjectItem(am, "content");
-        cJSON *res = cJSON_CreateObject(); cJSON_AddStringToObject(res, "role", "user");
-        cJSON *rc = cJSON_AddArrayToObject(res, "content");
-        int n = cJSON_GetArraySize(ac);
-        for (int i = 0; i < n; i++) {
-            cJSON *b = cJSON_GetArrayItem(ac, i);
-            const char *ty = jstr(b, "type");
-            if (!ty || strcmp(ty, "tool_use")) continue;
-            cJSON *big = cJSON_GetObjectItem(b, "_too_large");
-            bool too_large = big != NULL;
-            if (too_large) { /* remove our marker so the history stays valid */
-                for (int k = 0; k < cJSON_GetArraySize(b); k++) { cJSON *f = cJSON_GetArrayItem(b, k); if (f == big) { cJSON_DeleteItemFromArray(b, k); break; } }
-            }
-            sb_t r = { rb, 0, RESULT_MAX + 256, false }; rb[0] = 0;
-            if (!strcmp(jstr(b, "name") ? jstr(b, "name") : "", "str_replace_based_edit_tool")) r.cap = VIEW_MAX + 256;
-            bool ok = run_tool(a, jstr(b, "name") ? jstr(b, "name") : "?", too_large ? NULL : cJSON_GetObjectItem(b, "input"), &r);
-            a->st.tools++; if (!ok) a->st.tool_errors++;
-            cJSON *tr = cJSON_CreateObject();
-            cJSON_AddStringToObject(tr, "type", "tool_result");
-            cJSON_AddStringToObject(tr, "tool_use_id", jstr(b, "id") ? jstr(b, "id") : "");
-            cJSON_AddStringToObject(tr, "content", rb[0] ? rb : "(empty)");
-            if (!ok) cJSON_AddBoolToObject(tr, "is_error", true);
-            cJSON_AddItemToArray(rc, tr);
-        }
-        cJSON_AddItemToArray(a->msgs, res);
-        if (call == max - 1) snprintf(a->st.error, sizeof a->st.error, "stopped after %d model calls", max);
+    if (!agent_submit(a, user_text)) return false;
+    char err[256];
+    for (;;) {
+        agent_state_t s = agent_state(a);
+        if (s == AG_SEND) {
+            agent_begin_response(a);
+            if (a->state != AG_RECV) break;
+            err[0] = 0;
+            int status = a->io.post_file(a->io.post_op, a->req, (agent_bytes_fn)agent_feed, a, err, sizeof err);
+            agent_end_response(a, status, err);
+        } else if (s == AG_TOOLS) agent_step(a);
+        else if (s == AG_ASK) agent_answer(a, a->io.approve ? a->io.approve(a->io.ui_op, "tool", a->ask) : true);
+        else break;
     }
-    free(rb);
-    return ended;
+    return a->state == AG_DONE;
 }
 #endif

@@ -113,6 +113,8 @@ int nucleo_anima_online_chat_ctx(const char *input, const anima_turn_t *turns, i
 int nucleo_anima_online_code(const char *input, bool en, anima_result_t *out);
 // What the offline brain found for this turn, handed to the next model turn as <notes> (consumed once).
 void nucleo_anima_online_set_notes(const char *notes);
+// The last Claude call (model, status, length, stop, time, heap; the error head when it failed), for the self-test.
+const char *nucleo_anima_online_last(void);
 
 // LONG-FORM in segments: returns the NEXT ~one-paragraph chunk of a complete long answer (story, essay,
 // detailed explanation), continuing from `tail` (the end of what was written so far) WITHOUT repeating

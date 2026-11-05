@@ -57,5 +57,6 @@ int nucleo_anima_online_teacher(const char *input, bool en, anima_result_t *out)
 void nucleo_anima_online_upgrade(const char *topic, bool en) { (void)topic; (void)en; }   // no internet on host
 bool nucleo_anima_online_is_about(const char *input, bool en) { (void)input; (void)en; return false; }
 int nucleo_anima_online_chat(const char *input, const char *ctx_q, const char *ctx_a, bool en, anima_result_t *out) { (void)input;(void)ctx_q;(void)ctx_a;(void)en;(void)out; return 0; }
+void nucleo_anima_online_set_notes(const char *notes) { (void)notes; }   // the offline tiers' notes for the model (none here)
 int nucleo_anima_online_chat_ctx(const char *input, const anima_turn_t *turns, int nturns, bool en, anima_result_t *out) { (void)input;(void)turns;(void)nturns;(void)en;(void)out; return 0; }
 int nucleo_anima_online_code(const char *input, bool en, anima_result_t *out) { (void)input;(void)en;(void)out; return 0; }   // no internet on host

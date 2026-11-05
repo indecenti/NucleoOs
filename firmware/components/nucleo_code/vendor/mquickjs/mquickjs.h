@@ -308,6 +308,8 @@ void JS_GC(JSContext *ctx);
 /* NUCLEO PATCH: memory figures (bytes): the most live after a GC, and what is in use now */
 uint32_t JS_NucleoLiveMax(JSContext *ctx);
 uint32_t JS_NucleoUsedNow(JSContext *ctx);
+/* NUCLEO PATCH: the interrupt handler runs at the next instruction (Esc / the time limit, seen at once) */
+void JS_NucleoInterruptSoon(JSContext *ctx);
 JSValue JS_NewStringLen(JSContext *ctx, const char *buf, size_t buf_len);
 JSValue JS_NewString(JSContext *ctx, const char *buf);
 const char *JS_ToCStringLen(JSContext *ctx, size_t *plen, JSValue val, JSCStringBuf *buf);

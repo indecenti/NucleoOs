@@ -16,14 +16,12 @@ static char g_hdr[MAX_PATH], g_body[MAX_PATH];
 static int64_t now_ms(void) { return (int64_t)GetTickCount64(); }
 static void sleep_ms(uint32_t ms) { Sleep(ms); }
 
-static int post(void *op, const char *body, size_t len, agent_bytes_fn bytes, void *bop, char *err, size_t errcap)
+static int post(void *op, const char *path, agent_bytes_fn bytes, void *bop, char *err, size_t errcap)
 {
     (void)op;
-    FILE *f = fopen(g_body, "wb"); if (!f) return -1;
-    fwrite(body, 1, len, f); fclose(f);
     char cmd[2048];
     snprintf(cmd, sizeof cmd, "curl.exe -sS -N --max-time 600 -H @\"%s\" --data-binary @\"%s\" -w \"\\n@@HTTP %%{http_code}\\n\" https://api.anthropic.com/v1/messages",
-             g_hdr, g_body);
+             g_hdr, path);
     FILE *p = _popen(cmd, "rb");
     if (!p) return -1;
     char buf[2048]; size_t n; int status = 0;
@@ -36,8 +34,7 @@ static int post(void *op, const char *body, size_t len, agent_bytes_fn bytes, vo
     tail[tl] = 0;
     char *h = strstr(tail, "@@HTTP ");
     if (h) status = atoi(h + 7);
-    if (status != 200 && err) { *h = 0; snprintf(err, errcap, "%.200s", tail); }
-    remove(g_body);
+    if (status != 200 && err) { if (h) *h = 0; snprintf(err, errcap, "%.200s", tail); }
     return status;
 }
 
@@ -75,7 +72,7 @@ int main(int argc, char **argv)
     void *arena = malloc(arena_kb * 1024);
     static char toolbuf[64 * 1024];
     const char *lang = getenv("NC_LANG");                // the bench answers in the prompt's language unless set
-    agent_cfg_t cfg = { ws, model, effort, lang, 30, 16000, arena, arena_kb * 1024, toolbuf, sizeof toolbuf };
+    agent_cfg_t cfg = { ws, model, effort, lang, 30, 16000, arena, arena_kb * 1024, toolbuf, sizeof toolbuf, false };
     agent_io_t io = { post, NULL, on_text, on_tool, on_tool_done, NULL, on_todo, NULL, now_ms, sleep_ms, NULL };
     agent_t *a = agent_new(&cfg, &io);
     int64_t t0 = now_ms();

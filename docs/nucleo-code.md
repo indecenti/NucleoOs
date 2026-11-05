@@ -115,6 +115,45 @@ Python still has a place: `run_python` sends the script to Anthropic's code-exec
 numpy, openpyxl, xlsxwriter, python-docx, pypdf, matplotlib preinstalled) and brings stdout and any file
 back to the SD card. That is also how real `.xlsx` / `.docx` / `.pdf` files are made.
 
+### 4.5 Apps with a screen, and visual tests
+
+Scripts get a small fantasy console: a 16-colour canvas, 4 bits a pixel, kept in strips of 16 rows (no block over
+2.5 KB: 240x135 is 16 KB, the external panel's 320x240 is 38 KB). Drawing marks the rows it touches; `gfx.flush()`
+converts only those to RGB565 and hands them to the platform in bands of 8 rows. `code_gfx.c` is platform-neutral:
+the host gate draws, flushes and decodes the PNG it writes (`npm run code:test`).
+
+| Object | Calls |
+|---|---|
+| `gfx` | `width() height() clear(c) pixel(x,y,c) get(x,y) rect frame line circle disc text(s,x,y,c,scale) flush()`, `BLACK`..`BEIGE` (0-15) |
+| `key` | `get()` -> `"up" "down" "left" "right" "enter" "del" "tab"` or the character, `null` when none; `down(name)` held now |
+| `touch` | `poll()` -> a sample was taken, then `x() y() down()` (the external panel) |
+
+- **The user runs an app** from `/files` (the workspace `work/main`): the real keys, the touch, no time limit; Esc
+  always stops it (it is never given to the script). With the external panel attached the canvas is 320x240 there and
+  the Cardputer shows what runs and how to stop it: never a mirror.
+- **The agent tests an app**: `run_js` with `screen` (small / large), `keys` (`"wait:300"` spaces them) and `taps`.
+  The user watches the frames live; an app loop ending at `timeout_ms` is a normal end. The last frame is written as a
+  PNG (indexed, 4 bits, every pixel 2x2, one fixed-Huffman deflate block with two match distances: a run and the row
+  above, 1-3 KB for a typical screen) to `.code/shots/<n>.png`, and the tool result carries it as an image block whose
+  data is a mark; `build_request` streams the file in base64 when it writes the request, so a screenshot never sits in
+  RAM however many the session holds. Only the session's own `shots/*.png` can be named by a mark.
+- **Esc and the limit, on time**: MicroQuickJS polls its interrupt handler every 10,000 instructions, and an app lives
+  in C (drawing, sleeping), so `sys.sleep` and `gfx.flush` ask for the poll at the next instruction
+  (`JS_NucleoInterruptSoon`, the engine patch): a 300 ms limit stops at 300 ms, uncatchable.
+- **RAM**: a script that draws gets a smaller arena (28 KB small, 20 KB large) so its canvas fits beside it.
+
+### 4.6 ANIMA gives programs to Code
+
+ANIMA and Code each get a whole Solo heap, so they never run together; a job goes through the card.
+- ANIMA's engine names the intent before every other tier (`a_code_task`): a generation verb and an artifact noun
+  ("scrivimi un gioco", "fammi un'app", "sviluppa una calcolatrice") is `code_task`; a run verb with a `.js` name
+  ("esegui snake.js") is `code_run`. Questions about programs and programs in another language stay answers.
+- The app answers "Lo scrive Code... Invio = inizia" (the Store when Code is not installed). Enter writes
+  `work/main/.code/inbox.txt` (`task` + the request, or `run` + the script) and opens Code (the RTC launch slot).
+- Code takes the job once, sends it (waiting up to 40 s for Wi-Fi), and when it ends writes `outbox.txt`: the first
+  two sentences of its answer and ` [snake.js]`. Enter on an empty line runs the script it wrote; Esc goes back
+  to ANIMA (`nucleo_app_exit_to`, ABI 9), which shows "Code: ..." and offers "Invio = apri snake.js".
+
 ## 5. The workspace on the SD card
 
 ```
@@ -257,8 +296,8 @@ Built (store-only, host-tested; the device bench `b` in the Code app is still to
   breakpoint on the last message; usage and cost per turn. `anima_claude.h` parses the full stream (text,
   tool_use with `input_json_delta`, thinking signatures, usage, stop reason). Gate: `npm run claude:test`.
 - ABI 9 (unreleased): v8 + libgcc double / 64-bit helpers, setjmp/longjmp, abort, realloc, cJSON builders.
-- Module `code` 0.1.0: 203,724 B (117 KB code), 11.7 KB static RAM (the stdlib tables' relocated pointers:
-  to reduce).
+- Module `code` 0.2.0: 255,892 B (145 KB code), 6.3 KB static RAM (the stdlib tables went to flash: `nap.ld`
+  keeps `.data.rel.ro` with the constants).
 
 ### The dialect, measured (MicroQuickJS 6d4d7eb6)
 Not available: `let`/`const`, arrow functions, template literals, `class`, destructuring, spread, default
@@ -286,10 +325,28 @@ first sudoku run the model found that the given puzzle had no solution, named th
 force an answer. It still writes markdown in its final answer despite the instruction: the UI renders it as
 plain text (strip `**`, backticks, fences) rather than relying on the prompt.
 
+### On the ADV (2026-11-05, Sonnet 5.5, effort medium, Solo boot with Wi-Fi)
+The agent runs inside the Code app; the firmware's LLM service (`nucleo_llm_*`) streams each request file with the
+user's key. Self-test: `work/main/.code/selftest.txt` holds a task; Code runs it at its next open, writes
+`selftest-report.txt` (stats, transcript, plan) and `trace.txt` (stages with free / largest block), and returns to
+the OS (at most 40 s waiting for the network, 10 minutes per task).
+
+| Task | Calls | Tools | Time | Cost | Result |
+|---|---|---|---|---|---|
+| primes.js up to 200, checked by a second method | 3 | 2 | 13 s | $0.012 | 46 primes, sum 4227, run on the device in 18 ms |
+| vendite.csv (10 rows) + report.js -> aligned report.txt with totals | 4 | 4 | ~20 s | $0.021 | correct totals, no fix needed |
+
+RAM: 90 KB free at entry, 70 KB while the request streams (the largest block stays 31.7 KB). What it took:
+- Code draws straight on the panel: the launcher's 32 KB canvas is the model's TLS (on two screens the firmware
+  now draws a direct-draw app's compact frame on the Cardputer's own panel).
+- The loader checks each of its blocks against its own size, not their sum (a 25 KB relocation table was refused).
+- The LLM ring is 4 KB of heap while a request runs, not 8 KB of static RAM in every boot.
+- Every file read (the editor, `run_js`, the scripts' `fs.read`) takes a block of the file's size, not the cap.
+
 ### Next
-1. Device bench (RAM per phase, §8) with the ADV; then the arena size and the static RAM.
-2. The LLM service in the firmware (`nucleo_llm_post`: TLS + key + streamed bytes; the parser runs in the module)
-   and the agent inside the Code app: status bar, tool cards, approvals, diff view, session on the SD card.
+1. Device bench (RAM per phase, §8) with the ADV and the original Cardputer; harder tasks (multi-file, a long
+   session that compacts); both Cardputers before the store.
+2. Tool input streamed to the SD card instead of the 16 KB RAM buffer; the diff view.
 3. Apps from the agent: a script API for screen / keys / sound and the ADV's 320x240 panel, `promote_app` into
    `/apps/scripts/<id>/` (launcher), and **visual testing**: a test run returns a screenshot of what the app drew
    (both screens) plus scripted keys, so the model checks its own UI.

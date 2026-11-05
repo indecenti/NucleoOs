@@ -1212,6 +1212,10 @@ static bool teacher_load(teacher_cfg_t *c)
 // anything else / absent = medium. Utility calls (the cross-verifier veto) always run low.
 // ===========================================================================
 #define ANTH_READ_MS 5000           // one blocking read, < the 8 s Task-WDT
+// The last Claude call, for diagnosis (the ANIMA self-test writes it next to each answer): model, status, length,
+// stop reason, time, the heap after; the head of the error body when it failed.
+static char s_llm_last[260], s_llm_last_err[160];
+const char *nucleo_anima_online_last(void) { return s_llm_last; }
 #include "anima_claude.h"          // effort per model, request body, SSE reader (host-tested)
 
 // One Claude turn -> assistant text (malloc'd in *out_text, caller frees). Returns text length, or <0.
@@ -1281,13 +1285,19 @@ static int anthropic_chat_eff(const teacher_cfg_t *c, const char *sys, const ani
             int n = esp_http_client_read(cli, rb, sizeof rb - 1);
             rb[n > 0 ? n : 0] = 0;
             ESP_LOGW(TAG, "Claude HTTP %d: %.200s", status, rb);
-        }
+            snprintf(s_llm_last_err, sizeof s_llm_last_err, "%.150s", rb);
+        } else snprintf(s_llm_last_err, sizeof s_llm_last_err, "no headers (%lld)", (long long)hl);
         esp_http_client_close(cli); esp_http_client_cleanup(cli);
         nucleo_arb_release(tk);
     }
     free(body);
     ESP_LOGI(TAG, "Claude %s effort=%s status=%d %u chars stop=%s in %lld ms", c->model, eff ? eff : "-", status,
              (unsigned)s->len, s->stop[0] ? s->stop : (s->done ? "done" : "cut"), (long long)((esp_timer_get_time() - t0) / 1000));
+    snprintf(s_llm_last, sizeof s_llm_last, "%s %s HTTP %d, %u chars, %s, %lld ms, sent=%d, free %u largest %u%s%s", c->model, eff ? eff : "-",
+             status, (unsigned)s->len, s->err ? "stream error" : s->stop[0] ? s->stop : (s->done ? "done" : "cut"),
+             (long long)((esp_timer_get_time() - t0) / 1000), (int)sent, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), status == 200 ? "" : ": ", status == 200 ? "" : s_llm_last_err);
+    s_llm_last_err[0] = 0;
     int n = -1;
     if (!s->err && s->txt && s->len) { *out_text = s->txt; s->txt = NULL; n = (int)s->len; }
     free(s->txt); free(s);
@@ -3888,6 +3898,7 @@ static void chat_env(char *out, size_t cap)
 // extraction (clip_code, newlines preserved) instead of the prose clip_reply.
 static int grok_chat(const char *input, const anima_turn_t *turns, int nturns, bool en, bool code_mode, anima_result_t *out)
 {
+    snprintf(s_llm_last, sizeof s_llm_last, "chat: no call (offline or no key)");
     if (!input || !*input || !nucleo_anima_online_available()) return 0;
     (void)en;
     nucleo_anima_l1_unload();   // free the L1 index so the mbedTLS handshake has a contiguous block
@@ -4068,3 +4079,160 @@ int nucleo_anima_online_longform(const char *topic, const char *tail, int part, 
     if (more) *more = !done && out->reply[0] != 0;             // empty reply also ends the loop
     return out->reply[0] ? 1 : 0;
 }
+
+// ===========================================================================
+// The LLM service for native apps (ABI 9: Nucleo Code). A module writes its Anthropic /v1/messages request to
+// a FILE and starts it here; a firmware task streams the file over TLS (the user's Claude key is added here: a
+// module never sees it), and the streamed response comes back through an 8 KB ring the module drains from its
+// tick (allocated by the first request, freed once its answer is read: no static RAM). One request at a time; every read waits at most ANTH_READ_MS and pets nothing it does not own (the task
+// is not watched); a whole request is bounded by LLM_TURN_MS; nothing is ever sent twice.
+// ===========================================================================
+#include "freertos/semphr.h"
+#define LLM_RING     4096
+#define LLM_TURN_MS  300000
+#define LLM_STACK    12288
+
+static struct {
+    volatile int  state;            // 0 idle, 1 running, 2 finished
+    volatile bool cancel;
+    int           status;           // HTTP status (< 0: no connection / failure before an answer)
+    char          err[200];
+    char          path[160];
+    char         *ring;           // LLM_RING bytes while a request runs or its answer is unread
+    volatile uint32_t head, tail;   // single producer (the task) / single consumer (the module's tick)
+    portMUX_TYPE  mux;
+} s_llm = { .mux = portMUX_INITIALIZER_UNLOCKED };
+
+// the Claude configuration: top level when it is Anthropic's, else the keys{} entry that is
+static bool llm_claude_cfg(teacher_cfg_t *out)
+{
+    memset(out, 0, sizeof *out);
+    char *buf = teacher_read_file(); if (!buf) return false;
+    cJSON *o = cJSON_Parse(buf); free(buf); if (!o) return false;
+    bool ok = false;
+    teacher_cfg_t c; memset(&c, 0, sizeof c);
+    if (teacher_obj_to_cfg(o, &c)) { teacher_cfg_apply_defaults(&c); if (!strcmp(c.provider, "anthropic")) { *out = c; ok = true; } }
+    cJSON *keys = cJSON_GetObjectItem(o, "keys"), *k;
+    if (!ok && cJSON_IsObject(keys)) cJSON_ArrayForEach(k, keys) {
+        memset(&c, 0, sizeof c);
+        if (!teacher_obj_to_cfg(k, &c)) continue;
+        teacher_cfg_apply_defaults(&c);
+        if (!strcmp(c.provider, "anthropic")) { *out = c; ok = true; break; }
+    }
+    cJSON_Delete(o);
+    return ok;
+}
+
+bool nucleo_llm_config(char *model, int mcap, char *effort, int ecap)
+{
+    teacher_cfg_t c;
+    if (!llm_claude_cfg(&c)) return false;
+    if (model && mcap) snprintf(model, mcap, "%s", c.model);
+    if (effort && ecap) snprintf(effort, ecap, "%s", c.effort[0] ? c.effort : "medium");
+    return true;
+}
+
+static void llm_push(const char *b, int n)
+{
+    while (n > 0 && !s_llm.cancel) {
+        uint32_t used = s_llm.head - s_llm.tail;
+        uint32_t room = LLM_RING - used;
+        if (!room) { vTaskDelay(pdMS_TO_TICKS(10)); continue; }   // the module drains it on its tick
+        uint32_t k = (uint32_t)n < room ? (uint32_t)n : room;
+        for (uint32_t i = 0; i < k; i++) s_llm.ring[(s_llm.head + i) % LLM_RING] = b[i];
+        portENTER_CRITICAL(&s_llm.mux); s_llm.head += k; portEXIT_CRITICAL(&s_llm.mux);
+        b += k; n -= (int)k;
+    }
+}
+
+static void llm_task(void *arg)
+{
+    (void)arg;
+    int status = -1; char *rb = NULL; FILE *f = NULL;
+    esp_http_client_handle_t cli = NULL; uint32_t tk = 0;
+    teacher_cfg_t c;
+    if (!llm_claude_cfg(&c) || !c.key[0]) { snprintf(s_llm.err, sizeof s_llm.err, "no Claude key: add one in the web OS, Settings > AI"); goto out; }
+    f = fopen(s_llm.path, "rb");
+    if (!f) { snprintf(s_llm.err, sizeof s_llm.err, "cannot read the request"); goto out; }
+    fseek(f, 0, SEEK_END); long len = ftell(f); fseek(f, 0, SEEK_SET);
+    if (len <= 0) { snprintf(s_llm.err, sizeof s_llm.err, "empty request"); goto out; }
+    if (online_tls_heap_too_low("POST", "llm")) { snprintf(s_llm.err, sizeof s_llm.err, "not enough RAM for the connection"); goto out; }
+    char url[200]; snprintf(url, sizeof url, "%s/v1/messages", c.base);
+    esp_http_client_config_t cfg = {
+        .url = url, .timeout_ms = ANTH_READ_MS, .user_agent = HTTP_UA,
+        .crt_bundle_attach = esp_crt_bundle_attach, .buffer_size = 2048, .buffer_size_tx = 2048,
+        .method = HTTP_METHOD_POST,
+    };
+    tk = nucleo_arb_acquire(ARB_FG, "llm", 0);
+    if (!tk) { snprintf(s_llm.err, sizeof s_llm.err, "another connection is busy: retry"); goto out; }
+    cli = esp_http_client_init(&cfg);
+    if (!cli) { snprintf(s_llm.err, sizeof s_llm.err, "no memory for the client"); goto out; }
+    esp_http_client_set_header(cli, "Content-Type", "application/json");
+    esp_http_client_set_header(cli, "Accept", "text/event-stream");
+    esp_http_client_set_header(cli, "x-api-key", c.key);
+    esp_http_client_set_header(cli, "anthropic-version", c.version[0] ? c.version : ANTHROPIC_VERSION_DEFAULT);
+    if (esp_http_client_open(cli, (int)len) != ESP_OK) { snprintf(s_llm.err, sizeof s_llm.err, "cannot connect to Anthropic"); goto out; }
+    rb = malloc(2048);
+    if (!rb) { snprintf(s_llm.err, sizeof s_llm.err, "no memory"); goto out; }
+    size_t n;
+    while (!s_llm.cancel && (n = fread(rb, 1, 2048, f)) > 0)
+        if (esp_http_client_write(cli, rb, (int)n) != (int)n) { snprintf(s_llm.err, sizeof s_llm.err, "the request was cut off"); goto out; }
+    fclose(f); f = NULL;
+    int64_t t0 = esp_timer_get_time();
+    int64_t hl;
+    while ((hl = esp_http_client_fetch_headers(cli)) == -ESP_ERR_HTTP_EAGAIN && !s_llm.cancel && (esp_timer_get_time() - t0) < (int64_t)LLM_TURN_MS * 1000) { }
+    status = esp_http_client_get_status_code(cli);
+    if (hl < 0) { snprintf(s_llm.err, sizeof s_llm.err, "no answer from Anthropic"); status = -1; goto out; }
+    while (!s_llm.cancel && (esp_timer_get_time() - t0) < (int64_t)LLM_TURN_MS * 1000) {
+        int r = esp_http_client_read(cli, rb, 2048);
+        if (r == -ESP_ERR_HTTP_EAGAIN) continue;          // the model is thinking
+        if (r <= 0) break;
+        if (status == 200) llm_push(rb, r);
+        else { snprintf(s_llm.err, sizeof s_llm.err, "%.*s", r < 190 ? r : 190, rb); break; }
+    }
+    if (s_llm.cancel) snprintf(s_llm.err, sizeof s_llm.err, "stopped");
+out:
+    if (f) fclose(f);
+    free(rb);
+    if (cli) { esp_http_client_close(cli); esp_http_client_cleanup(cli); }
+    if (tk) nucleo_arb_release(tk);
+    s_llm.status = status;
+    s_llm.state = 2;
+    vTaskDelete(NULL);
+}
+
+// Start a request (`path`: the request file). false = one is already running or no task could start.
+bool nucleo_llm_start(const char *path)
+{
+    if (s_llm.state == 1 || !path) return false;
+    if (!s_llm.ring && !(s_llm.ring = (char *)malloc(LLM_RING))) return false;
+    snprintf(s_llm.path, sizeof s_llm.path, "%s", path);
+    s_llm.head = s_llm.tail = 0; s_llm.cancel = false; s_llm.status = 0; s_llm.err[0] = 0; s_llm.state = 1;
+    if (xTaskCreatePinnedToCore(llm_task, "llm", LLM_STACK, NULL, 5, NULL, 0) != pdPASS) { s_llm.state = 0; free(s_llm.ring); s_llm.ring = NULL; return false; }
+    return true;
+}
+// Response bytes so far (0 = none yet); -1 = the request is over and everything was read.
+int nucleo_llm_read(char *buf, int cap)
+{
+    const int st = s_llm.state;                       // read before the count: the task writes its last bytes, then 2
+    uint32_t avail = s_llm.ring ? s_llm.head - s_llm.tail : 0;
+    if (!avail) {
+        if (st != 2) return 0;
+        free(s_llm.ring); s_llm.ring = NULL;          // the answer is over and read: the ring goes
+        return -1;
+    }
+    uint32_t k = avail < (uint32_t)cap ? avail : (uint32_t)cap;
+    for (uint32_t i = 0; i < k; i++) buf[i] = s_llm.ring[(s_llm.tail + i) % LLM_RING];
+    portENTER_CRITICAL(&s_llm.mux); s_llm.tail += k; portEXIT_CRITICAL(&s_llm.mux);
+    return (int)k;
+}
+// Once over: the HTTP status (< 0 = no answer) and the reason when it failed; 0 while running.
+int nucleo_llm_status(char *err, int cap)
+{
+    if (s_llm.state != 2) return 0;
+    if (err && cap) snprintf(err, cap, "%s", s_llm.err);
+    return s_llm.status ? s_llm.status : -1;
+}
+void nucleo_llm_cancel(void) { if (s_llm.state == 1) s_llm.cancel = true; }
+// True while a request runs (the module must not leave before it ends: the task reads its file).
+bool nucleo_llm_busy(void) { return s_llm.state == 1; }

@@ -204,6 +204,21 @@ bool nucleo_anima_model_label(char *out, int cap, char *id, int idcap);
 bool nucleo_anima_model_step(int dir);
 bool nucleo_anima_effort_get(char *out, int cap);
 bool nucleo_anima_effort_step(int dir);
+// The LLM service for native apps (ABI 9, Nucleo Code): a request FILE streamed to Anthropic with the user's Claude
+// key (never visible to the module), the response drained from a ring. One request at a time.
+bool nucleo_llm_config(char *model, int mcap, char *effort, int ecap);   // the user's Claude model and effort
+bool nucleo_llm_start(const char *path);
+int  nucleo_llm_read(char *buf, int cap);       // bytes; 0 = none yet; -1 = over and drained
+int  nucleo_llm_status(char *err, int cap);     // 0 = running; else the HTTP status (< 0 = no answer)
+void nucleo_llm_cancel(void);
+bool nucleo_llm_busy(void);
+// code_run (ANIMA "esegui snake.js"): the script to open in Code; "" for code_task
+const char *nucleo_anima_code_file(void);
+// code_task: the request Code gets (a "yes" to an offer: the offered one); "" = the question itself
+const char *nucleo_anima_code_task(void);
+// Code is installed (the app says at each enter): ANIMA may offer it
+void nucleo_anima_set_code_app(bool on);
+const char *nucleo_anima_online_last(void);     // the last Claude call, for diagnosis (self-test)
 
 // Content channel for multi-step "compose THEN act": when the controller computes a payload too
 // large for the 64-byte arg field (e.g. a file body composed from a calculation or a literal text

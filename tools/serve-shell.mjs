@@ -902,6 +902,20 @@ const server = createServer(async (req, res) => {
     return sendJSON(res, { ok: true });
   }
 
+  if (path === '/api/play' && req.method === 'POST') {   // mirrors nucleo_app.cpp play_post: which emulator would open the file
+    if (!isAuthed(req)) return reject401(res);
+    const rel = (url.searchParams.get('path') || '').replace(/^\/sd\//, '').replace(/^\/+/, '');
+    const full = normalize(join(SD, rel));
+    let isFile = false;
+    try { isFile = !!rel && !rel.includes('..') && full.startsWith(SD) && (await stat(full)).isFile(); } catch { isFile = false; }
+    if (!isFile) return sendJSON(res, { ok: false, err: 'not found' });
+    const ext = (rel.split('.').pop() || '').toLowerCase();
+    const app = { gb: 'gbemu', gbc: 'gbemu', gg: 'ggemu', sms: 'ggemu', nes: 'nesemu' }[ext];   // gamefront.cpp SYS[]
+    if (!app) return sendJSON(res, { ok: false, err: 'no emulator' });
+    simLog(`W (${Date.now() % 100000}) play: api play ${rel} -> ${app}`);
+    return sendJSON(res, { ok: true, app });
+  }
+
   // ── live diagnostics (mirror nucleo_httpd.c shapes; public, cheap, no auth) ──
   if (path === '/api/heap') {                       // per-region heap (fragmentation investigation)
     const free = jit(74000, 8000), largest = jit(42000, 6000);

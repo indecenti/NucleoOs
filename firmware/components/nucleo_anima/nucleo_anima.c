@@ -1405,6 +1405,156 @@ static bool a_is_code_request(const char *input)
     return hasLang && hasGen;
 }
 
+// A program to WRITE or RUN on the device is Nucleo Code's work (docs/nucleo-code.md 4.6), not a snippet in the
+// chat: "scrivimi un gioco del serpente", "fammi un'app per le spese", "esegui snake.js". The engine names the
+// intent (code_task / code_run, LAUNCH "code"); the app decides: Code installed -> "Enter = Code writes it",
+// else the Store. A program in another language ("scrivi un programma in python") stays a snippet from the model:
+// the device runs JavaScript only.
+static char s_code_file[48];                       // code_run: the script to open ("snake.js")
+const char *nucleo_anima_code_file(void) { return s_code_file; }
+// Is Code installed? (the app says, at each enter). Without it there is nothing to offer: code is answered in the chat.
+#ifdef ESP_PLATFORM
+static bool s_code_app;
+#else
+static bool s_code_app = true;                     // the host harness: as on a device with Code
+#endif
+void nucleo_anima_set_code_app(bool on) { s_code_app = on; }
+// An ambiguous request ("scrivimi il codice di pong") asks first: Code on the device, or the code here. The question
+// waits one turn: yes -> the job for Code (this text), "qui" -> the snippet in the chat.
+static char s_code_offer[240];
+static char s_code_task[240];                      // the request Code gets (the offer's, when it was a yes)
+const char *nucleo_anima_code_task(void) { return s_code_task; }
+static bool a_code_task(const char *input, bool en, anima_result_t *r)
+{
+    char tok[A_MAX_TOKENS][A_TOK_LEN];
+    int n = a_tokenize(input, tok);
+    if (n < 2) return false;
+    // what makes something: the imperative / infinitive forms people use with ANIMA
+    static const char *verb[] = { "scrivi","scrivimi","scrivere","scrivermi","crea","creami","creare","crearmi","fammi","fai",
+                                  "fare","farmi","programma","programmami","programmare","programmarmi","sviluppa","sviluppami",
+                                  "sviluppare","svilupparmi","costruisci","costruiscimi","realizza","realizzami","realizzarmi",
+                                  "inventa","inventami","prepara","preparami","implementa","implementami","codifica","voglio","vorrei",
+                                  "write","make","build","create","develop","code","program","implement", NULL };
+    // an artifact that can only be a program: with a verb above it is a job for Code
+    static const char *strong[] = { "gioco","giochino","videogioco","videogame","game","app","applicazione","applicazioni",
+                                    "programma","programmino","script","javascript","simulazione","animazione","demo", NULL };
+    // a classic game by name: most likely a program, but "fammi un sudoku" may want a puzzle - ANIMA asks
+    static const char *named[] = { "pong","tetris","snake","serpente","breakout","arkanoid","flappy","asteroids","invaders",
+                                   "pacman","2048","sudoku","tris","minesweeper","labirinto","maze","platform","platformer", NULL };
+    // a tool ANIMA or the OS may already be: asked about only without a number or a time ("fammi un timer di 5 minuti")
+    static const char *weak[] = { "timer","cronometro","contatore","counter","stopwatch","calcolatrice","calculator",
+                                  "convertitore","converter","orologio", NULL };
+    static const char *codew[] = { "codice","esempio","example","snippet","sorgente","source", NULL };
+    static const char *timew[] = { "minuti","minuto","secondi","secondo","ore","ora","domani","oggi","stasera","alle","minutes",
+                                   "minute","seconds","hours","tomorrow","today", NULL };
+    static const char *run[]  = { "esegui","eseguimi","avvia","lancia","apri","gioca","run","start","launch","open","play",
+                                  "aprire","avviare","lanciare","usare","usa","giocare","eseguire", NULL };
+    static const char *tell[] = { "dire","dimmi","sai","sapere","spiegami","spiega","spiegare","racconta","raccontami","parlami",
+                                  "tell","explain", NULL };
+    static const char *show[] = { "dammi","mostrami","mostra","esempio","example","snippet","give","show", NULL };
+    static const char *other[] = { "python","typescript","golang","kotlin","java","rust","php","swift","bash","sql","html",
+                                   "css","cpp","arduino","micropython","lua","basic", NULL };
+    static const char *notcode[] = { "fiscale","postale","pin","iban","sconto","cap","colore","morse","promo","promemoria",
+                                     "evento","appuntamento","poesia","storia","racconto","lettera","email","mail","canzone", NULL };
+    static const char *ask[] = { "cos","cosa","che","come","quale","quali","perche","quando","dove","chi","quanto","quanti",
+                                 "quanta","quante","what","how","why","which","when","where","who","is","are","does","do", NULL };
+    // a question about programs, not a job: an ask word first, or after a polite opening ("mi puoi dire quante...");
+    // later it is a relative ("uno script che rinomina i file")
+    static const char *lead[] = { "mi","ti","puoi","potresti","scusa","ehi","ciao","senti","dimmi","sai", NULL };
+    int q0 = 0;
+    while (q0 < n && q0 < 3) { bool l = false; for (int i = 0; lead[i]; i++) if (!strcmp(lead[i], tok[q0])) l = true; if (!l) break; q0++; }
+    for (int i = 0; ask[i]; i++) if (q0 < n && !strcmp(ask[i], tok[q0])) return false;
+    int vt = -1, st = -1, nt = -1, wt = -1, js = -1;
+    bool cw = false, o = false, rv = false, digits = false, tw = false, sh = false;
+    for (int t = 0; t < n; t++) {
+        const char *w = tok[t];
+        for (int i = 0; verb[i]; i++) if (!strcmp(verb[i], w) && vt < 0) vt = t;
+        for (int i = 0; strong[i]; i++) if (!strcmp(strong[i], w) && st < 0 && t != vt) st = t;
+        for (int i = 0; named[i]; i++) if (!strcmp(named[i], w) && nt < 0) nt = t;
+        for (int i = 0; weak[i]; i++) if (!strcmp(weak[i], w) && wt < 0) wt = t;
+        for (int i = 0; codew[i]; i++) if (!strcmp(codew[i], w)) cw = true;
+        for (int i = 0; timew[i]; i++) if (!strcmp(timew[i], w)) tw = true;
+        for (int i = 0; run[i]; i++) if (!strcmp(run[i], w)) rv = true;
+        for (int i = 0; tell[i]; i++) if (!strcmp(tell[i], w)) return false;      // "dimmi", "sai": a question
+        for (int i = 0; show[i]; i++) if (!strcmp(show[i], w)) sh = true;
+        for (int i = 0; other[i]; i++) if (!strcmp(other[i], w)) o = true;
+        for (int i = 0; notcode[i]; i++) if (!strcmp(notcode[i], w)) return false;   // "il codice fiscale", "una poesia"
+        bool num = w[0] != 0; for (const char *c = w; *c; c++) if (*c < '0' || *c > '9') num = false;
+        if (num && strcmp(w, "2048")) digits = true;
+        if (t > 0 && !strcmp(w, "js") && js < 0) js = t;
+    }
+    if (rv && js > 0 && vt < 0) {                    // "esegui snake.js": open it in Code
+        snprintf(s_code_file, sizeof s_code_file, "%s.js", tok[js - 1]);
+        r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 90;
+        snprintf(r->intent, sizeof r->intent, "code_run");
+        snprintf(r->arg, sizeof r->arg, "code");
+        snprintf(r->reply, sizeof r->reply, en ? "Opening %s in Code." : "Apro %s in Code.", s_code_file);
+        return true;
+    }
+    if (o) return false;                             // another language: a snippet, the device runs JavaScript only
+    if (rv) return false;                            // "vorrei aprire la calcolatrice": using a thing, not making one
+    s_code_file[0] = 0;
+    const bool v = vt >= 0;
+    const bool sure = v && st >= 0 && !cw;           // "scrivimi un gioco", "fammi un'app per le spese"
+    const bool maybe = (v && (nt >= 0 || (wt >= 0 && !digits && !tw) || (st >= 0 && cw)))   // "fammi pong", "il codice di un gioco"
+                    || (!v && cw && sh && a_is_code_request(input));                        // "dammi un esempio di codice javascript"
+    if (sure && s_code_app) {
+        snprintf(s_code_task, sizeof s_code_task, "%s", input);
+        r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 85;
+        snprintf(r->intent, sizeof r->intent, "code_task");
+        snprintf(r->arg, sizeof r->arg, "code");
+        snprintf(r->reply, sizeof r->reply, en ? "Code can write it, run it and test it on the device."
+                                               : "Code puo' scriverlo, eseguirlo e provarlo sul dispositivo.");
+        return true;
+    }
+    if (sure && !s_code_app) {                       // the app offers the Store
+        r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 80;
+        snprintf(r->intent, sizeof r->intent, "code_task");
+        snprintf(r->arg, sizeof r->arg, "code");
+        r->reply[0] = 0;
+        return true;
+    }
+    if (maybe && s_code_app) {                       // ask: Code on the device, or the code here
+        snprintf(s_code_offer, sizeof s_code_offer, "%s", input);
+        r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 80;
+        snprintf(r->intent, sizeof r->intent, "code_offer");
+        snprintf(r->arg, sizeof r->arg, "code");
+        snprintf(r->reply, sizeof r->reply, en ? "Shall Code write it and test it here on the Cardputer? Enter = yes. Or type \"here\" for an answer in the chat."
+                                               : "Lo faccio scrivere e provare a Code qui sul Cardputer? Invio = si'. Oppure scrivi \"qui\" e ti rispondo in chat.");
+        return true;
+    }
+    return false;
+}
+// The turn after an offer: yes -> the job for Code; "qui" / "here" / no -> 1 (the caller answers the offer's text as
+// code in the chat); anything else drops the offer (0, handled as usual). *q gets the offer's text for the chat case.
+static int a_code_offer_reply(const char *input, bool en, anima_result_t *r, const char **q)
+{
+    if (!s_code_offer[0]) return 0;
+    char tok[A_MAX_TOKENS][A_TOK_LEN];
+    int n = a_tokenize(input, tok);
+    static const char *yes[] = { "si","ok","okay","vai","certo","code","1","yes","sure","go","usa","fallo","dai", NULL };
+    static const char *here[] = { "qui","chat","here","no","2","codice","testo","solo","text", NULL };
+    int k = 0;
+    if (n >= 1 && n <= 4) for (int t = 0; t < n && !k; t++) {
+        for (int i = 0; yes[i] && !k; i++) if (!strcmp(yes[i], tok[t])) k = 1;
+        for (int i = 0; here[i] && !k; i++) if (!strcmp(here[i], tok[t])) k = 2;
+    }
+    static char saved[240];
+    snprintf(saved, sizeof saved, "%s", s_code_offer);
+    s_code_offer[0] = 0;
+    if (k == 1) {
+        snprintf(s_code_task, sizeof s_code_task, "%s", saved);
+        r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_LAUNCH; r->confidence = 90;
+        snprintf(r->intent, sizeof r->intent, "code_task");
+        snprintf(r->arg, sizeof r->arg, "code");
+        snprintf(r->reply, sizeof r->reply, en ? "Code can write it, run it and test it on the device."
+                                               : "Code puo' scriverlo, eseguirlo e provarlo sul dispositivo.");
+        return 2;
+    }
+    if (k == 2) { *q = saved; return 1; }
+    return 0;
+}
+
 static bool a_is_more_request(const char *input)
 {
     char tok[A_MAX_TOKENS][A_TOK_LEN];
@@ -1725,6 +1875,35 @@ enum { AG_LITERAL = 0, AG_AUTO = 1, AG_RETRIEVE = 2 };
 // a pending clarify/slot. Everything else the offline brain produced (L0 static FAQ, L1 cards, HDC/facet
 // reasoning, Wikipedia/Wikidata, dialogue glue, an honest miss) is handed to the model with the whole
 // conversation; the offline answer stays as the fallback when no model answers.
+static bool a_local_answer(const anima_result_t *r);
+// Words that make a request creative ("scrivi una poesia sulla neve"): a live tier that matched a word of it (the
+// weather took "neve in montagna", a city "Quattro") must leave it to the model. Seen in the device self-test.
+static bool a_creative(const char *q)
+{
+    static const char *const W[] = { "poesia", "poesie", "racconto", "raccont", "storia", "storie", "favola", "fiaba", "canzone",
+        "filastrocca", "haiku", "rima", "poem", "story", "stories", "song", "tale", "lyrics", "limerick", NULL };
+    char lo[200]; size_t n = 0;
+    for (const char *p = q; *p && n < sizeof lo - 1; p++) lo[n++] = (char)tolower((unsigned char)*p);
+    lo[n] = 0;
+    for (int i = 0; W[i]; i++) if (strstr(lo, W[i])) return true;
+    return false;
+}
+// A word problem ("ho 3 mele, ne mangio una e ne compro il doppio...") is reasoning, not an expression: the local
+// calculator keeps a request only while it is mostly numbers and operators. Seen in the device self-test.
+static bool a_wordy(const char *q)
+{
+    int letters = 0;
+    for (const char *p = q; *p; p++) if (isalpha((unsigned char)*p)) letters++;
+    return letters > 24;
+}
+static bool a_local_answer_q(const anima_result_t *r, const char *q)
+{
+    if (q && (!strcmp(r->intent, "weather") || !strcmp(r->intent, "news") || !strcmp(r->intent, "fx") || !strcmp(r->intent, "worldclock")
+              || !strcmp(r->intent, "add_event")) && a_creative(q)) return false;
+    if (q && (!strcmp(r->intent, "calc") || !strcmp(r->intent, "math") || !strcmp(r->intent, "percent") || !strcmp(r->intent, "convert"))
+        && a_wordy(q)) return false;
+    return a_local_answer(r);
+}
 static bool a_local_answer(const anima_result_t *r)
 {
     if (r->action == ANIMA_ACT_LAUNCH || r->action == ANIMA_ACT_SYSTEM || r->action == ANIMA_ACT_TOOL) return true;
@@ -2476,7 +2655,9 @@ static int tool_teach(const char *raw, char tok[A_MAX_TOKENS][A_TOK_LEN], int nt
     if (!rem) return 0;                                // no explicit teach frame -> not ours
 
     // Split subject | fact on the FIRST binding copula in the remainder. "è" via its UTF-8 bytes.
-    static const char *const COP[] = { " \xC3\xA8 ", " sono ", " significa ", " vuol dire ", " is ", " are ", " means ", NULL };
+    // " e' " / " e` ": how the accented e is typed on the Cardputer's keyboard (no accented keys). The device self-test
+    // caught "ricorda che il mio colore preferito e' il verde" becoming a calendar reminder.
+    static const char *const COP[] = { " \xC3\xA8 ", " e' ", " e` ", " sono ", " significa ", " vuol dire ", " is ", " are ", " means ", NULL };
     const char *cop = NULL; size_t clen = 0;
     for (int i = 0; COP[i]; i++) {
         const char *p = strstr(rem, COP[i]);
@@ -3922,6 +4103,17 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // tool slot or app clarify is pending, so a "no" there resolves the FSM, not the dialogue layer.
     if (!s_session.pending_tool[0] && !s_session.clarify_opt[0][0] && a_dialogue_act(q, en, &r)) goto done;
 
+    // A program to write or run on the device: Nucleo Code's work, before every other tier (a game is not a fact)
+    bool force_code = false;                        // "qui": the offered request, answered as code in the chat
+    s_code_task[0] = 0;
+    {
+        const char *oq = NULL;
+        int k = a_code_offer_reply(q, en, &r, &oq);
+        if (k == 2) goto done;
+        if (k == 1) { q = oq; force_code = true; }
+    }
+    if (!force_code && !s_session.pending_tool[0] && a_code_task(q, en, &r)) goto done;
+
     // Online-only mode: bypass the offline cascade entirely and answer ONLY via PURE Grok — a direct
     // chat passthrough (no JSON classification, no Wikipedia truth gate, no learning). Honest miss if
     // unconfigured/offline — we deliberately do NOT fall back to the offline tiers (that's hybrid "On").
@@ -3929,12 +4121,12 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
         bool avail = nucleo_anima_online_available();
         {   // the device's own answers first: the model cannot read the clock, the battery or open an app
             anima_result_t lr = l0_query(q, en);
-            if (lr.tier != ANIMA_TIER_NONE && a_local_answer(&lr)) { r = lr; mem_update(&r); goto done; }
+            if (lr.tier != ANIMA_TIER_NONE && a_local_answer_q(&lr, q)) { r = lr; mem_update(&r); goto done; }
         }
         // CODE even in online-only: take the dedicated code path (code prompt, bigger token budget,
         // verbatim long_reply) — the prose teacher's clip_reply sentence-truncates on '.' and so
         // mangles a snippet mid-statement (cuts "pygame.display." in half).
-        if (avail && a_is_code_request(q) && nucleo_anima_online_code(q, en, &r)) {
+        if (avail && (force_code || a_is_code_request(q)) && nucleo_anima_online_code(q, en, &r)) {
             mem_update(&r);
             snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);
             s_session.dirty = true;
@@ -3994,6 +4186,10 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // online_llm is effectively false through this hybrid section, which is exactly the intent.)
     const bool online_llm = nucleo_anima_online_available() && nucleo_anima_teacher_configured()
                             && nucleo_anima_online_only_enabled();
+    // MODEL FIRST (the hand-off at done:): with a model to answer, the keyless network knowledge tiers below
+    // (Wikidata facts, Wikipedia summaries) are not run: their answer would be handed to the model anyway, and
+    // on the ADV they cost 2-5 s of every turn before the model was even called (measured by the self-test).
+    const bool model_first = nucleo_anima_online_available() && nucleo_anima_teacher_configured();
 
     // Classify once up-front: the F_* feature flags drive the live/weather routing below AND the
     // later spellfix gate. (Pure function of q; q is stable from here on.)
@@ -4044,7 +4240,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // card. Routed here (before the entity/L1 tiers) with a code prompt + a larger reply budget so the
     // fenced ```block isn't truncated. Online+key only; offline/no-key falls through (we never fabricate
     // code). Frees L1 first (the TLS handshake needs the contiguous heap on this PSRAM-less chip).
-    if (online_llm && a_is_code_request(q)) {   // LLM-only: code is generated, never wiki-searched
+    if (online_llm && (force_code || a_is_code_request(q))) {   // LLM-only: code is generated, never wiki-searched
         nucleo_anima_l1_unload();
         if (nucleo_anima_online_code(q, en, &r)) { mem_update(&r); s_session.dirty = true; goto done; }
     }
@@ -4068,7 +4264,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // every Stalin question yields the same bio). Online-only and gated to actual fact-questions, so a
     // non-fact query never pays a net round-trip; offline -> 0 here and the L1 bio (whose prose holds
     // the fact) answers. Free L1 first — the TLS claim fetch needs the contiguous heap.
-    if (askable && nucleo_anima_online_available() && nucleo_anima_online_is_fact(q, en)) {
+    if (askable && !model_first && nucleo_anima_online_available() && nucleo_anima_online_is_fact(q, en)) {
         nucleo_anima_l1_unload();
         fact_tried = true;
         if (nucleo_anima_online_fact(q, en, &r)) {
@@ -4392,7 +4588,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // online (policy above); keyless devices still use it.
     // (Not again if the structured-fact priority above already asked Wikidata this turn and missed —
     // that was a second TLS round-trip per miss for the same answer.)
-    if (!online_llm && !fact_tried && nucleo_anima_online_fact(q, en, &r)) {
+    if (!online_llm && !model_first && !fact_tried && nucleo_anima_online_fact(q, en, &r)) {
         mem_update(&r);
         snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);
         s_session.dirty = true;
@@ -4413,7 +4609,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
                     s_session.dirty = true;
                     goto done;
                 }
-            } else if (nucleo_anima_online_answer(entity, slug, en, &r)) {
+            } else if (!model_first && nucleo_anima_online_answer(entity, slug, en, &r)) {
                 mem_update(&r);
                 snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);   // enable "tell me more"
                 s_session.dirty = true;
@@ -4481,7 +4677,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // owns online (it'll answer below); keyless devices still use it. The clarify band just above
     // reloads the L1 index, so free it again before this TLS fetch needs the contiguous heap.
     if (!online_llm && nucleo_anima_online_available()) nucleo_anima_l1_unload();
-    if (!online_llm && nucleo_anima_online_entity_bare(q, en, &r)) {
+    if (!online_llm && !model_first && nucleo_anima_online_entity_bare(q, en, &r)) {
         mem_update(&r);
         snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);
         s_session.dirty = true;
@@ -4508,7 +4704,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
 done: {
         // MODEL FIRST (see a_local_answer): whatever the offline brain answered, the configured model answers
         // instead when the turn is not the device's own. The offline answer is the fallback.
-        if (q && q[0] && q[1] && !a_local_answer(&r) && nucleo_anima_online_available() && nucleo_anima_teacher_configured()) {
+        if (q && q[0] && q[1] && !a_local_answer_q(&r, q) && nucleo_anima_online_available() && nucleo_anima_teacher_configured()) {
             anima_result_t mr; memset(&mr, 0, sizeof mr);
             // the offline brain's finding becomes the model's <notes>: the two layers cooperate, not compete
             bool knew = r.reply[0] && (r.tier == ANIMA_TIER_FACT || r.tier == ANIMA_TIER_STITCH || r.tier == ANIMA_TIER_REMOTE);

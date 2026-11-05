@@ -18,8 +18,17 @@ typedef struct {
     int64_t (*now_ms)(void);                            // monotonic clock
     void (*sleep_ms)(uint32_t ms);                      // sys.sleep (the host may poll its keys there)
     bool (*cancel)(void *op);                           // true = stop now (Esc); may be NULL
-    uint32_t timeout_ms;                                // wall clock for the whole run (0 = 10 s)
+    uint32_t timeout_ms;                                // wall clock for the whole run (0 = 10 s, CODE_NO_LIMIT = none)
+    // The screen (docs/nucleo-code.md 4.5): scr_w = 0 means none, and gfx calls throw. The canvas exists only once a
+    // script draws; every flush hands the changed rows to `blit` (NULL = drawn but shown nowhere, e.g. a host test).
+    int scr_w, scr_h;
+    void (*blit)(void *op, int x, int y, int w, int h, const uint16_t *rgb565);
+    const char *(*key)(void *op);                       // the next key pressed ("up", "enter", "a"...), NULL = none
+    bool (*key_down)(void *op, const char *name);       // is it held right now
+    bool (*touch)(void *op, int *x, int *y, bool *down);// the next touch sample on the panel, false = none
+    const char *shot;                                   // a script that drew: its last frame as a PNG here at the end
 } code_env_t;
+#define CODE_NO_LIMIT 0xFFFFFFFFu
 
 typedef struct {
     bool     ok;                // ran to the end without an exception
@@ -30,6 +39,10 @@ typedef struct {
     uint32_t live_max;          // the most memory live after a GC (bytes): what this script really needs
     uint32_t used_end;          // in use at the end, before the final GC (bytes)
     uint32_t arena;             // the arena it was given (bytes)
+    bool     drew;              // it used the screen
+    bool     shot_ok;           // env->shot was written
+    uint32_t frames;            // gfx.flush() calls
+    int      scr_w, scr_h;      // the canvas it drew on
 } code_result_t;
 
 // Run `src` (UTF-8, `len` bytes, named `filename` in errors) in `arena` (`arena_size` bytes, 8-aligned).

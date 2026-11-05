@@ -35,6 +35,8 @@ extern "C" {
 #include "esp_mmu_map.h"
 #include "esp_app_desc.h"
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
+#include <sys/stat.h>
 #include "esp_log.h"
 #include "esp_task_wdt.h"
 #include "hal/cache_hal.h"
@@ -272,10 +274,27 @@ static bool header_matches(const CacheHdr &want)
     return ok;
 }
 
+// Maintainer breadcrumbs (docs/native-apps.md): with /sd/system/nap-trace.on present, every load step appends a
+// line to /sd/system/nap-trace.txt with the heap, so a panic during a load (no serial in the field) says where.
+static int s_trace = -1;
+static void nap_trace(const char *id, const char *step)
+{
+    if (s_trace < 0) { struct stat st; s_trace = stat(NUCLEO_SD_MOUNT "/system/nap-trace.on", &st) == 0; }
+    if (!s_trace) return;
+    FILE *f = fopen(NUCLEO_SD_MOUNT "/system/nap-trace.txt", "ab");
+    if (!f) return;
+    fprintf(f, "%lld %s %s free %u largest %u\n", (long long)(esp_timer_get_time() / 1000), id ? id : "-", step,
+            (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    fclose(f);
+}
+#define NT(step) nap_trace(id, step)
+extern "C" void nucleo_native_trace(const char *id, const char *step) { nap_trace(id, step); }
+
 // ── load ──────────────────────────────────────────────────────────────────────
 extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
 {
     s_err[0] = 0;
+    NT("load");
     if (!id || !id[0] || strlen(id) > NAP_ID_MAX) { set_err("id", id); return nullptr; }
     if (s_id[0] && !strcmp(s_id, id) && s_def) return s_def;           // already resident
     if (!scratch()) { set_err("no scratch region", nullptr); return nullptr; }
@@ -284,6 +303,7 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     // 1. The file is exactly what the store signed.
     uint8_t signed_sha[32];
     if (!nucleo_store_check_installed(id, NAP_FILE, signed_sha)) { set_err("signature", id); return nullptr; }
+    NT("signed");
 
     char path[96];
     snprintf(path, sizeof path, NUCLEO_SD_MOUNT "/apps/%s/" NAP_FILE, id);
@@ -309,14 +329,27 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     if ((rc = nap_inspect(&src, &s_img, detail, sizeof detail)) != NAP_OK) { set_err(nap_rc_name(rc), detail); goto fail; }
     if (s_img.info.ram > EXTRA_RAM_MAX) { set_err("RAM", "asks for too much"); goto fail; }
     if (nap_relocs_bytes(&s_img) > RELOCS_MAX) { set_err("too many relocations", nullptr); goto fail; }
-    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL) <
-        (size_t)s_img.data_memsz + DATA_ALIGN + s_img.info.ram + nap_relocs_bytes(&s_img) + 2 * SECTOR + 4096) { set_err("RAM", nullptr); goto fail; }
-    buf = (uint8_t *)malloc(SECTOR);
+    // The loader's blocks are separate allocations: each needs a block of its own size, and together they need
+    // that much free. (Asking for their SUM in one block refused a 25 KB-relocation module on a Solo heap of
+    // 70 KB free whose largest block is 31.7 KB.) The relocation table goes first, so it gets the largest block.
+    {
+        const size_t data = (size_t)s_img.data_memsz + DATA_ALIGN, rel = nap_relocs_bytes(&s_img);
+        size_t one = data > rel ? data : rel;
+        if (s_img.info.ram > one) one = s_img.info.ram;
+        if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL) < one + 512 ||
+            heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL) < data + rel + s_img.info.ram + 2 * SECTOR + 8192)
+            { snprintf(detail, sizeof detail, "block %u/%u, free %u", (unsigned)(one + 512),
+                       (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL),
+                       (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL));
+              set_err("RAM", detail); goto fail; }
+    }
     relocs = (uint8_t *)malloc(nap_relocs_bytes(&s_img) ? nap_relocs_bytes(&s_img) : 4);
     s_ram_raw = (uint8_t *)heap_caps_calloc(1, s_img.data_memsz + DATA_ALIGN, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+    buf = (uint8_t *)malloc(SECTOR);
     if (!buf || !relocs || !s_ram_raw) { set_err("RAM", nullptr); goto fail; }
     s_ram = (uint8_t *)(((uintptr_t)s_ram_raw + DATA_ALIGN - 1) & ~(uintptr_t)(DATA_ALIGN - 1));
     if ((rc = nap_cache_relocs(&src, &s_img, relocs, nap_relocs_bytes(&s_img))) != NAP_OK) { set_err(nap_rc_name(rc), "relocations"); goto fail; }
+    NT("inspected");
 
     // 3. Map the scratch pages: instruction bus for code, the data-bus alias of the same pages for constants.
     {
@@ -331,6 +364,7 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
         s_bases.ram = (uint32_t)s_ram - s_img.data_start;
     }
     snprintf(s_id, sizeof s_id, "%s", id);           // from here on unload() cleans up everything
+    NT("mapped");
 
     // 4. Dry pass: every relocation target checked, the image hashed - nothing written yet.
     if (!image_pass(&src, buf, nullptr, sha)) goto fail;
@@ -342,7 +376,8 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     memcpy(hdr.img_sha, sha, 32);
     hdr.ibus = s_bases.ibus; hdr.dbus = s_bases.dbus; hdr.ram = s_bases.ram; hdr.size = s_img.image_size;
     hdr.check = fnv(&hdr, offsetof(CacheHdr, check));
-    if (header_matches(hdr)) ESP_LOGW(TAG, "%s: scratch region already holds this image (no flash write)", id);
+    NT("dry pass");
+    if (header_matches(hdr)) { ESP_LOGW(TAG, "%s: scratch region already holds this image (no flash write)", id); NT("cached"); }
     else {
         ESP_LOGW(TAG, "%s: updating the scratch region (%u B image)", id, (unsigned)s_img.image_size);
         // The header goes first and comes back last: an interrupted write never vouches for a half image.
@@ -378,7 +413,9 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     }
 
     // 7. Data; the file is still the signed one; constructors; entry.
+    NT("verified");
     if ((rc = nap_relocate_data(&src, &s_img, &s_bases, s_ram, detail, sizeof detail)) != NAP_OK) { set_err(nap_rc_name(rc), detail); goto fail; }
+    NT("data");
     if (!file_sha(&fc, buf, sha) || memcmp(sha, signed_sha, 32)) { set_err("signature", "file changed while loading"); goto fail; }
     fclose(fc.f); fc.f = nullptr;
     free(buf); buf = nullptr;
@@ -395,10 +432,12 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
         uint32_t fn = ((uint32_t *)(s_ram + (s_img.init_array - s_img.data_start)))[i];
         if (fn) ((void (*)(void))fn)();
     }
+    NT("constructors done");
     s_def = nullptr;
     s_capturing = true;
     ((void (*)(void))(s_bases.ibus + s_img.entry))();
     s_capturing = false;
+    NT("entry done");
     if (!s_def || !s_def->on_draw) { set_err("no app registered", id); goto fail; }
     def = s_def;
     ESP_LOGW(TAG, "%s loaded: abi %u, %u B code+const, %u B RAM", id, s_img.info.abi, (unsigned)s_img.image_size,
@@ -406,6 +445,7 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     return def;
 
 fail:
+    nap_trace(id, s_err);
     if (fc.f) fclose(fc.f);
     free(buf);
     free(relocs);

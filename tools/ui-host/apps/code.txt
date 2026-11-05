@@ -1,0 +1,7 @@
+# Nucleo Code: the welcome, an example one key away, a finished task, a task at work, a job from ANIMA done
+@host stubs/code_md.cpp
+welcome host:0
+example host:0 c:1
+done    host:1
+working host:2
+anima   host:3
