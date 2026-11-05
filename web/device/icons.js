@@ -450,6 +450,16 @@ export function drawIcon(g, id, cx, cy, s) {
       g.bx(cx - s, cy + s * 0.06, 2 * s, T * 0.65, g.bg);
       break;
 
+    case 'presence': {                               // a person sensed by radio waves
+      const ax = cx - s * 0.2, ay = cy - s * 0.1;
+      g.fc(ax, ay, s * 1.0); g.fc(ax, ay, s * 1.0 - T * 0.7, g.bg);
+      g.fc(ax, ay, s * 0.68); g.fc(ax, ay, s * 0.68 - T * 0.7, g.bg);
+      g.bx(cx - s * 1.25, cy - s * 1.15, s * 1.5, s * 2.3, g.bg);
+      g.fc(cx - s * 0.5, cy - s * 0.4, s * 0.28);
+      g.frr(cx - s * 1.0, cy + s * 0.0, s * 1.0, s * 0.82, s * 0.4);
+      break;
+    }
+
     case 'device':                                   // the Cardputer itself: screen with an "i" + key rows
       g.frr(cx - s, cy - s * 0.8, 2 * s, s * 1.6, s * 0.2);
       g.frr(cx - s * 0.74, cy - s * 0.56, s * 1.48, s * 0.66, 2, g.bg);

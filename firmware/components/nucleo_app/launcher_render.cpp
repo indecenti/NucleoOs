@@ -635,6 +635,14 @@ static void ui_icon(lgfx::v1::LGFXBase *g, int cx, int cy, int r, const char *id
         }
         IFC(cx - s * 0.28f, cy - s * 0.46f, Tk * 0.5f, col);                    // pin-1 notch dot
 
+    } else if (!strcmp(id, "presence")) {                                       // a person sensed by radio waves
+        { const float ax = cx - s * 0.2f, ay = cy - s * 0.1f;                     // two wave arcs, right of the person
+          IFC(ax, ay, s * 1.0f, col);  IFC(ax, ay, s * 1.0f - Tk * 0.7f, bg);
+          IFC(ax, ay, s * 0.68f, col); IFC(ax, ay, s * 0.68f - Tk * 0.7f, bg);
+          IBX(cx - s * 1.25f, cy - s * 1.15f, s * 1.5f, s * 2.3f, bg); }          // keep only their right side
+        IFC(cx - s * 0.5f, cy - s * 0.4f, s * 0.28f, col);                       // head
+        IRR(cx - s * 1.0f, cy + s * 0.0f, s * 1.0f, s * 0.82f, s * 0.4f, col);   // a bust: wide shoulders
+
     } else if (!strcmp(id, "device")) {                                         // the Cardputer itself: screen with an "i" + key rows
         IRR(cx - s, cy - s * 0.8f, 2 * s, s * 1.6f, s * 0.2f, col);                // body
         IRR(cx - s * 0.74f, cy - s * 0.56f, s * 1.48f, s * 0.66f, 2, bg);          // screen
