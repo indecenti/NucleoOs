@@ -806,8 +806,10 @@ static void compact_direct_cb(void *g)
     nucleo_app_set_gfx(nullptr);
 }
 
+extern "C" void nucleo_native_trace(const char *id, const char *step);   // native_apps.cpp: maintainer breadcrumbs
 static void open_app_def(const nucleo_app_def_t *def)
 {
+    nucleo_native_trace(def ? def->id : "?", "open");
     if (!def || !def->on_draw_large) nucleo_surface_set_large(false);   // compact apps: back to 240x135 before on_enter draws
     nucleo_touch_clear(); nucleo_touch_commit();   // the previous screen's touch targets end here
     // DIAG breadcrumbs (WARN -> visible in /api/logs): bracket on_enter with heap stats so a hang/OOM
@@ -867,7 +869,9 @@ static void open_app_def(const nucleo_app_def_t *def)
     s_app_poll = nullptr;                       // ...nor a per-loop data poll; a live app (mic spectrum) sets it on_enter
     launcher_render_reset_hint_colors();        // default dark footer; on_enter may override (e.g. Torch)
     d.fillRect(0, 0, W, H - HINT, BG);
+    nucleo_native_trace(def->id, "on_enter");
     if (def->on_enter) def->on_enter();
+    nucleo_native_trace(def->id, "on_enter done");
     ESP_LOGW("applaunch", "enter '%s' DONE free=%u", def && def->id ? def->id : "?",
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
     // Universal anti-flicker guarantee. Any app that draws BUFFERED (s_app_direct still false after on_enter)
@@ -926,6 +930,7 @@ static bool maybe_solo_launch(int idx)
     // s_open_file is plain RAM and would be lost. Empty for a normal menu launch -> self-clears, no stale file.
     snprintf(s_solo_open_file, sizeof s_solo_open_file, "%s", s_open_file);
     launcher_capture_return();            // remember the launch frame (Home/category + search + row) for the return boot
+    nucleo_native_trace(a->id, "solo reboot");
     nucleo_app_solo_request_id(a->id);   // never returns (warm reboot into Solo)
     return true;
 }
@@ -2025,7 +2030,7 @@ void nucleo_app_run(void)
     // Full OS after a Recorder Solo job: re-open the Recorder so the user lands on the saved result.
     else if (reopen_recorder_pending()) { s_reopen_req = 0; nucleo_app_launch_id("recorder"); }
     // Full OS after ANIMA Solo said "open Music": open the app it staged, like a launcher tap.
-    else if (const char *aid = nucleo_anima_take_launch()) nucleo_app_launch_id(aid);
+    else if (const char *aid = nucleo_anima_take_launch()) { nucleo_native_trace(aid, "launch after reboot"); nucleo_app_launch_id(aid); }
     // First boot: the wizard did the language; the network step IS Settings ▸ Nearby networks (the real
     // scan list + password editor + join), not a second blocking copy of it.
     else if (nucleo_setup_onboarding()) { nucleo_settings_onboard(); nucleo_app_launch_id("wifi"); }
