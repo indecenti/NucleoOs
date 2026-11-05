@@ -76,9 +76,13 @@ JSValue js_nc_fs_read(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv
     if (argc < 1 || !arg_path(ctx, argv[0], p, sizeof p)) return JS_ThrowTypeError(ctx, "fs.read: path outside the workspace");
     FILE *f = fopen(p, "rb");
     if (!f) return JS_NULL;
-    char *buf = malloc(FS_READ_MAX);
+    // a block of the file's own size: the engine's arena holds most of the heap, a 64 KB block never exists on the
+    // device (every fs.read was "out of memory")
+    fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+    size_t want = sz > 0 ? (size_t)sz : 0; if (want > FS_READ_MAX) want = FS_READ_MAX;
+    char *buf = malloc(want ? want : 1);
     if (!buf) { fclose(f); return JS_ThrowOutOfMemory(ctx); }
-    size_t n = fread(buf, 1, FS_READ_MAX, f); fclose(f);
+    size_t n = want ? fread(buf, 1, want, f) : 0; fclose(f);
     JSValue s = JS_NewStringLen(ctx, buf, n);
     free(buf);
     return s;
