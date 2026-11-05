@@ -10,6 +10,7 @@ choose-web  D
 native      c:1
 native-2nd  c:1 D
 web         c:2
+web-fast    c:2 D D
 web-games   c:2 TAB
 cats        c:2 TAB TAB
 cat-tools   c:2 TAB TAB R ENTER
