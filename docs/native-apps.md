@@ -147,7 +147,9 @@ One native app is resident at a time.
    then the whole image is hashed through the data bus and must equal the dry pass.
 7. **Data and start**: `.data` relocated; the file is hashed again and must still be the signed one (not swapped
    while loading); constructor, destructor and entry pointers must point into the module's code; constructors
-   run; `nucleo_native_main` registers the app. The launcher slot of the store app (`store_apps.cpp`) gets the
+   run; `nucleo_native_main` registers the app. A constructor may set the module's own data (Brawler's tables) but
+   must not call the firmware: `static LovyanGFX *g = &d;` (`d` is `(*nucleo_app_gfx())`) made Code panic at load in
+   its Solo boot, before the app existed. Set such pointers in `on_enter` or at each draw. The launcher slot of the store app (`store_apps.cpp`) gets the
    module's callbacks; the store keeps the identity (id, name, category, icon, description), so nothing the
    launcher keeps ever points into a module. Long passes feed the task watchdog.
 
