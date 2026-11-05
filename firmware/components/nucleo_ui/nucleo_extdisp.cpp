@@ -412,6 +412,7 @@ bool attach(void)
     nucleo_storage_set_sd_pre([]() { if (s_mirror) s_mirror->release_hold(); });
     mirror->set_fit(s_fit);
     mirror->set_ext_off(s_layout == 1);
+    mirror->seed_brightness(d.getBrightness());     // keep the saved level main.c restored (set_pri_off applies it)
     mirror->set_pri_off(s_layout == 2);
     draw_test_card(dev, mirror->origin_y(), mirror->frame_h());
     d.setPanel(mirror);

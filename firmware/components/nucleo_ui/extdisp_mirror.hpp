@@ -79,6 +79,9 @@ public:
     uint32_t ext_transactions(void) const { return _ext_tx; }   // diagnostics: SPI2 claims made so far
     // Follows setBrightness() for an external backlight on a GPIO (nullptr: LED wired to a supply rail).
     void set_brightness_cb(brightness_cb_t cb) { _bl_cb = cb; }
+    // The level the OS already set on the internal panel before the mirror was swapped in (the saved one,
+    // restored at boot): without it the mirror re-applies its 255 default on the first set_pri_off/set_solo.
+    void seed_brightness(uint8_t b) { _bri = b; }
     // Taken around every external primitive, so another task (the touch layer drawing its keys in the
     // letterbox) can hold the external panel between two of the mirror's primitives, never inside one.
     void set_ext_lock(lock_cb_t lock, lock_cb_t unlock) { _lock = lock; _unlock = unlock; }
