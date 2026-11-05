@@ -1397,8 +1397,22 @@ static void code_outbox_show(void)             // what Code did for the last job
     remove(CODE_OUTBOX);
     while (n && (b[n - 1] == '\n' || b[n - 1] == '\r')) b[--n] = 0;
     if (!n) return;
-    char t[520]; snprintf(t, sizeof t, "Code: %s", b);
+    // " [snake.js]" at the end: the script it wrote, one Enter away (Code opens it, and comes back here)
+    char js[48] = "";
+    char *o = strrchr(b, '[');
+    if (o && n > 2 && b[n - 1] == ']' && (size_t)(b + n - 1 - o - 1) < sizeof js) {
+        snprintf(js, sizeof js, "%.*s", (int)(b + n - 1 - o - 1), o + 1);
+        while (o > b && o[-1] == ' ') o--;
+        *o = 0;
+    }
+    char t[560];
+    if (js[0]) snprintf(t, sizeof t, s_en ? "Code: %s\nEnter = open %s" : "Code: %s\nInvio = apri %s", b, js);
+    else snprintf(t, sizeof t, "Code: %s", b);
     push_anima(t, ACC);                            // as an answer of ANIMA's, in Code's own words
+    if (js[0] && code_installed()) {
+        snprintf(s_code_job, sizeof s_code_job, "run\n%s", js);
+        snprintf(s_ses->launch, sizeof s_ses->launch, "code");
+    }
 }
 
 static const char *launch_target(const char *arg, char *nm, size_t n)

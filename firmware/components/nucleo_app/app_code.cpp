@@ -552,6 +552,11 @@ static void code_outbox(const char *error)
     static char plain[sizeof S->last_text];
     code_md_plain(S->last_text, plain, sizeof plain);
     for (char *c = plain; *c; c++) if (*c == '\n') *c = ' ';
+    {   // the first two sentences (the model opens with the result): ANIMA's chat is small
+        int dots = 0; char *c = plain;
+        for (; *c && c - plain < 230; c++) if ((*c == '.' || *c == '!' || *c == '?') && (c[1] == ' ' || !c[1]) && ++dots == 2) { c[1] = 0; break; }
+        if (c - plain >= 230) { while (c > plain && *c != ' ') c--; *c = 0; }
+    }
     if (error) fprintf(f, "%s %s", L("non ho finito:", "I did not finish:", "no termine:", "pas fini :", "nicht fertig:"), error);
     else fputs(plain[0] ? plain : L("fatto.", "done.", "hecho.", "fait.", "fertig."), f);
     if (S->last_js[0]) fprintf(f, " [%s]", S->last_js);
