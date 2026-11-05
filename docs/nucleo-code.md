@@ -257,8 +257,8 @@ Built (store-only, host-tested; the device bench `b` in the Code app is still to
   breakpoint on the last message; usage and cost per turn. `anima_claude.h` parses the full stream (text,
   tool_use with `input_json_delta`, thinking signatures, usage, stop reason). Gate: `npm run claude:test`.
 - ABI 9 (unreleased): v8 + libgcc double / 64-bit helpers, setjmp/longjmp, abort, realloc, cJSON builders.
-- Module `code` 0.1.0: 203,724 B (117 KB code), 11.7 KB static RAM (the stdlib tables' relocated pointers:
-  to reduce).
+- Module `code` 0.2.0: 255,892 B (145 KB code), 6.3 KB static RAM (the stdlib tables went to flash: `nap.ld`
+  keeps `.data.rel.ro` with the constants).
 
 ### The dialect, measured (MicroQuickJS 6d4d7eb6)
 Not available: `let`/`const`, arrow functions, template literals, `class`, destructuring, spread, default
@@ -286,10 +286,28 @@ first sudoku run the model found that the given puzzle had no solution, named th
 force an answer. It still writes markdown in its final answer despite the instruction: the UI renders it as
 plain text (strip `**`, backticks, fences) rather than relying on the prompt.
 
+### On the ADV (2026-11-05, Sonnet 5.5, effort medium, Solo boot with Wi-Fi)
+The agent runs inside the Code app; the firmware's LLM service (`nucleo_llm_*`) streams each request file with the
+user's key. Self-test: `work/main/.code/selftest.txt` holds a task; Code runs it at its next open, writes
+`selftest-report.txt` (stats, transcript, plan) and `trace.txt` (stages with free / largest block), and returns to
+the OS (at most 40 s waiting for the network, 10 minutes per task).
+
+| Task | Calls | Tools | Time | Cost | Result |
+|---|---|---|---|---|---|
+| primes.js up to 200, checked by a second method | 3 | 2 | 13 s | $0.012 | 46 primes, sum 4227, run on the device in 18 ms |
+| vendite.csv (10 rows) + report.js -> aligned report.txt with totals | 4 | 4 | ~20 s | $0.021 | correct totals, no fix needed |
+
+RAM: 90 KB free at entry, 70 KB while the request streams (the largest block stays 31.7 KB). What it took:
+- Code draws straight on the panel: the launcher's 32 KB canvas is the model's TLS (on two screens the firmware
+  now draws a direct-draw app's compact frame on the Cardputer's own panel).
+- The loader checks each of its blocks against its own size, not their sum (a 25 KB relocation table was refused).
+- The LLM ring is 4 KB of heap while a request runs, not 8 KB of static RAM in every boot.
+- Every file read (the editor, `run_js`, the scripts' `fs.read`) takes a block of the file's size, not the cap.
+
 ### Next
-1. Device bench (RAM per phase, §8) with the ADV; then the arena size and the static RAM.
-2. The LLM service in the firmware (`nucleo_llm_post`: TLS + key + streamed bytes; the parser runs in the module)
-   and the agent inside the Code app: status bar, tool cards, approvals, diff view, session on the SD card.
+1. Device bench (RAM per phase, §8) with the ADV and the original Cardputer; harder tasks (multi-file, a long
+   session that compacts); both Cardputers before the store.
+2. Tool input streamed to the SD card instead of the 16 KB RAM buffer; the diff view.
 3. Apps from the agent: a script API for screen / keys / sound and the ADV's 320x240 panel, `promote_app` into
    `/apps/scripts/<id>/` (launcher), and **visual testing**: a test run returns a screenshot of what the app drew
    (both screens) plus scripted keys, so the model checks its own UI.

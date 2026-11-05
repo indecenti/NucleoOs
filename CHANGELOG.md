@@ -26,10 +26,16 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   Opus 5.5, Haiku 5.5, Fable 5.1, and the other providers you have a key for) and Effort (low to max, medium by
   default); in the web OS, a model picker next to ANIMA's input (and `/model`) groups every model you can reach,
   and Settings > AI has the effort too. Both write the same file, so the two stay in step.
+- **Nucleo Code runs on the Cardputer**: ask it in plain words and Claude writes, runs and checks JavaScript programs
+  and text files in `work/main` on the SD card, from the Code app (status bar with model, effort, context and cost;
+  approvals in Ask mode; two screens). The firmware sends each request with your key, the app never sees it.
 - **Native app ABI level 9**: what a language engine needs (double-precision and 64-bit arithmetic helpers,
   setjmp/longjmp) and the JSON builders, for Nucleo Code, the coding agent coming to the Native C store.
 
 ### Changed
+- **More RAM for every app**: the native loader no longer asks for its blocks as one, and the LLM service keeps no
+  static buffer (8 KB back in every boot).
+- **Two screens**: an app that draws straight on the panel now shows its compact view on the Cardputer too.
 - **No more flicker on the second screen**: the screensaver clock repaints by rectangles composed off-screen (the
   whole panel once a minute, the seconds rail each second), and the launcher's clock on the panel repaints only when
   the minute turns, its bar composed and pushed at once.
