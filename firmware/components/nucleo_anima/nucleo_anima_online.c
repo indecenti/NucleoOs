@@ -4084,11 +4084,11 @@ int nucleo_anima_online_longform(const char *topic, const char *tail, int part, 
 // The LLM service for native apps (ABI 9: Nucleo Code). A module writes its Anthropic /v1/messages request to
 // a FILE and starts it here; a firmware task streams the file over TLS (the user's Claude key is added here: a
 // module never sees it), and the streamed response comes back through an 8 KB ring the module drains from its
-// tick. One request at a time; every read waits at most ANTH_READ_MS and pets nothing it does not own (the task
+// tick (allocated by the first request, freed once its answer is read: no static RAM). One request at a time; every read waits at most ANTH_READ_MS and pets nothing it does not own (the task
 // is not watched); a whole request is bounded by LLM_TURN_MS; nothing is ever sent twice.
 // ===========================================================================
 #include "freertos/semphr.h"
-#define LLM_RING     8192
+#define LLM_RING     4096
 #define LLM_TURN_MS  300000
 #define LLM_STACK    12288
 
@@ -4098,7 +4098,7 @@ static struct {
     int           status;           // HTTP status (< 0: no connection / failure before an answer)
     char          err[200];
     char          path[160];
-    char          ring[LLM_RING];
+    char         *ring;           // LLM_RING bytes while a request runs or its answer is unread
     volatile uint32_t head, tail;   // single producer (the task) / single consumer (the module's tick)
     portMUX_TYPE  mux;
 } s_llm = { .mux = portMUX_INITIALIZER_UNLOCKED };
@@ -4205,16 +4205,22 @@ out:
 bool nucleo_llm_start(const char *path)
 {
     if (s_llm.state == 1 || !path) return false;
+    if (!s_llm.ring && !(s_llm.ring = (char *)malloc(LLM_RING))) return false;
     snprintf(s_llm.path, sizeof s_llm.path, "%s", path);
     s_llm.head = s_llm.tail = 0; s_llm.cancel = false; s_llm.status = 0; s_llm.err[0] = 0; s_llm.state = 1;
-    if (xTaskCreatePinnedToCore(llm_task, "llm", LLM_STACK, NULL, 5, NULL, 0) != pdPASS) { s_llm.state = 0; return false; }
+    if (xTaskCreatePinnedToCore(llm_task, "llm", LLM_STACK, NULL, 5, NULL, 0) != pdPASS) { s_llm.state = 0; free(s_llm.ring); s_llm.ring = NULL; return false; }
     return true;
 }
 // Response bytes so far (0 = none yet); -1 = the request is over and everything was read.
 int nucleo_llm_read(char *buf, int cap)
 {
-    uint32_t avail = s_llm.head - s_llm.tail;
-    if (!avail) return s_llm.state == 2 ? -1 : 0;
+    const int st = s_llm.state;                       // read before the count: the task writes its last bytes, then 2
+    uint32_t avail = s_llm.ring ? s_llm.head - s_llm.tail : 0;
+    if (!avail) {
+        if (st != 2) return 0;
+        free(s_llm.ring); s_llm.ring = NULL;          // the answer is over and read: the ring goes
+        return -1;
+    }
     uint32_t k = avail < (uint32_t)cap ? avail : (uint32_t)cap;
     for (uint32_t i = 0; i < k; i++) buf[i] = s_llm.ring[(s_llm.tail + i) % LLM_RING];
     portENTER_CRITICAL(&s_llm.mux); s_llm.tail += k; portEXIT_CRITICAL(&s_llm.mux);

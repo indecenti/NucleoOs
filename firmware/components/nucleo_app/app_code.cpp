@@ -271,8 +271,10 @@ static void draw_companion(void)
     lg::comp_keys(L("invio esegui  b banco  su/giu", "enter run  b bench  up/dn", "intro ejecuta  b banco", "entree lancer  b banc", "enter starten  b Bench"));
 }
 
+static bool s_cleared;                // the agent view painted its background once since it came up
 static void files_draw(void)
 {
+    s_cleared = false;
     if (nucleo_app_two_screens()) { draw_companion(); return; }
     int y = app_ui_title("Code", ACCENT, S->output ? S->ran : "work/bench");
     if (S->output) { draw_output(y); nucleo_app_set_hint(L("su/giu scorri  invio lista  b banco", "up/dn scroll  enter list  b bench", "arr/ab  intro lista  b banco", "haut/bas  entree liste  b banc", "auf/ab  enter Liste  b Bench")); return; }
@@ -429,12 +431,15 @@ static void draw_lines(int x, int y, int w, int rows, int lh, unsigned short bg)
     for (const char *p = plain; *p && yy + lh <= y + rows * lh; ) {
         const char *e = p; int c = 0; while (*e && *e != '\n' && c < cols) { e++; c++; }
         if (line >= first) {
-            char t[64]; memcpy(t, p, (size_t)(e - p)); t[e - p] = 0;
+            char t[64]; int tl = (int)(e - p); memcpy(t, p, (size_t)tl);
+            while (tl < cols) t[tl++] = ' ';             // padded to the width: it overwrites the old row, no fill needed
+            t[tl] = 0;
             unsigned short col = t[0] == '>' ? ACCENT : (t[0] == ' ' && t[1] == ' ' && t[2] == '!') ? 0xF800 : (t[0] == ' ' && t[1] == ' ') ? C_DIM : t[0] == '[' ? 0xFFE0 : C_INK;
             d.setTextColor(col, bg); d.drawString(t, x, yy); yy += lh;
         }
         line++; p = *e == '\n' ? e + 1 : e;
     }
+    if (yy < y + rows * lh) d.fillRect(x, yy, w, y + rows * lh - yy, bg);   // below a short conversation
 }
 
 static void status_text(char *b, size_t n)
@@ -471,17 +476,28 @@ static void agent_draw(void)
         lg::comp_keys(agent_hint());
         return;
     }
+    // Drawn straight on the panel (the 32 KB canvas is the model's TLS): every row overwrites itself, nothing is
+    // cleared first, so a redraw never flickers.
     const int top = nucleo_app_content_top(), bottom = top + nucleo_app_content_height();
-    d.fillRect(0, top, 240, bottom - top, C_BG);
+    if (!s_cleared) { s_cleared = true; d.fillRect(0, top, 240, bottom - top, C_BG); }   // once: the gaps between rows
     d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left);
-    d.fillRect(0, top, 240, 10, lg::card()); d.setTextColor(C_DIM, lg::card()); d.drawString(st, 2, top + 1);
-    const int rows = (bottom - top - 10 - 12) / 9;
-    draw_lines(2, top + 11, 236, rows, 9, C_BG);
+    { int sl = (int)strlen(st); while (sl < 40 && sl < (int)sizeof st - 1) st[sl++] = ' '; st[sl] = 0; }
+    // the status band (top .. top+9): its text row overwrites itself, the edges around it are filled
+    d.fillRect(0, top, 240, 1, lg::card()); d.fillRect(0, top + 1, 2, 8, lg::card()); d.fillRect(0, top + 9, 240, 1, lg::card());
+    d.setTextColor(C_DIM, lg::card()); d.drawString(st, 2, top + 1);
+    // the conversation (top+10 .. bottom-12): 39 padded columns from x 2, the margins filled
+    const int rows = (bottom - top - 10 - 12) / 9, lines_end = top + 11 + rows * 9;
+    d.fillRect(0, top + 10, 240, 1, C_BG);
+    d.fillRect(0, top + 11, 2, rows * 9, C_BG); d.fillRect(236, top + 11, 4, rows * 9, C_BG);
+    if (lines_end < bottom - 11) d.fillRect(0, lines_end, 240, bottom - 11 - lines_end, C_BG);
+    draw_lines(2, top + 11, 234, rows, 9, C_BG);
     const char *q = S->ag ? agent_question(S->ag) : nullptr;
     char b[64];
     if (q) snprintf(b, sizeof b, "%.50s? y/n", q);
     else { int off = S->inlen > 36 ? S->inlen - 36 : 0; snprintf(b, sizeof b, "> %s%s", S->in + off, (esp_timer_get_time() / 500000) & 1 ? "_" : " "); }
-    d.fillRect(0, bottom - 11, 240, 11, lg::card()); d.setTextColor(q ? 0xFFE0 : C_INK, lg::card()); d.drawString(b, 2, bottom - 10);
+    { int bl = (int)strlen(b); while (bl < 40 && bl < (int)sizeof b - 1) b[bl++] = ' '; b[bl] = 0; }
+    d.fillRect(0, bottom - 11, 240, 1, lg::card()); d.fillRect(0, bottom - 10, 2, 8, lg::card()); d.fillRect(0, bottom - 2, 240, 2, lg::card());
+    d.setTextColor(q ? 0xFFE0 : C_INK, lg::card()); d.drawString(b, 2, bottom - 10);
     nucleo_app_set_hint(agent_hint());
 }
 
@@ -579,10 +595,16 @@ static void selftest_tick(void)
     S->auto_run = false;
     nucleo_app_exit();
 }
-static void on_tick(void) { agent_tick(); selftest_tick(); if (S->agent_view) nucleo_app_request_draw(); }
+static void on_tick(void)
+{
+    agent_tick(); selftest_tick();
+    static int64_t blink;                                   // the input cursor: two redraws a second, nothing more
+    if (S->agent_view && !nucleo_app_two_screens() && now_ms() - blink >= 500) { blink = now_ms(); nucleo_app_request_draw(); }
+}
 static void on_enter(void)
 {
     trace("enter");
+    nucleo_app_set_direct_draw(true); s_cleared = false;                       // the launcher's 32 KB canvas goes back to the heap: it is the TLS
     ensure_bench(); scan(); S->output = false; s_lg_scroll = 0;
     S->agent_view = true; S->ask = false;
     { struct stat sst; S->auto_run = stat(SELFTEST_IN, &sst) == 0; S->auto_sent = false; }
