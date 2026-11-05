@@ -58,7 +58,8 @@ struct State {
     char tr[6144]; int trlen, tscroll;
     char in[160]; int inlen;
     char todo[512];
-    bool auto_run, auto_sent, traced_draw, traced_net;     // the maintainer's self-test (work/main/.code/selftest.txt)
+    bool auto_run, auto_sent, traced_draw, traced_net;
+    int64_t auto_t0;     // the maintainer's self-test (work/main/.code/selftest.txt)
 };
 static State *S;
 
@@ -541,8 +542,16 @@ static void on_key(int key, char ch) { if (S->agent_view) agent_key(key, ch); el
 static void selftest_tick(void)
 {
     if (!S->auto_run) return;
+    if (!S->auto_t0) S->auto_t0 = now_ms();
+    const int64_t waited = now_ms() - S->auto_t0;
     if (!S->auto_sent) {
-        if (!nucleo_tcp_network_up()) return;                     // Wi-Fi first (the Solo boot brings it up after us)
+        if (!nucleo_tcp_network_up() && waited < 40000) return;  // Wi-Fi first (the Solo boot brings it up after us)
+        if (!nucleo_tcp_network_up()) {                           // never a self-test stuck in the Solo boot
+            trace("no network after 40 s");
+            remove(SELFTEST_IN);
+            FILE *o = fopen(SELFTEST_OUT, "wb"); if (o) { fputs("Code self-test: no network after 40 s\n", o); fclose(o); }
+            S->auto_run = false; nucleo_app_exit(); return;
+        }
         if (!S->traced_net) { S->traced_net = true; trace("net up"); }
         FILE *f = fopen(SELFTEST_IN, "rb"); if (!f) { S->auto_run = false; return; }
         size_t n = fread(S->in, 1, sizeof S->in - 1, f); fclose(f); remove(SELFTEST_IN);
@@ -552,6 +561,9 @@ static void selftest_tick(void)
         agent_send();
         trace("submitted");
         return;
+    }
+    if (S->ag && agent_running() && waited > 600000) {          // a whole task bounded at 10 minutes
+        trace("self-test: 10 minutes, stopping"); nucleo_llm_cancel(); agent_cancel(S->ag, "self-test time limit");
     }
     if (agent_running() || !S->ag) return;
     FILE *o = fopen(SELFTEST_OUT, "wb");
