@@ -500,7 +500,7 @@ static const Scene VIDEO[] = {
 };
 
 static const char *LANGS[]  = { "en", "it", "es", "fr", "de" };
-static const char *THEMES[] = { "classic", "nano_banana", "hacker", "amoled" };
+static const char *THEMES[] = { "classic", "nano_banana", "hacker", "amoled", "cyberdeck" };
 
 // Every scene runs in its OWN process (run.mjs fans them out): Settings and the Control Center keep
 // their focus across opens on purpose (resume), so a shared process would leak one scene into the next.
@@ -543,6 +543,7 @@ static void list_all(void)
         printf("launcher.%s.en.classic.large\n", sc);
         printf("launcher.%s.it.classic.large\n", sc);
         printf("launcher.%s.en.amoled.large\n", sc);
+        printf("launcher.%s.en.cyberdeck.large\n", sc);
         printf("launcher.%s.en.classic.large-short\n", sc);   // ADV's fitted canvas seen 320 wide (97 rows)
     }
     for (const char *sc : { "list", "folder", "subfolder", "old", "resume", "empty" }) {   // Video on the external panel (its own layout)

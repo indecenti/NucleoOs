@@ -15,6 +15,7 @@
 #include "ui_glyph.h"         // the quick menu's row glyphs (also the Control Center's, further down)
 #include "nucleo_touch.h"    // the large Control Center: tap a tile / shortcut
 #include "nucleo_extdisp.h"  // the second screen's own backlight slider
+#include "app_large.h"      // lg::frame_rect: the panel's clock minute composed off-screen, one push
 
 // The real display (defined in nucleo_ui.cpp). The launcher always draws to it directly;
 // only the animated list band is composited off-screen first. We do NOT include app_gfx.h
@@ -742,11 +743,17 @@ static void bar_band(int x, int w)
 {
     for (int y = 0; y < BAR - 1; y++) d.drawFastHLine(x, y, w, bar_shade(y));
     d.drawFastHLine(x, BAR - 1, w, LINE);
+    // HUD accents on the rule: a long one under the left end, a short one under the right (a band that only
+    // covers the clock cell repaints its own part of the left one).
+    if (x < 90) d.fillRect(x, BAR - 2, (90 < x + w ? 90 : x + w) - x, 2, THEME_SEL);
+    if (x + w >= W) d.fillRect(W - 28, BAR - 2, 28, 2, THEME_ACC);
 }
+static char s_bar_clock[8];                         // the HH:MM the panel's bar shows now (the tick repaints on a change only)
 static void bar_clock_large(void)
 {
     time_t now = time(NULL); struct tm *tm = localtime(&now);
     char t[8]; snprintf(t, sizeof(t), "%02d:%02d", tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
+    memcpy(s_bar_clock, t, sizeof s_bar_clock);
     bar_band(0, 72);
     d.setFont(&fonts::FreeSansBold12pt7b); d.setTextSize(1); d.setTextColor(FG);
     d.setTextDatum(middle_left); d.drawString(t, 8, BAR / 2); d.setTextDatum(top_left);
@@ -803,6 +810,8 @@ static void status_large(bool sta)
     }
     d.setTextDatum(top_left); d.setFont(&fonts::Font0); d.setTextSize(1);
 }
+
+static void status_large_paint(void *sta) { status_large(*(const bool *)sta); }
 
 void launcher_render_status_bar(void)
 {
@@ -894,6 +903,8 @@ void launcher_render_status_bar(void)
     }
 
     d.drawFastHLine(0, BAR - 1, W, LINE);
+    d.drawFastHLine(0, BAR - 1, 56, THEME_SEL);                  // HUD accents on the rule (the clock tick never touches it)
+    d.drawFastHLine(W - 20, BAR - 1, 20, THEME_ACC);
 }
 
 // Once-a-second clock refresh WITHOUT wiping the bar. The full chrome repaint did a fillRect
@@ -920,7 +931,16 @@ void launcher_render_clock_tick(void)
     if (online_now != s_last_online) { s_last_online = online_now; launcher_render_status_bar(); return; }
     char t[8]; time_t now = time(NULL); struct tm *tm = localtime(&now);
     snprintf(t, sizeof(t), "%02d:%02d", tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
-    if (lr_large()) { bar_clock_large(); return; }            // the panel: its bold clock on its band
+    // The panel: nothing to do until the minute turns. Then the WHOLE bar is composed off-screen and pushed once
+    // (frame_rect, RGB565 so the band's shades are exact): repainting the cell straight on the panel every second
+    // wiped it to the band and redrew the digits, a visible flash each second. Inside frame_rect `d` is the bar's
+    // window (full width, so lr_large() and BAR still read the panel). No canvas: the old direct paint, per minute.
+    if (lr_large()) {
+        if (!strcmp(t, s_bar_clock)) return;
+        bool sta = online_now != 0;
+        if (!lg::frame_rect(status_large_paint, &sta, 0, 0, W, BAR, true)) bar_clock_large();
+        return;
+    }
     d.fillRect(0, 0, 56, BAR - 1, INK);                       // wipe the clock cell (Font2 is wider than the old 6x8)
     d.setFont(&fonts::Font2); d.setTextColor(FG, INK); d.setCursor(6, BY); d.print(t);
     d.setFont(&fonts::Font0); d.setTextSize(1);               // leave the global font at the framework default
@@ -1474,6 +1494,14 @@ template <typename T> static void draw_grid(T *c, int base)
                 c->fillRoundRect(x0 + 3, top + 1, GRID_CELLW - 6, GRID_RH - 2, 12, under);
                 c->drawRoundRect(x0 + 3, top + 1, GRID_CELLW - 6, GRID_RH - 2, 12, it->color);
                 c->drawRoundRect(x0 + 4, top + 2, GRID_CELLW - 8, GRID_RH - 4, 11, mix565(under, it->color, 0.55f));
+                // HUD target corners in the free square corners of the rounded card: the focus reads "locked on".
+                const int fx = x0 + 3, fy = top + 1, fw = GRID_CELLW - 6, fh = GRID_RH - 2, fl = 7;
+                for (int k = 0; k < 2; k++) {
+                    c->drawFastHLine(fx, fy + k, fl, THEME_SEL);                 c->drawFastVLine(fx + k, fy, fl, THEME_SEL);
+                    c->drawFastHLine(fx + fw - fl, fy + k, fl, THEME_SEL);       c->drawFastVLine(fx + fw - 1 - k, fy, fl, THEME_SEL);
+                    c->drawFastHLine(fx, fy + fh - 1 - k, fl, THEME_SEL);        c->drawFastVLine(fx + k, fy + fh - fl, fl, THEME_SEL);
+                    c->drawFastHLine(fx + fw - fl, fy + fh - 1 - k, fl, THEME_SEL); c->drawFastVLine(fx + fw - 1 - k, fy + fh - fl, fl, THEME_SEL);
+                }
             }
             const int s = focus ? GRID_BADGE + 2 : GRID_BADGE, bx = cx - s / 2, by = top + (focus ? 2 : 3);
             const uint16_t badge = focus ? it->color : scrim ? mix565(BG, it->color, 0.28f) : mix565(LINE, it->color, 0.85f);

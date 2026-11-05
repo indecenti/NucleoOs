@@ -65,6 +65,18 @@ static const nucleo_theme_t s_themes[] = {
         0x0000, // ink
         0x8410, // sel
         0xFFFF  // acc
+    },
+    {
+        "cyberdeck", "Cyberdeck",
+        // Every value is exact in RGB332 as well (the 8-bit canvases): cyan on blue-black, magenta accent.
+        0x0062, // bg (blue-black)
+        0xDFFF, // fg (ice white)
+        0x6C95, // muted (steel teal)
+        0x024A, // dim (deep teal)
+        0x012A, // line (navy)
+        0x0000, // ink
+        0x07FF, // sel (cyan)
+        0xF935  // acc (hot magenta)
     }
 };
 static const int s_theme_count = sizeof(s_themes) / sizeof(s_themes[0]);
