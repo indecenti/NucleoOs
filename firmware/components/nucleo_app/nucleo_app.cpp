@@ -758,6 +758,16 @@ static void companion_cb(void *g) { launcher_render_companion((lgfx::LovyanGFX *
 // Two-screen apps: their compact frame (composited in the shared canvas) goes to the Cardputer's panel.
 static M5Canvas *s_compact_cv = nullptr;
 static void compact_cb(void *g) { if (s_compact_cv) s_compact_cv->pushSprite((lgfx::LovyanGFX *)g, 0, 0); }
+// A direct-draw app (no canvas: it gave the 32 KB back) on two screens: its compact frame is drawn straight on the
+// Cardputer's own panel. Without this its on_draw never ran there and the small screen kept the launcher's last frame.
+static const nucleo_app_def_t *s_compact_def;
+static void compact_direct_cb(void *g)
+{
+    if (!s_compact_def || !s_compact_def->on_draw) return;
+    nucleo_app_set_gfx((lgfx::LovyanGFX *)g);
+    s_compact_def->on_draw();
+    nucleo_app_set_gfx(nullptr);
+}
 
 static void open_app_def(const nucleo_app_def_t *def)
 {
@@ -2580,6 +2590,10 @@ void nucleo_app_run(void)
                         nucleo_extdisp_draw_internal(compact_cb);
                         s_compact_cv = nullptr;
                     }
+                } else if (s_app_direct && def->on_draw) {
+                    s_compact_def = def;
+                    nucleo_extdisp_draw_internal(compact_direct_cb);
+                    s_compact_def = nullptr;
                 }
                 d.startWrite();
                 def->on_draw_large();
