@@ -7,6 +7,12 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 ## [Unreleased]
 
 ### Added
+- **A Cyberdeck theme** for the native UI: cyan and magenta on blue-black, exact on the 8-bit screens too. The
+  launcher wears HUD accents on its top bar in every theme, and target corners on the focused tile of the panel.
+- **The screensaver clock as a cyberdeck HUD**: 7-segment digits with their unlit segments, a seconds rail, the date,
+  the ISO week, today's next calendar event with a countdown, battery, network, memory and uptime. With the panel
+  attached the panel has the time and the day and the Cardputer the deck's status, never the same thing twice.
+- **Drawn launcher icons** for Updates, Device Info and Presence (they showed a letter or a phone).
 - **Favorites and Recent in the Games gallery**, shared with the web Arcade (`GameShots/library.txt`): two collections
   at the head of the systems when they hold something; `*` or a long press stars the selected cartridge; every start
   (gallery, Files, /api/play) becomes the newest Recent.
@@ -24,6 +30,12 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   setjmp/longjmp) and the JSON builders, for Nucleo Code, the coding agent coming to the Native C store.
 
 ### Changed
+- **No more flicker on the second screen**: the screensaver clock repaints by rectangles composed off-screen (the
+  whole panel once a minute, the seconds rail each second), and the launcher's clock on the panel repaints only when
+  the minute turns, its bar composed and pushed at once.
+- **The Store scrolls fast**: holding an arrow no longer reads the SD card at every step (icons and the card come
+  from RAM until the keys stop); the panel's card no longer flashes; with two screens the Cardputer shows the store's
+  state (section, position, counts, catalog age) instead of repeating the card.
 - **Games gallery, quicker and lighter.** A picture is read from the card once, at the stop, straight into a RAM
   cache of the titles around the selection; the cache lives in one 8 KB block (nothing allocated while browsing) and
   holds one console photo for every cartridge that shows it. Favourites, the store's consoles and a missing photo no
