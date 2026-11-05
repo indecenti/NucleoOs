@@ -1,4 +1,9 @@
-# Remote Control: the Wi-Fi listening screen on the panel (IP + PIN + auto-handoff), and handoff turned off.
+# Remote Control: the Wi-Fi listening screen on the panel (IP + PIN + auto-handoff), handoff turned off, the longest
+# LAN address (never cut), USB-web (http://192.168.7.1), a connected browser and no network yet.
 @host stubs/remote_stubs.cpp
 listening
 handoff-off ENTER
+long-ip host:1
+usb host:2
+connected host:3
+no-network host:4

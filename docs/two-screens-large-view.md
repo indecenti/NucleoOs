@@ -22,7 +22,7 @@ draws its whole UI there natively (`on_draw_large`) and the Cardputer's own 240x
 | row targets `NUCLEO_TOUCH_ROW + i`, `lg::row_tap` | Lists: tap = select, tap again = open. `lg::list` / `lg::text_list` add scrolling. |
 | `nucleo_touch_add_pad(x, y, w, h, step)` | A drag pad: the drag delivers arrows in the FINGER's direction every `step` px (aim, steer, slide a paddle). |
 | `nucleo_touch_add(..., NK_BACK, 0)` | The header chevron = Back. |
-| `lg::header`, `lg::panel`, `lg::kv`, `lg::bar`, `lg::message`, `lg::font`, `lg::fit`, `lg::wrap` | Theme-coloured building blocks for tool apps; games usually draw their own palette (see `lt / ltf / lhead / lrow` in `app_constellations.cpp`). |
+| `lg::header`, `lg::panel`, `lg::kv`, `lg::bar`, `lg::message`, `lg::font`, `lg::font_fit`, `lg::fit`, `lg::wrap` | Theme-coloured building blocks for tool apps (`lg::font_fit`: the biggest font a text fits in whole, for what is typed by hand and must never end "..": an address, a PIN); games usually draw their own palette (see `lt / ltf / lhead / lrow` in `app_constellations.cpp`). |
 | `lg::setting` / `lg::settings_list` | THE settings / options row (nav chevron, value, switch, slider, < cycle >, danger) and a scrolling list of them. Every app's options use it — never a local copy. |
 | `lg::toggle`, `lg::slider` + `lg::slider_at`, `lg::vslider` + `lg::vslider_at` | The only switch and the only adjustable level controls (map a tap with `*_at`). Read-only meters stay `lg::bar`. |
 | `lg::search` | The search line: magnifier, typed text with a cursor (or a hint), a count at the right. Any height (36 on the panel, 22 on the Cardputer). |

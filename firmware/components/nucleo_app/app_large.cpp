@@ -59,6 +59,19 @@ void font(int f)
     d.setTextSize(1);
 }
 
+int font_fit(const char *s, int maxw, int from)
+{
+    static const signed char order[] = { 3, 2, 1, 0 };     // hero, big value, title, body (never the 8 px caption)
+    int f = 0;
+    for (size_t i = 0; i < sizeof order; i++) {
+        if (order[i] > from) continue;
+        f = order[i];
+        font(f);
+        if (d.textWidth(s ? s : "") <= maxw) return f;
+    }
+    return f;
+}
+
 void fit(char *out, size_t n, const char *s, int maxw)
 {
     snprintf(out, n, "%s", s ? s : "");

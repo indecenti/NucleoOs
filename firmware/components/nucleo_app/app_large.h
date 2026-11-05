@@ -31,6 +31,10 @@ int  wrap(const char *s, int x, int y, int maxw, int lh, int maxl);        // wo
 // Fonts on the panel: 0 = Font2 (16 px, rows / body), 1 = FreeSansBold9pt (titles), 2 = FreeSansBold12pt (big
 // values), 3 = FreeSansBold18pt (hero numbers), 4 = Font0 (8 px, captions only).
 void font(int f);
+// The biggest of those fonts, from `from` down (3, 2, 1, then 0), in which s fits maxw px WHOLE: it is set and
+// returned. For what must never be cut with ".." (an address to type, a code, a PIN). When not even Font2 fits it
+// stays set and the caller cuts (fit) or wraps.
+int  font_fit(const char *s, int maxw, int from = 3);
 
 // The header band [0, HEAD): a back chevron at the left (tap -> back_key; 0 = none), the title in `acc`, a muted
 // `right` text, and a menu glyph at the right when `menu_key` != 0 (tap -> that key, usually NK_TAB). Returns HEAD.
