@@ -25,7 +25,17 @@ static bool s_error;
 // as NK_RIGHT, but both still carry the right ch, so we filter purely on ch.
 static bool is_calc_char(char c) { return c && strchr("0123456789+-*/().", c) != nullptr; }
 
-static void enter(void) { nucleo_app_set_direct_draw(true); s_expr[0] = 0; s_prev[0] = 0; s_error = false; nucleo_app_set_hint(TR5("0-9 + - * / ( )  invio =  canc  esc", "0-9 + - * / ( )  enter =  del  esc", "0-9 + - * / ( )  intro =  supr  esc", "0-9 + - * / ( )  entree =  suppr  esc", "0-9 + - * / ( )  eingabe =  entf  esc")); }   // static UI: draw direct, free the 32 KB menu buffer
+// ',' arrives as NK_LEFT, which the framework treats as Back and closes the app with unless the app claims it:
+// claim it so it erases (on_key below); Esc still closes.
+static bool on_back(int key)
+{
+    if (key != NK_LEFT) return false;
+    int l = strlen(s_expr); if (l) s_expr[l - 1] = 0; s_error = false; s_prev[0] = 0;
+    nucleo_app_request_draw();
+    return true;
+}
+
+static void enter(void) { nucleo_app_set_back_handler(on_back); nucleo_app_set_direct_draw(true); s_expr[0] = 0; s_prev[0] = 0; s_error = false; nucleo_app_set_hint(TR5("0-9 + - * / ( )  invio =  canc  esc", "0-9 + - * / ( )  enter =  del  esc", "0-9 + - * / ( )  intro =  supr  esc", "0-9 + - * / ( )  entree =  suppr  esc", "0-9 + - * / ( )  eingabe =  entf  esc")); }   // static UI: draw direct, free the 32 KB menu buffer
 static void tick(void) {}
 
 static void evaluate(void)

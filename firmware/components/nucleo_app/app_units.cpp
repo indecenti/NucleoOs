@@ -235,6 +235,16 @@ static void toggle_sign(void)
 
 static void erase(void) { s_fresh = false; int l = (int)strlen(s_in); if (l) s_in[l - 1] = 0; }
 
+// ',' arrives as NK_LEFT, which the framework treats as Back and closes the app with unless the app claims it here
+// (issue #9: the decimal key quit the Converter). Esc / the system bar's Back still close.
+static bool on_back(int key)
+{
+    if (key != NK_LEFT) return false;
+    type_char('.');
+    nucleo_app_request_draw();
+    return true;
+}
+
 static bool lg_tap(int key, char ch);
 static void on_key(int key, char ch)
 {
@@ -242,7 +252,6 @@ static void on_key(int key, char ch)
     const int n = QTY[s_q].n;
     if (key == NK_UP) select_unit((s_sel[s_q] + n - 1) % n);
     else if (key == NK_DOWN) select_unit((s_sel[s_q] + 1) % n);
-    else if (key == NK_LEFT) type_char('.');                // ',' : the decimal comma
     else if (key == NK_RIGHT || ch == ']') set_quantity(s_q + 1);
     else if (ch == '[') set_quantity(s_q - 1);
     else if (key == NK_DEL) erase();
@@ -407,6 +416,7 @@ static void on_enter(void)
     read_lang();
     cfg_read();
     s_in[0] = 0; s_fresh = false;
+    nucleo_app_set_back_handler(on_back);                       // ',' is the decimal comma, not Back
     static const L5 HINT = { { ";. unita  / tipo  , virgola  - segno", ";. unit  / kind  , decimal  - sign",
                                ";. unidad  / tipo  , decimal  - signo", ";. unite  / type  , virgule  - signe",
                                ";. Einheit  / Art  , Komma  - Vorz." } };
