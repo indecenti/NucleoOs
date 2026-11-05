@@ -56,7 +56,7 @@ struct State {
     agent_t *ag; char *toolbuf;
     char model[48], effort[8];
     char tr[6144]; int trlen, tscroll;
-    char in[160]; int inlen;
+    char in[512]; int inlen;   // a task can be a paragraph
     char todo[512];
     bool auto_run, auto_sent, traced_draw, traced_net;
     int64_t auto_t0;     // the maintainer's self-test (work/main/.code/selftest.txt)
@@ -409,7 +409,7 @@ static void agent_send(void)
     agent_open();
     if (!S->ag) { tr_puts(L("\n[nessuna chiave Claude: aggiungila nella web OS, Impostazioni > IA]\n", "\n[no Claude key: add one in the web OS, Settings > AI]\n",
                             "\n[sin clave Claude: web OS, Ajustes > IA]\n", "\n[pas de cle Claude : web OS, Reglages > IA]\n", "\n[kein Claude-Schluessel: Web OS, Einstellungen > KI]\n")); return; }
-    char b[200]; snprintf(b, sizeof b, "\n> %s\n", S->in); tr_puts(b);
+    tr_puts("\n> "); tr_puts(S->in); tr_puts("\n");
     agent_submit(S->ag, S->in);
     S->inlen = 0; S->in[0] = 0;
     S->was_running = true;

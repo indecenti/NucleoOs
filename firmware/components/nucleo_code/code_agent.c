@@ -113,9 +113,13 @@ static char *read_file(const char *path, size_t max, size_t *len)
 {
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;
-    char *b = malloc(max + 1);
+    // the file's own size, not the cap: on the device a 64 KB block never exists, and asking for one made every
+    // run_js answer "does not exist"
+    fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+    size_t want = sz > 0 ? (size_t)sz : 0; if (want > max) want = max;
+    char *b = malloc(want + 1);
     if (!b) { fclose(f); return NULL; }
-    size_t n = fread(b, 1, max, f); fclose(f);
+    size_t n = want ? fread(b, 1, want, f) : 0; fclose(f);
     b[n] = 0; if (len) *len = n;
     return b;
 }
@@ -145,9 +149,19 @@ static void sb_printf(sb_t *s, const char *fmt, ...)
 }
 
 // ---- tools ----------------------------------------------------------------------------------------------
+// why read_file gave nothing: the file is not there, or there is no block for it right now
+static void no_file(sb_t *r, const char *rel, const char *path)
+{
+    struct stat st;
+    if (stat(path, &st) != 0) sb_printf(r, "error: %s does not exist", rel);
+    else sb_printf(r, "error: no memory to read %s (%ld bytes) right now", rel, (long)st.st_size);
+}
 static bool resolve(agent_t *a, const char *rel, char *out)
 {
     if (!rel) return false;
+    // the workspace's own absolute path ("/sd/work/main/a.js"): the model sometimes uses the one it saw in <env>
+    size_t rl = strlen(a->cfg.root);
+    if (!strncmp(rel, a->cfg.root, rl) && (rel[rl] == '/' || !rel[rl])) { rel += rl; while (*rel == '/') rel++; }
     while (rel[0] == '.' && rel[1] == '/') rel += 2;                 // "./a.js"
     if (!strcmp(rel, ".") || !rel[0]) { snprintf(out, PATHCAP, "%s", a->cfg.root); return true; }
     return code_path(a->cfg.root, rel, out, PATHCAP);
@@ -176,7 +190,7 @@ static bool tool_editor(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t sc
             return true;
         }
         size_t len; char *t = read_file(p, FILE_MAX, &len);
-        if (!t) { sb_printf(r, "error: %s does not exist", rel); return false; }
+        if (!t) { no_file(r, rel, p); return false; }
         int from = 1, to = 1 << 30;
         cJSON *vr = cJSON_GetObjectItem(in, "view_range");
         if (cJSON_IsArray(vr) && cJSON_GetArraySize(vr) == 2) {
@@ -212,7 +226,7 @@ static bool tool_editor(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t sc
         if (!o || !*o) { sb_printf(r, "error: old_str is required"); return false; }
         if (!nw) nw = "";
         size_t len; char *t = read_file(p, FILE_MAX, &len);
-        if (!t) { sb_printf(r, "error: %s does not exist", rel); return false; }
+        if (!t) { no_file(r, rel, p); return false; }
         char *hit = strstr(t, o);
         if (!hit) { free(t); sb_printf(r, "error: old_str not found in %s (it must match exactly, whitespace included)", rel); return false; }
         if (strstr(hit + 1, o)) { free(t); sb_printf(r, "error: old_str matches more than once in %s: add context", rel); return false; }
@@ -262,7 +276,7 @@ static bool tool_run(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t scap)
     if (!rel || !resolve(a, rel, p)) { sb_printf(r, "error: a path inside the workspace is required"); return false; }
     snprintf(summary, scap, "run %s", rel);
     size_t len; char *src = read_file(p, 64 * 1024, &len);
-    if (!src) { sb_printf(r, "error: %s does not exist", rel); return false; }
+    if (!src) { no_file(r, rel, p); return false; }
     cJSON *t = cJSON_GetObjectItem(in, "timeout_ms");
     uint32_t tmo = cJSON_IsNumber(t) && t->valuedouble > 0 ? (uint32_t)t->valuedouble : 10000; if (tmo > 10000) tmo = 10000;
     char *outb = malloc(4096); sb_t o = { outb, 0, 4096, false }; if (outb) outb[0] = 0;
