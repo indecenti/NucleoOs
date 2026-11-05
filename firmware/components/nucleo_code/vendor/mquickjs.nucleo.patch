@@ -8,7 +8,7 @@
      struct JSParseState *parse_state; /* != NULL during JS_Eval() */
      int unique_strings_len;
      int js_call_rec_count; /* number of recursing JS_Call() */
-@@ -12519,6 +12520,17 @@
+@@ -12519,7 +12520,21 @@
  void JS_GC(JSContext *ctx)
  {
      JS_GC2(ctx, TRUE);
@@ -24,17 +24,23 @@
 +{
 +    return (uint32_t)(ctx->heap_free - ctx->heap_base) + (uint32_t)(ctx->stack_top - (uint8_t *)ctx->sp);
  }
++/* NUCLEO PATCH: poll the interrupt handler at the next instruction, not after up to 10000 (a script that spends
++   its time in C - drawing, sleeping - would otherwise see Esc or its time limit seconds late) */
++void JS_NucleoInterruptSoon(JSContext *ctx) { ctx->interrupt_counter = 1; }
  
  /* bytecode saving and loading */
+ 
 --- a/mquickjs.h
 +++ b/mquickjs.h
-@@ -305,6 +305,9 @@
+@@ -305,6 +305,11 @@
  JSValue JS_Eval(JSContext *ctx, const char *input, size_t input_len,
                  const char *filename, int eval_flags);
  void JS_GC(JSContext *ctx);
 +/* NUCLEO PATCH: memory figures (bytes): the most live after a GC, and what is in use now */
 +uint32_t JS_NucleoLiveMax(JSContext *ctx);
 +uint32_t JS_NucleoUsedNow(JSContext *ctx);
++/* NUCLEO PATCH: the interrupt handler runs at the next instruction (Esc / the time limit, seen at once) */
++void JS_NucleoInterruptSoon(JSContext *ctx);
  JSValue JS_NewStringLen(JSContext *ctx, const char *buf, size_t buf_len);
  JSValue JS_NewString(JSContext *ctx, const char *buf);
  const char *JS_ToCStringLen(JSContext *ctx, size_t *plen, JSValue val, JSCStringBuf *buf);

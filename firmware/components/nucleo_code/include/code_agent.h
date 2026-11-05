@@ -31,6 +31,10 @@ typedef struct {
     int64_t (*now_ms)(void);
     void (*sleep_ms)(uint32_t ms);
     bool (*cancel)(void *op);                                                  // Esc: stop the turn now
+    // A visual test (run_js on a script that draws): its frames as they are drawn, `large` = the 320x240 layout
+    // (else 240x135), so the user watches the agent test the app. NULL = tested off screen.
+    void (*show)(void *op, bool large, int x, int y, int w, int h, const uint16_t *rgb565);
+    void (*shown)(void *op);                                                   // the test is over: repaint the UI
 } agent_io_t;
 
 typedef struct {

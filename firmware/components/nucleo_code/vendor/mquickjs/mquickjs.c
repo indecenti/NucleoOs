@@ -12532,6 +12532,9 @@ uint32_t JS_NucleoUsedNow(JSContext *ctx)
 {
     return (uint32_t)(ctx->heap_free - ctx->heap_base) + (uint32_t)(ctx->stack_top - (uint8_t *)ctx->sp);
 }
+/* NUCLEO PATCH: poll the interrupt handler at the next instruction, not after up to 10000 (a script that spends
+   its time in C - drawing, sleeping - would otherwise see Esc or its time limit seconds late) */
+void JS_NucleoInterruptSoon(JSContext *ctx) { ctx->interrupt_counter = 1; }
 
 /* bytecode saving and loading */
 

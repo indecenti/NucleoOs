@@ -31,6 +31,7 @@ typedef struct { const char *q, *a; } anima_turn_t;   // anima_claude.h's chat h
 #define FILE_MAX     (256 * 1024)  // a file the agent may write
 #define SEARCH_MAX   40            // matches a search returns
 #define PATHCAP      256
+#define FILE_MARK    "@@nc-file:"   // in a stored message: "this file, in base64, goes here" (build_request)
 
 struct agent {
     agent_cfg_t   cfg;
@@ -52,6 +53,10 @@ struct agent {
     uint32_t      big_mask;        // blocks whose input did not fit the device
     char          ask[160];        // the action waiting for the user's yes
     char          todo[1024];
+    unsigned      shots;           // screenshots taken in this session (.code/shots/<n>.png)
+    char          shot_path[PATHCAP];   // the last run_js left one: the tool result carries it as an image
+    // the run being tested (run_js): its scripted keys and taps, and where its frames go
+    cJSON        *t_keys, *t_taps; int t_ki, t_ti; bool t_up; int64_t t_wait; bool t_large;
 };
 
 // ---- the system prompt and the tools -------------------------------------------------------------------
@@ -88,14 +93,34 @@ static const char *SYS =
     "sys.mem() -> {used, liveMax} bytes.\n"
     "- Limits: a run stops after 10 s, and the engine has about 24-40 KB of memory: no huge arrays or strings, print at most a "
     "few hundred lines.\n"
-    "Text files (notes, chapters, CSV) are written with the editor tool directly: no code needed.";
+    "Text files (notes, chapters, CSV) are written with the editor tool directly: no code needed.\n\n"
+    "Apps with a screen (games, tools, demos): the device API has a 16-colour canvas.\n"
+    "- gfx.width(), gfx.height(): 240x135 on the Cardputer, 320x240 on the external panel; lay out for both, never assume one.\n"
+    "- gfx.clear(c); gfx.pixel(x, y, c); gfx.get(x, y); gfx.rect(x, y, w, h, c) filled; gfx.frame(x, y, w, h, c) outline; "
+    "gfx.line(x0, y0, x1, y1, c); gfx.circle(x, y, r, c); gfx.disc(x, y, r, c) filled; gfx.text(s, x, y, c, scale) draws ASCII "
+    "in a 6x8 cell times scale and returns the width; gfx.flush() shows the frame (once per frame, after drawing it).\n"
+    "- Colours: gfx.BLACK WHITE GRAY DARKGRAY RED ORANGE YELLOW GREEN DARKGREEN CYAN BLUE DARKBLUE PURPLE PINK BROWN BEIGE (0-15).\n"
+    "- key.get() -> the next key or null: 'up' 'down' 'left' 'right' 'enter' 'del' 'tab' or the character ('a', ' '); "
+    "key.down(name) -> held now. Esc always quits the app: never wait for it.\n"
+    "- touch.poll() -> true when the panel had a touch sample, then touch.x(), touch.y(), touch.down() (false = lifted).\n"
+    "- An app is a loop: read input, update, draw, gfx.flush(), sys.sleep(16 to 33). It runs until Esc when the user opens it.\n"
+    "- Test every app you write: run_js it with keys (and taps on the large screen), look at the frame you get back, fix what "
+    "looks wrong (cut text, overlaps, things off screen, unreadable colours) and test again; test screen large too.";
 
 static const char *TOOLS_JSON =
     "[{\"type\":\"text_editor_20250728\",\"name\":\"str_replace_based_edit_tool\",\"max_characters\":12000},"
     "{\"name\":\"run_js\",\"description\":\"Run a JavaScript file of the workspace on the device (MicroQuickJS) and return its output, "
-    "the error with file:line if it failed, the time and the memory it needed.\",\"input_schema\":{\"type\":\"object\",\"properties\":"
+    "the error with file:line if it failed, the time and the memory it needed. A script that draws (gfx) is a visual test: it runs on a "
+    "virtual screen the user watches, and the result carries its last frame as an image. An app loop ends at timeout_ms: a normal end "
+    "for a test.\",\"input_schema\":{\"type\":\"object\",\"properties\":"
     "{\"path\":{\"type\":\"string\",\"description\":\"file to run, relative to the workspace\"},\"timeout_ms\":{\"type\":\"integer\","
-    "\"description\":\"wall clock limit, at most 10000\"}},\"required\":[\"path\"]}},"
+    "\"description\":\"wall clock limit, at most 10000; 1500 to 3000 for an app test\"},"
+    "\"screen\":{\"type\":\"string\",\"enum\":[\"small\",\"large\"],\"description\":\"small = the Cardputer, 240x135 (default); "
+    "large = the external panel, 320x240 with touch\"},"
+    "\"keys\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"what key.get() returns, in order, e.g. "
+    "right, right, enter; wait:300 holds the next ones back 300 ms\"},"
+    "\"taps\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"}},\"description\":"
+    "\"[x, y] taps on the large screen, each a press then a lift for touch.poll()\"}},\"required\":[\"path\"]}},"
     "{\"name\":\"search\",\"description\":\"Find a text (case-insensitive) in the workspace's files; returns file:line: line, at most 40.\","
     "\"input_schema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"path\":{\"type\":\"string\","
     "\"description\":\"folder to search, relative to the workspace (default: all)\"}},\"required\":[\"text\"]}},"
@@ -268,33 +293,107 @@ static bool tool_editor(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t sc
 }
 
 static void run_out(void *op, const char *s, size_t n) { sb_add((sb_t *)op, s, n); }
-static bool run_cancel(void *op) { (void)op; return false; }
+static agent_t *s_run;                   // the agent whose run_js is running (the runtime's callbacks carry the output)
+static bool run_cancel(void *op) { (void)op; return s_run && s_run->io.cancel && s_run->io.cancel(s_run->io.ui_op); }
+// A visual test's input: the keys of "keys" one at a time ("wait:300" holds them back 300 ms), then nothing.
+static const char *run_key(void *op)
+{
+    (void)op; agent_t *a = s_run;
+    if (!a || !a->t_keys) return NULL;
+    int64_t now = a->io.now_ms ? a->io.now_ms() : 0;
+    if (now < a->t_wait) return NULL;
+    for (;;) {
+        cJSON *k = cJSON_GetArrayItem(a->t_keys, a->t_ki);
+        if (!k) return NULL;
+        a->t_ki++;
+        if (!cJSON_IsString(k)) continue;
+        if (!strncmp(k->valuestring, "wait:", 5)) { a->t_wait = now + atoi(k->valuestring + 5); return NULL; }
+        return k->valuestring;
+    }
+}
+// ... and each tap of "taps" ([x, y]) as a press and a lift there
+static bool run_touch(void *op, int *x, int *y, bool *down)
+{
+    (void)op; agent_t *a = s_run;
+    cJSON *t = a && a->t_taps ? cJSON_GetArrayItem(a->t_taps, a->t_ti) : NULL;
+    if (!t) return false;
+    *x = (int)cJSON_GetArrayItem(t, 0)->valuedouble; *y = (int)cJSON_GetArrayItem(t, 1)->valuedouble;
+    *down = !a->t_up;
+    if (a->t_up) a->t_ti++;
+    a->t_up = !a->t_up;
+    return true;
+}
+static void run_blit(void *op, int x, int y, int w, int h, const uint16_t *px)
+{
+    (void)op; agent_t *a = s_run;
+    if (a && a->io.show) a->io.show(a->io.ui_op, a->t_large, x, y, w, h, px);
+}
+static bool taps_ok(cJSON *t)
+{
+    if (!t) return true;
+    if (!cJSON_IsArray(t)) return false;
+    cJSON *e; cJSON_ArrayForEach(e, t) if (!cJSON_IsArray(e) || cJSON_GetArraySize(e) != 2 || !cJSON_IsNumber(cJSON_GetArrayItem(e, 0)) || !cJSON_IsNumber(cJSON_GetArrayItem(e, 1))) return false;
+    return true;
+}
 
 static bool tool_run(agent_t *a, cJSON *in, sb_t *r, char *summary, size_t scap)
 {
     const char *rel = jstr(in, "path"); char p[PATHCAP];
+    a->shot_path[0] = 0;
     if (!rel || !resolve(a, rel, p)) { sb_printf(r, "error: a path inside the workspace is required"); return false; }
     snprintf(summary, scap, "run %s", rel);
+    cJSON *keys = cJSON_GetObjectItem(in, "keys"), *taps = cJSON_GetObjectItem(in, "taps");
+    if ((keys && !cJSON_IsArray(keys)) || !taps_ok(taps)) { sb_printf(r, "error: keys is an array of key names, taps an array of [x, y]"); return false; }
+    const char *scr = jstr(in, "screen");
+    a->t_large = scr && !strcmp(scr, "large");
     size_t len; char *src = read_file(p, 64 * 1024, &len);
     if (!src) { no_file(r, rel, p); return false; }
     cJSON *t = cJSON_GetObjectItem(in, "timeout_ms");
     uint32_t tmo = cJSON_IsNumber(t) && t->valuedouble > 0 ? (uint32_t)t->valuedouble : 10000; if (tmo > 10000) tmo = 10000;
     char *outb = malloc(4096); sb_t o = { outb, 0, 4096, false }; if (outb) outb[0] = 0;
-    code_env_t env = { a->cfg.root, run_out, &o, a->io.now_ms, a->io.sleep_ms, run_cancel, tmo };
-    code_result_t res;
+    char shot[PATHCAP];
+    snprintf(shot, sizeof shot, "%s/.code/shots", a->cfg.root); mkdir(shot, 0775);
+    snprintf(shot, sizeof shot, "%s/.code/shots/%u.png", a->cfg.root, a->shots + 1);
+    code_env_t env; memset(&env, 0, sizeof env);
+    env.root = a->cfg.root; env.out = run_out; env.op = &o; env.now_ms = a->io.now_ms; env.sleep_ms = a->io.sleep_ms;
+    env.cancel = run_cancel; env.timeout_ms = tmo;
+    env.scr_w = a->t_large ? 320 : 240; env.scr_h = a->t_large ? 240 : 135;
+    env.blit = run_blit; env.key = run_key; env.touch = run_touch; env.shot = shot;
+    a->t_keys = keys; a->t_taps = taps; a->t_ki = a->t_ti = 0; a->t_up = false; a->t_wait = 0;
+    code_result_t res; memset(&res, 0, sizeof res);
     // The arena: the configured one, or (on the device) one taken now and given back after the run, so the engine
-    // and the model's TLS session never hold RAM at the same time. It shrinks until a block is there.
+    // and the model's TLS session never hold RAM at the same time. It shrinks until a block is there; a script that
+    // draws leaves room for its canvas (strips of 2.5 KB: 20 KB for 240x135, 43 KB for 320x240).
+    bool draws = strstr(src, "gfx.") != NULL;
     void *arena = a->cfg.arena; size_t asz = a->cfg.arena_size;
-    if (!arena) for (size_t want = asz ? asz : 32768; want >= 12288 && !arena; want -= 4096) { arena = malloc(want); asz = want; }
+    size_t cap = asz ? asz : 32768;
+    if (draws && !arena) cap = a->t_large ? 20480 : 28672;
+    if (!arena) for (size_t want = cap; want >= 12288 && !arena; want -= 4096) { arena = malloc(want); asz = want; }
+    s_run = a;
     bool ok = arena && outb && code_run(arena, asz, src, len, rel, &env, &res);
+    s_run = NULL;
     if (arena && arena != a->cfg.arena) free(arena);
     free(src);
+    a->t_keys = a->t_taps = NULL;
+    if (res.drew && a->io.shown) a->io.shown(a->io.ui_op);
     if (!arena || !outb) { free(outb); sb_printf(r, "error: no memory for the engine"); return false; }
+    // an app's loop runs until the limit: with a screen that is how a test ends, not a failure
+    bool app_end = !ok && res.timeout && res.drew;
+    if (app_end) ok = true;
     if (o.n) { sb_printf(r, "output:\n"); sb_add(r, outb, o.n); if (o.cut) sb_printf(r, "\n[output cut at 4 KB]"); sb_printf(r, "\n"); }
     else sb_printf(r, "output: (none)\n");
-    if (ok) sb_printf(r, "exit: ok in %u ms, memory %u bytes of %u", (unsigned)res.ms, (unsigned)res.live_max, (unsigned)res.arena);
+    if (app_end) sb_printf(r, "exit: ok, stopped at the %u ms limit (an app loop), memory %u bytes of %u", (unsigned)tmo, (unsigned)res.live_max, (unsigned)res.arena);
+    else if (ok) sb_printf(r, "exit: ok in %u ms, memory %u bytes of %u", (unsigned)res.ms, (unsigned)res.live_max, (unsigned)res.arena);
     else sb_printf(r, "exit: FAILED %s%s%s (after %u ms)", res.where, res.where[0] ? ": " : "", res.error, (unsigned)res.ms);
-    snprintf(summary, scap, "run %s %s %ums%s%s", rel, ok ? "ok" : "FAILED", (unsigned)res.ms, ok ? "" : " ", ok ? "" : res.where);
+    if (res.drew) {
+        sb_printf(r, "\nscreen: %dx%d, %u frames flushed", res.scr_w, res.scr_h, (unsigned)res.frames);
+        if (keys) sb_printf(r, ", %d of %d keys read", a->t_ki, cJSON_GetArraySize(keys));
+        if (res.shot_ok) { a->shots++; snprintf(a->shot_path, sizeof a->shot_path, "%s", shot); sb_printf(r, "; the last frame is attached (shown at 2x)"); }
+        else sb_printf(r, "; no screenshot (no room on the card or in RAM)");
+        if (!res.frames) sb_printf(r, "\nnote: nothing was flushed: call gfx.flush() after drawing a frame, or the screen never shows it");
+    }
+    snprintf(summary, scap, "run %s %s %ums%s%s%s", rel, ok ? "ok" : "FAILED", (unsigned)res.ms, ok ? "" : " ", ok ? "" : res.where,
+             res.drew ? (res.shot_ok ? " +screen" : " screen") : "");
     free(outb);
     return ok;
 }
@@ -475,6 +574,45 @@ static char *read_line(FILE *f, char **buf, size_t *cap)
     }
 }
 
+// A message line as it goes into the request: every FILE_MARK "<path>@@" becomes that file in base64, streamed from
+// the card (a screenshot never sits in RAM, however many the session holds); a missing file becomes a 1x1 PNG.
+static const char B64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static const char PNG_1X1[] = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+static bool put_b64_file(FILE *out, const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+    unsigned char in[384]; char enc[512]; size_t n; bool ok = true, any = false;
+    while (ok && (n = fread(in, 1, sizeof in, f)) > 0) {
+        size_t o = 0;
+        for (size_t i = 0; i < n; i += 3) {
+            unsigned v = (unsigned)in[i] << 16 | (i + 1 < n ? (unsigned)in[i + 1] << 8 : 0) | (i + 2 < n ? in[i + 2] : 0);
+            enc[o++] = B64[v >> 18 & 63]; enc[o++] = B64[v >> 12 & 63];
+            enc[o++] = i + 1 < n ? B64[v >> 6 & 63] : '=';
+            enc[o++] = i + 2 < n ? B64[v & 63] : '=';
+        }
+        ok = fwrite(enc, 1, o, out) == o; any = true;
+    }
+    fclose(f);
+    return ok && any;
+}
+static bool put_line(FILE *out, const char *s, const char *shots)   // `shots`: the only folder a mark may name
+{
+    for (;;) {
+        const char *m = strstr(s, FILE_MARK);
+        if (!m) return fputs(s, out) >= 0;
+        if (fwrite(s, 1, (size_t)(m - s), out) != (size_t)(m - s)) return false;
+        const char *p = m + strlen(FILE_MARK), *e = strstr(p, "@@");
+        if (!e) return fputs(m, out) >= 0;
+        char path[PATHCAP]; size_t n = 0;                    // the mark sits in JSON: undo its escapes (a Windows root has \\)
+        for (const char *q = p; q < e && n < sizeof path - 1; q++) { if (*q == '\\' && q + 1 < e) q++; path[n++] = *q; }
+        path[n] = 0;
+        bool mine = !strncmp(path, shots, strlen(shots)) && !strstr(path, "..") && n > 4 && !strcmp(path + n - 4, ".png");
+        if (!(mine && put_b64_file(out, path)) && fputs(PNG_1X1, out) < 0) return false;
+        s = e + 2;
+    }
+}
+
 static bool build_request(agent_t *a)
 {
     FILE *out = fopen(a->req, "wb");
@@ -500,6 +638,7 @@ static bool build_request(agent_t *a)
     bool ok = head != NULL;
     if (ok) { size_t hl = strlen(head); ok = fwrite(head, 1, hl - 1, out) == hl - 1 && fputs(",\"messages\":[", out) >= 0; }
     cJSON_free(head);
+    char shots[PATHCAP]; snprintf(shots, sizeof shots, "%s/.code/shots/", a->cfg.root);
     FILE *h = ok ? fopen(a->hist, "rb") : NULL;
     char *cur = NULL, *nxt = NULL; size_t ccap = 0, ncap = 0;
     bool first = true;
@@ -509,14 +648,14 @@ static bool build_request(agent_t *a)
             char *m = read_line(h, &nxt, &ncap);                 // look ahead: is `cur` the last line?
             if (!first) ok = fputc(',', out) != EOF;
             first = false;
-            if (m) ok = ok && fputs(cur, out) >= 0;
+            if (m) ok = ok && put_line(out, cur, shots);
             else {                                              // the last message: the cache breakpoint on its last block
                 cJSON *msg = cJSON_Parse(cur);
                 cJSON *ct = msg ? cJSON_GetObjectItem(msg, "content") : NULL;
                 cJSON *lb = cJSON_IsArray(ct) ? cJSON_GetArrayItem(ct, cJSON_GetArraySize(ct) - 1) : NULL;
                 if (lb) { cJSON *c2 = cJSON_AddObjectToObject(lb, "cache_control"); cJSON_AddStringToObject(c2, "type", "ephemeral"); }
                 char *t = msg ? cJSON_PrintUnformatted(msg) : NULL;
-                ok = ok && fputs(t ? t : cur, out) >= 0;
+                ok = ok && put_line(out, t ? t : cur, shots);
                 cJSON_free(t); cJSON_Delete(msg);
             }
             char *sw = cur; size_t sc = ccap; cur = nxt; ccap = ncap; nxt = sw; ncap = sc;   // next becomes current
@@ -659,12 +798,23 @@ static void do_tool(agent_t *a, int i, bool declined)
     bool ok;
     if (!rb) ok = false;
     else if (declined) { rb[0] = 0; sb_printf(&r, "The user declined this action."); ok = false; if (a->io.on_tool_done) a->io.on_tool_done(a->io.ui_op, name, false, "declined"); }
-    else { rb[0] = 0; ok = run_tool(a, name, too_large ? NULL : cJSON_GetObjectItem(b, "input"), &r); }
+    else { rb[0] = 0; a->shot_path[0] = 0; ok = run_tool(a, name, too_large ? NULL : cJSON_GetObjectItem(b, "input"), &r); }
     a->st.tools++; if (!ok) a->st.tool_errors++;
     cJSON *tr = cJSON_CreateObject();
     cJSON_AddStringToObject(tr, "type", "tool_result");
     cJSON_AddStringToObject(tr, "tool_use_id", jstr(b, "id") ? jstr(b, "id") : "");
-    cJSON_AddStringToObject(tr, "content", rb && rb[0] ? rb : "(no memory for the result)");
+    if (a->shot_path[0] && !declined) {                    // a visual test: the words and the last frame
+        cJSON *ct = cJSON_AddArrayToObject(tr, "content");
+        cJSON *tx = cJSON_CreateObject(); cJSON_AddStringToObject(tx, "type", "text");
+        cJSON_AddStringToObject(tx, "text", rb && rb[0] ? rb : "(no memory for the result)"); cJSON_AddItemToArray(ct, tx);
+        cJSON *im = cJSON_CreateObject(); cJSON_AddStringToObject(im, "type", "image");
+        cJSON *so = cJSON_AddObjectToObject(im, "source");
+        cJSON_AddStringToObject(so, "type", "base64"); cJSON_AddStringToObject(so, "media_type", "image/png");
+        char mark[PATHCAP + 16]; snprintf(mark, sizeof mark, FILE_MARK "%s@@", a->shot_path);
+        cJSON_AddStringToObject(so, "data", mark);         // the PNG stays on the card: build_request streams it in
+        cJSON_AddItemToArray(ct, im);
+        a->shot_path[0] = 0;
+    } else cJSON_AddStringToObject(tr, "content", rb && rb[0] ? rb : "(no memory for the result)");
     if (!ok) cJSON_AddBoolToObject(tr, "is_error", true);
     cJSON_AddItemToArray(cJSON_GetObjectItem(a->rmsg, "content"), tr);
     free(rb);
@@ -713,7 +863,13 @@ void agent_cancel(agent_t *a, const char *why)
     free(a->s); a->s = NULL;
 }
 agent_state_t agent_state(const agent_t *a) { return a->state; }
-void agent_reset(agent_t *a) { remove(a->hist); a->st = (agent_stats_t){0}; a->state = AG_IDLE; a->todo[0] = 0; }
+void agent_reset(agent_t *a)
+{
+    remove(a->hist); a->st = (agent_stats_t){0}; a->state = AG_IDLE; a->todo[0] = 0;
+    char p[PATHCAP];                                         // the session's screenshots go with it
+    for (unsigned i = 1; i <= a->shots; i++) { snprintf(p, sizeof p, "%s/.code/shots/%u.png", a->cfg.root, i); remove(p); }
+    a->shots = 0;
+}
 
 // ---- public ---------------------------------------------------------------------------------------------
 agent_t *agent_new(const agent_cfg_t *cfg, const agent_io_t *io)
@@ -725,6 +881,9 @@ agent_t *agent_new(const agent_cfg_t *cfg, const agent_io_t *io)
     char dir[PATHCAP]; snprintf(dir, sizeof dir, "%s/.code", cfg->root); mkdir(dir, 0775);
     snprintf(a->hist, sizeof a->hist, "%s/.code/session.jsonl", cfg->root);
     snprintf(a->req, sizeof a->req, "%s/.code/request.json", cfg->root);
+    snprintf(dir, sizeof dir, "%s/.code/shots", cfg->root);   // a resumed session numbers its screenshots on
+    DIR *sd = opendir(dir);
+    if (sd) { struct dirent *e; while ((e = readdir(sd))) { unsigned n = (unsigned)atoi(e->d_name); if (n > a->shots) a->shots = n; } closedir(sd); }
     if (!a->text) { agent_free(a); return NULL; }
     return a;
 }

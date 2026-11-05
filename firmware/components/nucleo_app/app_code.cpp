@@ -19,6 +19,10 @@
 #include "nucleo_theme.h"
 #include "app_large.h"        // lg:: two-screen kit
 #include "nucleo_touch.h"
+#include "nucleo_kbd.h"
+#include "nucleo_surface.h"
+#include "nucleo_extdisp.h"    // the Cardputer's own panel while the external one runs an app
+#include "esp_task_wdt.h"
 #include <M5GFX.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +42,7 @@ static const unsigned short ACCENT = 0xFD20;            // amber: a workshop
 
 #define WS        NUCLEO_SD_MOUNT "/work"
 #define BENCH     WS "/bench"
+#define AWS       WS "/main"            // the workspace: the agent writes here, /files lists and runs it
 #define MAX_FILES 24
 #define OUT_CAP   3072
 #define ARENA_MAX (40 * 1024)
@@ -62,6 +67,7 @@ struct State {
     int64_t auto_t0;     // the maintainer's self-test (work/main/.code/selftest.txt)
 };
 static State *S;
+static bool s_cleared;                // the agent view painted its background once since it came up
 
 static int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
 // Breadcrumbs on the SD card (work/main/.code/trace.txt): the Solo boot has no web server and a panic loses the log,
@@ -79,6 +85,91 @@ static void out_fn(void *op, const char *s, size_t n)
     size_t room = OUT_CAP - 1 - (size_t)S->olen;
     if (n > room) n = room;
     memcpy(S->out + S->olen, s, n); S->olen += (int)n; S->out[S->olen] = 0;
+}
+
+// ---- the scripts' screen (docs/nucleo-code.md 4.5) ------------------------------------------------------------
+// A script that draws gets a 16-colour canvas: 240x135 on the Cardputer, 320x240 on the external panel when one is
+// there (the Cardputer then shows what runs and how to stop it: never a mirror). Its rows arrive here in bands.
+static lgfx::LovyanGFX *s_scr;          // where the frames go (NULL = nowhere)
+static void scr_blit(void *, int x, int y, int w, int h, const uint16_t *px)
+{
+    if (!s_scr) return;
+    s_scr->startWrite();
+    s_scr->pushImage(x, y, w, h, (const lgfx::rgb565_t *)px);
+    s_scr->endWrite();
+}
+static lgfx::LovyanGFX *small_panel(void)   // the Cardputer's own panel, with or without the external one
+{
+    if (nucleo_surface_large()) return (lgfx::LovyanGFX *)nucleo_extdisp_internal_gfx();
+    return &d;
+}
+// Keys while a script runs: the keyboard is read here (the run loop waits for the script); Esc stops it, the rest
+// queue for key.get(). The engine polls the cancel often: that is also where the task lets the others run.
+static struct { unsigned char ring[16]; int head, tail; bool stop; int64_t yield_at; } s_kb;   // a character, or 0x80 | NK_*
+static const char *key_name(const nucleo_key_t &k, char *one)
+{
+    switch (k.key) {
+    case NK_UP: return "up";      case NK_DOWN: return "down"; case NK_LEFT: return "left"; case NK_RIGHT: return "right";
+    case NK_ENTER: return "enter"; case NK_DEL: return "del";  case NK_TAB: return "tab";
+    case NK_CHAR: one[0] = k.ch; one[1] = 0; return one;
+    default: return nullptr;
+    }
+}
+static void kb_pump(void)
+{
+    for (nucleo_key_t k = nucleo_kbd_read(); k.key != NK_NONE; k = nucleo_kbd_read()) {
+        if (k.key == NK_BACK) { s_kb.stop = true; continue; }
+        if (k.key == NK_CHAR && (k.ch < 32 || k.ch > 126)) continue;
+        if (k.key != NK_CHAR && k.key > NK_TAB) continue;
+        if ((s_kb.head + 1) % 16 == s_kb.tail) continue;          // full: a script that never reads keys
+        s_kb.ring[s_kb.head] = k.key == NK_CHAR ? (unsigned char)k.ch : (unsigned char)(0x80 | k.key);
+        s_kb.head = (s_kb.head + 1) % 16;
+    }
+}
+static const char *kb_key(void *)
+{
+    kb_pump();
+    if (s_kb.tail == s_kb.head) return nullptr;
+    static char one[2];
+    unsigned char c = s_kb.ring[s_kb.tail];
+    s_kb.tail = (s_kb.tail + 1) % 16;
+    if (c & 0x80) { nucleo_key_t k = { c & 0x7F, 0 }; return key_name(k, one); }
+    one[0] = (char)c; one[1] = 0;
+    return one;
+}
+static bool kb_down(void *, const char *n)
+{
+    if (!strcmp(n, "up")) return nucleo_kbd_char_down(';');
+    if (!strcmp(n, "down")) return nucleo_kbd_char_down('.');
+    if (!strcmp(n, "left")) return nucleo_kbd_char_down(',');
+    if (!strcmp(n, "right")) return nucleo_kbd_char_down('/');
+    return n[0] && !n[1] && nucleo_kbd_char_down(n[0]);
+}
+static bool kb_cancel(void *)
+{
+    int64_t t = esp_timer_get_time() / 1000;
+    if (t >= s_kb.yield_at) { s_kb.yield_at = t + 200; kb_pump(); esp_task_wdt_reset(); vTaskDelay(1); }
+    return s_kb.stop;
+}
+static bool tp_read(void *, int *x, int *y, bool *down)
+{
+    nucleo_touch_raw_t ev;
+    if (!nucleo_touch_raw_read(&ev)) return false;
+    *x = ev.x; *y = ev.y; *down = ev.down;
+    return true;
+}
+// what the Cardputer shows while an app runs on the external panel
+static void companion_running(const char *name)
+{
+    lgfx::LovyanGFX *g = small_panel();
+    if (!g || g == &d) return;
+    g->startWrite();
+    g->fillRect(0, 0, 240, 135, C_BG);
+    g->setFont(&fonts::Font2); g->setTextSize(1); g->setTextDatum(top_left);
+    g->setTextColor(ACCENT, C_BG); g->drawString(L("In esecuzione sul pannello", "Running on the panel", "En el panel", "Sur le panneau", "Auf dem Panel"), 8, 10);
+    g->setTextColor(C_INK, C_BG); g->drawString(name, 8, 40);
+    g->setTextColor(C_DIM, C_BG); g->drawString(L("esc ferma", "esc stops", "esc para", "esc arrete", "esc stoppt"), 8, 100);
+    g->endWrite();
 }
 
 // The bench scripts: written once when the folder has none, so the first run has something to measure.
@@ -117,10 +208,10 @@ static void ensure_bench(void)
     }
 }
 
-static void scan(void)
+static void scan(const char *dir)
 {
     S->nfiles = 0;
-    DIR *dd = opendir(BENCH); if (!dd) return;
+    DIR *dd = opendir(dir); if (!dd) return;
     struct dirent *e;
     while ((e = readdir(dd)) && S->nfiles < MAX_FILES) {
         size_t n = strlen(e->d_name);
@@ -131,11 +222,12 @@ static void scan(void)
 }
 
 // One run: the arena is the largest block minus a margin, capped; it exists only for the run.
-static bool run_file(const char *name, uint32_t timeout_ms)
+// `interactive`: the user opened it - the screen, the keys and the touch are its, no time limit, Esc stops it.
+static bool run_file(const char *dir, const char *name, uint32_t timeout_ms, bool interactive)
 {
     S->olen = 0; S->out[0] = 0; S->scroll = 0;
     snprintf(S->ran, sizeof S->ran, "%s", name);
-    char p[96]; snprintf(p, sizeof p, BENCH "/%s", name);
+    char p[128]; snprintf(p, sizeof p, "%s/%s", dir, name);
     FILE *f = fopen(p, "rb");
     if (!f) { snprintf(S->res.error, sizeof S->res.error, "cannot open %s", name); S->res.ok = false; return false; }
     fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
@@ -144,17 +236,35 @@ static bool run_file(const char *name, uint32_t timeout_ms)
     if (!src) { fclose(f); snprintf(S->res.error, sizeof S->res.error, "no RAM for the source"); S->res.ok = false; return false; }
     fread(src, 1, (size_t)n, f); fclose(f); src[n] = 0;
 
+    const bool large = interactive && nucleo_surface_large();
+    const bool draws = interactive && strstr(src, "gfx.") != nullptr;
     S->heap_before  = (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     S->block_before = (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
     size_t arena = S->block_before > 4096 ? S->block_before - 2048 : 0;
-    if (arena > ARENA_MAX) arena = ARENA_MAX;
+    // a script that draws leaves the heap room for its canvas (strips: 20 KB at 240x135, 43 KB at 320x240)
+    const size_t amax = !draws ? ARENA_MAX : large ? 20 * 1024 : 28 * 1024;
+    if (arena > amax) arena = amax;
     arena &= ~(size_t)7;
     void *mem = arena ? heap_caps_malloc(arena, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) : NULL;
     S->arena = (unsigned)(mem ? arena : 0);
     if (!mem) { free(src); snprintf(S->res.error, sizeof S->res.error, "no block for the arena"); S->res.ok = false; return false; }
     code_env_t env = {};
-    env.root = BENCH; env.out = out_fn; env.now_ms = now_ms; env.sleep_ms = sleep_ms; env.timeout_ms = timeout_ms;
+    env.root = dir; env.out = out_fn; env.now_ms = now_ms; env.sleep_ms = sleep_ms; env.timeout_ms = timeout_ms;
+    if (interactive) {
+        env.timeout_ms = CODE_NO_LIMIT; env.cancel = kb_cancel;
+        env.scr_w = large ? 320 : 240; env.scr_h = large ? 240 : 135;
+        env.blit = scr_blit; env.key = kb_key; env.key_down = kb_down;
+        s_kb.head = s_kb.tail = 0; s_kb.stop = false; s_kb.yield_at = 0;
+        s_scr = large ? &d : small_panel();
+        if (large) { nucleo_touch_raw(true); env.touch = tp_read; companion_running(name); }
+    }
     bool ok = code_run(mem, arena, src, (size_t)n, name, &env, &S->res);
+    if (interactive) {
+        if (large) nucleo_touch_raw(false);
+        s_scr = nullptr;
+        if (S->res.cancelled) { S->res.ok = true; S->res.cancelled = false; S->res.error[0] = 0; ok = true; }   // Esc is how an app ends
+        nucleo_app_force_repaint(); s_cleared = false;
+    }
     free(mem); free(src);            // free() releases heap_caps_malloc memory too (heap_caps_free is not in the ABI)
     S->heap_after  = (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     S->block_after = (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
@@ -166,8 +276,9 @@ static void bench_all(void)
     char *rep = (char *)malloc(4096);
     if (!rep) return;
     int rl = snprintf(rep, 4096, "Nucleo Code bench (MicroQuickJS, 32-bit)\nscript           ok  ms     live-max  arena   heap-before/block   heap-after/block  error\n");
+    scan(BENCH);
     for (int i = 0; i < S->nfiles && rl < 3900; i++) {
-        run_file(S->files[i], 3000);
+        run_file(BENCH, S->files[i], 3000, false);
         rl += snprintf(rep + rl, 4096 - rl, "%-16s %-3s %-6u %-8u  %-6u  %6u/%-6u      %6u/%-6u  %s %s\n", S->files[i], S->res.ok ? "yes" : "no",
                        (unsigned)S->res.ms, (unsigned)S->res.live_max, S->arena, S->heap_before, S->block_before, S->heap_after, S->block_after,
                        S->res.error, S->res.where);
@@ -175,6 +286,7 @@ static void bench_all(void)
     }
     FILE *f = fopen(BENCH "/report.txt", "wb");
     if (f) { fwrite(rep, 1, (size_t)rl, f); fclose(f); }
+    scan(AWS);
     S->olen = 0; S->out[0] = 0; out_fn(nullptr, rep, (size_t)rl);
     snprintf(S->ran, sizeof S->ran, "bench -> report.txt");
     S->output = true; S->scroll = 0;
@@ -215,7 +327,7 @@ static void draw_large(void)
 {
     nucleo_touch_clear();
     const int W = d.width(), H = d.height(), LW = 128;
-    int y = lg::header("Code", "work/bench", ACCENT);
+    int y = lg::header("Code", "work/main", ACCENT);
     lg::text_list(0, y, LW, H - y, S->nfiles, S->sel, &s_lg_scroll, row_label, row_right_lg, row_color_lg, nullptr, ACCENT);
     const int x = LW + 4, w = W - x - 4;
     lg::panel(x, y + 2, w, H - y - 4, lg::card());
@@ -271,12 +383,11 @@ static void draw_companion(void)
     lg::comp_keys(L("invio esegui  b banco  su/giu", "enter run  b bench  up/dn", "intro ejecuta  b banco", "entree lancer  b banc", "enter starten  b Bench"));
 }
 
-static bool s_cleared;                // the agent view painted its background once since it came up
 static void files_draw(void)
 {
     s_cleared = false;
     if (nucleo_app_two_screens()) { draw_companion(); return; }
-    int y = app_ui_title("Code", ACCENT, S->output ? S->ran : "work/bench");
+    int y = app_ui_title("Code", ACCENT, S->output ? S->ran : "work/main");
     if (S->output) { draw_output(y); nucleo_app_set_hint(L("su/giu scorri  invio lista  b banco", "up/dn scroll  enter list  b bench", "arr/ab  intro lista  b banco", "haut/bas  entree liste  b banc", "auf/ab  enter Liste  b Bench")); return; }
     int bottom = nucleo_app_content_top() + nucleo_app_content_height();
     app_ui_list(y, bottom - y, S->nfiles, S->sel, row_label, row_right, row_color, nullptr);
@@ -289,7 +400,7 @@ static void files_key(int key, char ch)
     if (ch == '/') { S->agent_view = true; nucleo_app_request_draw(); return; }
     if (nucleo_app_two_screens()) {                          // taps on the panel's list arrive as keys
         int t = lg::row_tap(key, ch, s_lg_scroll, S->nfiles, &S->sel);
-        if (t == 2 && S->nfiles) { run_file(S->files[S->sel], 5000); S->output = true; }
+        if (t == 2 && S->nfiles) { run_file(AWS, S->files[S->sel], 0, true); S->output = true; }
         if (t) { nucleo_app_request_draw(); return; }
         if (key == NK_UP && S->scroll > 0 && S->output) { S->scroll--; nucleo_app_request_draw(); return; }
     }
@@ -301,12 +412,11 @@ static void files_key(int key, char ch)
     }
     if (key == NK_UP && S->nfiles) S->sel = (S->sel + S->nfiles - 1) % S->nfiles;
     else if (key == NK_DOWN && S->nfiles) S->sel = (S->sel + 1) % S->nfiles;
-    else if (key == NK_ENTER && S->nfiles) { run_file(S->files[S->sel], 5000); S->output = true; }
+    else if (key == NK_ENTER && S->nfiles) { run_file(AWS, S->files[S->sel], 0, true); S->output = true; }
     nucleo_app_request_draw();
 }
 
 // ==== the agent (docs/nucleo-code.md 9): status bar, the conversation, the input; driven from the tick ====
-#define AWS       WS "/main"            // the workspace the agent works in
 #define TR_CAP    6144                  // the conversation shown (raw; the oldest half goes when full)
 #define TOOL_CAP  (16 * 1024)           // one tool call's input (a whole file for create)
 
@@ -333,6 +443,14 @@ static bool agent_running(void)
     return s == AG_SEND || s == AG_RECV || s == AG_TOOLS || s == AG_ASK;
 }
 
+// a visual test's frames, live: the small layout on the Cardputer, the large one on the external panel when there is one
+static void ui_show(void *, bool large, int x, int y, int w, int h, const uint16_t *px)
+{
+    s_scr = large ? (nucleo_surface_large() ? &d : nullptr) : small_panel();
+    scr_blit(nullptr, x, y, w, h, px);
+    s_scr = nullptr;
+}
+static void ui_shown(void *) { s_cleared = false; nucleo_app_force_repaint(); nucleo_app_request_draw(); }
 static void agent_open(void)
 {
     if (S->ag) return;
@@ -349,6 +467,7 @@ static void agent_open(void)
     agent_io_t io = {};
     io.on_text = ui_text; io.on_tool = ui_tool; io.on_tool_done = ui_tool_done; io.on_todo = ui_todo;
     io.now_ms = now_ms; io.sleep_ms = sleep_ms;
+    io.show = ui_show; io.shown = ui_shown;
     S->ag = agent_new(&cfg, &io);
 }
 static void agent_close(void)
@@ -400,7 +519,7 @@ static void agent_send(void)
     if (!S->inlen) return;
     S->in[S->inlen] = 0;
     if (S->in[0] == '/') {                                    // commands
-        if (!strcmp(S->in, "/files")) S->agent_view = false;
+        if (!strcmp(S->in, "/files")) { S->agent_view = false; scan(AWS); }
         else if (!strcmp(S->in, "/new")) { if (S->ag) agent_reset(S->ag); S->trlen = 0; S->tr[0] = 0; S->todo[0] = 0; }
         else if (!strcmp(S->in, "/mode")) { S->ask = !S->ask; agent_close(); agent_open(); tr_puts(S->ask ? "\n[mode: Ask]\n" : "\n[mode: Auto]\n"); }
         else tr_puts(L("\n[comandi: /files /new /mode]\n", "\n[commands: /files /new /mode]\n", "\n[/files /new /mode]\n", "\n[/files /new /mode]\n", "\n[/files /new /mode]\n"));
@@ -605,7 +724,7 @@ static void on_enter(void)
 {
     trace("enter");
     nucleo_app_set_direct_draw(true); s_cleared = false;                       // the launcher's 32 KB canvas goes back to the heap: it is the TLS
-    ensure_bench(); scan(); S->output = false; s_lg_scroll = 0;
+    ensure_bench(); mkdir(AWS, 0775); scan(AWS); S->output = false; s_lg_scroll = 0;
     S->agent_view = true; S->ask = false;
     { struct stat sst; S->auto_run = stat(SELFTEST_IN, &sst) == 0; S->auto_sent = false; }
     S->have_key = nucleo_llm_config(S->model, sizeof S->model, S->effort, sizeof S->effort);

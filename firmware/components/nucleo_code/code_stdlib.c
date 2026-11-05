@@ -354,6 +354,56 @@ static const JSPropDef js_nucleo_sys[] = {
 };
 static const JSClassDef js_nucleo_sys_obj = JS_OBJECT_DEF("Sys", js_nucleo_sys);
 
+/* the screen (docs/nucleo-code.md 4.5): a 16-colour canvas, its keys and its touch */
+static const JSPropDef js_nucleo_gfx[] = {
+    JS_CFUNC_DEF("width", 0, js_nc_gfx_width),
+    JS_CFUNC_DEF("height", 0, js_nc_gfx_height),
+    JS_CFUNC_DEF("clear", 1, js_nc_gfx_clear),
+    JS_CFUNC_DEF("pixel", 3, js_nc_gfx_pixel),
+    JS_CFUNC_DEF("get", 2, js_nc_gfx_get),
+    JS_CFUNC_DEF("rect", 5, js_nc_gfx_rect),
+    JS_CFUNC_DEF("frame", 5, js_nc_gfx_frame),
+    JS_CFUNC_DEF("line", 5, js_nc_gfx_line),
+    JS_CFUNC_DEF("circle", 4, js_nc_gfx_circle),
+    JS_CFUNC_DEF("disc", 4, js_nc_gfx_disc),
+    JS_CFUNC_DEF("text", 5, js_nc_gfx_text),
+    JS_CFUNC_DEF("flush", 0, js_nc_gfx_flush),
+    JS_PROP_DOUBLE_DEF("BLACK", 0, 0),
+    JS_PROP_DOUBLE_DEF("WHITE", 1, 0),
+    JS_PROP_DOUBLE_DEF("GRAY", 2, 0),
+    JS_PROP_DOUBLE_DEF("DARKGRAY", 3, 0),
+    JS_PROP_DOUBLE_DEF("RED", 4, 0),
+    JS_PROP_DOUBLE_DEF("ORANGE", 5, 0),
+    JS_PROP_DOUBLE_DEF("YELLOW", 6, 0),
+    JS_PROP_DOUBLE_DEF("GREEN", 7, 0),
+    JS_PROP_DOUBLE_DEF("DARKGREEN", 8, 0),
+    JS_PROP_DOUBLE_DEF("CYAN", 9, 0),
+    JS_PROP_DOUBLE_DEF("BLUE", 10, 0),
+    JS_PROP_DOUBLE_DEF("DARKBLUE", 11, 0),
+    JS_PROP_DOUBLE_DEF("PURPLE", 12, 0),
+    JS_PROP_DOUBLE_DEF("PINK", 13, 0),
+    JS_PROP_DOUBLE_DEF("BROWN", 14, 0),
+    JS_PROP_DOUBLE_DEF("BEIGE", 15, 0),
+    JS_PROP_END,
+};
+static const JSClassDef js_nucleo_gfx_obj = JS_OBJECT_DEF("Gfx", js_nucleo_gfx);
+
+static const JSPropDef js_nucleo_key[] = {
+    JS_CFUNC_DEF("get", 0, js_nc_key_get),
+    JS_CFUNC_DEF("down", 1, js_nc_key_down),
+    JS_PROP_END,
+};
+static const JSClassDef js_nucleo_key_obj = JS_OBJECT_DEF("Key", js_nucleo_key);
+
+static const JSPropDef js_nucleo_touch[] = {
+    JS_CFUNC_DEF("poll", 0, js_nc_touch_poll),
+    JS_CFUNC_DEF("x", 0, js_nc_touch_x),
+    JS_CFUNC_DEF("y", 0, js_nc_touch_y),
+    JS_CFUNC_DEF("down", 0, js_nc_touch_down),
+    JS_PROP_END,
+};
+static const JSClassDef js_nucleo_touch_obj = JS_OBJECT_DEF("Touch", js_nucleo_touch);
+
 static const JSPropDef js_global_object[] = {
     JS_PROP_CLASS_DEF("Object", &js_object_class),
     JS_PROP_CLASS_DEF("Function", &js_function_class),
@@ -404,6 +454,9 @@ static const JSPropDef js_global_object[] = {
     JS_CFUNC_DEF("gc", 0, js_gc),
     JS_PROP_CLASS_DEF("fs", &js_nucleo_fs_obj),
     JS_PROP_CLASS_DEF("sys", &js_nucleo_sys_obj),
+    JS_PROP_CLASS_DEF("gfx", &js_nucleo_gfx_obj),
+    JS_PROP_CLASS_DEF("key", &js_nucleo_key_obj),
+    JS_PROP_CLASS_DEF("touch", &js_nucleo_touch_obj),
     JS_PROP_END,
 };
 
