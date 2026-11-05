@@ -682,7 +682,8 @@ static void agent_send(void)
 // left behind an accent bar, each step on a compact row with its mark), the input field. Straight on the panel
 // and flicker-free: every row paints its own background, nothing is cleared first.
 static const unsigned short C_USR = 0x6E1F, C_OK = 0x47E8, C_BAD = 0xF8A6, C_ASK = 0xFFE0;
-static lgfx::LovyanGFX *G_ = &d;          // the panel a view draws on
+static lgfx::LovyanGFX *G_;               // the panel a view draws on (set by each draw: a static &d would be a
+                                          // constructor, run by the loader before the app exists)
 #define G (*G_)
 // opaque text in the band [bx, bx+bw) x [by, by+bh): only what the glyphs leave uncovered is filled
 static int box_text(int bx, int by, int bw, int bh, int tx, int ty, const char *s, unsigned short fg, unsigned short bg)
