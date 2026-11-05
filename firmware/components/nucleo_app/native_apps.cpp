@@ -309,11 +309,23 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     if ((rc = nap_inspect(&src, &s_img, detail, sizeof detail)) != NAP_OK) { set_err(nap_rc_name(rc), detail); goto fail; }
     if (s_img.info.ram > EXTRA_RAM_MAX) { set_err("RAM", "asks for too much"); goto fail; }
     if (nap_relocs_bytes(&s_img) > RELOCS_MAX) { set_err("too many relocations", nullptr); goto fail; }
-    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL) <
-        (size_t)s_img.data_memsz + DATA_ALIGN + s_img.info.ram + nap_relocs_bytes(&s_img) + 2 * SECTOR + 4096) { set_err("RAM", nullptr); goto fail; }
-    buf = (uint8_t *)malloc(SECTOR);
+    // The loader's blocks are separate allocations: each needs a block of its own size, and together they need
+    // that much free. (Asking for their SUM in one block refused a 25 KB-relocation module on a Solo heap of
+    // 70 KB free whose largest block is 31.7 KB.) The relocation table goes first, so it gets the largest block.
+    {
+        const size_t data = (size_t)s_img.data_memsz + DATA_ALIGN, rel = nap_relocs_bytes(&s_img);
+        size_t one = data > rel ? data : rel;
+        if (s_img.info.ram > one) one = s_img.info.ram;
+        if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL) < one + 512 ||
+            heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL) < data + rel + s_img.info.ram + 2 * SECTOR + 8192)
+            { snprintf(detail, sizeof detail, "block %u/%u, free %u", (unsigned)(one + 512),
+                       (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL),
+                       (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL));
+              set_err("RAM", detail); goto fail; }
+    }
     relocs = (uint8_t *)malloc(nap_relocs_bytes(&s_img) ? nap_relocs_bytes(&s_img) : 4);
     s_ram_raw = (uint8_t *)heap_caps_calloc(1, s_img.data_memsz + DATA_ALIGN, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+    buf = (uint8_t *)malloc(SECTOR);
     if (!buf || !relocs || !s_ram_raw) { set_err("RAM", nullptr); goto fail; }
     s_ram = (uint8_t *)(((uintptr_t)s_ram_raw + DATA_ALIGN - 1) & ~(uintptr_t)(DATA_ALIGN - 1));
     if ((rc = nap_cache_relocs(&src, &s_img, relocs, nap_relocs_bytes(&s_img))) != NAP_OK) { set_err(nap_rc_name(rc), "relocations"); goto fail; }
