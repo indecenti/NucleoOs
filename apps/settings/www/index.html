@@ -531,6 +531,14 @@
           <div class="scope-legend" id="scope-legend" style="margin-top:11px"></div>
         </div>
 
+        <div class="sect" id="ai-keys-sect"><h2 data-i18n="aiAssistant">IA online · provider, modello e chiave</h2>
+          <div class="hint" style="margin-bottom:10px" data-i18n-html="aiOnlineHint">Claude, Groq, Gemini, Grok o <b>qualsiasi servizio compatibile OpenAI</b> (indirizzo, modello e chiave). La usano ANIMA, il copilota e le app che chiedono all’IA del sistema; AI Chat tiene un suo endpoint.</div>
+          <!-- Single shared key manager (shell/ai-keys.js) — same component the ANIMA app mounts; the ONE
+               place the OS asks for / stores a provider key. Provider chips, model, exec, key + test/save/delete,
+               Gemini plan detection — all on shell/ai.js. No provider table or teacher.json I/O lives here anymore. -->
+          <div id="ai-keys-mount"><span class="hint" data-i18n="loadingKeyMgr">carico il gestore chiavi…</span></div>
+          <div class="row" style="border-bottom:none;margin-top:8px"><div class="hint" style="flex:1" data-i18n-html="aiKeysHint">🎨 <b>Generare immagini con l'IA</b> in Paint (Atelier) richiede una chiave <b>Grok (xAI)</b> — modello <code>grok-2-image</code>. Claude e Groq non disegnano, ma possono <b>migliorare il prompt</b>. 🎙️ La <b>trascrizione vocale</b> (Recorder, Dettatura) usa sempre Groq/OpenAI (Whisper), anche con Claude, Gemini o Grok come chat.</div></div></div>
+
         <div class="sect" id="ai-server-sect" hidden><h2><span data-i18n="serverModels">Modelli del server</span> <span class="badge live" data-i18n="badgeServerModels">Sul server</span></h2>
           <div class="hint" style="margin-bottom:6px" data-i18n-html="serverModelsHint">Il server che ospita NucleoOS fa girare dei modelli <b>per te</b>: niente chiavi da mettere, niente da scaricare. Qui vedi quanto contesto ha ogni domanda e quante richieste ti restano oggi.</div>
           <div id="server-models-mount"><span class="hint" data-i18n="srvLoading">chiedo al server…</span></div>
@@ -540,13 +548,13 @@
           <div id="pc-models-mount"><span class="hint" data-i18n="pcDetecting">cerco i server…</span></div>
         </div>
 
-        <details class="adv" id="ai-adv"><summary data-i18n="advSettings">Impostazioni avanzate · provider, chiave, cervello offline, voce</summary><div class="adv-inner">
+        <details class="adv" id="ai-adv"><summary data-i18n="advSettings">Impostazioni avanzate · come ragiona, cervello offline, voce</summary><div class="adv-inner">
         <div class="sect"><h2><span data-i18n="brainsChain">Cervelli & catena di fallback</span> <span class="badge" data-i18n="badgeHowItWorks">Come funziona</span></h2>
           <div class="hint" style="margin-bottom:10px" id="brains-chain-hint" data-i18n-html="brainsChainHint">ANIMA ha <b>cinque menti</b> e le prova <b>in ordine</b>, dalla più capace a quella sempre-disponibile. Sfrutta prima la potenza del browser/PC e <b>scala sul dispositivo solo come ultima rete di sicurezza</b>.</div>
           <div style="display:flex;flex-direction:column;gap:6px">
             <div id="brain-cmds-card" hidden style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:1.2143rem;width:22px;text-align:center">🎮</span><div style="flex:1"><div style="font-weight:600;font-size:0.9286rem" data-i18n="brainCmdsTitle">Dispositivo · dati veri</div><div class="hint" data-i18n-html="brainCmdsDesc">Batteria, spazio, giochi recenti: risposte lette dal dispositivo, senza IA e senza rete.</div></div></div>
             <div id="brain-cmds-arrow" hidden style="text-align:center;color:var(--dim)">↓</div>
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:1.2143rem;width:22px;text-align:center">☁</span><div style="flex:1"><div style="font-weight:600;font-size:0.9286rem" data-i18n="brain1Title">1 · IA online (cloud)</div><div class="hint" data-i18n="brain1Desc">Claude / Groq / Grok — serve chiave + Internet. La più capace.</div></div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:1.2143rem;width:22px;text-align:center">☁</span><div style="flex:1"><div style="font-weight:600;font-size:0.9286rem" data-i18n="brain1Title">1 · IA online (cloud)</div><div class="hint" data-i18n="brain1Desc">Claude, Groq, Gemini, Grok o un servizio compatibile OpenAI — serve chiave + Internet. La più capace.</div></div></div>
             <div style="text-align:center;color:var(--dim)">↓</div>
             <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:1.2143rem;width:22px;text-align:center">⌂</span><div style="flex:1"><div style="font-weight:600;font-size:0.9286rem" data-i18n="brainPcTitle">2 · Modello sul tuo PC</div><div class="hint" data-i18n="brainPcDesc">Ollama / LM Studio su questo computer: gratis, offline, privato.</div></div></div>
             <div style="text-align:center;color:var(--dim)">↓</div>
@@ -564,12 +572,6 @@
           <div class="row" style="border-bottom:none"><div class="hint" id="l1-stat" style="flex:1">…</div></div>
           <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="l1PolicyHint">In <b>Auto</b> il cervello offline si fa da parte (liberando ~31&nbsp;KB) quando c'è un cervello più forte (online o LLM browser). <b>Sempre</b> lo tiene attivo, <b>Mai</b> non lo serve mai.</div></div></div>
 
-        <div class="sect"><h2 data-i18n="aiAssistant">Assistente IA · Provider e chiave</h2>
-          <!-- Single shared key manager (shell/ai-keys.js) — same component the ANIMA app mounts; the ONE
-               place the OS asks for / stores a provider key. Provider chips, model, exec, key + test/save/delete,
-               Gemini plan detection — all on shell/ai.js. No provider table or teacher.json I/O lives here anymore. -->
-          <div id="ai-keys-mount"><span class="hint" data-i18n="loadingKeyMgr">carico il gestore chiavi…</span></div>
-          <div class="row" style="border-bottom:none;margin-top:8px"><div class="hint" style="flex:1" data-i18n-html="aiKeysHint">🎨 <b>Generare immagini con l'IA</b> in Paint (Atelier) richiede una chiave <b>Grok (xAI)</b> — modello <code>grok-2-image</code>. Claude e Groq non disegnano, ma possono <b>migliorare il prompt</b>. 🎙️ La <b>trascrizione vocale</b> (Recorder, Dettatura) usa sempre Groq/OpenAI (Whisper), anche con Claude, Gemini o Grok come chat.</div></div></div>
 
         <div class="sect"><h2><span data-i18n="browserWasm">Browser · cervello locale (WASM)</span> <span class="badge">Offline</span></h2>
           <div class="row"><label data-i18n="state">Stato</label><div class="ctl" style="flex-wrap:wrap"><span class="hint" id="edge-brain-stat" style="flex:1" data-i18n="checking">controllo…</span></div></div>
@@ -2286,7 +2288,7 @@ async function mountPcModelsUI() {
   // ({ it, en, es, fr, de }) read through L(); English stays the fallback floor.
   const L = (o) => (o && (o[lang] || o.en || o.it)) || '';
 
-  async function buildReg() { try { const ai = await import('/ai.js'); REG = buildRegistry(ai.PROVIDERS, ai.CAPMATRIX, ai.TIERS); } catch {} }
+  async function buildReg() { try { const ai = await import('/ai.js'); REG = buildRegistry(ai.PROVIDERS, ai.CAPMATRIX, ai.TIERS, (id) => ai.providerLabel(id, lang)); } catch {} }
 
   // Build the CapabilityModel from signals that already exist (caps + teacher.json) + cheap browser probes.
   async function probeSignals() {
@@ -2298,7 +2300,7 @@ async function mountPcModelsUI() {
       const fresh = await apiJson('/api/anima/caps');
       if (fresh) { c = caps = Object.assign(caps, fresh); capsAt = Date.now(); }
     }
-    const keys = { anthropic: false, openai: false, xai: false, google: false, local: false };
+    const keys = { anthropic: false, openai: false, xai: false, google: false, local: false, custom: false };
     let exec = 'browser', geminiTier = '';
     try {
       // Through the shared, cached reader: Settings used to read teacher.json twice within 3 ms at open.
@@ -2379,7 +2381,7 @@ async function mountPcModelsUI() {
     const gpuS = sig.webgpu ? (gpuOk ? CT('cap_gpu_ready', { model: shortModel }) : CT('cap_gpu_nomodel'))
       : (sig.gpuCause === 'insecure' ? CT('cap_gpu_blocked_http') : CT('cap_gpu_none'));
     const rungs = [
-      { k: 'cloud', t: T('apRungCloud'), led: cloudOk ? 'on' : (sig.hasKey ? 'warn' : 'off'), s: cloudOk ? ('✓ ' + sig.provider) : (sig.hasKey ? (sig.online ? T('apCloudReady') : T('apOffline')) : T('apNoKey')) },
+      { k: 'cloud', t: T('apRungCloud'), led: cloudOk ? 'on' : (sig.hasKey ? 'warn' : 'off'), s: cloudOk ? ('✓ ' + ((REG.providers[sig.provider] || {}).label || sig.provider)) : (sig.hasKey ? (sig.online ? T('apCloudReady') : T('apOffline')) : T('apNoKey')) },
       { k: 'pc', t: T('apRungPc'), led: sig.pcModel ? 'on' : (sig.pcState === 'refused' ? 'warn' : 'off'), s: sig.pcModel ? ('✓ ' + sig.pcServer + ' · ' + sig.pcModel) : (sig.pcState === 'refused' ? T('pcStCors') : T('apPcNone')) },
       { k: 'gpu', t: T('apRungGpu'), led: gpuOk ? 'on' : (sig.webgpu ? 'warn' : 'off'), s: gpuS, how: !sig.webgpu },
       { k: 'wasm', t: T('apRungWasm'), led: wasmOk ? 'on' : 'warn', s: wasmOk ? T('apCached') : T('apPackMissing') },

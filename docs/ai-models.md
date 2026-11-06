@@ -63,7 +63,35 @@ ANIMA shows an actionable kind (`auth`, `forbidden`, `model`, `quota`) as a warn
 another tier gave, and as the reply itself when nothing answered — so a broken key gets fixed instead
 of silently making every answer worse.
 
+## An OpenAI-compatible service of the user's choice (`custom`, 2026-11-06)
+
+Settings ▸ AI / Models ▸ Online AI and the first-run wizard offer **OpenAI-compatible**: any service that speaks the
+OpenAI API (OpenRouter, Together, DeepSeek, Mistral, OpenAI, a self-hosted server behind https). The user gives the
+base URL, the key and the model; nothing is assumed about the host (no default address, no model table, no key shape).
+- `normalizeBase()` saves one form (`https://host/v1`, no trailing slash, `https://` added when missing) and refuses
+  plain http to an Internet host (the key would travel in clear), credentials or a query in the URL, and a full
+  `/chat/completions` URL (it offers the base instead).
+- **Test** (`probeEndpoint()`): `/models` then one tiny completion with the chosen model, from the browser first and,
+  when the browser cannot reach the service at all (no CORS), through the device relay `/api/llm`. The way that
+  worked is saved as `proxy: true` on the entry; `apiUrl()` / `viaProxy()` relay every host the vault marks so, for
+  ANIMA, the agent and the apps alike. Errors name the host: wrong key, unknown model, unreachable, no model listed.
+- `teacher.json`: `provider: "custom"` with `base`, `model`, `key` at the top level and in `keys.custom` — what every
+  firmware reads as an OpenAI-compatible teacher, the released ones included, so ANIMA on the device answers with it
+  too. The firmware ignores `proxy`; it never uses a `custom` top level for Whisper (chat only is promised) and labels
+  the model row with the model's own name.
+- A key AI Chat saves for a host that is not Groq or OpenAI goes to `keys.custom` instead of replacing the Groq key.
+  AI Chat itself keeps its own endpoint (its ⚙ panel); the Settings note says so.
+- Firmware limits: `base` and `key` ≤ 159 bytes, `model` ≤ 63 (`teacher_cfg_t`). Settings and the wizard refuse a
+  longer value on Save and name the field (`deviceFieldTooLong()`): the device would cut it and every call would fail.
+
 ## Tests
+
+The OpenAI-compatible provider: `nucleo-webos tests/suite/ai-custom-provider.test.mjs` (address rules, browser/relay
+detection, every failure reason, the `teacher.json` shape, relayed hosts, AI Chat's key slot, names in six languages),
+`ai-custom-probe.test.mjs` (the firmware field limits, a stop, no relay, the key never in a URL nor in an error),
+`ai-custom-sealed.test.mjs` (a sealed vault), `ai-custom-ui.test.mjs` (Settings and wizard order and strings, presets,
+ANIMA and the agent). Firmware: `npm run customteacher:test` (in `anima:gate`) runs the real `model_label()` and
+checks the source rules (provider kept, no Whisper on `custom`, the entry's own base).
 
 `nucleo-webos tests/suite/ai-models.test.mjs` (in `npm run test:all` / the gate's unit tests): ranking on Groq's real
 list, preference kept while served, a retired model replaced (404 and 400 "decommissioned"), a bad

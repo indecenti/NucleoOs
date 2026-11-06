@@ -56,7 +56,7 @@
   {
    "id": "anima",
    "title": "ANIMA",
-   "md": "**ANIMA** es el asistente del sistema. Ábrela desde el escritorio, o con `Ctrl` + `Espacio` desde cualquier sitio.\n\n- Responde preguntas, escribe y resume textos, abre apps y archivos por ti.\n- Funciona con un proveedor de IA y tu propia clave (Ajustes › IA / Modelos) o con un modelo que funciona en el navegador, sin que tus datos salgan del ordenador.\n- Antes de algo que cambie tus archivos o el dispositivo, te pide confirmación.\n",
+   "md": "**ANIMA** es el asistente del sistema. Ábrela desde el escritorio, o con `Ctrl` + `Espacio` desde cualquier sitio.\n\n- Responde preguntas, escribe y resume textos, abre apps y archivos por ti.\n- Funciona con un proveedor de IA y tu propia clave (Ajustes › IA / Modelos) o con un modelo que funciona en el navegador, sin que tus datos salgan del ordenador.\n- Como proveedor también puedes elegir **Compatible con OpenAI**: cualquier servicio que hable la API de OpenAI (OpenRouter, Together, DeepSeek, Mistral, tu propio servidor https). Escribe la dirección, la clave y el modelo en Ajustes › IA / Modelos › IA en línea y pulsa **Probar**: lista los modelos y comprueba que el servicio responde.\n- Antes de algo que cambie tus archivos o el dispositivo, te pide confirmación.\n",
    "icon": "✨",
    "app": "anima"
   },

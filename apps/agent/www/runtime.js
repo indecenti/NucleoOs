@@ -332,7 +332,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     if (keys) {
       try {
         const r = routeFor({ ...spec, exclude: [...(spec.exclude || []), ...PROXY_PROVIDERS] }, keys, active);
-        if (r && r.key && !providerOf(r.provider).proxy) return { cfg: { provider: r.provider, key: r.key, base: r.base, model: r.model, version: r.version }, model: r.model };
+        if (r && r.key && !providerOf(r.provider).proxy && !r.proxy) return { cfg: { provider: r.provider, key: r.key, base: r.base, model: r.model, version: r.version }, model: r.model };
       } catch {}
     }
     const tier = spec.difficulty === 'hard' ? 'hard' : spec.difficulty === 'fast' ? 'orchestrator' : 'worker';

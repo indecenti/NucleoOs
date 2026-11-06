@@ -46,6 +46,15 @@ const STR = {
     listed: (n) => n + ' modelli disponibili', nolist: 'Il server non ha restituito modelli', typemodel: 'nome del modello (es. llama3.2)',
     localok: (n, m) => '✓ Server raggiungibile — ' + n + ' modelli' + (m ? ' · prova ' + m + ' ok' : ''),
     needbase: 'Inserisci l’indirizzo del server (http://<pc>:<porta>/v1).', needmodel: 'Scegli o scrivi il modello.',
+    customph: 'https://api.esempio.com/v1',
+    customnote: 'Qualsiasi servizio compatibile con le API OpenAI (OpenRouter, Together, DeepSeek, Mistral, OpenAI, un tuo server in https…): indirizzo base, modello e chiave. Lo usano ANIMA (anche sul dispositivo) e le app che chiedono all’IA di sistema. AI Chat ha un suo endpoint e una sua chiave (nelle impostazioni dell’app).',
+    badurl: 'Indirizzo non valido: scrivi l’URL base del servizio, per esempio https://openrouter.ai/api/v1.', insecure: 'Serve un indirizzo https://: con http la chiave viaggerebbe in chiaro.',
+    endpoint: (b) => 'Scrivi solo l’indirizzo base, senza /chat/completions: ' + b, unreach: (h) => 'Non raggiungo ' + h + ' né dal browser né tramite il dispositivo. Controlla l’indirizzo (di solito finisce con /v1) e la rete.',
+    nomodels: 'Il server non elenca i suoi modelli: scrivi il nome del modello.', okdirect: (m) => '✓ Funziona — ' + m + ' · chiamato direttamente dal browser',
+    okrelay: (m) => '✓ Funziona — ' + m + ' · tramite il dispositivo (il servizio non accetta chiamate dal browser)', notok: 'Prova non riuscita: ', saveanyway2: ' Salvo lo stesso?',
+    badkey: (h) => 'Chiave rifiutata da ' + h + ': controlla di averla copiata intera.', nomodel: (h, m) => h + ' non conosce il modello «' + m + '»: sceglilo dall’elenco (Prova lo riempie) o controlla il nome.',
+    execRelay: 'Questo servizio non accetta chiamate dal browser: le richieste passano dal dispositivo, che le inoltra.',
+    toolong: (f, n) => f + ': troppo lungo per il dispositivo (al massimo ' + n + ' caratteri).',
     localnote: 'Server locale: il dispositivo fa da ponte (il browser non può parlare direttamente con Ollama). La chiave serve solo se il server la richiede. Su Ollama, sul PC: OLLAMA_HOST=0.0.0.0 ollama serve.',
     netmode: 'Modalità', nets: [['offline', 'Offline', 'Solo il dispositivo, niente rete'], ['local', 'Locale', 'Dispositivo + server LLM nella tua rete, niente internet'],
            ['hybrid', 'Ibrida', 'Dispositivo, poi Wikipedia, poi il modello'], ['llm', 'LLM', 'Prima il modello, il dispositivo come riserva']],
@@ -99,6 +108,15 @@ const STR = {
     listed: (n) => n + ' models available', nolist: 'The server returned no models', typemodel: 'model name (e.g. llama3.2)',
     localok: (n, m) => '✓ Server reachable — ' + n + ' models' + (m ? ' · ' + m + ' answered' : ''),
     needbase: 'Enter the server address (http://<pc>:<port>/v1).', needmodel: 'Pick or type the model.',
+    customph: 'https://api.example.com/v1',
+    customnote: 'Any service that speaks the OpenAI API (OpenRouter, Together, DeepSeek, Mistral, OpenAI, your own https server…): base URL, model and key. ANIMA (on the device too) and the apps that ask the system AI use it. AI Chat keeps its own endpoint and key (in the app’s own settings).',
+    badurl: 'Not a valid address: type the service’s base URL, e.g. https://openrouter.ai/api/v1.', insecure: 'Use an https:// address: over http the key would travel in clear text.',
+    endpoint: (b) => 'Type only the base address, without /chat/completions: ' + b, unreach: (h) => 'Can’t reach ' + h + ' from the browser or through the device. Check the address (it usually ends in /v1) and the network.',
+    nomodels: 'The server doesn’t list its models: type the model name.', okdirect: (m) => '✓ Works — ' + m + ' · called straight from the browser',
+    okrelay: (m) => '✓ Works — ' + m + ' · through the device (the service refuses browser calls)', notok: 'Test failed: ', saveanyway2: ' Save anyway?',
+    badkey: (h) => 'Key rejected by ' + h + ': check you copied all of it.', nomodel: (h, m) => h + ' doesn’t know the model “' + m + '”: pick one from the list (Test fills it) or check the name.',
+    execRelay: 'This service refuses browser calls: requests go through the device, which forwards them.',
+    toolong: (f, n) => f + ': too long for the device (at most ' + n + ' characters).',
     localnote: 'Local server: the device bridges it (a browser cannot talk to Ollama directly). A key only if the server wants one. For Ollama, on the PC: OLLAMA_HOST=0.0.0.0 ollama serve.',
     netmode: 'Mode', nets: [['offline', 'Offline', 'The device only, no network'], ['local', 'Local', 'Device + an LLM server on your network, no internet'],
            ['hybrid', 'Hybrid', 'Device, then Wikipedia, then the model'], ['llm', 'LLM', 'The model first, the device as fallback']],
@@ -152,6 +170,15 @@ const STR = {
     listed: (n) => n + ' modelos disponibles', nolist: 'El servidor no devolvió ningún modelo', typemodel: 'nombre del modelo (p. ej. llama3.2)',
     localok: (n, m) => '✓ Servidor accesible — ' + n + ' modelos' + (m ? ' · ' + m + ' respondió' : ''),
     needbase: 'Introduce la dirección del servidor (http://<pc>:<puerto>/v1).', needmodel: 'Elige o escribe el modelo.',
+    customph: 'https://api.ejemplo.com/v1',
+    customnote: 'Cualquier servicio que hable la API de OpenAI (OpenRouter, Together, DeepSeek, Mistral, OpenAI, tu propio servidor https…): URL base, modelo y clave. La usan ANIMA (también en el dispositivo) y las apps que preguntan a la IA del sistema. AI Chat tiene su propio endpoint y su propia clave (en los ajustes de la app).',
+    badurl: 'Dirección no válida: escribe la URL base del servicio, p. ej. https://openrouter.ai/api/v1.', insecure: 'Usa una dirección https://: con http la clave viajaría sin cifrar.',
+    endpoint: (b) => 'Escribe solo la dirección base, sin /chat/completions: ' + b, unreach: (h) => 'No llego a ' + h + ' ni desde el navegador ni a través del dispositivo. Revisa la dirección (suele terminar en /v1) y la red.',
+    nomodels: 'El servidor no lista sus modelos: escribe el nombre del modelo.', okdirect: (m) => '✓ Funciona — ' + m + ' · llamado directamente desde el navegador',
+    okrelay: (m) => '✓ Funciona — ' + m + ' · a través del dispositivo (el servicio no acepta llamadas del navegador)', notok: 'La prueba falló: ', saveanyway2: ' ¿Guardo igualmente?',
+    badkey: (h) => 'Clave rechazada por ' + h + ': comprueba que la copiaste entera.', nomodel: (h, m) => h + ' no conoce el modelo «' + m + '»: elige uno de la lista (Probar la llena) o revisa el nombre.',
+    execRelay: 'Este servicio no acepta llamadas del navegador: las peticiones pasan por el dispositivo, que las reenvía.',
+    toolong: (f, n) => f + ': demasiado largo para el dispositivo (como máximo ' + n + ' caracteres).',
     localnote: 'Servidor local: el dispositivo hace de puente (un navegador no puede hablar directamente con Ollama). La clave solo si el servidor la pide. Con Ollama, en el PC: OLLAMA_HOST=0.0.0.0 ollama serve.',
     netmode: 'Modo', nets: [['offline', 'Sin red', 'Solo el dispositivo, sin red'], ['local', 'Local', 'Dispositivo + un servidor LLM en tu red, sin internet'],
            ['hybrid', 'Híbrido', 'Dispositivo, luego Wikipedia, luego el modelo'], ['llm', 'LLM', 'Primero el modelo, el dispositivo como respaldo']],
@@ -205,6 +232,15 @@ const STR = {
     listed: (n) => n + ' modèles disponibles', nolist: 'Le serveur n’a renvoyé aucun modèle', typemodel: 'nom du modèle (ex. llama3.2)',
     localok: (n, m) => '✓ Serveur joignable — ' + n + ' modèles' + (m ? ' · ' + m + ' a répondu' : ''),
     needbase: 'Saisissez l’adresse du serveur (http://<pc>:<port>/v1).', needmodel: 'Choisissez ou saisissez le modèle.',
+    customph: 'https://api.exemple.com/v1',
+    customnote: 'Tout service qui parle l’API OpenAI (OpenRouter, Together, DeepSeek, Mistral, OpenAI, votre propre serveur https…) : URL de base, modèle et clé. ANIMA (sur l’appareil aussi) et les apps qui interrogent l’IA du système l’utilisent. AI Chat garde son propre endpoint et sa propre clé (dans les réglages de l’app).',
+    badurl: 'Adresse non valide : saisissez l’URL de base du service, par ex. https://openrouter.ai/api/v1.', insecure: 'Utilisez une adresse https:// : en http la clé circulerait en clair.',
+    endpoint: (b) => 'Saisissez seulement l’adresse de base, sans /chat/completions : ' + b, unreach: (h) => 'Impossible de joindre ' + h + ' depuis le navigateur ou via l’appareil. Vérifiez l’adresse (elle finit souvent par /v1) et le réseau.',
+    nomodels: 'Le serveur ne liste pas ses modèles : saisissez le nom du modèle.', okdirect: (m) => '✓ Ça marche — ' + m + ' · appelé directement depuis le navigateur',
+    okrelay: (m) => '✓ Ça marche — ' + m + ' · via l’appareil (le service refuse les appels du navigateur)', notok: 'Échec du test : ', saveanyway2: ' Enregistrer quand même ?',
+    badkey: (h) => 'Clé refusée par ' + h + ' : vérifiez qu’elle est copiée en entier.', nomodel: (h, m) => h + ' ne connaît pas le modèle « ' + m + ' » : choisissez-en un dans la liste (Tester la remplit) ou vérifiez le nom.',
+    execRelay: 'Ce service refuse les appels du navigateur : les requêtes passent par l’appareil, qui les transmet.',
+    toolong: (f, n) => f + ' : trop long pour l’appareil (' + n + ' caractères au maximum).',
     localnote: 'Serveur local : l’appareil sert de pont (un navigateur ne peut pas parler directement à Ollama). Une clé seulement si le serveur en demande une. Pour Ollama, sur le PC : OLLAMA_HOST=0.0.0.0 ollama serve.',
     netmode: 'Mode', nets: [['offline', 'Hors ligne', 'L’appareil seul, sans réseau'], ['local', 'Local', 'Appareil + un serveur LLM sur votre réseau, sans internet'],
            ['hybrid', 'Hybride', 'L’appareil, puis Wikipédia, puis le modèle'], ['llm', 'LLM', 'Le modèle d’abord, l’appareil en secours']],
@@ -258,6 +294,15 @@ const STR = {
     listed: (n) => n + ' Modelle verfügbar', nolist: 'Der Server hat keine Modelle geliefert', typemodel: 'Modellname (z. B. llama3.2)',
     localok: (n, m) => '✓ Server erreichbar — ' + n + ' Modelle' + (m ? ' · ' + m + ' hat geantwortet' : ''),
     needbase: 'Gib die Serveradresse ein (http://<pc>:<port>/v1).', needmodel: 'Wähle oder tippe das Modell.',
+    customph: 'https://api.beispiel.com/v1',
+    customnote: 'Jeder Dienst, der die OpenAI-API spricht (OpenRouter, Together, DeepSeek, Mistral, OpenAI, dein eigener https-Server…): Basis-URL, Modell und Schlüssel. ANIMA (auch auf dem Gerät) und die Apps, die die System-KI fragen, nutzen ihn. AI Chat hat einen eigenen Endpunkt und Schlüssel (in den Einstellungen der App).',
+    badurl: 'Keine gültige Adresse: gib die Basis-URL des Dienstes ein, z. B. https://openrouter.ai/api/v1.', insecure: 'Nutze eine https://-Adresse: über http ginge der Schlüssel unverschlüsselt.',
+    endpoint: (b) => 'Gib nur die Basisadresse ein, ohne /chat/completions: ' + b, unreach: (h) => h + ' ist weder vom Browser noch über das Gerät erreichbar. Prüfe die Adresse (sie endet meist auf /v1) und das Netz.',
+    nomodels: 'Der Server listet seine Modelle nicht: gib den Modellnamen ein.', okdirect: (m) => '✓ Funktioniert — ' + m + ' · direkt vom Browser aufgerufen',
+    okrelay: (m) => '✓ Funktioniert — ' + m + ' · über das Gerät (der Dienst lehnt Browser-Aufrufe ab)', notok: 'Test fehlgeschlagen: ', saveanyway2: ' Trotzdem speichern?',
+    badkey: (h) => 'Schlüssel von ' + h + ' abgelehnt: prüfe, ob du ihn vollständig kopiert hast.', nomodel: (h, m) => h + ' kennt das Modell „' + m + '“ nicht: wähle eins aus der Liste (Testen füllt sie) oder prüfe den Namen.',
+    execRelay: 'Dieser Dienst lehnt Browser-Aufrufe ab: Anfragen laufen über das Gerät, das sie weiterleitet.',
+    toolong: (f, n) => f + ': zu lang für das Gerät (höchstens ' + n + ' Zeichen).',
     localnote: 'Lokaler Server: das Gerät dient als Brücke (ein Browser kann nicht direkt mit Ollama sprechen). Ein Schlüssel nur, wenn der Server einen verlangt. Für Ollama auf dem PC: OLLAMA_HOST=0.0.0.0 ollama serve.',
     netmode: 'Modus', nets: [['offline', 'Offline', 'Nur das Gerät, kein Netz'], ['local', 'Lokal', 'Gerät + ein LLM-Server in deinem Netz, kein Internet'],
            ['hybrid', 'Hybrid', 'Gerät, dann Wikipedia, dann das Modell'], ['llm', 'LLM', 'Zuerst das Modell, das Gerät als Reserve']],
@@ -311,6 +356,15 @@ const STR = {
     listed: (n) => n + ' 个可用模型', nolist: '服务器没有返回任何模型', typemodel: '模型名称（例如 llama3.2）',
     localok: (n, m) => '✓ 服务器可访问——' + n + ' 个模型' + (m ? ' · ' + m + ' 已应答' : ''),
     needbase: '请输入服务器地址（http://<pc>:<port>/v1）。', needmodel: '请选择或输入模型。',
+    customph: 'https://api.example.com/v1',
+    customnote: '任何支持 OpenAI API 的服务（OpenRouter、Together、DeepSeek、Mistral、OpenAI、你自己的 https 服务器…）：基础地址、模型和密钥。ANIMA（包括设备上）和调用系统 AI 的应用会使用它。AI Chat 有自己的端点和密钥（在应用自己的设置中）。',
+    badurl: '地址无效：请输入服务的基础 URL，例如 https://openrouter.ai/api/v1。', insecure: '请使用 https:// 地址：通过 http 密钥会以明文传输。',
+    endpoint: (b) => '只需输入基础地址，不要 /chat/completions：' + b, unreach: (h) => '无法从浏览器或通过设备连接到 ' + h + '。请检查地址（通常以 /v1 结尾）和网络。',
+    nomodels: '服务器没有列出模型：请输入模型名称。', okdirect: (m) => '✓ 可用 — ' + m + ' · 由浏览器直接调用',
+    okrelay: (m) => '✓ 可用 — ' + m + ' · 通过设备（该服务不接受浏览器调用）', notok: '测试失败：', saveanyway2: ' 仍要保存吗？',
+    badkey: (h) => h + ' 拒绝了该密钥：请检查是否完整复制。', nomodel: (h, m) => h + ' 不认识模型“' + m + '”：请从列表中选择（点击“测试”会填充列表）或检查名称。',
+    execRelay: '该服务不接受浏览器调用：请求通过设备转发。',
+    toolong: (f, n) => f + '：对设备来说太长（最多 ' + n + ' 个字符）。',
     localnote: '本地服务器：由设备中转（浏览器无法直接与 Ollama 通信）。只有服务器要求时才需要密钥。使用 Ollama 时，在电脑上运行：OLLAMA_HOST=0.0.0.0 ollama serve。',
     netmode: '模式', nets: [['offline', '离线', '仅使用设备，不联网'], ['local', '本地', '设备 + 你网络中的 LLM 服务器，不连接互联网'],
            ['hybrid', '混合', '先用设备，再查维基百科，最后用模型'], ['llm', 'LLM', '先用模型，设备作为备用']],
@@ -453,15 +507,16 @@ export function mountKeyManager(container, opts = {}) {
     (full ? `<div class="nkm-grp" data-el="netgrp" style="display:none"><div class="nkm-row"><label>${esc(t().netmode)}</label><span class="nkm-seg" data-el="net">${t().nets.map(([id, lbl]) => `<span class="it" data-n="${id}">${esc(lbl)}</span>`).join('')}</span></div><div class="nkm-exechint" data-el="nethint"></div></div>` : '') +
     `<div class="nkm-chips" data-el="chips"></div>` +
     (full ? `<div class="nkm-cap" data-el="cap"></div>` : '') +
-    (full && showTier ? `<div class="nkm-row" data-el="tierrow" style="display:none"><label>${esc(t().plan)}</label><span class="nkm-badge" data-el="tier">…</span><button type="button" class="nkm-btn" data-el="detect">${esc(t().detect)}</button></div>` : '') +
+    // the order a user fills them in: what this provider is, its address (typed ones), the key, then the model
+    `<div class="nkm-note" data-el="localnote" style="display:none">${esc(t().localnote)}</div>` +
     `<div class="nkm-row" data-el="baserow" style="display:none"><label>${esc(t().base)}</label><input data-el="base" type="url" autocomplete="off" spellcheck="false" placeholder="http://192.168.1.10:11434/v1"><span class="nkm-btns" data-el="presets"></span></div>` +
+    `<div class="nkm-row"><label>${esc(t().key)}</label><input data-el="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…"></div>` +
     `<div class="nkm-row"><label>${esc(t().model)}</label><select data-el="model"></select><input data-el="modeltxt" style="display:none" autocomplete="off" spellcheck="false" placeholder="${esc(t().typemodel)}"><button type="button" class="nkm-btn" data-el="refresh">${esc(t().refresh)}</button></div>` +
     `<div class="nkm-row" data-el="effrow" style="display:none"><label>${esc(AI.effortLabel('label', lang))}</label><span class="nkm-seg" role="group" aria-label="${esc(AI.effortLabel('label', lang))}" data-el="eff"></span></div>` +
     `<div class="nkm-exechint" data-el="effhint" style="display:none">${esc(t().effhint)}</div>` +
-    `<div class="nkm-note" data-el="localnote" style="display:none">${esc(t().localnote)}</div>` +
+    (full && showTier ? `<div class="nkm-row" data-el="tierrow" style="display:none"><label>${esc(t().plan)}</label><span class="nkm-badge" data-el="tier">…</span><button type="button" class="nkm-btn" data-el="detect">${esc(t().detect)}</button></div>` : '') +
     (showExec ? `<div class="nkm-row"><label>${esc(t().exec)}</label><span class="nkm-seg" data-el="exec"><span class="it" data-x="browser">${esc(t().browser)}</span><span class="it" data-x="device">${esc(t().device)}</span></span></div>` : '') +
     (showExec ? `<div class="nkm-exechint" data-el="exechint"></div>` : '') +
-    `<div class="nkm-row"><label>${esc(t().key)}</label><input data-el="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…"></div>` +
     `<div class="nkm-btns"><button type="button" class="nkm-btn primary" data-el="save">${esc(t().save)}</button><button type="button" class="nkm-btn" data-el="test">${esc(t().test)}</button><button type="button" class="nkm-btn danger" data-el="del">${esc(t().del)}</button></div>` +
     `<div class="nkm-stat" data-el="stat">…</div>` +
     (full ? `<div class="nkm-note">${esc(t().note)}</div>` : '') +
@@ -504,8 +559,15 @@ export function mountKeyManager(container, opts = {}) {
   const $ = (n) => root.querySelector(`[data-el="${n}"]`);
 
   const setStat = (html) => { $('stat').innerHTML = html; };
+  // A provider's name on screen: the OpenAI-compatible one in the page's language, the others by brand.
+  const labelOf = (id) => AI.providerLabel(id, lang);
+  const hostOf = (u) => { try { return new URL(u).host; } catch { return String(u || ''); } };
+  // A provider whose address the user types: the LAN server, or the OpenAI-compatible service.
+  const typedBase = () => !!(prov().local || prov().custom);
   const statText = () => (prov().local && cfg.base && cfg.model)
     ? `${t().active} <b>${esc(cfg.base)}</b> · ${esc(prov().label)} · ${esc(cfg.model)}`
+    : (prov().custom && cfg.key)
+    ? `${t().active} <b>${esc(AI.maskKey(cfg.key, cfg.keyHint))}</b> · ${esc(hostOf(cfg.base))} · ${esc(cfg.model)}`
     : cfg.key
     ? `${t().active} <b>${esc(AI.maskKey(cfg.key, cfg.keyHint))}</b> · ${esc(prov().label)} · ${esc(cfg.model)}`
     : t().nokey;
@@ -516,7 +578,7 @@ export function mountKeyManager(container, opts = {}) {
     const ids = (AI.lanRelay() || cfg.provider === 'local') ? providerIds.concat(['local']) : providerIds;
     $('chips').innerHTML = ids.map((id) => {
       const set = !!(cfg.keys && cfg.keys[id] && cfg.keys[id].key) || (id === cfg.provider && cfg.key);
-      return `<button type="button" class="nkm-chip${id === cfg.provider ? ' cur' : ''}" data-p="${id}">${esc(AI.PROVIDERS[id].label)}${set ? '<span class="ok">✓</span>' : ''}</button>`;
+      return `<button type="button" class="nkm-chip${id === cfg.provider ? ' cur' : ''}" data-p="${id}">${esc(labelOf(id))}${set ? '<span class="ok">✓</span>' : ''}</button>`;
     }).join('');
     $('chips').querySelectorAll('[data-p]').forEach((b) => b.addEventListener('click', () => chooseProvider(b.dataset.p)));
   }
@@ -525,9 +587,10 @@ export function mountKeyManager(container, opts = {}) {
     const live = cfg.liveModels && cfg.liveModels.provider === cfg.provider ? cfg.liveModels.list : null;
     const list = live && live.length ? live
       : (cfg.provider === 'google' && cfg.geminiModels && cfg.geminiModels.length) ? cfg.geminiModels : prov().models.slice();
-    if (cfg.model && !list.some((m) => m[0] === cfg.model)) list.unshift([cfg.model, cfg.model]);   // keep the saved one visible
-    // A local server with no list yet: a free-text model name instead of an empty dropdown.
-    const typed = !list.length;
+    // A server with no list yet (a LAN one, or an OpenAI-compatible service not asked yet): a free-text model name
+    // instead of a dropdown holding only the saved one.
+    const typed = !list.length || (!!prov().custom && !(live && live.length));
+    if (!typed && cfg.model && !list.some((m) => m[0] === cfg.model)) list.unshift([cfg.model, cfg.model]);   // keep the saved one visible
     if ($('modeltxt')) { $('modeltxt').style.display = typed ? '' : 'none'; if (typed) $('modeltxt').value = cfg.model || ''; }
     sel.style.display = typed ? 'none' : '';
     sel.innerHTML = '';
@@ -550,11 +613,13 @@ export function mountKeyManager(container, opts = {}) {
       $('exec').closest('.nkm-row').style.display = prov().local ? 'none' : '';
       if ($('exechint')) $('exechint').style.display = prov().local ? 'none' : '';
       $('exec').querySelectorAll('.it').forEach((b) => b.classList.toggle('on', b.dataset.x === (cfg.exec || 'browser')));
-      if ($('exechint')) $('exechint').textContent = (cfg.exec === 'device') ? t().execDevice : t().execBrowser;
+      if ($('exechint')) $('exechint').textContent = (cfg.exec === 'device') ? t().execDevice : (prov().custom && cfg.proxy) ? t().execRelay : t().execBrowser;
     }
-    const local = !!p.local;
-    if ($('baserow')) { $('baserow').style.display = local ? '' : 'none'; if (local && document.activeElement !== $('base')) $('base').value = cfg.base || ''; }
-    if ($('localnote')) $('localnote').style.display = local ? '' : 'none';
+    const local = !!p.local, typed = typedBase();
+    if ($('baserow')) { $('baserow').style.display = typed ? '' : 'none'; if (typed && document.activeElement !== $('base')) $('base').value = cfg.base || ''; }
+    if ($('base')) $('base').placeholder = p.custom ? t().customph : 'http://192.168.1.10:11434/v1';
+    if ($('presets')) $('presets').style.display = local ? '' : 'none';
+    if ($('localnote')) { $('localnote').style.display = typed ? '' : 'none'; $('localnote').textContent = p.custom ? t().customnote : t().localnote; }
     if ($('presets') && local && !$('presets').childElementCount) {
       $('presets').innerHTML = (p.presets || []).map(([n, port]) => `<button type="button" class="nkm-btn" data-port="${port}">${esc(n)}</button>`).join('');
       $('presets').querySelectorAll('[data-port]').forEach((b) => b.addEventListener('click', () => {
@@ -581,8 +646,10 @@ export function mountKeyManager(container, opts = {}) {
     const d = AI.providerOf(p), st = (cfg.keys && cfg.keys[p]) || {};
     cfg.provider = p; cfg.base = st.base || d.base; cfg.model = st.model || d.def;
     cfg.version = st.version || d.version; cfg.key = st.key || ''; cfg.keyHint = st.keyHint || ''; cfg.geminiModels = null;
-    cfg.effort = st.effort || '';
+    cfg.effort = st.effort || ''; cfg.proxy = st.proxy === true; probed = null;
   }
+  // The last test of the OpenAI-compatible endpoint ({base, proxy}): Save reuses it instead of testing again.
+  let probed = null;
   function chooseProvider(p) {
     if (!AI.PROVIDERS[p]) return;
     adopt(p); paint(); setStat(statText()); if ($('key')) $('key').value = '';
@@ -604,9 +671,10 @@ export function mountKeyManager(container, opts = {}) {
     cfg.vision_model = c.vision_model || ''; cfg.vision_base = c.vision_base || ''; cfg.vision_key = c.vision_key || '';
     cfg.vision = typeof c.vision === 'boolean' ? c.vision : null;
     cfg.effort = c.effort || ''; cfg._extra = c._extra || {};   // _extra: fields another edition or the firmware wrote, written back untouched
+    cfg.proxy = c.proxy === true;
     if ($('stt')) { $('stt').value = cfg.stt_url; $('sttstat').textContent = cfg.stt_url ? t().sttok : t().sttoff; }
     if ($('vismodel')) { $('vismodel').value = cfg.vision_model; $('visstat').textContent = cfg.vision_model ? t().visok : t().visoff; }
-    if (cfg.key) cfg.keys[cfg.provider] = Object.assign({}, cfg.keys[cfg.provider] || {}, { base: cfg.base, model: cfg.model, key: cfg.key, keyHint: cfg.keyHint }, cfg.provider === 'anthropic' ? { version: cfg.version } : {}, cfg.effort ? { effort: cfg.effort } : {});
+    if (cfg.key) cfg.keys[cfg.provider] = Object.assign({}, cfg.keys[cfg.provider] || {}, { base: cfg.base, model: cfg.model, key: cfg.key, keyHint: cfg.keyHint }, cfg.provider === 'anthropic' ? { version: cfg.version } : {}, cfg.effort ? { effort: cfg.effort } : {}, cfg.proxy ? { proxy: true } : {});
     paint(); setStat((cfg.key || (prov().local && cfg.base)) ? statText() : t().noset);
     onChange(getCfg());
   }
@@ -634,6 +702,23 @@ export function mountKeyManager(container, opts = {}) {
       cfg.model = pickedModel();
       if (!cfg.model) { setStat(t().needmodel); return; }
       if (v) cfg.key = v;
+    } else if (p.custom) {
+      const b = checkBase(); if (!b) return;
+      if (!v && !cfg.key) { setStat(t().typefirst); return; }
+      const model = pickedModel();
+      if (!model) { setStat(t().needmodel); return; }
+      const long = AI.deviceFieldTooLong({ base: b, key: v, model });
+      if (long) { setStat(esc(t().toolong({ base: t().base, key: t().key, model: t().model }[long.field], long.max))); return; }
+      // How the browser reaches it (directly, or through the device) is known only by trying: the last test of this
+      // same address, or a test now. A failed test asks before saving (the service may just be down right now).
+      let how = probed && probed.base === b && probed.ok ? probed : null;
+      if (!how) {
+        setStat(t().testing);
+        how = await AI.probeEndpoint({ base: b, key: v || cfg.key, model });
+        if (!how.ok && !confirm(t().notok + probeText(how, b).replace(/<[^>]+>/g, '').replace(/^✗ /, '') + t().saveanyway2)) { setStat(probeText(how, b)); return; }
+      }
+      cfg.base = b; cfg.model = model; cfg.proxy = how.ok ? !!how.proxy : !!cfg.proxy;
+      if (v) cfg.key = v;
     } else {
       // No key typed: a model / effort change keeps the key already saved for this provider (on a sealed vault that
       // is the VAULT_KEY placeholder, written back as "" so the device keeps the real one).
@@ -648,7 +733,7 @@ export function mountKeyManager(container, opts = {}) {
       // The key now lives on the device: read its view back so the typed key leaves the page.
       $('key').value = '';
       await reload();
-      setStat(`${t().saved} <b>${esc(cfg.key ? AI.maskKey(cfg.key, cfg.keyHint) : cfg.base)}</b> · ${esc(p.label)} · ${esc(cfg.model)}`);
+      setStat(`${t().saved} <b>${esc(cfg.key ? AI.maskKey(cfg.key, cfg.keyHint) : cfg.base)}</b> · ${esc(cfg.provider === 'custom' ? hostOf(cfg.base) : labelOf(cfg.provider))} · ${esc(cfg.model)}`);
       fillChips();
       if (cfg.provider === 'google') calibrate();
     } else if (r === 'unpaired') setStat(t().pairSave);
@@ -669,8 +754,42 @@ export function mountKeyManager(container, opts = {}) {
     } else setStat(r === 'unpaired' ? t().pairSave : r === 'too_big' ? t().toobig : t().savefail);
   }
 
+  // The OpenAI-compatible address in the field, checked: the saved form, or null after saying what is wrong.
+  function checkBase() {
+    const r = AI.normalizeBase($('base') ? $('base').value : cfg.base);
+    if (r.base && !r.error) { if ($('base')) $('base').value = r.base; return r.base; }
+    setStat(esc(r.error === 'insecure' ? t().insecure : r.error === 'endpoint' ? t().endpoint(r.base) : t().badurl));
+    if (r.error === 'endpoint' && $('base')) $('base').value = r.base;   // offered, not saved: the user sees and confirms it
+    return null;
+  }
+  // A probeEndpoint() result in words.
+  function probeText(r, base) {
+    if (r.ok) return esc(r.proxy ? t().okrelay(r.model) : t().okdirect(r.model));
+    if (r.kind === 'no_model') return esc(t().nomodels);
+    if (r.kind === 'network') return '✗ ' + esc(t().unreach(hostOf(base)));
+    if (r.kind === 'auth') return '✗ ' + esc(t().badkey(hostOf(base)));
+    if (r.kind === 'model') return '✗ ' + esc(t().nomodel(hostOf(base), (r.error && r.error.model) || pickedModel()));
+    return '✗ ' + esc(AI.explainAiError(r.error, lang, { label: hostOf(base) }));
+  }
+  async function probeCustom() {
+    const b = checkBase(); if (!b) return null;
+    const key = $('key').value.trim() || cfg.key;
+    if (!key) { setStat(t().typeortest); return null; }
+    setStat(t().testing);
+    const r = await AI.probeEndpoint({ base: b, key, model: pickedModel() });
+    probed = Object.assign({ base: b }, r);
+    if (r.models && r.models.length) {
+      cfg.liveModels = { provider: cfg.provider, list: [...new Set(r.models)].sort().map((id) => [id, id]) };
+      if (!cfg.model && r.model) cfg.model = r.model;
+      fillModels();
+    }
+    setStat(probeText(r, b));
+    return r;
+  }
+
   async function refreshModels() {
     const p = prov();
+    if (p.custom) { const r = await probeCustom(); return r && r.models ? cfg.liveModels.list : null; }
     const c = { provider: cfg.provider, base: p.local ? ($('base').value || '').trim() : (cfg.base || p.base), key: $('key').value.trim() || cfg.key, version: cfg.version || p.version };
     if (p.local && !AI.isLanUrl(c.base)) { setStat(t().needbase); return null; }
     if (!p.local && !c.key) { setStat(t().typeortest); return null; }
@@ -691,6 +810,7 @@ export function mountKeyManager(container, opts = {}) {
   }
 
   async function test() {
+    if (prov().custom) { await probeCustom(); return; }
     if (prov().local) {
       const list = await refreshModels();
       if (!list) return;
@@ -713,7 +833,7 @@ export function mountKeyManager(container, opts = {}) {
   }
 
   async function del() {
-    if (!confirm(t().confirmDel + prov().label + t().confirmDelTail)) return;
+    if (!confirm(t().confirmDel + labelOf(cfg.provider) + t().confirmDelTail)) return;
     setStat(t().deleting);
     const keys = Object.assign({}, cfg.keys || {}); delete keys[cfg.provider];
     const remaining = Object.keys(keys).filter((k) => keys[k] && keys[k].key);
@@ -723,7 +843,7 @@ export function mountKeyManager(container, opts = {}) {
         cfg.keys = keys;
         cfg.provider = np; cfg.base = e.base; cfg.model = e.model; cfg.key = e.key; cfg.keyHint = e.keyHint || ''; cfg.version = e.version || '2023-06-01'; cfg.effort = e.effort || '';
         const r = await AI.writeTeacher(cfg);
-        if (r === true) { paint(); if ($('key')) $('key').value = ''; setStat(t().delActive + esc(AI.PROVIDERS[np].label)); onChange(getCfg()); return; }
+        if (r === true) { paint(); if ($('key')) $('key').value = ''; setStat(t().delActive + esc(labelOf(np))); onChange(getCfg()); return; }
         if (r === 'unpaired') { setStat(t().pairSave); return; }
         setStat(t().delfail); return;
       }
@@ -735,7 +855,7 @@ export function mountKeyManager(container, opts = {}) {
     } catch { setStat(t().delfail); }
   }
 
-  function getCfg() { return { provider: cfg.provider, base: cfg.base, model: cfg.model, key: cfg.key, version: cfg.version, exec: cfg.exec, geminiTier: cfg.geminiTier, effort: cfg.effort || '', hasKey: !!cfg.key, keys: cfg.keys }; }
+  function getCfg() { return { provider: cfg.provider, base: cfg.base, model: cfg.model, key: cfg.key, version: cfg.version, exec: cfg.exec, geminiTier: cfg.geminiTier, effort: cfg.effort || '', hasKey: !!cfg.key, keys: cfg.keys, proxy: !!cfg.proxy }; }
 
   // ======== sections beyond the key: each appears ONLY where it is proven to work ========
   // Device sections (network mode, Telegram, workspace/heartbeat/permissions, wake word, home Whisper, vision helper)

@@ -56,7 +56,7 @@
   {
    "id": "anima",
    "title": "ANIMA",
-   "md": "**ANIMA** is the system assistant. Open it from the desktop, or with `Ctrl` + `Space` from anywhere.\n\n- It answers questions, writes and summarises text, opens apps and files for you.\n- It works with an AI provider and your own key (Settings › AI / Models) or with a model that runs in the browser, without your data leaving the computer.\n- Before doing anything that changes your files or the device, it asks you to confirm.\n",
+   "md": "**ANIMA** is the system assistant. Open it from the desktop, or with `Ctrl` + `Space` from anywhere.\n\n- It answers questions, writes and summarises text, opens apps and files for you.\n- It works with an AI provider and your own key (Settings › AI / Models) or with a model that runs in the browser, without your data leaving the computer.\n- As the provider you can also pick **OpenAI-compatible**: any service that speaks the OpenAI API (OpenRouter, Together, DeepSeek, Mistral, your own https server). Type the address, key and model in Settings › AI / Models › Online AI, then press **Test**: it lists the models and checks that the service answers.\n- Before doing anything that changes your files or the device, it asks you to confirm.\n",
    "icon": "✨",
    "app": "anima"
   },

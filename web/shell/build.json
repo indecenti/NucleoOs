@@ -257,13 +257,13 @@
  "budget": {
   "bytes": 75497472,
   "ok": true,
-  "used": 39091289
+  "used": 39154059
  },
- "bytes": 59978406,
+ "bytes": 60041176,
  "caps_row": {
   "after": "0.8.3"
  },
- "commit": "e9ac00dc38920c15a04b5234b4de35a1d82d7194",
+ "commit": "bc0fe718bcc289c58ca959cf4f71b2293b5f2053",
  "edition": "cardputer",
  "externals": [
   {
@@ -555,7 +555,7 @@
  "format": 1,
  "generator": "nucleo-webos tools/build.py",
  "gz_twins": 769,
- "hash": "cc423556354738ce3033eb708263cceac8491125fa91357ade7f7ee77d84f9de",
+ "hash": "70f3f634cd830a166336cddb3b14cbed28e4dca2f7a0d46560652ad46f1a9dfc",
  "left_out": [
   {
    "id": "cast",
@@ -598,8 +598,8 @@
  },
  "profile_sha256": "f84fc128e9d0121dd7a732107ea112fac273696d36da3aa9fb35ff5d3c8948d8",
  "shell": {
-  "cache": "nucleo-shell-v166-f6637455b754",
-  "hash": "f6637455b754"
+  "cache": "nucleo-shell-v166-26bcdf65ff7a",
+  "hash": "26bcdf65ff7a"
  },
  "shell_dir": "www/shell",
  "uncommitted_files": 0,

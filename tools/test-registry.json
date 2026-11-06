@@ -631,6 +631,21 @@
       "anima": true
     },
     {
+      "id": "gate-code-task-code-or-the-chat",
+      "label": "code-task (Code or the chat)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/code-task-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-decline-honest-abstain",
       "label": "decline (honest abstain)",
       "category": "cascade-infra",
@@ -1597,6 +1612,36 @@
       "anima": true
     },
     {
+      "id": "gate-claude-stream",
+      "label": "claude-stream",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/claude-stream-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-custom-teacher",
+      "label": "custom-teacher",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/custom-teacher-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-offline-installer",
       "label": "offline-installer",
       "category": "cascade-infra",
@@ -1798,6 +1843,21 @@
       "anima": true
     },
     {
+      "id": "gate-fwsig-release-signatures",
+      "label": "fwsig (release signatures)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/fwsig-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-setup-store-reset-sd-secrets",
       "label": "setup-store (reset + SD secrets)",
       "category": "connect-transfer",
@@ -1811,6 +1871,21 @@
       "lang": "both",
       "in_gate": true,
       "anima": false
+    },
+    {
+      "id": "gate-clock-zones-time-zone-table",
+      "label": "clock-zones (time zone table)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/clock-zones-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
     },
     {
       "id": "gate-update-policy-release",
@@ -3548,6 +3623,22 @@
       "args": [
         "--test",
         "tools/registry-merge.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-release-announce",
+      "label": "release-announce.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/release-announce.test.mjs"
       ],
       "verifies": "",
       "nl": false,

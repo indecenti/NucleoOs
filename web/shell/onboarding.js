@@ -161,6 +161,27 @@ const L10N = {
     'Connect ': 'Conecta ',
     'Your key stays on the device': 'Tu clave permanece en el dispositivo',
     'Model': 'Modelo',
+    '{F}: too long for the device (at most {N} characters).': '{F}: demasiado largo para el dispositivo (como máximo {N} caracteres).',
+    'Key rejected by {H}: check you copied all of it.': 'Clave rechazada por {H}: comprueba que la copiaste entera.',
+    '{H} doesn’t know the model “{M}”: pick one from the list (Test fills it) or check the name.': '{H} no conoce el modelo «{M}»: elige uno de la lista (Probar la llena) o revisa el nombre.',
+    'OpenAI-compatible': 'Compatible con OpenAI',
+    'OpenRouter, Together, DeepSeek, Mistral, OpenAI or your own server: address, model and key.': 'OpenRouter, Together, DeepSeek, Mistral, OpenAI o tu propio servidor: dirección, modelo y clave.',
+    'Connect an OpenAI-compatible service': 'Conecta un servicio compatible con OpenAI',
+    'Address, model and key stay on the device': 'Dirección, modelo y clave se quedan en el dispositivo',
+    'Copy the API base URL from your service’s docs (it usually ends in /v1).': 'Copia la URL base de la API de la documentación de tu servicio (suele terminar en /v1).',
+    'Create an API key there and paste it below.': 'Crea allí una clave de API y pégala abajo.',
+    'Press Test: the models the service offers appear in the list.': 'Pulsa Probar: los modelos del servicio aparecen en la lista.',
+    'Address': 'Dirección',
+    'model name': 'nombre del modelo',
+    'Not a valid address: type the service’s base URL, e.g. https://openrouter.ai/api/v1.': 'Dirección no válida: escribe la URL base del servicio, p. ej. https://openrouter.ai/api/v1.',
+    'Use an https:// address: over http the key would travel in clear text.': 'Usa una dirección https://: con http la clave viajaría sin cifrar.',
+    'Type only the base address, without /chat/completions.': 'Escribe solo la dirección base, sin /chat/completions.',
+    'Can’t reach this address from the browser or through the device. Check it (it usually ends in /v1) and the network.': 'No llego a esta dirección ni desde el navegador ni a través del dispositivo. Revísala (suele terminar en /v1) y revisa la red.',
+    'The server doesn’t list its models: type the model name.': 'El servidor no lista sus modelos: escribe el nombre del modelo.',
+    '✓ Works — called straight from the browser.': '✓ Funciona — llamado directamente desde el navegador.',
+    '✓ Works — through the device (the service refuses browser calls).': '✓ Funciona — a través del dispositivo (el servicio no acepta llamadas del navegador).',
+    'The test failed. Save anyway?': 'La prueba falló. ¿Guardo igualmente?',
+    'Type the model name.': 'Escribe el nombre del modelo.',
     'Stored only on your device, never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': 'Se guarda solo en tu dispositivo, nunca en registros. Con Claude la clave permanece en <b>tu navegador</b> y habla directamente con Anthropic — el dispositivo no se carga.',
     'Skip AI setup? You can do it later in Settings ▸ AI.': '¿Omitir la configuración de la IA? Puedes hacerlo luego en Ajustes ▸ IA.',
     'Set up later': 'Más tarde',
@@ -223,6 +244,27 @@ const L10N = {
     'Connect ': 'Connecter ',
     'Your key stays on the device': 'Votre clé reste sur l’appareil',
     'Model': 'Modèle',
+    '{F}: too long for the device (at most {N} characters).': '{F} : trop long pour l’appareil ({N} caractères au maximum).',
+    'Key rejected by {H}: check you copied all of it.': 'Clé refusée par {H} : vérifiez qu’elle est copiée en entier.',
+    '{H} doesn’t know the model “{M}”: pick one from the list (Test fills it) or check the name.': '{H} ne connaît pas le modèle « {M} » : choisissez-en un dans la liste (Tester la remplit) ou vérifiez le nom.',
+    'OpenAI-compatible': 'Compatible OpenAI',
+    'OpenRouter, Together, DeepSeek, Mistral, OpenAI or your own server: address, model and key.': 'OpenRouter, Together, DeepSeek, Mistral, OpenAI ou votre propre serveur : adresse, modèle et clé.',
+    'Connect an OpenAI-compatible service': 'Connecter un service compatible OpenAI',
+    'Address, model and key stay on the device': 'Adresse, modèle et clé restent sur l’appareil',
+    'Copy the API base URL from your service’s docs (it usually ends in /v1).': 'Copiez l’URL de base de l’API depuis la documentation de votre service (elle finit souvent par /v1).',
+    'Create an API key there and paste it below.': 'Créez-y une clé API et collez-la ci-dessous.',
+    'Press Test: the models the service offers appear in the list.': 'Appuyez sur Tester : les modèles du service apparaissent dans la liste.',
+    'Address': 'Adresse',
+    'model name': 'nom du modèle',
+    'Not a valid address: type the service’s base URL, e.g. https://openrouter.ai/api/v1.': 'Adresse non valide : saisissez l’URL de base du service, par ex. https://openrouter.ai/api/v1.',
+    'Use an https:// address: over http the key would travel in clear text.': 'Utilisez une adresse https:// : en http la clé circulerait en clair.',
+    'Type only the base address, without /chat/completions.': 'Saisissez seulement l’adresse de base, sans /chat/completions.',
+    'Can’t reach this address from the browser or through the device. Check it (it usually ends in /v1) and the network.': 'Impossible de joindre cette adresse depuis le navigateur ou via l’appareil. Vérifiez-la (elle finit souvent par /v1) ainsi que le réseau.',
+    'The server doesn’t list its models: type the model name.': 'Le serveur ne liste pas ses modèles : saisissez le nom du modèle.',
+    '✓ Works — called straight from the browser.': '✓ Ça marche — appelé directement depuis le navigateur.',
+    '✓ Works — through the device (the service refuses browser calls).': '✓ Ça marche — via l’appareil (le service refuse les appels du navigateur).',
+    'The test failed. Save anyway?': 'Le test a échoué. Enregistrer quand même ?',
+    'Type the model name.': 'Saisissez le nom du modèle.',
     'Stored only on your device, never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': 'Stockée uniquement sur votre appareil, jamais journalisée. Avec Claude, la clé reste dans <b>votre navigateur</b> et communique directement avec Anthropic — l’appareil n’est pas sollicité.',
     'Skip AI setup? You can do it later in Settings ▸ AI.': 'Passer la configuration de l’IA ? Vous pourrez le faire plus tard dans Réglages ▸ IA.',
     'Set up later': 'Plus tard',
@@ -285,6 +327,27 @@ const L10N = {
     'Connect ': 'Verbinde ',
     'Your key stays on the device': 'Dein Schlüssel bleibt auf dem Gerät',
     'Model': 'Modell',
+    '{F}: too long for the device (at most {N} characters).': '{F}: zu lang für das Gerät (höchstens {N} Zeichen).',
+    'Key rejected by {H}: check you copied all of it.': 'Schlüssel von {H} abgelehnt: prüfe, ob du ihn vollständig kopiert hast.',
+    '{H} doesn’t know the model “{M}”: pick one from the list (Test fills it) or check the name.': '{H} kennt das Modell „{M}“ nicht: wähle eins aus der Liste (Testen füllt sie) oder prüfe den Namen.',
+    'OpenAI-compatible': 'OpenAI-kompatibel',
+    'OpenRouter, Together, DeepSeek, Mistral, OpenAI or your own server: address, model and key.': 'OpenRouter, Together, DeepSeek, Mistral, OpenAI oder dein eigener Server: Adresse, Modell und Schlüssel.',
+    'Connect an OpenAI-compatible service': 'Einen OpenAI-kompatiblen Dienst verbinden',
+    'Address, model and key stay on the device': 'Adresse, Modell und Schlüssel bleiben auf dem Gerät',
+    'Copy the API base URL from your service’s docs (it usually ends in /v1).': 'Kopiere die API-Basis-URL aus der Doku deines Dienstes (sie endet meist auf /v1).',
+    'Create an API key there and paste it below.': 'Erstelle dort einen API-Schlüssel und füge ihn unten ein.',
+    'Press Test: the models the service offers appear in the list.': 'Drücke Testen: die Modelle des Dienstes erscheinen in der Liste.',
+    'Address': 'Adresse',
+    'model name': 'Modellname',
+    'Not a valid address: type the service’s base URL, e.g. https://openrouter.ai/api/v1.': 'Keine gültige Adresse: gib die Basis-URL des Dienstes ein, z. B. https://openrouter.ai/api/v1.',
+    'Use an https:// address: over http the key would travel in clear text.': 'Nutze eine https://-Adresse: über http ginge der Schlüssel unverschlüsselt.',
+    'Type only the base address, without /chat/completions.': 'Gib nur die Basisadresse ein, ohne /chat/completions.',
+    'Can’t reach this address from the browser or through the device. Check it (it usually ends in /v1) and the network.': 'Diese Adresse ist weder vom Browser noch über das Gerät erreichbar. Prüfe sie (sie endet meist auf /v1) und das Netz.',
+    'The server doesn’t list its models: type the model name.': 'Der Server listet seine Modelle nicht: gib den Modellnamen ein.',
+    '✓ Works — called straight from the browser.': '✓ Funktioniert — direkt vom Browser aufgerufen.',
+    '✓ Works — through the device (the service refuses browser calls).': '✓ Funktioniert — über das Gerät (der Dienst lehnt Browser-Aufrufe ab).',
+    'The test failed. Save anyway?': 'Der Test ist fehlgeschlagen. Trotzdem speichern?',
+    'Type the model name.': 'Gib den Modellnamen ein.',
     'Stored only on your device, never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': 'Nur auf deinem Gerät gespeichert, nie protokolliert. Mit Claude bleibt der Schlüssel in <b>deinem Browser</b> und spricht direkt mit Anthropic — das Gerät wird nicht belastet.',
     'Skip AI setup? You can do it later in Settings ▸ AI.': 'KI-Einrichtung überspringen? Du kannst sie später unter Einstellungen ▸ KI vornehmen.',
     'Set up later': 'Später',
@@ -347,6 +410,27 @@ const L10N = {
     'Connect ': '连接 ',
     'Your key stays on the device': '你的密钥保存在设备上',
     'Model': '模型',
+    '{F}: too long for the device (at most {N} characters).': '{F}：对设备来说太长（最多 {N} 个字符）。',
+    'Key rejected by {H}: check you copied all of it.': '{H} 拒绝了该密钥：请检查是否完整复制。',
+    '{H} doesn’t know the model “{M}”: pick one from the list (Test fills it) or check the name.': '{H} 不认识模型“{M}”：请从列表中选择（点击“测试”会填充列表）或检查名称。',
+    'OpenAI-compatible': 'OpenAI 兼容',
+    'OpenRouter, Together, DeepSeek, Mistral, OpenAI or your own server: address, model and key.': 'OpenRouter、Together、DeepSeek、Mistral、OpenAI 或你自己的服务器：地址、模型和密钥。',
+    'Connect an OpenAI-compatible service': '连接 OpenAI 兼容服务',
+    'Address, model and key stay on the device': '地址、模型和密钥保存在设备上',
+    'Copy the API base URL from your service’s docs (it usually ends in /v1).': '从服务的文档中复制 API 基础地址（通常以 /v1 结尾）。',
+    'Create an API key there and paste it below.': '在那里创建一个 API 密钥并粘贴到下方。',
+    'Press Test: the models the service offers appear in the list.': '点击“测试”：服务提供的模型会出现在列表中。',
+    'Address': '地址',
+    'model name': '模型名称',
+    'Not a valid address: type the service’s base URL, e.g. https://openrouter.ai/api/v1.': '地址无效：请输入服务的基础 URL，例如 https://openrouter.ai/api/v1。',
+    'Use an https:// address: over http the key would travel in clear text.': '请使用 https:// 地址：通过 http 密钥会以明文传输。',
+    'Type only the base address, without /chat/completions.': '只需输入基础地址，不要 /chat/completions。',
+    'Can’t reach this address from the browser or through the device. Check it (it usually ends in /v1) and the network.': '无法从浏览器或通过设备访问此地址。请检查地址（通常以 /v1 结尾）和网络。',
+    'The server doesn’t list its models: type the model name.': '服务器没有列出模型：请输入模型名称。',
+    '✓ Works — called straight from the browser.': '✓ 可用 — 由浏览器直接调用。',
+    '✓ Works — through the device (the service refuses browser calls).': '✓ 可用 — 通过设备（该服务不接受浏览器调用）。',
+    'The test failed. Save anyway?': '测试失败。仍要保存吗？',
+    'Type the model name.': '请输入模型名称。',
     'Stored only on your device, never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': '仅保存在你的设备上，从不写入日志。使用 Claude 时，密钥保存在<b>你的浏览器</b>中并直接与 Anthropic 通信——不会占用设备资源。',
     'Skip AI setup? You can do it later in Settings ▸ AI.': '跳过 AI 设置？之后可以在「设置 ▸ AI」中完成。',
     'Set up later': '稍后设置',
@@ -434,6 +518,7 @@ function runWizard(acc = null, accountOnly = false) {
       else if (STEPS[state.step] === 'apps') renderApps();
       else if (STEPS[state.step] === 'install') renderInstall();
       else if (STEPS[state.step] === 'provider') renderProvider();
+      else if (state.provider === 'custom') renderCustomKey();
       else renderKey();
     }
 
@@ -572,9 +657,13 @@ function runWizard(acc = null, accountOnly = false) {
           mk('anthropic', '🟣', 'Claude (Anthropic)', TR('Comprensione al top. Gira nel browser — zero carico sul dispositivo.', 'Best understanding. Runs in your browser — zero load on the device.'), true),
           mk('openai', '⚡', 'Groq', TR('Veloce e con piano gratuito. OpenAI-compatibile (modelli Llama).', 'Fast & free tier. OpenAI-compatible (Llama models).'), false),
           mk('google', '✨', 'Gemini (Google)', TR('Forte, free tier generoso. Instradato dal proxy del device (niente CORS browser).', 'Strong, generous free tier. Routed via the device proxy (no browser CORS).'), false),
+          mk('custom', '⇄', TR('Compatibile OpenAI', 'OpenAI-compatible'), TR('OpenRouter, Together, DeepSeek, Mistral, OpenAI o un tuo server: indirizzo, modello e chiave.', 'OpenRouter, Together, DeepSeek, Mistral, OpenAI or your own server: address, model and key.'), false),
           mk('offline', '🧠', TR('Solo offline', 'Offline only'), TR('Nessuna chiave. ANIMA risponde comunque dal cervello on-device, meteo e Wikipedia.', 'No key. ANIMA still answers from its on-device brain, weather & Wikipedia.'), false))),
         footer({ back: true, next: state.provider !== 'offline', finish: state.provider === 'offline' }));
     }
+
+    // The two key steps share their buttons' words.
+    const LBL = { test: () => TR('⚡ Prova', '⚡ Test'), save: () => TR('💾 Salva e finisci', '💾 Save & finish') };
 
     // ---- step 3: API key -----------------------------------------------------
     function renderKey() {
@@ -595,7 +684,7 @@ function runWizard(acc = null, accountOnly = false) {
         try { const ok = await AI.cloudPing(cfg()); setStat(ok ? TR('✓ La chiave funziona!', '✓ Key works!') : TR('✗ Chiave rifiutata.', '✗ Key rejected.'), ok ? 'ok' : 'err'); }
         catch (e) { setStat('✗ ' + String(e.message || e), 'err'); }
         finally { testBtn.disabled = false; }
-      } } }, TR('⚡ Prova', '⚡ Test'));
+      } } }, LBL.test());
 
       const saveBtn = h('button', { class: 'nob-btn pri', on: { click: async () => {
         const k = input.value.trim();
@@ -623,7 +712,7 @@ function runWizard(acc = null, accountOnly = false) {
         if (res === true) { setStat(TR('✓ Salvata — ANIMA è pronta.', '✓ Saved — ANIMA is ready.'), 'ok'); setTimeout(done, 650); }
         else if (res === 'unpaired') setStat(TR('Accoppia prima il browser.', 'Pair this browser first.'), 'err');
         else setStat(TR('Salvataggio fallito.', 'Save failed.'), 'err');
-      } } }, TR('💾 Salva e finisci', '💾 Save & finish'));
+      } } }, LBL.save());
 
       const where = state.provider === 'anthropic'
         ? [li(TR('Vai su ', 'Go to '), h('a', { href: 'https://console.anthropic.com/settings/keys', target: '_blank', rel: 'noopener' }, 'console.anthropic.com')),
@@ -650,6 +739,104 @@ function runWizard(acc = null, accountOnly = false) {
             'Salvata solo sul tuo dispositivo, mai nei log. Con Claude la chiave resta nel <b>tuo browser</b> e parla direttamente con Anthropic — il dispositivo non viene caricato.',
             'Stored only on your device, never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.') })),
         footer({ back: true, saveSlot: saveBtn }));
+    }
+
+    // ---- step 3b: an OpenAI-compatible service (address + model + key) --------
+    // Any service that speaks the OpenAI API: nothing is assumed about the host, so the user gives all three. Test asks
+    // the service for its models and runs one tiny completion, first from the browser and, when the service refuses
+    // browser calls, through the device (AI.probeEndpoint); the way that worked is saved with the key (`proxy`).
+    function renderCustomKey() {
+      const stat = h('div', { class: 'nob-stat', role: 'status', 'aria-live': 'polite' });
+      const setStat = (t, cls) => { stat.textContent = t; stat.className = 'nob-stat' + (cls ? ' ' + cls : ''); };
+      const base = h('input', { class: 'nob-input', type: 'url', placeholder: 'https://openrouter.ai/api/v1', autocomplete: 'off', spellcheck: 'false', 'aria-label': TR('Indirizzo', 'Address') });
+      const listId = 'nob-models';
+      const model = h('input', { class: 'nob-input', type: 'text', placeholder: TR('nome del modello', 'model name'), autocomplete: 'off', spellcheck: 'false', 'aria-label': TR('Modello', 'Model') });
+      model.setAttribute('list', listId);   // `list` is a read-only property: the attribute links the datalist
+      const models = h('datalist', { id: listId });
+      const input = h('input', { class: 'nob-input', type: 'password', placeholder: 'sk-…', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'API key' });
+      if (state.cbase) base.value = state.cbase;
+      if (state.cmodel) model.value = state.cmodel;
+      let probed = null;   // { base, ok, proxy, model } of the last test
+      base.addEventListener('change', () => { state.cbase = base.value.trim(); probed = null; });
+      model.addEventListener('change', () => { state.cmodel = model.value.trim(); });
+
+      // The address as it will be saved, or null after saying what is wrong with it.
+      const checkBase = () => {
+        const r = AI.normalizeBase(base.value);
+        if (r.base && !r.error) { base.value = r.base; return r.base; }
+        if (r.error === 'endpoint') { base.value = r.base; setStat(TR('Scrivi solo l’indirizzo base, senza /chat/completions.', 'Type only the base address, without /chat/completions.'), 'err'); }
+        else if (r.error === 'insecure') setStat(TR('Serve un indirizzo https://: con http la chiave viaggerebbe in chiaro.', 'Use an https:// address: over http the key would travel in clear text.'), 'err');
+        else setStat(TR('Indirizzo non valido: scrivi l’URL base del servizio, per esempio https://openrouter.ai/api/v1.', 'Not a valid address: type the service’s base URL, e.g. https://openrouter.ai/api/v1.'), 'err');
+        return null;
+      };
+      const say = (r) => {
+        if (r.ok) setStat(r.proxy ? TR('✓ Funziona — tramite il dispositivo (il servizio non accetta chiamate dal browser).', '✓ Works — through the device (the service refuses browser calls).')
+          : TR('✓ Funziona — chiamato direttamente dal browser.', '✓ Works — called straight from the browser.'), 'ok');
+        else if (r.kind === 'no_model') setStat(TR('Il server non elenca i suoi modelli: scrivi il nome del modello.', 'The server doesn’t list its models: type the model name.'), 'err');
+        else if (r.kind === 'network') setStat(TR('Non raggiungo questo indirizzo né dal browser né tramite il dispositivo. Controllalo (di solito finisce con /v1) e controlla la rete.', 'Can’t reach this address from the browser or through the device. Check it (it usually ends in /v1) and the network.'), 'err');
+        else if (r.kind === 'auth') setStat('✗ ' + TR('Chiave rifiutata da {H}: controlla di averla copiata intera.', 'Key rejected by {H}: check you copied all of it.').replace('{H}', host()), 'err');
+        else if (r.kind === 'model') setStat('✗ ' + TR('{H} non conosce il modello «{M}»: sceglilo dall’elenco (Prova lo riempie) o controlla il nome.', '{H} doesn’t know the model “{M}”: pick one from the list (Test fills it) or check the name.')
+          .replace('{H}', host()).replace('{M}', (r.error && r.error.model) || model.value.trim()), 'err');
+        else setStat('✗ ' + AI.explainAiError(r.error, lang(), { label: host() }), 'err');
+      };
+      const host = () => { try { return new URL(base.value).host; } catch { return base.value; } };
+      const probe = async () => {
+        const b = checkBase(); if (!b) return null;
+        const k = input.value.trim(); if (!k) { setStat(TR('Incolla prima una chiave.', 'Paste a key first.'), 'err'); return null; }
+        setStat(TR('provo…', 'testing…'));
+        const r = await AI.probeEndpoint({ base: b, key: k, model: model.value.trim() });
+        probed = Object.assign({ base: b }, r);
+        if (r.models && r.models.length) {
+          models.textContent = '';
+          for (const id of [...new Set(r.models)].sort()) models.append(h('option', { value: id }));
+          if (!model.value.trim() && r.model) { model.value = r.model; state.cmodel = r.model; }
+        }
+        say(r);
+        return r;
+      };
+
+      const testBtn = h('button', { class: 'nob-btn', on: { click: async () => { testBtn.disabled = true; try { await probe(); } finally { testBtn.disabled = false; } } } }, LBL.test());
+      const saveBtn = h('button', { class: 'nob-btn pri', on: { click: async () => {
+        const b = checkBase(); if (!b) return;
+        const k = input.value.trim(); if (!k) { setStat(TR('Incolla la tua chiave.', 'Paste your key.'), 'err'); return; }
+        const long = AI.deviceFieldTooLong({ base: b, key: k, model: model.value.trim() });
+        if (long) {
+          const F = { base: TR('Indirizzo', 'Address'), key: 'API key', model: TR('Modello', 'Model') }[long.field];
+          setStat(TR('{F}: troppo lungo per il dispositivo (al massimo {N} caratteri).', '{F}: too long for the device (at most {N} characters).').replace('{F}', F).replace('{N}', String(long.max)), 'err');
+          return;
+        }
+        saveBtn.disabled = true;
+        try {
+          let r = probed && probed.base === b && probed.ok ? probed : await probe();
+          if (!r) return;
+          if (!model.value.trim()) { setStat(TR('Scrivi il nome del modello.', 'Type the model name.'), 'err'); return; }
+          if (!r.ok && !confirm(TR('La prova non è riuscita. Salvo lo stesso?', 'The test failed. Save anyway?'))) return;
+          setStat(TR('salvo…', 'saving…'));
+          const held = await AI.readTeacher({ fresh: true }).catch(() => null);
+          const cfg = Object.assign({}, (held && !held.unpaired) ? held : {},
+            { provider: 'custom', base: b, model: model.value.trim(), key: k, version: '', exec: 'browser', effort: '', proxy: !!(r.ok && r.proxy) });
+          const res = await AI.writeTeacher(cfg);
+          if (res === true) { setStat(TR('✓ Salvata — ANIMA è pronta.', '✓ Saved — ANIMA is ready.'), 'ok'); setTimeout(done, 650); }
+          else if (res === 'unpaired') setStat(TR('Accoppia prima il browser.', 'Pair this browser first.'), 'err');
+          else setStat(TR('Salvataggio fallito.', 'Save failed.'), 'err');
+        } finally { saveBtn.disabled = false; }
+      } } }, LBL.save());
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); } });
+
+      card.append(
+        header(TR('Collega un servizio compatibile OpenAI', 'Connect an OpenAI-compatible service'), TR('Indirizzo, modello e chiave restano sul dispositivo', 'Address, model and key stay on the device')),
+        h('div', { class: 'nob-body' },
+          h('ol', { class: 'nob-steps' },
+            li(TR('Copia l’URL base delle API dalla documentazione del servizio (di solito finisce con /v1).', 'Copy the API base URL from your service’s docs (it usually ends in /v1).')),
+            li(TR('Crea lì una chiave API e incollala qui sotto.', 'Create an API key there and paste it below.')),
+            li(TR('Premi Prova: i modelli del servizio compaiono nell’elenco.', 'Press Test: the models the service offers appear in the list.'))),
+          h('div', { class: 'nob-field' },
+            h('label', null, TR('Indirizzo', 'Address')), base,
+            h('label', null, 'API key'), input,
+            h('label', null, TR('Modello', 'Model')), model, models,
+            h('div', { class: 'nob-row' }, testBtn), stat)),
+        footer({ back: true, saveSlot: saveBtn }));
+      base.focus();
     }
 
     // ---- footer --------------------------------------------------------------

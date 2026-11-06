@@ -443,6 +443,11 @@ const gates = [
     // model accepts (5.x/Fable all five and they think; 4.6 no xhigh; Haiku/Sonnet 4.5 none), the streamed
     // body (stream + output_config.effort), and the SSE reader (text deltas only, cap, stop, error event).
     ok: (code) => code === 0, summary: (o) => (o.match(/\[claude-stream\][^\n]*/) || [lastLine(o)])[0] },
+  { name: 'custom-teacher', cmd: 'node', args: ['tools/anima-host/custom-teacher-check.mjs'],
+    // The user's OpenAI-compatible teacher ("custom", issue #10): the real model_label() extracted and run (the model's
+    // own name, cut to the row, never "OpenAI"/"Groq"), and the source rules: provider kept as written, no Whisper on
+    // a custom top level, the OpenAI-compatible wire on the entry's own base.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[custom-teacher\][^\n]*/) || [lastLine(o)])[0] },
   { name: 'offline-installer', cmd: 'node', args: ['--test', 'tools/anima-host/forge-model-store.test.mjs', 'tools/anima-host/forge-install-flow.test.mjs', 'tools/anima-host/forge-install-integration.test.mjs', 'tools/anima-host/forge-model-url-map.test.mjs', 'tools/anima-host/forge-local-models.test.mjs'],
     // First-class regression guard for the OFFLINE-MODEL INSTALLER (apps/anima/www/forge — the "scarica dal
     // Cardputer → gira offline nel browser" core path). Two suites: the download CONTROLLER's hard invariants

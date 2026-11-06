@@ -1106,7 +1106,7 @@ static int http_post_json(const char *url, const char *auth, const char *body, c
 #define ANTHROPIC_MODEL_DEFAULT   "claude-sonnet-5-5"
 
 typedef struct {
-    char provider[16];   // "anthropic" | "openai" (openai = any OpenAI-compatible incl. Groq)
+    char provider[16];   // "anthropic" | "google" | "xai" | "custom" | "openai" (any other OpenAI-compatible incl. Groq)
     char base[160];      // no trailing slash
     char model[64];
     char key[160];
@@ -3303,7 +3303,9 @@ static bool teacher_cfg(char *base, int bcap, char *model, int mcap, char *key, 
         // have no audio endpoint, so when one of them is the active CHAT provider we must NOT use it here —
         // fall through to a stored keys.groq/keys.openai so transcription keeps working. (This also fixes a
         // latent bug where xAI/Gemini as top-level would 404 the audio path under the old "!= anthropic" test.)
-        bool audio_capable = strcmp(top.provider, "anthropic") && strcmp(top.provider, "google") && strcmp(top.provider, "xai");
+        // "custom" (the user's OpenAI-compatible service) promises chat only: its host may have no Whisper either.
+        bool audio_capable = strcmp(top.provider, "anthropic") && strcmp(top.provider, "google") && strcmp(top.provider, "xai") &&
+                             strcmp(top.provider, "custom");
         if (audio_capable) { c = top; ok = true; }              // top-level IS an OpenAI Whisper endpoint
     }
     if (!ok) {                                                  // Claude active (or no top-level key): use a stored OpenAI key
@@ -3431,6 +3433,11 @@ static void model_label(const mopt_t *m, char *out, int cap)
     if (anth_model_ver(m->model, fam, sizeof fam, &maj, &min)) {
         fam[0] = (char)toupper((unsigned char)fam[0]);
         if (min) snprintf(out, cap, "%s %d.%d", fam, maj, min); else snprintf(out, cap, "%s %d", fam, maj);
+        return;
+    }
+    if (!strcmp(m->provider, "custom")) {          // the user's OpenAI-compatible service: the model is the only name it has
+        const char *slash = strrchr(m->model, '/');   // "deepseek/deepseek-chat" -> "deepseek-chat"
+        snprintf(out, cap, "%s", slash && slash[1] ? slash + 1 : (m->model[0] ? m->model : "OpenAI-compat"));
         return;
     }
     const char *p = !strcmp(m->provider, "google") ? "Gemini" : !strcmp(m->provider, "xai") ? "Grok"

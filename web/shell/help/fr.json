@@ -56,7 +56,7 @@
   {
    "id": "anima",
    "title": "ANIMA",
-   "md": "**ANIMA** est l'assistant du système. Ouvrez-la depuis le bureau, ou avec `Ctrl` + `Espace` de n'importe où.\n\n- Elle répond aux questions, écrit et résume des textes, ouvre des applications et des fichiers pour vous.\n- Elle fonctionne avec un fournisseur d'IA et votre propre clé (Réglages › IA / Modèles) ou avec un modèle qui tourne dans le navigateur, sans que vos données quittent l'ordinateur.\n- Avant toute action qui modifie vos fichiers ou l'appareil, elle demande votre accord.\n",
+   "md": "**ANIMA** est l'assistant du système. Ouvrez-la depuis le bureau, ou avec `Ctrl` + `Espace` de n'importe où.\n\n- Elle répond aux questions, écrit et résume des textes, ouvre des applications et des fichiers pour vous.\n- Elle fonctionne avec un fournisseur d'IA et votre propre clé (Réglages › IA / Modèles) ou avec un modèle qui tourne dans le navigateur, sans que vos données quittent l'ordinateur.\n- Comme fournisseur, vous pouvez aussi choisir **Compatible OpenAI** : tout service qui parle l'API OpenAI (OpenRouter, Together, DeepSeek, Mistral, votre propre serveur https). Saisissez l'adresse, la clé et le modèle dans Réglages › IA / Modèles › IA en ligne, puis appuyez sur **Tester** : la liste des modèles s'affiche et le service est vérifié.\n- Avant toute action qui modifie vos fichiers ou l'appareil, elle demande votre accord.\n",
    "icon": "✨",
    "app": "anima"
   },

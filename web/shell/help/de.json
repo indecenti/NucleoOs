@@ -56,7 +56,7 @@
   {
    "id": "anima",
    "title": "ANIMA",
-   "md": "**ANIMA** ist der Assistent des Systems. Öffne ihn über den Desktop oder mit `Strg` + `Leertaste` von überall.\n\n- Er beantwortet Fragen, schreibt und fasst Texte zusammen, öffnet Apps und Dateien für dich.\n- Er arbeitet mit einem KI-Anbieter und deinem eigenen Schlüssel (Einstellungen › KI / Modelle) oder mit einem Modell im Browser, ohne dass deine Daten den Computer verlassen.\n- Vor allem, was deine Dateien oder das Gerät verändert, fragt er nach deiner Zustimmung.\n",
+   "md": "**ANIMA** ist der Assistent des Systems. Öffne ihn über den Desktop oder mit `Strg` + `Leertaste` von überall.\n\n- Er beantwortet Fragen, schreibt und fasst Texte zusammen, öffnet Apps und Dateien für dich.\n- Er arbeitet mit einem KI-Anbieter und deinem eigenen Schlüssel (Einstellungen › KI / Modelle) oder mit einem Modell im Browser, ohne dass deine Daten den Computer verlassen.\n- Als Anbieter kannst du auch **OpenAI-kompatibel** wählen: jeden Dienst, der die OpenAI-API spricht (OpenRouter, Together, DeepSeek, Mistral, deinen eigenen https-Server). Gib Adresse, Schlüssel und Modell unter Einstellungen › KI / Modelle › Online-KI ein und drücke **Testen**: es listet die Modelle und prüft, ob der Dienst antwortet.\n- Vor allem, was deine Dateien oder das Gerät verändert, fragt er nach deiner Zustimmung.\n",
    "icon": "✨",
    "app": "anima"
   },

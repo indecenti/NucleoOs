@@ -3878,7 +3878,8 @@
         else if(I==='fx'){ eng=TR('Online · Cambio valute', 'Online · Exchange'); model='exchangerate'; }
         else if(I==='wiki'){ eng='Online · Wikipedia'; model='REST API'; }
         else if(I==='wikidata'){ eng='Online · Wikidata'; model='REST API'; }
-        else { eng=TR('Online · maestro Grok', 'Online · Grok teacher');   // grok / teacher / generic remote
+        else { // grok / teacher / generic remote: named by the service that really answered (Claude, Groq, Gemini, a host)
+               eng=TR('Online · maestro Grok', 'Online · Grok teacher').replace('Grok', (AI.brandOf(keyCfg) || 'Grok'));
                model=r.model||(keyCfg&&keyCfg.model)||'auto'; host=hostOf((keyCfg&&keyCfg.base)||''); }
       } else if(T==='browser'){                                     // an exact rule run in this page: arithmetic, an app launch (no model, no device)
         kind='wasm'; icon='◆'; eng=TR('Browser · regola esatta', 'Browser · exact rule'); model=I==='calc'?TR('calcolo', 'arithmetic'):I==='launch'?TR('avvio app', 'app launch'):I==='date'?TR('calendario', 'calendar'):I;
@@ -4976,7 +4977,7 @@
         };
       if(isPrivate()) return null;
       await ensureKeyLoaded();
-      if(keyCfg && keyCfg.key && !curProv().proxy) return async (system, user, o)=>({ model:keyCfg.model||keyCfg.provider, text: await AI.cloudChat(keyCfg, { system, messages:[{role:'user',content:user}], maxTokens:o.maxTokens, temperature:0.2 }) });
+      if(keyCfg && keyCfg.key && !relayedKey()) return async (system, user, o)=>({ model:keyCfg.model||keyCfg.provider, text: await AI.cloudChat(keyCfg, { system, messages:[{role:'user',content:user}], maxTokens:o.maxTokens, temperature:0.2 }) });
       return null;
     }
     // A JavaScript parser for the review, when Code Runner ships one (acorn): a page that does not parse is not offered.
@@ -5047,7 +5048,7 @@
         return m.pcChat((u,o)=>fetch(u,o), res.best.srv, res.best.model.id, { system, messages, maxTokens:4096, temperature:0.3, ctx:16384, onDelta });
       }
       await ensureKeyLoaded();
-      if(keyCfg && keyCfg.key && !curProv().proxy){ _forgeModel = keyCfg.model || keyCfg.provider; return AI.cloudChat(keyCfg, { system, messages, maxTokens:4096, temperature:0.3, ...(onDelta ? { onDelta:(p, full)=>onDelta(full.length) } : {}) }); }
+      if(keyCfg && keyCfg.key && !relayedKey()){ _forgeModel = keyCfg.model || keyCfg.provider; return AI.cloudChat(keyCfg, { system, messages, maxTokens:4096, temperature:0.3, ...(onDelta ? { onDelta:(p, full)=>onDelta(full.length) } : {}) }); }
       throw Object.assign(new Error('no model'), { nollm:true });
     }
     // "crea un gioco snake al neon" -> "Snake Al Neon"
@@ -5998,7 +5999,7 @@
     // Can a tool-using agent run right now? A cloud key the agent loop takes (not in Private), or a local server up.
     async function agentCanRun(){
       if(!useAgents) return false;
-      if(!isPrivate()){ await ensureKeyLoaded(); if(keyCfg.key && !curProv().proxy) return true; }
+      if(!isPrivate()){ await ensureKeyLoaded(); if(keyCfg.key && !relayedKey()) return true; }
       const E=await enginesMod(); const cfg=E.loadLocalConfig();
       if(cfg.enabled && (await E.liveServers({ config:cfg })).some((s)=>s.status==='ok' && s.models.length && (!isPrivate() || E.isLoopback(s.base)))) return true;
       // …or the installed in-browser GPU model (the 2a rung): installed only, never a download
@@ -6123,7 +6124,7 @@
         //     PSRAM-less chip. The agentic loop is browser-hosted for the same reason; a proxy
         //     provider (relayed via the device) skips the loop so a 14-step relay cannot hammer it.
         if(!r && !priv && !pin && keyCfg.key && !sig.aborted){
-          const loopEligible = useAgents && !curProv().proxy;
+          const loopEligible = useAgents && !relayedKey();
           const wsx = await wsxOnce();   // built ONCE - shared by the loop seed and fallback
           if(loopEligible && !sig.aborted){
             _agentDidMutate = false; _agentCancelled = false; _agentWsAsked = false; _agentLocalFirst = lcfg.prefer==='local';
@@ -7029,11 +7030,14 @@
     let keyCfg={ provider:'anthropic', base:AI.PROVIDERS.anthropic.base, model:AI.PROVIDERS.anthropic.def, key:'', version:'2023-06-01', exec:'browser', keys:{}, geminiTier:'', geminiModels:null };
     let keyHydrated=false;
     function curProv(){ return AI.providerOf(keyCfg.provider); }
+    // Reached through the device relay: a CORS-less provider (Gemini), or an OpenAI-compatible host that refuses browser calls.
+    function relayedKey(){ return !!(curProv().proxy || keyCfg.proxy); }
     function adoptKeyCfg(c){ if(!c) return; const p=AI.providerOf(c.provider||keyCfg.provider);
       keyCfg.provider=c.provider||keyCfg.provider; keyCfg.base=c.base||p.base; keyCfg.model=c.model||p.def;
       keyCfg.key=c.key||''; keyCfg.version=c.version||p.version; keyCfg.exec=c.exec||keyCfg.exec||'browser';
       keyCfg.geminiTier=c.geminiTier||keyCfg.geminiTier; if(c.keys) keyCfg.keys=c.keys;
       keyCfg.effort=c.effort||'';                    // Settings ▸ AI's effort (teacher.json); a picked one overrides it below
+      keyCfg.proxy=c.proxy===true;                   // an OpenAI-compatible host that refuses browser calls: reached through the device
       try{ applyPickToKey(); }catch{} }
     async function loadKey(){ try{ const c=await AI.readTeacher(); if(c && !c.unpaired){ keyHydrated=true; adoptKeyCfg(c); } }catch(e){} try{ paintSub(); }catch{} }
     async function ensureKeyLoaded(){ if(keyHydrated) return; try{ await loadKey(); }catch(e){} }   // hydrate keyCfg on first online use (independent of opening Settings)

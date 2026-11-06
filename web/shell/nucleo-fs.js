@@ -295,9 +295,15 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
       const part = blob.slice(at, Math.min(total, at + step));
       const r = await req(wurl + (at === 0 ? '' : '&append=1&at=' + at), { method: 'POST', body: part }, { ms: 120000 }).catch((e) => e);
       if (r instanceof Error || !r.ok) {
-        if (++misses > 8) { if (r instanceof Error) throw r; await failWrite(r, path); }   // a weak Wi-Fi gets patience
         // 409 tells how much the device really has: resume from there (first chunk: start again).
-        if (!(r instanceof Error) && r.status === 409) { const j = await r.json().catch(() => null); at = j && Number.isInteger(j.size) && j.size <= total ? j.size : 0; }
+        if (!(r instanceof Error) && r.status === 409) {
+          const j = await r.json().catch(() => null), was = at;
+          at = j && Number.isInteger(j.size) && j.size <= total ? j.size : 0;
+          // The device kept part of a piece that failed (a card write error, a cut link): that is progress, not
+          // a miss. Counting it as one gave up on a big file over a link that kept moving (8 misses in a row).
+          if (at > was) { misses = 0; if (onProgress) onProgress(at, total); continue; }
+        }
+        if (++misses > 8) { if (r instanceof Error) throw r; await failWrite(r, path); }   // a weak Wi-Fi gets patience
         await new Promise((ok) => setTimeout(ok, Math.min(6000, 750 * misses)));
         continue;
       }

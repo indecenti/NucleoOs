@@ -122,6 +122,7 @@
     "anima:qgen": "node tools/anima-host/qgen-check.mjs",
     "anima:tts": "node tools/anima-host/tts-check.mjs",
     "claude:test": "node tools/anima-host/claude-stream-check.mjs",
+    "customteacher:test": "node tools/anima-host/custom-teacher-check.mjs",
     "code:test": "node tools/code/rt-check.mjs",
     "code:gen": "node tools/code/gen-tables.mjs",
     "code:bench": "node tools/code/agent-bench.mjs",

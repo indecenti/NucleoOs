@@ -57,11 +57,13 @@ export function defaultSig() {
 
 // Build the registry the engine needs from web/shell/ai.js's single source (PROVIDERS + CAPMATRIX + TIERS).
 // Done here (not inline in two places) so browser and tests build it identically.
-export function buildRegistry(PROVIDERS, CAPMATRIX, TIERS) {
+// labelOf(id): the provider's name in the page's language (ai.js providerLabel); default its brand label.
+export function buildRegistry(PROVIDERS, CAPMATRIX, TIERS, labelOf) {
   const providers = {};
   for (const id of Object.keys(PROVIDERS || {})) {
     const p = PROVIDERS[id];
-    providers[id] = { label: p.label, def: p.def, models: p.models || [], caps: (CAPMATRIX && CAPMATRIX[id]) || {}, tiers: (TIERS && TIERS[id]) || {} };
+    // read at render time, so it follows the page's language even when the registry was built before it was known
+    providers[id] = { get label() { return (labelOf && labelOf(id)) || p.label; }, def: p.def, models: p.models || [], caps: (CAPMATRIX && CAPMATRIX[id]) || {}, tiers: (TIERS && TIERS[id]) || {} };
   }
   return { providers };
 }
@@ -78,8 +80,11 @@ const same = (s) => ({ it: s, en: s, es: s, fr: s, de: s, zh: s });
 // Validate a wanted tier model against the registry; NEVER invent or rewrite — fall back to the provider
 // default only if the wanted id is absent (the claude-*-4-x / gemini-2.5-* ids here are the real 2026 ids).
 // google.max (Pro) is downgraded to mid (Flash) unless the key's plan is paid.
+// A provider with no model table (the OpenAI-compatible one: the user's own service) gets null — its model is the one
+// the user typed, and a preset leaves it alone.
 export function resolveModel(provider, tier, reg, geminiPaid) {
   const p = provOf(provider, reg); if (!p) return null;
+  if (!(p.models || []).length) return null;
   let want = p.tiers[tier];
   if (provider === 'google' && tier === 'max' && !geminiPaid) want = p.tiers.mid;
   const ok = want && (p.models || []).some((m) => m[0] === want);
@@ -129,7 +134,8 @@ export const PRESETS = [
     intent: { it: 'Cloud al massimo, il dispositivo resta a riposo', en: 'Best cloud, the device stays idle', es: 'La mejor nube, el dispositivo en reposo', fr: 'Le meilleur cloud, l’appareil reste au repos', de: 'Beste Cloud, das Gerät bleibt im Leerlauf', zh: '最佳云端，设备保持空闲' },
     plan(sig, reg) {
       const model = resolveModel(sig.provider, 'max', reg, sig.geminiTier === 'paid');
-      return mk('cloud', 'only', 'off', true, { teacherModel: model, using: same(labelOf(sig.provider, reg) + ' · ' + (model || '')) });
+      const shown = model || sig.model || '';   // a provider without a model table runs the user's own model
+      return mk('cloud', 'only', 'off', true, { teacherModel: model, using: same(labelOf(sig.provider, reg) + (shown ? ' · ' + shown : '')) });
     },
     feasible(sig) {
       if (!sig.online || !sig.enabled) return { state: 'blocked', reason: { it: 'Serve una connessione a Internet', en: 'Needs an internet connection', es: 'Necesita conexión a Internet', fr: 'Nécessite une connexion Internet', de: 'Benötigt eine Internetverbindung', zh: '需要互联网连接' } };

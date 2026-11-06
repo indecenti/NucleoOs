@@ -62,6 +62,17 @@ export const PROVIDERS = {
     // gemini-2.5-flash-lite (cheap, weak — fine for quick lookups, NOT for careful code).
     models: [['gemini-2.5-flash', 'Gemini 2.5 Flash · consigliato', 'Gemini 2.5 Flash · recommended', 'Gemini 2.5 Flash · recomendado', 'Gemini 2.5 Flash · recommandé', 'Gemini 2.5 Flash · empfohlen', 'Gemini 2.5 Flash · 推荐'], ['gemini-flash-latest', 'Gemini Flash · ultimo', 'Gemini Flash · latest', 'Gemini Flash · último', 'Gemini Flash · dernier', 'Gemini Flash · neueste', 'Gemini Flash · 最新'], ['gemini-2.5-pro', 'Gemini 2.5 Pro · qualità (a pagamento)', 'Gemini 2.5 Pro · quality (paid)', 'Gemini 2.5 Pro · calidad (de pago)', 'Gemini 2.5 Pro · qualité (payant)', 'Gemini 2.5 Pro · Qualität (kostenpflichtig)', 'Gemini 2.5 Pro · 高质量（付费）'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite · economico', 'Gemini 2.5 Flash-Lite · cheap', 'Gemini 2.5 Flash-Lite · económico', 'Gemini 2.5 Flash-Lite · économique', 'Gemini 2.5 Flash-Lite · günstig', 'Gemini 2.5 Flash-Lite · 经济']],
   },
+  // Any OpenAI-compatible service the user names (OpenRouter, Together, DeepSeek, Mistral, OpenAI, a self-hosted vLLM
+  // behind https…): the user gives the address, the model and the key; nothing is assumed about the host, so there
+  // is no default address, no model table and no key shape. The page calls it directly when the host allows browser
+  // calls (CORS), else through the device relay (/api/llm): probeEndpoint() finds out and the entry keeps `proxy`
+  // (relayOrigins below). Every firmware reads it as an OpenAI-compatible teacher (provider + base + model + key —
+  // the ones that predate it included), so ANIMA on the device answers with it too.
+  custom: {
+    label: 'OpenAI-compatible', base: '', version: '', custom: true,
+    labels: { it: 'Compatibile OpenAI', en: 'OpenAI-compatible', es: 'Compatible con OpenAI', fr: 'Compatible OpenAI', de: 'OpenAI-kompatibel', zh: 'OpenAI 兼容' },
+    prefix: /^\S{8,}$/, ph: 'sk-…', def: '', models: [],
+  },
 };
 // A model server on the LAN: Ollama (:11434), LM Studio (:1234), llama.cpp / LocalAI (:8080), any
 // OpenAI-compatible endpoint. No CORS and plain HTTP, so the browser reaches it through the device
@@ -85,6 +96,16 @@ export function modelLabel(entry) {
   try { lang = (localStorage.getItem('anima.lang') || document.documentElement.lang || 'en').slice(0, 2); } catch {}
   const i = { it: 1, en: 2, es: 3, fr: 4, de: 5, zh: 6 }[lang] || 2;
   return entry[i] || entry[2] || entry[1] || entry[0];   // active language → en → it → id
+}
+
+// The name a provider is shown by, in `lang` (default: the page's). Brands stay as they are; only the OpenAI-compatible
+// provider, which has no brand of its own, has a name per language.
+export function providerLabel(id, lang) {
+  const p = providerOf(id);
+  if (!p.labels) return p.label;
+  let l = lang;
+  if (!l) { try { l = localStorage.getItem('anima.lang') || document.documentElement.lang || 'en'; } catch { l = 'en'; } }
+  return p.labels[String(l).slice(0, 2)] || p.labels.en;
 }
 
 // A model id by name, for lists: the localized label of a known model ({name:'Sonnet 5.5', desc:'equilibrio'}),
@@ -116,6 +137,7 @@ export const CAPMATRIX = {
   xai:       { chat: true, image: true,  whisper: false, audioLLM: false, toolUse: true, ir: true },
   google:    { chat: true, image: false, whisper: false, audioLLM: true,  toolUse: true, ir: true },
   local:     { chat: true, image: false, whisper: false, audioLLM: false, toolUse: true, ir: true },
+  custom:    { chat: true, image: false, whisper: false, audioLLM: false, toolUse: true, ir: true },   // unknown host: chat only is promised
 };
 // Per-provider quality tiers, mapped to REAL ids from PROVIDERS.models (validated against the registry
 // by the engine; google.max=Pro is offered only when geminiTier==='paid'). Single source so a preset
@@ -126,7 +148,7 @@ export const TIERS = {
   xai:       { max: 'grok-2-latest',            mid: 'grok-2-latest',        fast: 'grok-2-1212' },
   google:    { max: 'gemini-2.5-pro',           mid: 'gemini-2.5-flash',     fast: 'gemini-2.5-flash-lite' },
 };
-// (local: no tiers - the server runs the one model the user picked)
+// (local, custom: no tiers - the server runs the one model the user picked)
 
 // ── multi-model router ────────────────────────────────────────────────────────────────────────────
 // Leverage EVERY configured model: route a subtask to the best available across ALL keys in teacher.json's
@@ -142,6 +164,7 @@ export const ROUTE_RANK = {
   xai:       { cost: 3, strength: 7  },
   google:    { cost: 1, strength: 8  },
   local:     { cost: 0, strength: 5  },   // free and private, usually a smaller model
+  custom:    { cost: 2, strength: 7  },   // unknown service and model: in the middle of the ladder
 };
 const TIER_OF = { fast: 'fast', mid: 'mid', hard: 'max' };
 
@@ -151,7 +174,8 @@ function cfgFor(provider, entry, model, exec, tier) {
   entry = entry || {};
   // `tier` travels with the cfg: the static TIERS id is only a first guess, and withAutoModel re-picks at call
   // time for the same tier when the provider no longer serves it.
-  return { provider, base: entry.base || p.base, model: model || entry.model || p.def, key: entry.key || '', version: entry.version || p.version, exec: exec || entry.exec || 'browser', tier: tier || 'mid', effort: entry.effort || '' };
+  return Object.assign({ provider, base: entry.base || p.base, model: model || entry.model || p.def, key: entry.key || '', version: entry.version || p.version, exec: exec || entry.exec || 'browser', tier: tier || 'mid', effort: entry.effort || '' },
+    entry.proxy === true ? { proxy: true } : {});
 }
 
 // Pick the best call cfg for a subtask across all configured keys.
@@ -166,7 +190,9 @@ export function routeFor(spec = {}, keys = {}, active = null) {
   const exclude = new Set(spec.exclude || []);
   const activeP = active && active.provider;
   keys = keys || {};
-  const usable = (p) => keys[p] && (keys[p].key || (PROVIDERS[p] && PROVIDERS[p].keyOptional && keys[p].base && keys[p].model));
+  // (an OpenAI-compatible entry has no default address: without its own base it cannot be called)
+  const usable = (p) => keys[p] && (keys[p].key || (PROVIDERS[p] && PROVIDERS[p].keyOptional && keys[p].base && keys[p].model))
+    && !(PROVIDERS[p] && PROVIDERS[p].custom && !keys[p].base);
   const configured = Object.keys(keys).filter((p) => usable(p) && PROVIDERS[p] && !exclude.has(p));
   // Rank a provider set: cheapest for 'fast', strongest for 'mid'/'hard'; tie → the user's active provider.
   const rank = (list) => list.map((p) => ({ p, ...(ROUTE_RANK[p] || ROUTE_RANK.anthropic) }))
@@ -220,7 +246,18 @@ export const lanRelay = () => _sealed;
 // Gemini's endpoint has no CORS → a browser fetch is blocked. Relay it through the device same-origin
 // /api/llm proxy (firmware dials it server-side). Other providers go browser-direct (no extra hop) — except
 // on a sealed vault, where the page has no key to send and everything rides the relay.
-export const viaProxy = (provider, url) => ((_sealed || providerOf(provider).proxy) ? '/api/llm?url=' + encodeURIComponent(url) : url);
+export const viaProxy = (provider, url) => ((_sealed || providerOf(provider).proxy || relaysOrigin(url)) ? '/api/llm?url=' + encodeURIComponent(url) : url);
+// The hosts the user's OpenAI-compatible entries reach through the device relay (their `proxy`: the host refuses
+// browser calls). readTeacher fills it from the vault, so every caller of apiUrl() / viaProxy() — ANIMA, the agent,
+// the apps — relays them without carrying the flag itself.
+const _relayOrigins = new Set();
+function urlOrigin(u) { try { return new URL(u).origin; } catch { return ''; } }
+export function relaysOrigin(u) { const o = urlOrigin(u); return !!o && _relayOrigins.has(o); }
+function noteRelays(j) {
+  _relayOrigins.clear();
+  const top = j && j.provider === 'custom' ? j : null;   // a merged vault may keep a stale top-level flag
+  for (const e of [top, ...Object.values((j && j.keys) || {})]) if (e && e.proxy === true && e.base) { const o = urlOrigin(e.base); if (o) _relayOrigins.add(o); }
+}
 // A private / loopback / .local host — a server on the LAN (mirrors the firmware's url_is_local).
 export const isLanUrl = (u) => {
   const m = /^https?:\/\/([^/:]+)/i.exec(String(u || '')); if (!m) return false;
@@ -246,7 +283,7 @@ const regOf = (cfg) => (isAnth(cfg) ? PROVIDERS.anthropic : (PROVIDERS[cfg && cf
 // Endpoint for `path` ('/v1/messages', '/chat/completions', '/models'…) on this cfg, relayed when it must be.
 export function apiUrl(cfg, path) {
   const url = String(cfg.base || regOf(cfg).base || '').replace(/\/+$/, '') + path;
-  return (_sealed || isVaultKey(cfg.key) || cfg.proxy || regOf(cfg).proxy) ? '/api/llm?url=' + encodeURIComponent(url) : url;
+  return (_sealed || isVaultKey(cfg.key) || cfg.proxy || regOf(cfg).proxy || relaysOrigin(url)) ? '/api/llm?url=' + encodeURIComponent(url) : url;
 }
 
 // Auth + content headers for this cfg's wire. Only a key the user is typing goes out from the page; a saved one
@@ -603,7 +640,8 @@ export function explainAiError(e, lang, opts = {}) {
   const row = AI_ERR_TEXT[err.kind] || AI_ERR_TEXT.bad_request;
   const tpl = row[l] || row.en;
   // an unknown provider is "AI" — providerOf() falls back to Anthropic, and a Groq rate limit read "Claude is limiting…"
-  const P = err.provider ? (providerOf(err.provider).label || err.provider) : ({ it: 'IA', es: 'IA', fr: 'IA', de: 'KI', zh: 'AI' }[l] || 'AI');
+  // opts.label: the caller's own name for it (the OpenAI-compatible service is named by its host, not by an English label)
+  const P = opts.label || (err.provider ? (providerLabel(err.provider, l) || err.provider) : ({ it: 'IA', es: 'IA', fr: 'IA', de: 'KI', zh: 'AI' }[l] || 'AI'));
   const detail = redactSecrets(err.message || '').replace(/\s+/g, ' ').slice(0, 160);   // last line of defence
   return tpl.replace(/\{SET\}/g, opts.settings || AI_SETTINGS_AT[l] || AI_SETTINGS_AT.en)
     .replace(/\{P\}/g, P).replace(/\{M\}/g, err.model || '?')
@@ -772,6 +810,8 @@ async function _readTeacher() {
     const p = providerOf(provider);
     const cfg = { provider, base: j.base || p.base, model: j.model || p.def, key: j.key || '', keyHint: j.keyHint || '', version: j.version || p.version, exec: j.exec || 'browser', keys: j.keys || {}, geminiTier: j.geminiTier || '', stt_url: j.stt_url || '', stt_model: j.stt_model || '', vision_model: j.vision_model || '', vision_base: j.vision_base || '', vision_key: j.vision_key || '', vision: typeof j.vision === 'boolean' ? j.vision : null,
       effort: EFFORTS.includes(j.effort) ? j.effort : '', _extra: unknownFields(j) };
+    if (j.proxy === true && p.custom) cfg.proxy = true;
+    noteRelays(j);
     _teacherCache = cfg; _teacherAt = Date.now();
     return cfg;
   } catch { return null; }
@@ -793,7 +833,7 @@ export async function whisperKey(opts = {}) {
 // shell or the firmware added) is carried through a read/write untouched: readTeacher keeps it in cfg._extra and
 // buildTeacherDoc puts it back. (keys.<provider> entries are copied whole, so their unknown fields survive too.)
 const TEACHER_FIELDS = new Set(['provider', 'base', 'model', 'key', 'version', 'exec', 'keys', 'geminiTier', 'effort',
-  'stt_url', 'stt_model', 'vision_model', 'vision_base', 'vision_key', 'vision', 'keyHint', 'unpaired']);
+  'stt_url', 'stt_model', 'vision_model', 'vision_base', 'vision_key', 'vision', 'keyHint', 'unpaired', 'proxy']);
 function unknownFields(j) {
   const out = {};
   for (const [k, v] of Object.entries(j || {})) if (!TEACHER_FIELDS.has(k) && !/_(set|hint)$/.test(k) && k[0] !== '_') out[k] = v;
@@ -812,8 +852,12 @@ export function buildTeacherDoc(cfg) {
   // can be set back to the default), elsewhere only when one was chosen.
   const entry = Object.assign({ base: cfg.base || p.base, model: cfg.model || p.def, key: cfg.key || '' },
     cfg.provider === 'anthropic' ? { version: cfg.version || p.version, effort: normEffort(cfg.effort) } : (EFFORTS.includes(cfg.effort) ? { effort: cfg.effort } : {}),
-    (cfg.provider === 'google' && cfg.geminiTier) ? { geminiTier: cfg.geminiTier } : {});
+    (cfg.provider === 'google' && cfg.geminiTier) ? { geminiTier: cfg.geminiTier } : {},
+    // an OpenAI-compatible host that refuses browser calls: reached through the device relay (the firmware ignores it)
+    (p.custom && cfg.proxy === true) ? { proxy: true } : {});
   const keys = Object.assign({}, cfg.keys || {});
+  // the active entry is written whole: a host that now takes browser calls drops its old `proxy`
+  if (p.custom && keys[cfg.provider] && cfg.proxy !== true) { keys[cfg.provider] = Object.assign({}, keys[cfg.provider]); delete keys[cfg.provider].proxy; }
   const keyless = providerOf(cfg.provider).keyOptional && entry.base && entry.model;   // a LAN server needs no key
   // the active entry is updated in place: a field another edition put in it (keys.<provider>.x) stays
   if (entry.key || keyless) keys[cfg.provider] = Object.assign({}, keys[cfg.provider] || {}, entry); else delete keys[cfg.provider];
@@ -856,8 +900,11 @@ export async function writeTeacher(cfg) {
 
 // ── keys typed inside an app (AI Chat, Dictation, Recorder) ──────────────────────────────────────────
 const originOf = (u) => { try { return new URL(u).origin; } catch { return ''; } };
+// Groq and OpenAI keep the 'openai' slot they always had; any other host is the user's OpenAI-compatible service, so
+// a key typed for it lands in its own entry and leaves the Groq one alone.
 const providerForBase = (base) => (/\bx\.ai\b/.test(base) ? 'xai' : /anthropic\.com/.test(base) ? 'anthropic'
-  : /generativelanguage/.test(base) ? 'google' : isLanUrl(base) ? 'local' : 'openai');
+  : /generativelanguage/.test(base) ? 'google' : isLanUrl(base) ? 'local'
+  : (/\bgroq\.com\b|\bopenai\.com\b/.test(base) || !base) ? 'openai' : 'custom');
 
 // Does the vault hold a key for `base`'s host (on a sealed vault: the relay will add it)? false when unpaired / unknown.
 export async function hasKeyFor(base, opts = {}) {
@@ -1118,4 +1165,90 @@ async function toolCallOnce(cfg, { system, messages = [], tools = [], signal, ma
 export async function cloudPing(cfg) {
   const t = await cloudComplete(cfg, null, 'Reply with exactly: ok', 16);
   return /\bok\b/i.test(t || '');
+}
+
+// ── an OpenAI-compatible endpoint the user typed ───────────────────────────────────────────────────────
+// { base } — the address as it will be saved ('https://host/v1', no trailing slash) — or { error } with the reason: 'bad_url' (not a
+// URL, or not http/https), 'insecure' (plain http to a host on the Internet — the key would travel in clear; a LAN
+// address is allowed only where the device relay reaches plain-http LAN hosts, lanRelay()), 'endpoint' (a full
+// /chat/completions URL instead of the base).
+export function normalizeBase(raw) {
+  let s = String(raw || '').trim();
+  if (!s) return { error: 'bad_url' };
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = 'https://' + s;
+  let u; try { u = new URL(s); } catch { return { error: 'bad_url' }; }
+  if (!/^https?:$/.test(u.protocol) || !u.hostname || u.username || u.password || u.search || u.hash) return { error: 'bad_url' };
+  const base = (u.origin + u.pathname).replace(/\/+$/, '');
+  if (/\/(chat\/completions|completions|models|messages)$/i.test(base)) return { error: 'endpoint', base: base.replace(/\/(chat\/completions|completions|models|messages)$/i, '') };
+  if (u.protocol === 'http:' && !(isLanUrl(base) && lanRelay())) return { error: 'insecure' };
+  return { base };
+}
+
+// The device keeps each teacher field in a fixed buffer (the firmware's teacher_cfg_t: 160-byte base and key, 64-byte
+// model, the terminator included): a longer value would be cut there and every call the device makes would fail.
+// Counted in UTF-8 bytes, as the firmware counts them. A saved key the page never sees (VAULT_KEY) is not checked.
+export const DEVICE_FIELD_MAX = { base: 159, key: 159, model: 63 };
+export function deviceFieldTooLong(cfg) {
+  for (const f of ['base', 'key', 'model']) {
+    const v = cfg && cfg[f];
+    if (v && !isVaultKey(v) && new TextEncoder().encode(String(v)).length > DEVICE_FIELD_MAX[f]) return { field: f, max: DEVICE_FIELD_MAX[f] };
+  }
+  return null;
+}
+
+// Test an OpenAI-compatible endpoint before it is saved: can it be reached, does the key work, which models does it
+// serve, does the chosen model answer. Called from the browser first; when the browser cannot reach it at all (the
+// host refuses browser calls — CORS — or blocks this origin), again through the device relay. Resolves
+//   { ok:true, proxy, models:[ids]|null, model }               — it answered; `proxy` = it must go through the device
+//   { ok:false, kind, proxy, models, error }                    — kind: auth | model | no_model | network | … (AiError kinds)
+// Never throws. `cfg` = { base, key, model }; the model may be '' when the server lists its own.
+export async function probeEndpoint(cfg, { signal, relay = true } = {}) {
+  const base = String((cfg && cfg.base) || '').replace(/\/+$/, '');
+  const key = (cfg && cfg.key) || '';
+  const headers = Object.assign({ 'content-type': 'application/json' }, key && !isVaultKey(key) ? { authorization: 'Bearer ' + key } : {});
+  const at = (path, proxy) => (proxy ? '/api/llm?url=' + encodeURIComponent(base + path) : base + path);
+  const fail = (e, proxy, models) => { const err = toAiError(e, { provider: 'custom', key, model: cfg && cfg.model }); return { ok: false, kind: err.kind, proxy, models: models || null, error: err }; };
+  // 1. reach it: /models answers on most servers and costs nothing. A network error means "not from here".
+  let proxy = false, models = null, reached = false;
+  // A saved key the page never sees (sealed vault) only works through the relay, which adds it.
+  const ways = (_sealed || isVaultKey(key)) ? [true] : relay ? [false, true] : [false];
+  for (const p of ways) {
+    proxy = p;
+    try {
+      const r = await fetch(at('/models', p), { headers, cache: 'no-store', signal });
+      reached = true;
+      if (r.status === 401 || r.status === 403) return fail(await aiErrorFromResponse(r, { provider: 'custom', key }), p, null);
+      // through the relay, a 404 is either "this server has no /models" or "this device has no relay"
+      if (p && r.status === 404 && !(await relayAnswers(signal))) return { ok: false, kind: 'network', proxy: p, models: null, error: new AiError('network', 'no relay') };
+      if (r.ok) {
+        const j = await r.json().catch(() => null);
+        const data = j && (j.data || j.models);
+        if (Array.isArray(data)) models = data.filter((m) => m && (m.id || m.name || m.model)).map((m) => m.id || m.name || m.model);
+      }
+      break;                                           // reached (a 404 /models is fine: some servers have none)
+    } catch (e) {
+      if (e && e.name === 'AbortError') return fail(e, p, null);
+      if (!p && relay) continue;                       // not from the browser: try the device relay
+      return fail(e, p, null);
+    }
+  }
+  if (!reached) return { ok: false, kind: 'network', proxy, models: null, error: new AiError('network', 'unreachable') };
+  // 2. the model: the one asked for, else the best chat model the server lists.
+  let model = (cfg && cfg.model) || '';
+  if (!model && models && models.length) model = rankModels(models, 'mid')[0] || models[0];
+  if (!model) return { ok: false, kind: 'no_model', proxy, models, error: new AiError('model', 'no model') };
+  // 3. one tiny completion, with that model only (no automatic re-pick: the user is testing THIS choice).
+  try {
+    const resp = await fetch(at('/chat/completions', proxy), { method: 'POST', signal, headers,
+      body: JSON.stringify({ model, max_tokens: 16, temperature: 0, messages: [{ role: 'user', content: 'Reply with exactly: ok' }] }) });
+    const text = await resp.text().catch(() => '');
+    let j = null; try { j = JSON.parse(text); } catch {}
+    if (!resp.ok || !j || j.error) return fail(await aiErrorFromResponse(resp, { provider: 'custom', key, model }, text), proxy, models);
+    if (!Array.isArray(j.choices)) return { ok: false, kind: 'bad_request', proxy, models, error: new AiError('bad_request', 'not an OpenAI-compatible reply') };
+    return { ok: true, proxy, models, model };
+  } catch (e) { return fail(e, proxy, models); }
+}
+// Does this device have the /api/llm relay at all (a 404 from it then means "the relay is not there", not "no /models")?
+async function relayAnswers(signal) {
+  try { const r = await fetch('/api/llm', { cache: 'no-store', signal }); return r.status !== 404; } catch { return false; }
 }
