@@ -86,6 +86,15 @@
    "md": "**终端**会打开一个命令行，适合熟悉命令行的人使用：命令会直接作用于文件和设备，没有应用所提供的那些保护。\n\n- 如果设备提供系统 shell，终端就会打开它：命令及其手册都来自系统。\n- 否则，终端提供 NucleoOS 自己的命令：`help` 列出所有命令，`man` 后跟命令名称可显示该命令的手册页。本手册的**终端命令**中也有同样的页面，只列出这台设备具备的命令。\n- `Ctrl` + `C` 停止正在运行的命令。\n",
    "icon": "⌨",
    "app": "terminal"
+  },
+  {
+   "id": "computer",
+   "title": "在电脑上使用：nucleo",
+   "md": "**nucleo** 是一个运行在电脑上（Windows、macOS、Linux）的命令行工具，通过网络处理设备上的文件：列出、双向复制、保持文件夹同步、移动、删除到回收站、搜索、查看实时变化。它还能让电脑上的 AI 助手在你设定的范围内处理设备上的文件。\n\n## 需要准备\n\n- 电脑上安装 Node.js 20.10 或更高版本，然后安装 nucleo 软件包：`npm install -g @nucleoos/cli`。\n- 电脑和设备连接在同一个网络中。\n\n## 只需连接一次\n\n- `nucleo discover` 列出它在网络中找到的设备（`--scan` 会搜索得更彻底）。\n- `nucleo connect <地址>` 用新浏览器要求输入的同一个 6 位 PIN 码配对这台电脑。在有账户的设备上，它会改为询问你的用户名和密码。设备会被记住：之后的命令不再需要地址。\n- `nucleo doctor` 检查所有环节：连接、访问权限、空间、写入并读回一个测试文件、速度。\n- 请在你信任的网络中使用：通过 `http://` 连接时，PIN 码、密码和文件都以未加密的方式传输，与浏览器相同。`nucleo logout` 会结束这台电脑上的会话。\n\n## 日常命令\n\n- `nucleo ls Pictures` 列出一个文件夹；不以 `/` 开头的路径从你的文件（`/data`）开始。\n- `nucleo put report.pdf Documents/` 复制到设备，`nucleo get Documents/report.pdf` 复制到电脑；整个文件夹加 `-r`。中断的下载会从停下的地方继续。\n- `nucleo sync ./music :Music` 让设备上的文件夹与电脑上的一致（反方向也可以）。加上 `--delete` 时，源中已不存在的内容会被移到一个 `.nucleo-removed-…` 文件夹中，绝不会被删掉。\n- `nucleo rm Pictures/old.jpg` 将文件移到回收站；`nucleo trash ls` 和 `nucleo trash restore 1` 可以把它找回来。\n- `nucleo find '*.jpg'`、`nucleo du`、`nucleo df`、`nucleo watch Documents`。\n- `nucleo help` 列出所有命令，`nucleo help <命令>` 显示它的选项和示例。\n\n已经存在的文件不会在未经询问的情况下被替换。回收站保留 20 项：如果一次删除会让最早的一项被永久删除，nucleo 会先询问。系统自身的文件（`/data` 之外）不会被改动，除非你加上 `--system`。\n\n## AI 助手\n\n`nucleo mcp` 让支持 Model Context Protocol 的 AI 助手可以使用设备上的文件（例如 `claude mcp add nucleo -- nucleo mcp`）。默认情况下，助手：\n\n- 只能在你的文件（`/data`）中工作，或在你用 `--root` 指定的文件夹中工作；\n- 不会永久丢失任何内容：它删除或替换的文件会进入回收站，回收站满时操作会被拒绝；\n- 永远看不到 PIN 码或密码，也不能访问电脑上的文件，除非你用 `--local-root` 为它指定一个文件夹。\n\n`--read-only` 只允许它读取和搜索。\n",
+   "icon": "💻",
+   "unless": [
+    "host.session"
+   ]
   }
  ],
  "commands": [

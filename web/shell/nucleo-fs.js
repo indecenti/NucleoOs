@@ -52,6 +52,7 @@ const ABSENT = new Set([404, 405, 501]);        // a route this backend does not
 const BUSY = new Set([502, 503, 504]);
 const TRASH_DB = '/system/config/trash.json';
 const TRASH_CAP = 20;
+const BIN_OLD = '/system/.trash', BIN_OWN = '/system/config/.trash', BINS = [BIN_OLD, BIN_OWN];
 
 // '/data//a/./b/../c' → '/data/a/c'; never climbs above the root. Paths are always absolute.
 export function normPath(p) {
@@ -486,7 +487,11 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
   // so the Recycle Bin app lists and restores it. Every step is checked and the original goes LAST; any failure leaves
   // it where it was. Where the device trashes by itself (/api/fs/stat answers trash:true for the path, the Handheld's
   // cards) a delete is that move, and the device writes the entry. With accounts the bin is the user's own
-  // (/system/config is theirs); without, it stays /system/.trash as it always was.
+  // (/system/config is theirs); without, it stays /system/.trash as it always was, unless the device refuses it:
+  // a firmware that protects /system (the move answers 403) gets the bin in /system/config/.trash, the device's own
+  // state folder on every edition. Tried as soon as the old bin refuses, remembered for the rest of the session;
+  // the items already in the old bin keep their path and stay restorable.
+  let oldBinRefused = false;
   async function trashIndex() {
     let txt;
     try { txt = await readText(TRASH_DB); } catch { return null; }      // a read that broke off is not an index
@@ -517,27 +522,56 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
     }
     const db = await trashIndex();
     if (!db) throw new FsError('failed', p, 0, 'trash_index');
-    const bin = info.caps.includes('users.multi') ? '/system/config/.trash' : '/system/.trash';
+    const bins = info.caps.includes('users.multi') || oldBinRefused ? [BIN_OWN] : [BIN_OLD, BIN_OWN];
     const name = nameOf(p);
-    const entry = { orig: p, trash: joinPath(bin, Date.now() + '_' + Math.floor(Math.random() * 9999) + '_' + name), name, ts: Date.now() };
-    db.items.unshift(entry);
-    await write(TRASH_DB, JSON.stringify(db));      // the entry first: a file in the bin is never unlisted
+    let entry, bin;
     const unlist = async () => { db.items = db.items.filter((i) => i !== entry); await write(TRASH_DB, JSON.stringify(db)).catch(() => {}); };
     // A move is one rename on the device: files and folders alike, no bytes through the browser. Across two disks it
     // cannot be one, so the bytes are copied and the original removed only once the copy is there.
-    let moved = false;
-    try { await move(p, entry.trash); moved = true; } catch {}
+    const where = (x) => stat(x).catch(() => undefined);   // an entry, null (not there), undefined (unknown)
+    let moved = false, refusal = null, lost = null;
+    for (bin of bins) {
+      entry = { orig: p, trash: joinPath(bin, Date.now() + '_' + Math.floor(Math.random() * 9999) + '_' + name), name, ts: Date.now() };
+      db.items.unshift(entry);
+      await write(TRASH_DB, JSON.stringify(db));    // the entry first: a file in the bin is never unlisted
+      refusal = null; lost = null;
+      try { await move(p, entry.trash); moved = true; } catch (e) { if (e && e.code === 'denied') refusal = e; else lost = e; }
+      if (moved || !refusal) break;
+      // A refusal is no second disk: no copy is tried (its bytes would land where nothing may remove them).
+      // The old bin refused a file of the user's: the next bin. Anything else refused stays where it is.
+      await unlist();
+      if (bin === BIN_OLD && p.startsWith('/data/')) { oldBinRefused = true; continue; }
+      throw refusal;
+    }
+    if (refusal) throw refusal;
     if (!moved) {
-      try { await copy(p, entry.trash); } catch (e) { await remove(entry.trash).catch(() => {}); await unlist(); throw e; }
+      // A move whose answer never came (weak Wi-Fi, a timeout) may still have happened on the device: look first, and
+      // never delete what may be the only copy. Unknown: the entry stays listed and nothing is touched.
+      const src = await where(p), dst = await where(entry.trash);
+      if (src === null && dst) moved = true;
+      else if (src === undefined || dst !== null) throw lost || new FsError('failed', p, 0, 'trash_failed');
+    }
+    if (!moved) {
+      try { await copy(p, entry.trash); } catch (e) {
+        if (!e || e.code !== 'exists') await remove(entry.trash).catch(() => {});   // only what this call wrote
+        await unlist(); throw e;
+      }
       let gone = false;
       try { gone = await remove(p); } catch {}
-      if (!gone) { await remove(entry.trash).catch(() => {}); await unlist(); throw new FsError('failed', p, 0, 'trash_failed'); }
+      if (!gone) {
+        // the answer to the remove may be the thing lost: the original already gone means the copy is the file now
+        const left = await where(p);
+        if (left !== null) {
+          if (left) { await remove(entry.trash).catch(() => {}); await unlist(); }
+          throw new FsError('failed', p, 0, 'trash_failed');
+        }
+      }
     }
     if (db.items.length > TRASH_CAP) {              // the oldest go only once this one is safely in
       // only what lies inside the bin: an edited index cannot make this delete anything else
       while (db.items.length > TRASH_CAP) {
         const old = db.items.pop();
-        if (old && typeof old.trash === 'string' && normPath(old.trash).startsWith(bin + '/')) await remove(old.trash).catch(() => {});
+        if (old && typeof old.trash === 'string' && BINS.some((b) => normPath(old.trash).startsWith(b + '/'))) await remove(old.trash).catch(() => {});
       }
       await write(TRASH_DB, JSON.stringify(db)).catch(() => {});
     }
