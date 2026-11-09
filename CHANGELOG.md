@@ -6,7 +6,13 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.8.7] — 2026-11-09
+
 ### Added
+- **Your files from a computer: `nucleo`**, a command line for Windows, macOS and Linux (`npm install -g @nucleoos/cli`):
+  pair once with the PIN, then list, copy both ways (folders, downloads that resume), sync a folder, move, delete to the
+  Recycle Bin and restore, search, watch changes live, with `--json` for scripts. `nucleo mcp` lets an AI assistant work
+  on the device's files inside limits you set. Help has a page about it, "From a computer".
 - **A Cyberdeck theme** for the native UI: cyan and magenta on blue-black, exact on the 8-bit screens too. The
   launcher wears HUD accents on its top bar in every theme, and target corners on the focused tile of the panel.
 - **The screensaver clock as a cyberdeck HUD**: 7-segment digits with their unlit segments, a seconds rail, the date,
@@ -59,6 +65,9 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   content); a card without it keeps the photos it already made, else shows the emulator's icon.
 
 ### Fixed
+- **The Recycle Bin works on this device**: the firmware protects `/system`, where the web OS kept the bin, so
+  deleting a file in File Commander or on the desktop was refused and left a hidden file behind. Deleted files now go
+  to `/system/config/.trash`, and the ones already in the bin stay restorable.
 - Games gallery: a store console's photo or mark made without transparency no longer shows as a dark square on the
   selected row or the background (its corner colour is taken as transparent).
 - **ANIMA answers with the model you chose.** With a key and the network up, the model answers every question that
