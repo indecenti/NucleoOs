@@ -1,13 +1,25 @@
-using System.Net;
+using System;
+using System.Collections.Generic;
+using System.Net.Http;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
-using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 
 namespace NucleoConnect;
 
 /// <summary>A NucleoOS device found on the LAN.</summary>
-public record NucleoDevice(string Ip, string Version, string Fs, long FreeBytes, long TotalBytes)
+public sealed class NucleoDevice
 {
+    public NucleoDevice(string ip, string version, string fs, long freeBytes, long totalBytes)
+    { Ip = ip; Version = version; Fs = fs; FreeBytes = freeBytes; TotalBytes = totalBytes; }
+    public string Ip { get; }
+    public string Version { get; }
+    public string Fs { get; }
+    public long FreeBytes { get; }
+    public long TotalBytes { get; }
+
     public override string ToString()
         => $"{Ip}   ·   v{Version}   ·   {Fs} {FreeBytes / 1_000_000_000.0:F1} GB free";
 }
@@ -38,20 +50,27 @@ public static class Discovery
         await gate.WaitAsync(ct);
         try
         {
-            var json = await http.GetStringAsync($"http://{ip}/api/status", ct);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            if (root.GetProperty("os").GetString() != "NucleoOS") return;
-            var st = root.GetProperty("storage");
+            using var res = await http.GetAsync($"http://{ip}/api/status", ct);
+            if (!res.IsSuccessStatusCode) return;
+            var json = await res.Content.ReadAsStringAsync();
+            if (!(new JavaScriptSerializer().DeserializeObject(json) is Dictionary<string, object> root)) return;
+            if (!(root.TryGetValue("os", out var os) && os as string == "NucleoOS")) return;
+            var st = root.TryGetValue("storage", out var so) ? so as Dictionary<string, object> : null;
             found.Report(new NucleoDevice(
                 ip,
-                root.GetProperty("version").GetString() ?? "?",
-                st.GetProperty("fs").GetString() ?? "?",
-                st.GetProperty("free_bytes").GetInt64(),
-                st.GetProperty("total_bytes").GetInt64()));
+                root.TryGetValue("version", out var v) ? v as string ?? "?" : "?",
+                st != null && st.TryGetValue("fs", out var fs) ? fs as string ?? "?" : "?",
+                Num(st, "free_bytes"),
+                Num(st, "total_bytes")));
         }
         catch { /* not a NucleoOS host / unreachable / timeout */ }
         finally { gate.Release(); }
+    }
+
+    private static long Num(Dictionary<string, object>? d, string key)
+    {
+        if (d == null || !d.TryGetValue(key, out var v) || v == null) return 0;
+        try { return Convert.ToInt64(v); } catch { return 0; }
     }
 
     /// <summary>Distinct "a.b.c." prefixes for each up, non-loopback IPv4 interface.</summary>

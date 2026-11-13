@@ -1,21 +1,49 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- .NET Framework 4.8 ships with every Windows 10 (1903+) and Windows 11: the exe runs with nothing to install.
+       (A .NET 8 build needed the .NET 8 Desktop Runtime, which most PCs do not have.) The WebView2 assemblies and
+       the native WebView2Loader.dll are embedded, so the download is ONE file (Program.cs unpacks/resolves them). -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>NucleoConnect</AssemblyName>
     <RootNamespace>NucleoConnect</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <Version>1.1.0</Version>
+    <Product>NucleoOS Connect</Product>
+    <Description>NucleoOS Connect</Description>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- No build-machine paths in the shipped exe: no PDB path, source paths mapped to a neutral root. -->
+    <Deterministic>true</Deterministic>
+    <PathMap>$(MSBuildProjectDirectory)=/src/windows-app</PathMap>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
     <!-- Cosmetic WindowsBase WinForms/WPF unification from the WebView2 package. -->
     <NoWarn>$(NoWarn);MSB3277</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- WebView2 control. Runtime ships with Windows 11; only the SDK is needed to build. -->
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.*" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3967.48" GeneratePathProperty="true" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+
+  <!-- One file: the managed WebView2 assemblies and the native loader for each CPU travel inside the exe. -->
+  <ItemGroup>
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\lib\net462\Microsoft.Web.WebView2.Core.dll" LogicalName="lib.Microsoft.Web.WebView2.Core.dll" Visible="false" />
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\lib\net462\Microsoft.Web.WebView2.WinForms.dll" LogicalName="lib.Microsoft.Web.WebView2.WinForms.dll" Visible="false" />
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-x64\native\WebView2Loader.dll" LogicalName="native.x64.WebView2Loader.dll" Visible="false" />
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-x86\native\WebView2Loader.dll" LogicalName="native.x86.WebView2Loader.dll" Visible="false" />
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-arm64\native\WebView2Loader.dll" LogicalName="native.arm64.WebView2Loader.dll" Visible="false" />
   </ItemGroup>
 
 </Project>

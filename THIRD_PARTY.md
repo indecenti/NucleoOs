@@ -15,6 +15,7 @@ below is a convenience summary of the major dependencies.
 | wllama (llama.cpp) | in-browser LLM inference | MIT |
 | ONNX Runtime Web | in-browser diffusion (Paint/Atelier) | MIT |
 | libssh2 | SSH terminal (native + bridge) | BSD-style (libssh2 license) |
+| Microsoft Edge WebView2 SDK | NucleoOS Connect for Windows (`windows-app`, embedded in `NucleoConnect.exe`) | BSD-3-Clause (Microsoft) |
 | **ffmpeg.wasm** | Video Studio (in-browser transcode) | **LGPL-2.1+ / GPL** (build-dependent) |
 | **DOSBox** | in-browser DOS emulator app | **GPL-2.0** |
 

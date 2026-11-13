@@ -25,19 +25,32 @@ The device must be powered on with its HTTP server up (it advertises itself via 
 
 ## Build & run
 
-Requires the .NET 8 SDK (Windows). The WebView2 **runtime** ships with Windows 11.
+Targets **.NET Framework 4.8**, which every Windows 10 (1903+) and Windows 11 already has: users install
+nothing. The WebView2 assemblies and the native `WebView2Loader.dll` (x64, x86, arm64) are embedded in the exe,
+so the download is one file (~1.1 MB). On first start the loader is unpacked to
+`%LOCALAPPDATA%\NucleoConnect\loader\<arch>-<hash>` and the browser profile lives in
+`%LOCALAPPDATA%\NucleoConnect\WebView2`. Without the WebView2 Runtime (older Windows 10) the app offers
+Microsoft's download page.
+
+Requires a .NET SDK (any recent one) on the build machine:
 
 ```
 cd windows-app
-dotnet run -c Release
+dotnet build -c Release
+copy bin\Release\net48\NucleoConnect.exe ..\web\downloads\NucleoConnect.exe
 ```
 
-A standalone single-file build:
+Only `NucleoConnect.exe` ships (`web/downloads/` -> the SD's `www/shell/downloads/`); the DLLs next to it in
+`bin/` are not needed. `NucleoConnect.exe <host>` opens that device directly (handy in a shortcut).
 
-```
-dotnet publish -c Release -r win-x64 --self-contained false ^
-  -p:PublishSingleFile=true -o dist
-```
+The exe is not code-signed: Windows SmartScreen shows "Windows protected your PC" the first time:
+**More info -> Run anyway**.
+
+## Security
+
+The PC file bridge (`LocalFs`, `window.chrome.webview.hostObjects.nucleo`) can read and write this PC's files,
+so it exists only for the device you connected to: any navigation to another site opens in the default browser,
+and iframes get the bridge only when they are the device's own origin.
 
 ## Files
 
@@ -46,4 +59,5 @@ dotnet publish -c Release -r win-x64 --self-contained false ^
 | `Program.cs` | Entry point |
 | `MainForm.cs` | UI: device list, scan/connect, WebView2 host |
 | `Discovery.cs` | Dependency-free LAN scan for `/api/status` |
+| `LocalFs.cs` | PC file bridge for File Commander (device origin only) |
 | `app.manifest` | Per-monitor DPI awareness |

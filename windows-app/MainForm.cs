@@ -1,4 +1,13 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
 namespace NucleoConnect;
@@ -16,12 +25,15 @@ public class MainForm : Form
     private readonly Label _status = new() { Dock = DockStyle.Bottom, Height = 22, Text = "Idle." };
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill };
     private CancellationTokenSource? _cts;
+    private bool _webReady;
+    private string? _pending;                       // a Connect() that came before WebView2 was ready
+    private string? _deviceAuthority;               // "host[:port]" of the connected device, the only place the bridge exists
 
     private readonly Panel _side = new() { Dock = DockStyle.Left, Width = 300, Padding = new Padding(8) };
     private bool _fullScreen = false;
     private FormWindowState _prevState = FormWindowState.Normal;
 
-    public MainForm()
+    public MainForm(string? startHost = null)
     {
         Text = "NucleoOS Connect";
         Width = 1100; Height = 720; StartPosition = FormStartPosition.CenterScreen;
@@ -78,6 +90,7 @@ public class MainForm : Form
             else if (e.KeyCode == Keys.Escape && _fullScreen) ToggleFullScreen();
         };
 
+        if (!string.IsNullOrWhiteSpace(startHost)) { _host.Text = startHost!.Trim(); _pending = _host.Text; }
         Load += async (_, _) => await InitWebViewAsync();
     }
 
@@ -103,19 +116,73 @@ public class MainForm : Form
     /// Boot WebView2 and inject the native filesystem bridge so the web file manager can browse
     /// the drives connected to this PC. The bridge is exposed to the top-level document AND to
     /// iframes (the File Commander app runs in an iframe inside the device shell), so it is
-    /// reachable as <c>window.chrome.webview.hostObjects.nucleo</c> everywhere.
+    /// reachable as <c>window.chrome.webview.hostObjects.nucleo</c> on the device's pages.
+    /// The bridge reaches this PC's files, so it exists ONLY for the device you connected to: navigation
+    /// elsewhere opens in your normal browser, and iframes get it only when they are the device's own origin.
     /// </summary>
     private async Task InitWebViewAsync()
     {
-        await _web.EnsureCoreWebView2Async();
+        try
+        {
+            CoreWebView2Environment.SetLoaderDllFolderPath(Program.UnpackLoader());
+            var env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(Program.DataDir, "WebView2"));
+            await _web.EnsureCoreWebView2Async(env);
+        }
+        catch (WebView2RuntimeNotFoundException)
+        {
+            _status.Text = "Microsoft Edge WebView2 Runtime is missing.";
+            if (MessageBox.Show(this,
+                    "NucleoOS Connect needs the Microsoft Edge WebView2 Runtime (already part of Windows 11).\n\n" +
+                    "Open the download page now?", "WebView2 Runtime missing",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                OpenExternal("https://go.microsoft.com/fwlink/p/?LinkId=2124703");
+            return;
+        }
+        catch (Exception ex)
+        {
+            _status.Text = "WebView2 failed to start.";
+            MessageBox.Show(this, "The embedded browser could not start:\n" + ex.Message, "NucleoOS Connect",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
         var core = _web.CoreWebView2;
         core.AddHostObjectToScript("nucleo", new LocalFs());
-        // Same object for every iframe, regardless of which device IP/hostname is loaded.
+        core.NavigationStarting += (_, e) =>
+        {
+            if (!IsDevice(e.Uri)) { e.Cancel = true; OpenExternal(e.Uri); }
+        };
+        core.NewWindowRequested += (_, e) =>
+        {
+            e.Handled = true;
+            if (IsDevice(e.Uri)) _web.Source = new Uri(e.Uri); else OpenExternal(e.Uri);
+        };
         core.FrameCreated += (_, e) =>
         {
-            try { e.Frame.AddHostObjectToScript("nucleo", new LocalFs(), new[] { "*" }); }
+            if (_deviceAuthority == null) return;
+            try { e.Frame.AddHostObjectToScript("nucleo", new LocalFs(), new[] { "http://" + _deviceAuthority }); }
             catch { /* older runtime without per-frame host objects: top-level injection still works */ }
         };
+        core.NavigationCompleted += (_, e) =>
+        {
+            if (_deviceAuthority != null)
+                _status.Text = e.IsSuccess ? $"Connected to {_deviceAuthority}." : $"Cannot reach {_deviceAuthority}.";
+        };
+        _webReady = true;
+        if (_pending != null) { var p = _pending; _pending = null; Connect(p); }
+    }
+
+    private bool IsDevice(string uri)
+    {
+        if (uri == "about:blank") return true;
+        return _deviceAuthority != null && Uri.TryCreate(uri, UriKind.Absolute, out var u)
+            && u.Scheme == Uri.UriSchemeHttp
+            && string.Equals(u.Authority, _deviceAuthority, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void OpenExternal(string uri)
+    {
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out var u) || (u.Scheme != Uri.UriSchemeHttp && u.Scheme != Uri.UriSchemeHttps)) return;
+        try { Process.Start(new ProcessStartInfo(u.AbsoluteUri) { UseShellExecute = true }); } catch { }
     }
 
     private async Task ScanAsync()
@@ -147,8 +214,15 @@ public class MainForm : Form
     private void Connect(string hostOrIp)
     {
         if (string.IsNullOrWhiteSpace(hostOrIp)) return;
-        _status.Text = $"Connecting to {hostOrIp}…";
-        _web.Source = new Uri($"http://{hostOrIp}/");
+        if (!Uri.TryCreate($"http://{hostOrIp.Trim()}/", UriKind.Absolute, out var target) || target.AbsolutePath != "/")
+        {
+            _status.Text = "Type a device name or IP address (e.g. 192.168.1.20).";
+            return;
+        }
+        if (!_webReady) { _pending = hostOrIp; return; }
+        _deviceAuthority = target.Authority;
+        _status.Text = $"Connecting to {target.Authority}…";
+        _web.Source = target;
     }
 
     protected override void OnClosing(CancelEventArgs e) { _cts?.Cancel(); base.OnClosing(e); }

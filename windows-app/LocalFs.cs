@@ -1,5 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text.Json;
+using System.Web.Script.Serialization;
 
 namespace NucleoConnect;
 
@@ -40,7 +44,7 @@ public class LocalFs
             }
             catch { /* a not-ready drive (empty card reader, etc.) — skip it */ }
         }
-        return JsonSerializer.Serialize(list);
+        return Json.Serialize(list);
     }
 
     /// <summary>JSON { entries:[{ name, type:"dir"|"file", size }] } for a folder, or { error }.</summary>
@@ -58,11 +62,11 @@ public class LocalFs
             {
                 entries.Add(new { name = f.Name, type = "file", size = f.Length });
             }
-            return JsonSerializer.Serialize(new { entries });
+            return Json.Serialize(new { entries });
         }
         catch (Exception ex)
         {
-            return JsonSerializer.Serialize(new { error = ex.Message });
+            return Json.Serialize(new { error = ex.Message });
         }
     }
 
@@ -137,8 +141,10 @@ public class LocalFs
     public string Exists(string path)
         => (File.Exists(path) || Directory.Exists(path)) ? "1" : "";
 
+    private static readonly JavaScriptSerializer Json = new() { MaxJsonLength = int.MaxValue };
+
     private static string Ok() => "{\"ok\":true}";
-    private static string Err(string msg) => JsonSerializer.Serialize(new { error = msg });
+    private static string Err(string msg) => Json.Serialize(new { error = msg });
 
     // Enumeration on a drive root can throw the moment it touches a denied/locked entry; degrade
     // to an empty list rather than failing the whole listing.
