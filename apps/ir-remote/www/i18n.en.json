@@ -94,5 +94,6 @@
   "b_ch_up": "Channel up", "b_ch_down": "Channel down",
   "b_up": "Up", "b_down": "Down", "b_left": "Left", "b_right": "Right", "b_ok": "OK",
   "sd_read_failed": "Couldn't read your saved favourites and buttons from the SD: changes stay in this browser until it can be read again.",
-  "st_no_ir": "demo — infrared is not available on this device"
+  "st_no_ir": "demo — infrared is not available on this device",
+  "st_off": "demo — the device's infrared transmitter is off: restart the device normally to send"
 }

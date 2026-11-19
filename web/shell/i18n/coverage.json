@@ -26,7 +26,7 @@
     "zh": 100
   },
   "surfaces": 52,
-  "totalKeys": 4922,
+  "totalKeys": 4924,
   "namespaces": {
     "agent": 161,
     "anima": 193,
@@ -49,7 +49,7 @@
     "games": 818,
     "groq-chat": 44,
     "help": 33,
-    "ir-remote": 113,
+    "ir-remote": 114,
     "log-viewer": 27,
     "mail": 49,
     "media-player": 4,
@@ -78,7 +78,7 @@
     "video-player": 117,
     "video-studio": 36,
     "voice-manager": 79,
-    "weather": 41,
+    "weather": 42,
     "wifi-scanner": 29
   }
 }

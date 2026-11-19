@@ -94,5 +94,6 @@
   "b_ch_up": "Chaîne +", "b_ch_down": "Chaîne -",
   "b_up": "Haut", "b_down": "Bas", "b_left": "Gauche", "b_right": "Droite", "b_ok": "OK",
   "sd_read_failed": "Impossible de lire vos favoris et boutons enregistrés sur la SD : les modifications restent dans ce navigateur jusqu'à ce qu'elle soit de nouveau lisible.",
-  "st_no_ir": "démo — infrarouge non disponible sur cet appareil"
+  "st_no_ir": "démo — infrarouge non disponible sur cet appareil",
+  "st_off": "démo — l'émetteur infrarouge de l'appareil est éteint : redémarrez l'appareil normalement pour envoyer"
 }

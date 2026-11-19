@@ -94,5 +94,6 @@
   "b_ch_up": "Canale su", "b_ch_down": "Canale giù",
   "b_up": "Su", "b_down": "Giù", "b_left": "Sinistra", "b_right": "Destra", "b_ok": "OK",
   "sd_read_failed": "Impossibile leggere preferiti e pulsanti salvati sulla SD: le modifiche restano in questo browser finché non torna leggibile.",
-  "st_no_ir": "demo — infrarossi non disponibili su questo dispositivo"
+  "st_no_ir": "demo — infrarossi non disponibili su questo dispositivo",
+  "st_off": "demo — il trasmettitore a infrarossi del dispositivo è spento: riavvia il dispositivo normalmente per inviare"
 }

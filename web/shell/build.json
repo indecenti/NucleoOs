@@ -103,8 +103,8 @@
   },
   {
    "id": "ir-remote",
-   "version": "0.1.2",
-   "version_code": 3
+   "version": "0.1.3",
+   "version_code": 4
   },
   {
    "id": "log-viewer",
@@ -257,13 +257,13 @@
  "budget": {
   "bytes": 75497472,
   "ok": true,
-  "used": 39182683
+  "used": 39188113
  },
- "bytes": 60069800,
+ "bytes": 60075230,
  "caps_row": {
   "after": "0.8.3"
  },
- "commit": "59606b1823569d49782109ca8938e8012fad43de",
+ "commit": "15aa1cf3a9b41ec4d98aeacfba0e511fe3f1bb26",
  "edition": "cardputer",
  "externals": [
   {
@@ -555,7 +555,7 @@
  "format": 1,
  "generator": "nucleo-webos tools/build.py",
  "gz_twins": 769,
- "hash": "9ffab6cf985ed412ec7d37cb543c2f59bd13b3a760ce2157d3c21bc3604ac6b7",
+ "hash": "3a055adbf6a40fcdd5cfc5b7928189f5fa2458b71eb6495afda8bb7a05d4b120",
  "left_out": [
   {
    "id": "cast",
@@ -598,8 +598,8 @@
  },
  "profile_sha256": "f84fc128e9d0121dd7a732107ea112fac273696d36da3aa9fb35ff5d3c8948d8",
  "shell": {
-  "cache": "nucleo-shell-v166-3c95cd18aa51",
-  "hash": "3c95cd18aa51"
+  "cache": "nucleo-shell-v166-d148edf28c52",
+  "hash": "d148edf28c52"
  },
  "shell_dir": "www/shell",
  "uncommitted_files": 0,

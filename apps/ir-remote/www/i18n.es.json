@@ -94,5 +94,6 @@
   "b_ch_up": "Canal arriba", "b_ch_down": "Canal abajo",
   "b_up": "Arriba", "b_down": "Abajo", "b_left": "Izquierda", "b_right": "Derecha", "b_ok": "OK",
   "sd_read_failed": "No se pudieron leer tus favoritos y botones guardados en la SD: los cambios se quedan en este navegador hasta que vuelva a poder leerse.",
-  "st_no_ir": "demo — infrarrojos no disponibles en este dispositivo"
+  "st_no_ir": "demo — infrarrojos no disponibles en este dispositivo",
+  "st_off": "demo — el transmisor de infrarrojos del dispositivo está apagado: reinicia el dispositivo normalmente para enviar"
 }

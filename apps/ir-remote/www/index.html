@@ -294,7 +294,8 @@
       LS.set('ir.userdata', { favs, custom, macros, recents });
       clearTimeout(saveTimer);
       saveTimer = setTimeout(async () => {
-        if (demo) return;
+        // Saved on the device even when the transmitter is off or absent: the device's own IR app reads this
+        // file, and "demo" only means this page cannot SEND right now, not that the disk is out of reach.
         if (!sdOk && !(await recoverSd())) return;     // never write over an SD copy we could not read
         sdWrite(UDATA, JSON.stringify({ favs, custom, macros, recents }));
       }, 600);
@@ -307,6 +308,9 @@
       if (!data || !(data.favs || data.custom || data.macros)) data = LS.get('ir.userdata', null);
       if (!data) data = { favs: LS.get('ir.fav', []), custom: LS.get('ir.custom', []), macros: LS.get('ir.macros', []), recents: LS.get('ir.recent', []) };
       favs = data.favs || []; custom = data.custom || []; macros = data.macros || []; recents = data.recents || [];
+      // No copy on the device yet but this browser has one (starred while an older version kept everything
+      // in the browser): write it through once, so the device's own IR app sees those favourites too.
+      if (r.ok && !r.data && (favs.length || custom.length || macros.length)) persist();
     }
 
     function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show');
@@ -361,7 +365,9 @@
 
     // ---- device API (graceful demo fallback) -------------------------------------------------
     async function postJSON(url, body) { try { const r = await fetch(url, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r.ok ? await r.json().catch(() => ({ ok: true })) : null; } catch { return null; } }
+    // null = no IR API on this firmware (404/405/501 or unreachable); otherwise the device's own report.
     async function irDb() { try { const r = await fetch('/api/ir/db', { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch { return null; } }
+    let irState = 'absent';      // 'ready' | 'off' (API present, transmitter not running) | 'absent' (no API)
 
     const codeKey = (c) => c.raw ? 'raw:' + c.carrier + ':' + c.raw.length + ':' + c.raw.slice(0, 4).join(',') : `${c.protocol}:${c.address || 0}:${c.command}`;
     function pushRecent(code, label) { recents = recents.filter((r) => codeKey(r.code) !== codeKey(code)); recents.unshift({ code, label }); recents = recents.slice(0, 12); persist(); if (curTab === 'fav') renderFav(); }
@@ -374,7 +380,7 @@
     }
     const isFav = (code) => favs.some((f) => codeKey(f.code) === codeKey(code));
     function toggleFav(code, label) { if (isFav(code)) favs = favs.filter((f) => codeKey(f.code) !== codeKey(code)); else favs.unshift({ code, label }); persist(); }
-    function setStatus(ready) { demo = !ready; $('dot').className = 'd ' + (ready ? 'live' : 'demo'); $('status').textContent = ready ? t('st_ready', { gpio }) : t(noIr ? 'st_no_ir' : 'st_demo'); }
+    function setStatus(ready) { demo = !ready; $('dot').className = 'd ' + (ready ? 'live' : 'demo'); $('status').textContent = ready ? t('st_ready', { gpio }) : t(noIr ? 'st_no_ir' : irState === 'off' ? 'st_off' : 'st_demo'); }
 
     // ---- FAVORITES + RECENTS tab -------------------------------------------------------------
     function favButton(item, onStar) {
@@ -643,7 +649,7 @@
       const text = toIR(items);
       try { const blob = new Blob([text], { type: 'text/plain' }); const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = 'nucleo-remotes.ir'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); } catch {}
-      if (!demo) await sdWrite('/data/ir/nucleo-remotes.ir', text);
+      if (!noIr) await sdWrite('/data/ir/nucleo-remotes.ir', text);   // for the device's IR app, whether or not it can send now
       toast(t('export_done', { n: items.length }));
     }
 
@@ -784,6 +790,7 @@
       // says so, and sends nothing. Where it exists, /api/ir/db gives its state (ready, pin, protocols, regions).
       noIr = !(await Caps.has('device.ir'));
       const db = noIr ? null : await irDb();
+      irState = !db ? 'absent' : db.ready === false ? 'off' : 'ready';
       if (db) { gpio = db.gpio || 44; if (db.tvbgone?.regions?.length) REGIONS = db.tvbgone.regions; }
       setStatus(!!db && db.ready !== false);
       await loadUserData();          // SD-backed favourites/custom/scenes (localStorage fallback)

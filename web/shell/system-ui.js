@@ -195,6 +195,16 @@ function wxEmoji(code, isDay) {
   if (cls === 'sun' && isDay === 0) return '🌙';
   return WX_EMOJI[cls];
 }
+// Same unit choice as the Weather app ('weather.units'; no choice yet → Fahrenheit in the countries that use it).
+function wxTemp(c) {
+  let u = null;
+  try { u = localStorage.getItem('weather.units'); } catch {}
+  if (u !== 'metric' && u !== 'imperial') {
+    const region = ((navigator.language || '').split('-')[1] || '').toUpperCase();
+    u = ['US', 'LR', 'MM', 'BS', 'BZ', 'KY', 'PW'].includes(region) ? 'imperial' : 'metric';
+  }
+  return Math.round(u === 'imperial' ? c * 9 / 5 + 32 : c);
+}
 function readWeather() {
   try {
     const c = JSON.parse(localStorage.getItem('weather.cache'));
@@ -217,7 +227,7 @@ export function initSystemUI(ctx) {
     paintPill();
     pill.addEventListener('click', (e) => { e.stopPropagation(); togglePanel(); });
     // The Weather app writing its cache fires 'storage' here (different document) → live pill.
-    window.addEventListener('storage', (e) => { if (e.key === 'weather.cache') paintPill(); });
+    window.addEventListener('storage', (e) => { if (e.key === 'weather.cache' || e.key === 'weather.units') paintPill(); });
     I18N.onChange(() => { paintPill(); if (panel && !panel.classList.contains('hidden')) renderPanel(); });
   }
   function paintPill() {
@@ -226,7 +236,7 @@ export function initSystemUI(ctx) {
     if (wx) {
       const c = wx.data.current;
       pill.innerHTML = `<span class="wg-emo">${wxEmoji(c.weather_code, c.is_day)}</span>` +
-        `<span class="wg-t">${Math.round(c.temperature_2m)}°</span>`;
+        `<span class="wg-t">${wxTemp(c.temperature_2m)}°</span>`;
       pill.title = wx.place.name;
     } else {
       pill.innerHTML = '<span class="wg-emo">🧩</span>';
@@ -260,11 +270,11 @@ export function initSystemUI(ctx) {
       for (let i = 0; daysOk && i < Math.min(3, (D.time || []).length); i++) {
         const dn = i === 0 ? t('wg_today') : I18N.fmtDate(new Date(D.time[i] + 'T12:00:00'), { weekday: 'short' });
         days += `<div class="wg-day"><span>${esc(dn)}</span><span class="e">${wxEmoji(D.weather_code[i], 1)}</span>` +
-          `<span class="mm">${Math.round(D.temperature_2m_min[i])}°·<b>${Math.round(D.temperature_2m_max[i])}°</b></span></div>`;
+          `<span class="mm">${wxTemp(D.temperature_2m_min[i])}°·<b>${wxTemp(D.temperature_2m_max[i])}°</b></span></div>`;
       }
       html += `<div class="wg-card wg-wx" data-open="weather"><div class="wg-wx-main">` +
         `<span class="wg-wx-emo">${wxEmoji(c.weather_code, c.is_day)}</span>` +
-        `<span class="wg-wx-t">${Math.round(c.temperature_2m)}°</span>` +
+        `<span class="wg-wx-t">${wxTemp(c.temperature_2m)}°</span>` +
         `<span class="wg-wx-place">${esc(wx.place.name)}</span></div>` +
         `<div class="wg-days">${days}</div></div>`;
     } else {

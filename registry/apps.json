@@ -83,7 +83,7 @@
     },
     {
       "id": "ir-remote",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/ir-remote",
       "enabled": true,
       "autostart": false,

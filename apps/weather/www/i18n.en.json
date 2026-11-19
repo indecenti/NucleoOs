@@ -5,6 +5,7 @@
   "search_tip": "Change city",
   "locate": "Use my location",
   "refresh": "Refresh",
+  "units_tip": "Units: °C / °F",
   "updated": "Updated {ago}",
   "offline_cache": "Offline · cached data",
   "feels": "Feels like",

@@ -5,6 +5,7 @@
   "search_tip": "更换城市",
   "locate": "使用我的位置",
   "refresh": "刷新",
+  "units_tip": "单位：°C / °F",
   "updated": "{ago}更新",
   "offline_cache": "离线 · 缓存数据",
   "feels": "体感温度",

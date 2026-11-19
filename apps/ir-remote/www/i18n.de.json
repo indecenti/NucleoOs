@@ -94,5 +94,6 @@
   "b_ch_up": "Kanal +", "b_ch_down": "Kanal -",
   "b_up": "Oben", "b_down": "Unten", "b_left": "Links", "b_right": "Rechts", "b_ok": "OK",
   "sd_read_failed": "Deine gespeicherten Favoriten und Tasten konnten nicht von der SD gelesen werden: Änderungen bleiben in diesem Browser, bis sie wieder lesbar ist.",
-  "st_no_ir": "Demo — Infrarot ist auf diesem Gerät nicht verfügbar"
+  "st_no_ir": "Demo — Infrarot ist auf diesem Gerät nicht verfügbar",
+  "st_off": "Demo — der Infrarotsender des Geräts ist aus: starte das Gerät normal neu, um zu senden"
 }

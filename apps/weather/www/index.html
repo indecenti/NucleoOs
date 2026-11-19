@@ -84,6 +84,7 @@
     <div class="sp"></div>
     <button class="iconbtn" id="b-search" data-i18n-attr="title:search_tip">🔍</button>
     <button class="iconbtn" id="b-locate" data-i18n-attr="title:locate">📍</button>
+    <button class="iconbtn" id="b-units" data-i18n-attr="title:units_tip">°C</button>
     <button class="iconbtn" id="b-refresh" data-i18n-attr="title:refresh">⟳</button>
   </header>
   <div class="updated" id="updated"></div>
@@ -107,7 +108,7 @@
       <div class="card cur">
         <div class="wxi" id="cur-icon"></div>
         <div>
-          <div class="t"><span id="cur-t">—</span><small> °C</small></div>
+          <div class="t"><span id="cur-t">—</span><small id="cur-u"> °C</small></div>
           <div class="lbl" id="cur-lbl">—</div>
         </div>
         <div class="stats">
@@ -200,6 +201,21 @@ async function geocode(name) {
   return (await r.json()).results || [];
 }
 
+// ---- units: the cache always holds Open-Meteo's metric data; °F / mph / in are a view of it ----
+// 'weather.units' ('metric' | 'imperial') is shared with the shell's taskbar pill (system-ui.js). With no
+// choice yet, the countries that use Fahrenheit get it by default (browser region: US, LR, MM, BS, BZ, KY, PW).
+const UK = 'weather.units';
+const F_REGIONS = ['US', 'LR', 'MM', 'BS', 'BZ', 'KY', 'PW'];
+function readUnits() {
+  try { const u = localStorage.getItem(UK); if (u === 'metric' || u === 'imperial') return u; } catch {}
+  const region = (navigator.language || '').split('-')[1] || '';
+  return F_REGIONS.includes(region.toUpperCase()) ? 'imperial' : 'metric';
+}
+let units = readUnits();
+const imp = () => units === 'imperial';
+const tmp = (c) => imp() ? c * 9 / 5 + 32 : c;
+const tUnit = () => imp() ? '°F' : '°C';
+
 // ---- rendering ----
 const fmtN = (v, d = 0) => I18N.fmtNumber(v, { maximumFractionDigits: d });
 const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -208,12 +224,13 @@ const windDir = (deg) => DIRS[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
 function renderCurrent(d) {
   const c = d.current;
   $('cur-icon').innerHTML = svgIcon(wmoIcon(c.weather_code), !c.is_day);
-  $('cur-t').textContent = fmtN(c.temperature_2m);
+  $('cur-t').textContent = fmtN(tmp(c.temperature_2m));
+  $('cur-u').textContent = ' ' + tUnit();
   $('cur-lbl').textContent = t(wmoKey(c.weather_code));
-  $('st-feels').textContent = fmtN(c.apparent_temperature) + ' °C';
-  $('st-wind').innerHTML = `${fmtN(c.wind_speed_10m)} km/h <span class="dir" style="transform:rotate(${(c.wind_direction_10m + 180) % 360}deg)">↑</span> ${windDir(c.wind_direction_10m)}`;
+  $('st-feels').textContent = fmtN(tmp(c.apparent_temperature)) + ' ' + tUnit();
+  $('st-wind').innerHTML = `${imp() ? fmtN(c.wind_speed_10m / 1.609344) + ' mph' : fmtN(c.wind_speed_10m) + ' km/h'} <span class="dir" style="transform:rotate(${(c.wind_direction_10m + 180) % 360}deg)">↑</span> ${windDir(c.wind_direction_10m)}`;
   $('st-hum').textContent = fmtN(c.relative_humidity_2m) + '%';
-  $('st-prec').textContent = fmtN(c.precipitation, 1) + ' mm';
+  $('st-prec').textContent = (imp() ? fmtN(c.precipitation / 25.4, 2) + ' in' : fmtN(c.precipitation, 1) + ' mm');
 }
 function renderHours(d) {
   const H = d.hourly, box = $('hours'); box.innerHTML = '';
@@ -226,7 +243,7 @@ function renderHours(d) {
     const hh = H.time[i].slice(11, 16);
     const pp = H.precipitation_probability ? H.precipitation_probability[i] : null;
     el.innerHTML = `<div class="h">${hh}</div><div class="wxi">${svgIcon(wmoIcon(H.weather_code[i]), H.is_day && !H.is_day[i])}</div>` +
-      `<div class="t">${fmtN(H.temperature_2m[i])}°</div><div class="p">${pp > 15 ? fmtN(pp) + '%' : ''}</div>`;
+      `<div class="t">${fmtN(tmp(H.temperature_2m[i]))}°</div><div class="p">${pp > 15 ? fmtN(pp) + '%' : ''}</div>`;
     box.appendChild(el);
   }
 }
@@ -244,7 +261,7 @@ function renderDays(d) {
     el.className = 'day';
     el.innerHTML = `<div class="n">${name}<small>${sub}</small></div>` +
       `<div class="wxi">${svgIcon(wmoIcon(D.weather_code[i]), false)}</div>` +
-      `<div><div class="mm"><span>${fmtN(D.temperature_2m_min[i])}°</span> · <b>${fmtN(D.temperature_2m_max[i])}°</b></div>` +
+      `<div><div class="mm"><span>${fmtN(tmp(D.temperature_2m_min[i]))}°</span> · <b>${fmtN(tmp(D.temperature_2m_max[i]))}°</b></div>` +
       `<div class="bar"><i style="left:${l}%;right:${100 - r}%"></i></div></div>` +
       `<div class="pp">${pp > 15 ? '💧 ' + fmtN(pp) + '%' : ''}</div>`;
     box.appendChild(el);
@@ -346,6 +363,15 @@ $('b-geo').addEventListener('click', locate);
 $('b-search').addEventListener('click', showSearch);
 $('b-locate').addEventListener('click', locate);
 $('b-refresh').addEventListener('click', () => refresh(true));
+function paintUnitsBtn() { $('b-units').textContent = imp() ? '°F' : '°C'; }
+$('b-units').addEventListener('click', () => {
+  units = imp() ? 'metric' : 'imperial';
+  try { localStorage.setItem(UK, units); } catch {}
+  paintUnitsBtn();
+  if (cache && cache.data) renderAll();
+});
+window.addEventListener('storage', (e) => { if (e.key === UK) { units = readUnits(); paintUnitsBtn(); if (cache && cache.data) renderAll(); } });
+paintUnitsBtn();
 window.addEventListener('online', () => refresh(false));
 I18N.onChange(() => { if (cache && cache.data) renderAll(); });
 
