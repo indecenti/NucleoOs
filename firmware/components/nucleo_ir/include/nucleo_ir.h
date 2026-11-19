@@ -20,8 +20,9 @@
 extern "C" {
 #endif
 
-// Bring up the RMT TX channel + carrier + mutex. Safe no-op (returns ESP_ERR_INVALID_STATE) if
-// the IR GPIO is unavailable. Call once at boot, before the HTTP server starts.
+// Bring up the RMT TX channel + carrier + mutex. Idempotent, safe from any task, and retried after a
+// failure. Normal boots call it at start-up; boots that skip it (Solo, to save heap) get it lazily on
+// the first send, sweep, jammer start or GET /api/ir/db.
 esp_err_t nucleo_ir_init(void);
 
 // Encode (protocol, address, command) and transmit it `repeats` times. repeats<=0 uses the

@@ -26,6 +26,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/stat.h>
+#include "esp_timer.h"
 
 #define PRESETS_BIN NUCLEO_SD_MOUNT "/system/ir/presets.bin"  // built from presets.json by tools/ir-pack.mjs
 #define UDATA_PATH  NUCLEO_SD_MOUNT "/data/ir/userdata.json"
@@ -40,7 +42,11 @@ static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, LINE = 0x2
 // hold thousands of devices for a few hundred bytes of working set (see nucleo_ir_pack.h). Only
 // favourites — a short, user-curated list — are parsed into RAM, and that list is bounded.
 #define MAX_FAV 24
-typedef struct { char label[30]; nir_proto_t proto; uint32_t addr, cmd; } ir_fav_t;
+#define RAW_DUR_MAX 400          // RAW scratch (µs entries) shared by catalog RAW buttons and RAW favourites
+static uint16_t *s_rawdur;
+// A RAW favourite (a captured or .ir-imported signal) keeps only its label and its index in the file's
+// "favs" array: its µs list is read back from userdata.json when it is sent, so RAW costs no RAM here.
+typedef struct { char label[30]; nir_proto_t proto; uint32_t addr, cmd; uint8_t idx; bool raw; } ir_fav_t;
 
 static ir_pack_t        s_pack;     // open handle to presets.bin (valid while s_pack_ok)
 static bool             s_pack_ok;
@@ -147,27 +153,75 @@ static void open_pack(void) {
     }
 }
 
+// What userdata.json looked like when the favourites were last read: the web app rewrites it whenever a
+// star changes, so a change in size or mtime means "read it again" — the FAVS tab follows the browser live.
+static off_t  s_ud_size = -1;
+static time_t s_ud_mtime;
+static int64_t s_ud_checked_us;
+static bool udata_changed(void) {
+    struct stat st;
+    if (stat(UDATA_PATH, &st) != 0) return s_ud_size != -1;            // removed since last read
+    return st.st_size != s_ud_size || st.st_mtime != s_ud_mtime;
+}
 static void load_favorites(void) {
+    free(s_fav); s_fav = NULL; s_nfav = 0;
+    struct stat st;
+    if (stat(UDATA_PATH, &st) == 0) { s_ud_size = st.st_size; s_ud_mtime = st.st_mtime; } else s_ud_size = -1;
+    s_ud_checked_us = esp_timer_get_time();
     char *buf = slurp(UDATA_PATH, 64 * 1024); if (!buf) return;
     cJSON *root = cJSON_Parse(buf); free(buf); if (!root) return;
     cJSON *favs = cJSON_GetObjectItem(root, "favs");
     if (cJSON_IsArray(favs)) {
         s_fav = (ir_fav_t *)calloc(MAX_FAV, sizeof(ir_fav_t));
+        int idx = -1;
         if (s_fav) { cJSON *it; cJSON_ArrayForEach(it, favs) {
-            if (s_nfav >= MAX_FAV) break;
+            idx++;
+            if (s_nfav >= MAX_FAV || idx > 255) break;
             cJSON *lb = cJSON_GetObjectItem(it, "label"), *cd = cJSON_GetObjectItem(it, "code");
             if (!cJSON_IsObject(cd)) continue;
-            cJSON *pr = cJSON_GetObjectItem(cd, "protocol"), *ad = cJSON_GetObjectItem(cd, "address"), *cm = cJSON_GetObjectItem(cd, "command");
-            if (!cJSON_IsString(pr) || !cJSON_IsNumber(cm)) continue;   // skip raw favourites
             ir_fav_t *F = &s_fav[s_nfav];
-            snprintf(F->label, sizeof F->label, "%s", cJSON_IsString(lb) ? lb->valuestring : "fav");
+            snprintf(F->label, sizeof F->label, "%s", cJSON_IsString(lb) && lb->valuestring[0] ? lb->valuestring : "fav");
+            F->idx = (uint8_t)idx;
+            cJSON *raw = cJSON_GetObjectItem(cd, "raw");
+            if (cJSON_IsArray(raw)) {                                     // RAW: sent from the file on demand
+                int n = cJSON_GetArraySize(raw);
+                if (n <= 0 || n > RAW_DUR_MAX) continue;                  // longer than the transmit buffer
+                F->raw = true; F->proto = NIR_PROTO_RAW; s_nfav++;
+                continue;
+            }
+            cJSON *pr = cJSON_GetObjectItem(cd, "protocol"), *ad = cJSON_GetObjectItem(cd, "address"), *cm = cJSON_GetObjectItem(cd, "command");
+            if (!cJSON_IsString(pr) || !cJSON_IsNumber(cm)) continue;
             F->proto = nir_proto_from_name(pr->valuestring);
             F->addr  = cJSON_IsNumber(ad) ? (uint32_t)ad->valuedouble : 0;
             F->cmd   = (uint32_t)cm->valuedouble;
-            if (F->proto < NIR_PROTO__COUNT) s_nfav++;
+            if (F->proto < NIR_PROTO__COUNT && F->proto != NIR_PROTO_RAW) s_nfav++;
         } }
     }
     cJSON_Delete(root);
+}
+// Send a RAW favourite: re-read its entry (by index, checked against the label in case the list changed)
+// straight into the shared RAW scratch buffer.
+static bool send_raw_fav(const ir_fav_t *F) {
+    if (!s_rawdur) return false;
+    char *buf = slurp(UDATA_PATH, 64 * 1024); if (!buf) return false;
+    cJSON *root = cJSON_Parse(buf); free(buf); if (!root) return false;
+    bool ok = false;
+    cJSON *it = cJSON_GetArrayItem(cJSON_GetObjectItem(root, "favs"), F->idx);
+    cJSON *lb = cJSON_GetObjectItem(it, "label"), *cd = cJSON_GetObjectItem(it, "code");
+    cJSON *raw = cJSON_GetObjectItem(cd, "raw"), *car = cJSON_GetObjectItem(cd, "carrier");
+    const bool same = !cJSON_IsString(lb) || !lb->valuestring[0] || strncmp(lb->valuestring, F->label, sizeof F->label - 1) == 0;
+    if (same && cJSON_IsArray(raw)) {
+        int n = 0; cJSON *e;
+        cJSON_ArrayForEach(e, raw) {
+            if (n >= RAW_DUR_MAX) break;
+            int v = cJSON_IsNumber(e) ? e->valueint : 0;
+            s_rawdur[n++] = (uint16_t)(v < 0 ? 0 : (v > 0xFFFF ? 0xFFFF : v));
+        }
+        uint16_t hz = cJSON_IsNumber(car) ? (uint16_t)car->valueint : 38000;
+        ok = n > 0 && nucleo_ir_send_raw(s_rawdur, n, hz, 0) == ESP_OK;
+    }
+    cJSON_Delete(root);
+    return ok;
 }
 
 static void free_all(void) {
@@ -195,8 +249,6 @@ static void tx_center(int cx, int y, const char *s, unsigned short fg, unsigned 
 // the pack (cmd_or_off is then the RAW-pool byte offset). This is what makes any protocol sendable.
 // RAW scratch, APP_RAM: ir_emit is file-local and only runs from on_key/on_tick (foreground), and
 // nucleo_ir_send_raw copies it into RMT symbols synchronously, so nothing reads it after close.
-#define RAW_DUR_MAX 400
-static uint16_t *s_rawdur;
 static void ir_emit(uint8_t proto, uint32_t addr, uint32_t cmd_or_off) {
     if (proto == IRPACK_PROTO_RAW) {
         uint16_t car = 0; uint16_t *dur = s_rawdur;
@@ -451,7 +503,14 @@ static void activate(void) {
         if (!s_find) { s_region = s_sel; start_find(); }
         nucleo_app_request_draw(); return;
     }
-    if (s_view == V_FAV) { if (s_sel < s_nfav) send_now(s_fav[s_sel].proto, s_fav[s_sel].addr, s_fav[s_sel].cmd, s_fav[s_sel].label); return; }
+    if (s_view == V_FAV) {
+        if (s_sel >= s_nfav) return;
+        const ir_fav_t *F = &s_fav[s_sel];
+        if (!F->raw) { send_now(F->proto, F->addr, F->cmd, F->label); return; }
+        snprintf(s_status, sizeof s_status, send_raw_fav(F) ? "sent %s" : "can't send %s", F->label);
+        nucleo_app_request_draw();
+        return;
+    }
     if (s_level == 0) {                          // pick a category
         if (s_pack_ok && s_sel < s_ncat) { s_catsel = s_sel; s_level = 1; s_sel = 0; nucleo_app_request_draw(); }
         return;
@@ -526,11 +585,21 @@ static bool ir_back(int key) {
 static void ir_tab(void) {
     s_view = (s_view + 1) % NTABS; s_level = 0; s_sel = 0; s_status[0] = 0;
     s_sweep = false; s_find = false;   // leaving a tab cancels any live sweep/wizard
+    if (s_view == V_FAV && udata_changed()) load_favorites();   // starred in the browser meanwhile
     nucleo_app_request_draw();
 }
 
 // ---- lifecycle ----
 static void on_tick(void) {
+    // FAVS follows the web app live: a cheap stat() of userdata.json every 2 s while the tab is shown.
+    if (s_view == V_FAV && esp_timer_get_time() - s_ud_checked_us > 2000000) {
+        s_ud_checked_us = esp_timer_get_time();
+        if (udata_changed()) {
+            load_favorites();
+            if (s_sel >= s_nfav) s_sel = s_nfav ? s_nfav - 1 : 0;
+            nucleo_app_request_draw();
+        }
+    }
     if (!s_sweep) return;
     if (nucleo_ir_busy()) return;
     // Stream the next region-matching power code straight from the SD pack (no array in RAM).
@@ -558,7 +627,7 @@ static void enter(void) {
     nucleo_app_set_tab_handler(ir_tab);
     nucleo_app_request_draw();
 }
-static void on_exit(void) { s_sweep = false; free_all(); }
+static void on_exit(void) { s_sweep = false; free_all(); s_ud_size = -1; }
 
 static const nucleo_app_ram_t APP_RAM[] = {
     { (void **)&s_rawdur,    sizeof(uint16_t) * RAW_DUR_MAX },

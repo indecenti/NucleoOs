@@ -32,6 +32,9 @@ static rmt_encoder_handle_t s_enc;
 static SemaphoreHandle_t    s_lock;
 static uint16_t             s_cur_carrier;
 static bool                 s_ready;
+static portMUX_TYPE         s_init_mux = portMUX_INITIALIZER_UNLOCKED;   // guards the one-time mutex creation
+
+static esp_err_t ir_ensure(void);   // bring the transmitter up on first use (see nucleo_ir_init)
 
 // ---- TV-B-Gone sweep state ------------------------------------------------------------------
 static TaskHandle_t       s_sweep_task;
@@ -59,7 +62,9 @@ static void ir_set_carrier(uint16_t hz) {
 
 // ---- pack an alternating mark/space µs list into RMT symbols and blast it `repeats` times ----
 static esp_err_t ir_blast(const uint16_t *dur, int n, uint16_t carrier, int repeats) {
-    if (!s_ready || !dur || n <= 0) return ESP_ERR_INVALID_STATE;
+    if (!dur || n <= 0) return ESP_ERR_INVALID_ARG;
+    esp_err_t up = ir_ensure();
+    if (up != ESP_OK) return up;
     if (repeats <= 0) repeats = 1;
     int nsym = (n + 1) / 2;
     rmt_symbol_word_t *sym = calloc(nsym, sizeof(rmt_symbol_word_t));
@@ -226,7 +231,7 @@ static int pack_sweep_count(const char *region) {
 }
 
 esp_err_t nucleo_ir_tvbgone_start(const char *region) {
-    if (!s_ready) return ESP_ERR_INVALID_STATE;
+    if (ir_ensure() != ESP_OK) return ESP_ERR_INVALID_STATE;
     if (s_sweep_running) return ESP_ERR_INVALID_STATE;
     snprintf(s_sweep_region, sizeof s_sweep_region, "%s", region ? region : "all");
     // Prefer the SD pack (kept in sync with presets.json, grows without a reflash); fall back to the
@@ -279,7 +284,7 @@ static void jam_task(void *arg) {
 }
 
 esp_err_t nucleo_ir_jammer_start(const char *mode) {
-    if (!s_ready) return ESP_ERR_INVALID_STATE;
+    if (ir_ensure() != ESP_OK) return ESP_ERR_INVALID_STATE;
     if (s_jam_run || s_sweep_running) return ESP_ERR_INVALID_STATE;
     snprintf(s_jam_mode, sizeof s_jam_mode, "%s", mode && mode[0] ? mode : "sweep");
     s_jam_abort = false; s_jam_run = true;
@@ -394,6 +399,10 @@ static esp_err_t tvbgone_get(httpd_req_t *req) {
 
 static esp_err_t db_get(httpd_req_t *req) {
     // Static capability info for the UI: protocols we can encode, TV-B-Gone size, and the GPIO.
+    // A boot that skipped the transmitter (the Web Client Solo boot keeps its heap for the web OS) brings it
+    // up here, when the IR app actually opens: "ready" then tells the truth about THIS device, and an
+    // older web app (which treats ready:false as "no IR") works unchanged.
+    ir_ensure();
     cJSON *root = cJSON_CreateObject();
     cJSON_AddBoolToObject(root, "ready", s_ready);
     cJSON_AddNumberToObject(root, "gpio", NUCLEO_IR_GPIO);
@@ -450,10 +459,22 @@ esp_err_t nucleo_ir_register(httpd_handle_t server) {
 }
 
 // ---- init -----------------------------------------------------------------------------------
+// Idempotent and safe from any task: the mutex is created once (under a spinlock), the RMT setup runs
+// under that mutex, and a failed attempt releases what it took, so a later call can try again. Normal
+// boots call it from app_main; boots that skip it (Solo) get it on the first send or /api/ir/db.
 esp_err_t nucleo_ir_init(void) {
     if (s_ready) return ESP_OK;
-    s_lock = xSemaphoreCreateMutex();
-    if (!s_lock) return ESP_ERR_NO_MEM;
+    if (!s_lock) {
+        SemaphoreHandle_t m = xSemaphoreCreateMutex();
+        if (!m) return ESP_ERR_NO_MEM;
+        bool mine = false;
+        taskENTER_CRITICAL(&s_init_mux);
+        if (!s_lock) { s_lock = m; mine = true; }
+        taskEXIT_CRITICAL(&s_init_mux);
+        if (!mine) vSemaphoreDelete(m);   // another task won the race: use its mutex
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (s_ready) { xSemaphoreGive(s_lock); return ESP_OK; }
 
     rmt_tx_channel_config_t txcfg = {
         .gpio_num       = NUCLEO_IR_GPIO,
@@ -463,11 +484,17 @@ esp_err_t nucleo_ir_init(void) {
         .trans_queue_depth = 4,
     };
     esp_err_t err = rmt_new_tx_channel(&txcfg, &s_chan);
-    if (err != ESP_OK) { ESP_LOGW(TAG, "rmt channel on GPIO%d failed: %s", NUCLEO_IR_GPIO, esp_err_to_name(err)); return err; }
-
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "rmt channel on GPIO%d failed: %s", NUCLEO_IR_GPIO, esp_err_to_name(err));
+        s_chan = NULL; xSemaphoreGive(s_lock); return err;
+    }
     rmt_copy_encoder_config_t copy_cfg = {};
     err = rmt_new_copy_encoder(&copy_cfg, &s_enc);
-    if (err != ESP_OK) { ESP_LOGW(TAG, "rmt encoder failed: %s", esp_err_to_name(err)); return err; }
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "rmt encoder failed: %s", esp_err_to_name(err));
+        rmt_del_channel(s_chan); s_chan = NULL; s_enc = NULL;
+        xSemaphoreGive(s_lock); return err;
+    }
 
     // Apply the default carrier on the freshly-created (disabled) channel, but DON'T enable it: the
     // channel rests disabled and ir_blast enables it only around a transmit. This keeps the APB
@@ -476,6 +503,9 @@ esp_err_t nucleo_ir_init(void) {
     rmt_apply_carrier(s_chan, &carrier);
     s_cur_carrier = 38000;
     s_ready = true;
+    xSemaphoreGive(s_lock);
     ESP_LOGI(TAG, "IR TX ready on GPIO%d (RMT, 38/40/36 kHz; enabled per-transmit)", NUCLEO_IR_GPIO);
     return ESP_OK;
 }
+
+static esp_err_t ir_ensure(void) { return s_ready ? ESP_OK : nucleo_ir_init(); }
