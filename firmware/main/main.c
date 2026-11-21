@@ -62,6 +62,7 @@ extern void nucleo_register_recorder(void);   // Recorder Solo: dedicated boot f
 extern int  nucleo_app_solo_app(void);        // which Solo profile (1=ANIMA, 2=Recorder) is active
 extern bool nucleo_app_solo_needs_speech(void); // only ANIMA Solo brings up TTS+voice; others skip them
 extern bool nucleo_app_solo_is_generic(void);   // generic Solo (heavy game via NX_SOLO): register all builtins
+extern uint32_t nucleo_app_solo_stack(void);    // its task stack when the app asked for more (voice apps), else 0
 extern bool nucleo_app_solo_is_server(void);    // Web Client server-Solo: keep httpd + auth up, skip the rest
 extern void nucleo_register_remote(void);        // server Solo registers ONLY the Remote Control app
 
@@ -791,6 +792,7 @@ void app_main(void)
         // under the 26 KB request. Free it here, before we ask.
         nucleo_app_release_buffers();
         uint32_t solo_stk = (solo_rec || nucleo_app_solo_is_generic()) ? 8192 : 26624;
+        if (nucleo_app_solo_is_generic() && nucleo_app_solo_stack()) solo_stk = nucleo_app_solo_stack();   // a voice app
         BaseType_t tcr = xTaskCreatePinnedToCore(anima_solo_task,
                                                  solo_rec ? "rec-solo" : "anima-solo",
                                                  solo_stk, NULL, ESP_TASK_MAIN_PRIO, NULL, 0);

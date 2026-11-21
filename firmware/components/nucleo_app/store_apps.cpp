@@ -233,6 +233,14 @@ extern "C" bool nucleo_app_net_allowed(void)
     return a ? a->net : true;
 }
 
+// The Solo task stack a store app needs, in KB (0 = the default 8 KB). A voice app ("mic") gets 20 KB: an audio
+// codec's frames (Opus's SILK encoder: 9.5 KB in one function) plus a TLS handshake do not fit in 8 KB.
+extern "C" int nucleo_store_app_solo_stack_kb(const char *id)
+{
+    const StoreApp *a = id ? find(id) : nullptr;
+    return (a && a->mic) ? 20 : 0;
+}
+
 // May the foreground app use the microphone (nucleo_mic.c)? Built-in apps may; a store app only when its signed
 // record grants "mic" (an older record without a perm line grants nothing: the mic is new in ABI 10).
 extern "C" bool nucleo_app_mic_allowed(void)
@@ -334,7 +342,8 @@ extern "C" void nucleo_store_apps_sync(void)
         if (native && apps[i].offline) d0.exclusive_flags = NX_SOLO | NX_WIFI;
         // One that connects to a PC ("net") gets its Solo boot WITH Wi-Fi: a fresh heap for its TLS-free TCP and
         // its buffers. (The "wifi" games keep opening inline as before: their radio is ESP-NOW.)
-        else if (native && apps[i].net) d0.exclusive_flags = NX_SOLO;
+        // A voice app ("mic") too: its codec and its TLS need the heap and the larger task stack of a Solo boot.
+        else if (native && (apps[i].net || apps[i].mic)) d0.exclusive_flags = NX_SOLO;
     }
     // Every slot is rewritten below: none runs a module any more (a resident module is simply re-attached
     // by the next nucleo_store_app_prepare, without reloading).

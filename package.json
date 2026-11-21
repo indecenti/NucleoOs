@@ -47,6 +47,7 @@
     "handoff:check": "node tools/gen-handoff.mjs --check",
     "catalog:check": "node tools/gen-app-catalog.mjs --check",
     "launcher:test": "node tools/launcher-host/check.mjs",
+    "xiaozhi:test": "node tools/xiaozhi-host/run.mjs",
     "ui:shots": "node tools/ui-host/run.mjs",
     "tanks:test": "node tools/tanks-host/run.mjs",
     "extdisp:test": "node tools/extdisp-host/run.mjs",

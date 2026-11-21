@@ -78,6 +78,8 @@ extern "C" void nucleo_ui_set_brightness(unsigned char b);
 enum { SOLO_NONE = 0, SOLO_ANIMA = 1, SOLO_RECORDER = 2, SOLO_APPID = 3, SOLO_REMOTE = 4 };  // 3 = open the app named in s_solo_id; 4 = Web Client server-Solo (httpd + auth UP, everything else off)
 RTC_NOINIT_ATTR static uint32_t s_solo_req;
 RTC_NOINIT_ATTR static char     s_solo_id[24];   // SOLO_APPID target app id (e.g. "slots") — survives the warm reboot
+RTC_NOINIT_ATTR static uint32_t s_solo_stack_kb; // its Solo task stack in KB (0 = the default 8), checked on read
+extern "C" int nucleo_store_app_solo_stack_kb(const char *id);   // store_apps.cpp: a store app's stack need
 RTC_NOINIT_ATTR static char     s_solo_open_file[256];   // "open with" path for a Solo target (Files -> .nfv): rides the warm reboot too
 static char s_open_file[256] = "";               // "open with" handoff: Files passes the exact file; the viewer's on_enter consumes it
 static bool s_solo_active = false;
@@ -140,6 +142,7 @@ extern "C" void nucleo_app_solo_request(int app) { s_solo_req = SOLO_MAGIC_BASE 
 extern "C" void nucleo_app_solo_request_id(const char *id)
 {
     snprintf(s_solo_id, sizeof s_solo_id, "%s", (id && id[0]) ? id : "");
+    s_solo_stack_kb = (uint32_t)nucleo_store_app_solo_stack_kb(s_solo_id);
     s_solo_req = SOLO_MAGIC_BASE | SOLO_APPID;
     wait_recorder_idle_then_restart();   // never returns
 }
@@ -166,6 +169,14 @@ extern "C" bool nucleo_app_solo_needs_speech(void) { return s_solo_app == SOLO_A
 // case so the run loop's launch_id(s_solo_id) finds the game (registration is just pointers — cheap; the
 // RAM win is from skipping httpd/mDNS, not from registering fewer apps). No speech/TTS brought up.
 extern "C" bool nucleo_app_solo_is_generic(void) { return s_solo_app == SOLO_APPID; }
+// The generic Solo target's task stack in bytes, 0 = the default. A voice app (store permission "mic") runs an
+// audio codec and a TLS handshake on its own task: 8 KB is not enough (Opus's SILK encoder alone has a 9.5 KB
+// frame). RTC_NOINIT survives only a software reboot and is range-checked, so garbage can never ask for more.
+extern "C" uint32_t nucleo_app_solo_stack(void)
+{
+    if (s_solo_app != SOLO_APPID || s_solo_stack_kb < 8 || s_solo_stack_kb > 24) return 0;
+    return s_solo_stack_kb * 1024u;
+}
 // Web Client server-Solo: unlike every other Solo profile, main.c KEEPS httpd + auth (the pairing PIN)
 // up — the web OS needs a server to talk to. Everything else (offline L1, voice, TTS, IR, recorder,
 // calendar) stays down, so the browser's first, heaviest shell load meets a fresh, unfragmented heap

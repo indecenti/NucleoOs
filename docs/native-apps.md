@@ -115,6 +115,23 @@ the token grants nothing). The framework closes the mic when the app closes. The
 (`app_store.cpp`); the store's tooling must enforce it like `net` (a module importing `nucleo_mic_*` without `mic`,
 or `mic` below level 10, is rejected: store `docs/rules.md`).
 
+**A voice app's Solo boot.** A store app with `mic` gets its Solo boot like a `net` app, with a 20 KB task stack
+instead of 8 KB (`nucleo_store_app_solo_stack_kb` in `store_apps.cpp`, carried across the warm reboot in RTC memory
+and range-checked by `nucleo_app_solo_stack()`; `main.c` falls back to 12 KB when the block is not there): an audio
+codec's frames (Opus's `silk_encode_frame_FIX` alone is 9.5 KB) and a TLS handshake do not fit in 8 KB.
+
+### XiaoZhi (store only, level 10)
+
+`app_xiaozhi.cpp` (UI) + `xz_core.c` (protocol) + libopus 1.5.2 (`firmware/components/opus`, BSD-3-Clause, fixed
+point, unmodified; nothing in the firmware calls it, so none of it is linked into the image). A client of the open
+XiaoZhi protocol (github.com/78/xiaozhi-esp32): the public service (activation code through `/xiaozhi/ota/`) or a
+server of one's own by its `ws://` address. Push-to-talk, half duplex, one phase at a time so the heavy parts never
+share the heap: record (PCM to the SD card) -> encode (encoder 24.6 KB + a 16 KB pseudostack) -> exchange (WebSocket;
+TLS for the public service; the answer's Opus packets to the SD card) -> play (decoder 17.9 KB + 8 KB). The module:
+text 181 KB + rodata 37 KB of the 256 KB scratch, 1.9 KB RAM. Identity: a random UUID and a random locally
+administered MAC, kept in secrets, never the radio's own MAC. Host test: `npm run xiaozhi:test` (a whole session
+against `tools/xiaozhi-host/fake_server.py`: activation, a 3 s question, the answer echoed back and played).
+
 ### Secrets (level 7)
 
 `nucleo_secret.h`: a value of up to 64 bytes (a password) under a name of up to 15 characters, in NVS (internal
