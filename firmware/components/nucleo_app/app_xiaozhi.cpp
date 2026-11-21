@@ -225,7 +225,11 @@ static void lg_paint(void *)
 static void draw_large(void)
 {
     s_ph = d.height() > 0 && d.height() <= 240 ? d.height() : 210;
-    lg::frame(lg_paint, nullptr, 0, 0, true);
+    // Straight to the panel, not lg::frame: frame composes through the shared canvas and would take back the
+    // 31 KB block this app gave up for the codec.
+    nucleo_touch_clear();
+    lg_paint(nullptr);
+    nucleo_touch_commit();
 }
 
 static bool lg_tap(int key, char ch)

@@ -363,8 +363,18 @@ static void ota_body(char *out, int cap)
     if (t) cJSON_free(t);
 }
 
+// The Solo boot joins Wi-Fi in the background: the first polls can come before it. Wait for it (said on screen)
+// instead of failing; true when the network is there.
+static bool network_ready(void)
+{
+    if (nucleo_tcp_network_up()) return true;
+    if (strcmp(V.status, "waiting for Wi-Fi")) { snprintf(V.status, sizeof V.status, "waiting for Wi-Fi"); V.seq++; }
+    return false;
+}
+
 static void ota_step(void)
 {
+    if (!network_ready()) return;
     char body[512]; ota_body(body, sizeof body);
     char *resp = (char *)malloc(6144);
     if (!resp) { fail("no memory", 0); return; }
@@ -392,7 +402,7 @@ static void ota_step(void)
 
 static void activate_step(void)
 {
-    if (now_ms() < s_next_poll) return;
+    if (now_ms() < s_next_poll || !network_ready()) return;
     char url[176];
     const size_t l = strlen(s_ota_url);
     snprintf(url, sizeof url, "%s%sactivate", s_ota_url, l && s_ota_url[l - 1] == '/' ? "" : "/");
@@ -547,6 +557,7 @@ static cJSON *msg(const char *type)
 
 static void exchange_step(void)
 {
+    if (!network_ready()) return;
     if (!ws_open()) return;
     set_state(XZ_EXCHANGE, "saying hello");
     cJSON *h = cJSON_CreateObject();
