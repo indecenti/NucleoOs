@@ -2122,6 +2122,14 @@ int nucleo_anima_summarize_file(const char *txt_path, const char *lang, const ch
     return rc;
 }
 
+// Custom endpoints may fix temperature (e.g. SubQ Savant requires 1), or reject
+// the parameter altogether. Let their model default apply instead of sending our
+// task-specific tuning. Built-in providers keep their existing temperatures.
+static void teacher_add_temperature(cJSON *req, const teacher_cfg_t *c, double temp)
+{
+    if (strcmp(c->provider, "custom")) cJSON_AddNumberToObject(req, "temperature", temp);
+}
+
 // Execute ONE completion attempt with a fully-resolved teacher_cfg_t.
 // Returns text length in `out` (>0) on success, -1 on any failure.
 // Does NOT touch the JSON file — caller owns cfg lifetime.
@@ -2136,7 +2144,7 @@ static int teacher_one_shot(const teacher_cfg_t *c, const char *sys_prompt,
     } else {
         cJSON *req = cJSON_CreateObject();
         cJSON_AddStringToObject(req, "model", c->model);
-        cJSON_AddNumberToObject(req, "temperature", temp);
+        teacher_add_temperature(req, c, temp);
         cJSON *msgs = cJSON_AddArrayToObject(req, "messages");
         cJSON *m1 = cJSON_CreateObject(); cJSON_AddStringToObject(m1, "role", "system"); cJSON_AddStringToObject(m1, "content", sys_prompt); cJSON_AddItemToArray(msgs, m1);
         cJSON *m2 = cJSON_CreateObject(); cJSON_AddStringToObject(m2, "role", "user"); cJSON_AddStringToObject(m2, "content", user_prompt); cJSON_AddItemToArray(msgs, m2);
@@ -3566,7 +3574,7 @@ static int grok_verify(const char *entity, const char *title, const char *extrac
     } else {
         cJSON *req = cJSON_CreateObject();
         cJSON_AddStringToObject(req, "model", c.model);
-        cJSON_AddNumberToObject(req, "temperature", 0);
+        teacher_add_temperature(req, &c, 0);
         cJSON *rf = cJSON_AddObjectToObject(req, "response_format");
         cJSON_AddStringToObject(rf, "type", "json_object");
         cJSON *msgs = cJSON_AddArrayToObject(req, "messages");
@@ -3691,7 +3699,7 @@ int nucleo_anima_online_teacher(const char *input, bool en, anima_result_t *out)
     } else {
         cJSON *req = cJSON_CreateObject();
         cJSON_AddStringToObject(req, "model", c.model);
-        cJSON_AddNumberToObject(req, "temperature", 0.2);
+        teacher_add_temperature(req, &c, 0.2);
         cJSON *rf = cJSON_AddObjectToObject(req, "response_format"); cJSON_AddStringToObject(rf, "type", "json_object");
         cJSON *msgs = cJSON_AddArrayToObject(req, "messages");
         cJSON *m1 = cJSON_CreateObject(); cJSON_AddStringToObject(m1, "role", "system"); cJSON_AddStringToObject(m1, "content", sys); cJSON_AddItemToArray(msgs, m1);
@@ -3791,7 +3799,7 @@ static char *chat_once(const teacher_cfg_t *c, const char *sys, const anima_turn
     }
     cJSON *req = cJSON_CreateObject();
     cJSON_AddStringToObject(req, "model", c->model);
-    cJSON_AddNumberToObject(req, "temperature", code_mode ? 0.2 : 0.4);
+    teacher_add_temperature(req, c, code_mode ? 0.2 : 0.4);
     cJSON_AddNumberToObject(req, "max_tokens", max_tok);
     cJSON *msgs = cJSON_AddArrayToObject(req, "messages");
     cJSON *m1 = cJSON_CreateObject(); cJSON_AddStringToObject(m1, "role", "system"); cJSON_AddStringToObject(m1, "content", sys); cJSON_AddItemToArray(msgs, m1);
@@ -4039,7 +4047,7 @@ int nucleo_anima_online_longform(const char *topic, const char *tail, int part, 
     } else {
         cJSON *req = cJSON_CreateObject();
         cJSON_AddStringToObject(req, "model", c.model);
-        cJSON_AddNumberToObject(req, "temperature", 0.6);
+        teacher_add_temperature(req, &c, 0.6);
         cJSON_AddNumberToObject(req, "max_tokens", max_tok);
         cJSON *msgs = cJSON_AddArrayToObject(req, "messages");
         cJSON *m1 = cJSON_CreateObject(); cJSON_AddStringToObject(m1, "role", "system");    cJSON_AddStringToObject(m1, "content", sys); cJSON_AddItemToArray(msgs, m1);

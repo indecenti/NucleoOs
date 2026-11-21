@@ -84,6 +84,19 @@ base URL, the key and the model; nothing is assumed about the host (no default a
 - Firmware limits: `base` and `key` ≤ 159 bytes, `model` ≤ 63 (`teacher_cfg_t`). Settings and the wizard refuse a
   longer value on Save and name the field (`deviceFieldTooLong()`): the device would cut it and every call would fail.
 
+### Custom endpoint sampling defaults
+
+The native firmware omits `temperature` for `provider: "custom"` in chat, code,
+teacher, verification and continuation requests. The endpoint applies its model
+sampling default. This supports services that fix or disallow the parameter;
+[SubQ Savant](https://docs.subq.ai/endpoints/chat-completions-api/), for example,
+accepts an omitted temperature or `1` and rejects other values. Built-in
+providers retain their task-specific temperatures. Set `provider: "custom"`
+on both the active top-level entry and `keys.custom` when configuring manually.
+
+Regression check: `node --test tools/anima-host/custom-temperature.test.mjs`
+(no network or device required; uses the host C compiler).
+
 ## Tests
 
 The OpenAI-compatible provider: `nucleo-webos tests/suite/ai-custom-provider.test.mjs` (address rules, browser/relay
