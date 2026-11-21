@@ -385,7 +385,7 @@ static void ota_step(void)
     snprintf(s_challenge, sizeof s_challenge, "%s", ch ? ch : "");
     cJSON_Delete(o);
     config_save();
-    if (V.code[0]) { set_state(XZ_ACTIVATE, "bind the device"); s_next_poll = now_ms() + 3000; }
+    if (V.code[0]) { set_state(XZ_ACTIVATE, "bind the device"); ESP_LOGW("xiaozhi", "activation code %s", V.code); s_next_poll = now_ms() + 3000; }
     else if (!s_ws_url[0]) fail("no websocket offered", 0);
     else set_state(XZ_IDLE, "ready");
 }
@@ -469,7 +469,7 @@ static void record_step(void)
         V.rec_ms += n * 1000 / RATE;
     }
     const int lv = nucleo_mic_level();
-    if (lv != V.level) { V.level = lv; V.seq++; }
+    if (abs(lv - V.level) >= 8) { V.level = lv; V.seq++; }   // a meter step, not every sample: direct drawing
     if (V.rec_ms >= MAX_REC_MS) xz_talk(false);
 }
 

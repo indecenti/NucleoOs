@@ -287,6 +287,10 @@ static void on_enter(void)
 {
     read_lang();
     s_editing = false; s_edit[0] = 0;
+    // The 31 KB off-screen canvas would hold the heap's largest block, and the Opus encoder needs 24.6 KB in one
+    // piece: draw straight to the panel instead (like ANIMA), every draw repaints what it shows.
+    nucleo_app_release_buffers();
+    nucleo_app_set_direct_draw(true);
     xz_init(NUCLEO_SD_MOUNT "/data/xiaozhi", LOCALE[s_lang]);
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_ptt_handler(on_ptt);
