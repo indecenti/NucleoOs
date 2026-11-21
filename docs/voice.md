@@ -5,9 +5,28 @@ browser Vosk path). Speaker-dependent, fully offline, no PSRAM. It is what the
 **Voice Manager** web app trains via `POST /api/voice/learn` + the `voice/learned`
 WebSocket event.
 
+## Native trainer and test console
+
+In **Voice Trainer**, press R, then Enter to name the word. Hold GO past the
+350 ms threshold, wait for the ready chime and the on-screen **LISTENING** mic
+indicator, say the word, then release GO. The trainer shows the saved or
+short/silent result after processing. A brief GO tap opens the white flashlight
+overlay; it does not start recording.
+
+Voice Trainer and the **Voice** test console claim the app PTT hook before the
+framework's exclusive-mode guard. They suspend HTTP/L1/discovery while retaining
+the recognizer. During PTT they lend the 32 KB canvas to the recognizer and draw
+directly, leaving the screen and mic indicator visible. The canvas is restored
+only after the engine releases its PTT hold (capture, recognition, end chime).
+App exit releases GO and unregisters the hook.
+
+Host regression: `node --test tools/voice-host/ptt-routing.test.mjs`. This runs
+the real GO routing block and app PTT helpers against host doubles; it does not
+validate physical microphone capture on either board.
+
 ## Pipeline (`nucleo_voice_dsp.c` + `nucleo_voice.c`)
 
-Hold **FN (G0)** and speak. Per spoken word ("burst"):
+Hold the **GO side button (G0)** for at least 350 ms, wait for the ready chime, then speak. A quick tap toggles the flashlight. Per spoken word ("burst"):
 
 ```
 PDM 16 kHz → VAD (adaptive RMS, noise-floor tracking) → pre-emphasis → 25ms/10ms frames → Hann → FFT(512)

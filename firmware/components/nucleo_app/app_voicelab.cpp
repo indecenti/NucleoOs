@@ -129,11 +129,36 @@ static void on_tab(void)
     nucleo_app_request_draw();
 }
 
+// The app owns GO even in its exclusive session. Lend the canvas for the WHOLE
+// asynchronous capture/recognition, but keep the display on for the mic overlay.
+static bool s_ptt_canvas = false;
+static void voice_ptt(bool on)
+{
+    if (on) {
+        nucleo_app_set_direct_draw(true);
+        s_ptt_canvas = true;
+    }
+    nucleo_voice_ptt(on);
+    nucleo_app_request_draw();
+}
+
+static void restore_ptt_canvas(void)
+{
+    if (s_ptt_canvas && !nucleo_voice_ptt_engaged()) {
+        s_ptt_canvas = false;
+        nucleo_app_set_direct_draw(false);
+        nucleo_app_request_draw();
+    }
+}
+
 static void enter(void)
 {
     // Free ~64 KB (httpd + L1 + mDNS) yet keep the voice engine: the recognizer needs ~38 KB on PTT,
     // which the loaded heap can't spare — without this the PTT heap gate silently refuses every press.
     nucleo_exclusive_enter(NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY, nullptr);
+    // App PTT is routed before the framework's generic exclusive-mode guard.
+    s_ptt_canvas = false;
+    nucleo_app_set_ptt_handler(voice_ptt);
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_hint(TR5("TAB schede  GO+parla per provare", "TAB tabs  GO+speak to test", "TAB pestanas  GO+habla prueba", "TAB onglets  GO+parlez test", "TAB Reiter  GO+sprich Test"));
     s_tab = 0; s_sel = 0; s_recog = 0; s_have_m = s_have_r = false;
@@ -147,6 +172,8 @@ static void enter(void)
 
 static void exit_app(void)
 {
+    nucleo_app_set_ptt_handler(nullptr);
+    nucleo_voice_ptt(false);             // do not orphan a held GO on app exit
     nucleo_voice_set_test_mode(false);
     nucleo_voice_request(false);
     if (nucleo_exclusive_active()) nucleo_exclusive_exit();   // bring httpd / L1 / mDNS back (guarded, like app_anima)
@@ -154,6 +181,7 @@ static void exit_app(void)
 
 static void tick(void)
 {
+    restore_ptt_canvas();
     bool changed = false;
 
     nucleo_voice_match_t m;

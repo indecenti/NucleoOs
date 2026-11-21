@@ -105,12 +105,37 @@ static void on_tab(void)
     nucleo_app_request_draw();
 }
 
+// The app owns GO even in its exclusive session. Lend the canvas for the WHOLE
+// asynchronous capture/recognition, but keep the display on for the mic overlay.
+static bool s_ptt_canvas = false;
+static void voice_ptt(bool on)
+{
+    if (on) {
+        nucleo_app_set_direct_draw(true);
+        s_ptt_canvas = true;
+    }
+    nucleo_voice_ptt(on);
+    nucleo_app_request_draw();
+}
+
+static void restore_ptt_canvas(void)
+{
+    if (s_ptt_canvas && !nucleo_voice_ptt_engaged()) {
+        s_ptt_canvas = false;
+        nucleo_app_set_direct_draw(false);
+        nucleo_app_request_draw();
+    }
+}
+
 static void enter(void)
 {
     // Free ~64 KB (httpd + ANIMA L1 + mDNS) BUT keep the voice engine up (no NX_VOICE): the
     // recognizer needs ~38 KB contiguous on PTT, which the loaded heap can't spare. Without this the
     // PTT heap gate (nucleo_voice.c) silently refuses every press — the app looks dead. Wi-Fi stays.
     nucleo_exclusive_enter(NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY, nullptr);
+    // App PTT is routed before the framework's generic exclusive-mode guard.
+    s_ptt_canvas = false;
+    nucleo_app_set_ptt_handler(voice_ptt);
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_hint(TR5("TAB schede  R aggiungi  Del elimina", "TAB tabs  R add  Del remove", "TAB pestan  R agrega  Supr bor", "TAB pestan  R agrega  Supp sup", "TAB tabs  R add  Entf loescht"));
     s_tab = 0; s_sel = 0; s_confirm_del = false;
@@ -122,6 +147,8 @@ static void enter(void)
 
 static void exit_app(void)
 {
+    nucleo_app_set_ptt_handler(nullptr);
+    nucleo_voice_ptt(false);             // do not orphan a held GO on app exit
     s_rec_step = RS_IDLE;
     nucleo_voice_set_test_mode(false);   // restore normal dispatch for the rest of the OS
     // Release the app hold. The engine frees its 16 KB UNLESS the user explicitly
@@ -134,6 +161,7 @@ static void exit_app(void)
 
 static void tick(void)
 {
+    restore_ptt_canvas();
     // Countdown for feedback message on RECORD tab
     if (s_rec_timer > 0) { s_rec_timer--; if (s_rec_timer == 0) nucleo_app_request_draw(); }
 
