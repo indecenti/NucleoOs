@@ -14,6 +14,7 @@
 #include "esp_random.h"
 #include "esp_task_wdt.h"
 #include "esp_timer.h"
+#include "esp_log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,12 +59,17 @@ static void heap_mark(void)
     V.heap_block = (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 }
 
+static const char *const STATE_NAME[] = { "setup", "ota", "activate", "idle", "recording", "encoding", "exchange",
+                                          "waiting", "playing", "error" };
+
 static void set_state(xz_state_t s, const char *status)
 {
     V.state = s;
     if (status) snprintf(V.status, sizeof V.status, "%s", status);
     heap_mark();
     V.seq++;
+    // One line per phase: the numbers a first run on a device is for (free heap, largest block).
+    ESP_LOGW("xiaozhi", "%s: %s (heap %u, block %u)", STATE_NAME[s], V.status, (unsigned)V.heap_free, (unsigned)V.heap_block);
 }
 
 static void fail(const char *what, int code)
