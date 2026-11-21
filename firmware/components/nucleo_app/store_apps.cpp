@@ -43,6 +43,7 @@ struct StoreApp {
     bool has_icon;
     bool offline;               // its record lists its permissions, and none is the network
     bool net;                   // its record grants "net": TCP client connections through nucleo_tcp
+    bool mic;                   // its record grants "mic": live capture through nucleo_mic (ABI 10)
     uint8_t icon[128];          // 32 x 32, 1 bit per pixel, MSB first
 };
 
@@ -93,11 +94,12 @@ static bool read_record(const char *id, StoreApp *a)
         } else if (!strncmp(line, "perm", 4) && (line[4] == ' ' || !line[4])) {
             // Only a record that lists its permissions can say "no network"; an older one (no line) keeps it.
             a->offline = !strstr(line, "wifi") && !strstr(line, "net");
-            a->net = false;                                // the exact token, not a substring of another name
+            a->net = false; a->mic = false;                 // the exact token, not a substring of another name
             for (const char *t = line + 4; *t; ) {
                 while (*t == ' ' || *t == ',') t++;
                 const size_t n = strcspn(t, " ,");
                 if (n == 3 && !strncmp(t, "net", 3)) a->net = true;
+                if (n == 3 && !strncmp(t, "mic", 3)) a->mic = true;
                 t += n;
             }
         } else if (!strncmp(line, "name ", 5)) {
@@ -229,6 +231,16 @@ extern "C" bool nucleo_app_net_allowed(void)
     if (!id) return false;
     const StoreApp *a = find(id);
     return a ? a->net : true;
+}
+
+// May the foreground app use the microphone (nucleo_mic.c)? Built-in apps may; a store app only when its signed
+// record grants "mic" (an older record without a perm line grants nothing: the mic is new in ABI 10).
+extern "C" bool nucleo_app_mic_allowed(void)
+{
+    const char *id = nucleo_app_active_id();
+    if (!id) return false;
+    const StoreApp *a = find(id);
+    return a ? a->mic : true;
 }
 
 // The launcher's quick menu (a long press on a tile): a store app's facts - its channel, the version installed and

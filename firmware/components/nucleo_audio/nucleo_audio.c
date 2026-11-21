@@ -426,6 +426,7 @@ esp_err_t nucleo_audio_pcm_open(int rate, int channels)
 
 esp_err_t nucleo_audio_pcm_write(const int16_t *pcm, size_t bytes)
 {
+    if (nucleo_recorder_is_busy()) return ESP_ERR_INVALID_STATE;   // the mic holds the shared I2S line (an app's, ABI 10)
     return nucleo_audio_i2s_write(pcm, bytes);   // same volume/mute/meter path as every other sound
 }
 

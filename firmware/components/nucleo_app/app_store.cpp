@@ -726,7 +726,8 @@ static void perms_text(const char *perms, char *out, size_t cap)
         if (!n) break;
         char w[16]; snprintf(w, sizeof w, "%.*s", (int)(n < 15 ? n : 15), t);
         const char *shown = !strcmp(w, "net") ? TR5("rete verso i PC che scegli", "network, to the PCs you pick", "red, a los PC que elijas",
-                                                     "reseau, vers les PC choisis", "Netz, zu den PCs deiner Wahl") : w;
+                                                     "reseau, vers les PC choisis", "Netz, zu den PCs deiner Wahl")
+                           : !strcmp(w, "mic") ? TR5("microfono", "microphone", "microfono", "microphone", "Mikrofon") : w;
         o += (size_t)snprintf(out + o, cap - o, "%s%s", o ? ", " : "", shown);
         if (o >= cap) { out[cap - 1] = 0; break; }
         t += n;

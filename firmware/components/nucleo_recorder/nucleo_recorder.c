@@ -39,7 +39,7 @@ static i2s_chan_handle_t s_rx = NULL;
 // released LAST on every exit path. The old check-then-act ("recording || task || streaming?" ...
 // then claim) let two concurrent starts (httpd task + native UI) both pass the check and fight over
 // the mic — one killed the other's take. Owner held until the worker FULLY exits (incl. WAV finalize).
-enum { MIC_IDLE = 0, MIC_REC = 1, MIC_STREAM = 2 };
+enum { MIC_IDLE = 0, MIC_REC = 1, MIC_STREAM = 2, MIC_APP = 3 };
 static atomic_int  s_owner = MIC_IDLE;
 static atomic_bool s_recording = false;   // set false to ask the task to stop
 static atomic_bool s_streaming = false;   // a /api/rec/stream client is holding the mic (live dictation)
@@ -288,6 +288,27 @@ esp_err_t nucleo_recorder_start(void)
     }
     publish_rec("rec.started", NULL);
     return ESP_OK;
+}
+
+// ---- a foreground app's live capture (nucleo_mic.h, ABI 10) ----
+// The same single owner as a take or a dictation stream: while an app holds the mic, nucleo_recorder_is_busy()
+// is true, so the speaker (which shares the I2S WS line) refuses to open, and a take or a web stream is refused.
+esp_err_t nucleo_recorder_app_open(int rate, i2s_chan_handle_t *out)
+{
+    if (!out) return ESP_ERR_INVALID_ARG;
+    *out = NULL;
+    int idle = MIC_IDLE;
+    if (!atomic_compare_exchange_strong(&s_owner, &idle, MIC_APP)) return ESP_ERR_INVALID_STATE;
+    const esp_err_t e = nucleo_codec_mic_open(rate, out);
+    if (e != ESP_OK) { *out = NULL; atomic_store(&s_owner, MIC_IDLE); }
+    return e;
+}
+
+void nucleo_recorder_app_close(i2s_chan_handle_t rx)
+{
+    if (atomic_load(&s_owner) != MIC_APP) return;
+    if (rx) nucleo_codec_mic_close(rx);
+    atomic_store(&s_owner, MIC_IDLE);     // released LAST, after the RX channel is closed
 }
 
 void        nucleo_recorder_stop(void)          { atomic_store(&s_recording, false); }

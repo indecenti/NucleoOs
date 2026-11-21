@@ -7,9 +7,13 @@
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "esp_task_wdt.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "nvs.h"
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
+#include "esp_tls.h"
+#include "esp_crt_bundle.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -21,6 +25,7 @@ static const char *TAG = "tcp";
 extern bool nucleo_app_net_allowed(void);
 
 static int s_fd[NUCLEO_TCP_MAX] = { -1, -1 };
+static esp_tls_t *s_tls[NUCLEO_TCP_MAX];   // a TLS connection (ABI 10): its socket is s_fd[], the session is here
 
 bool nucleo_tcp_network_up(void)
 {
@@ -30,6 +35,7 @@ bool nucleo_tcp_network_up(void)
 }
 
 static int fd_of(int h) { return (h >= 1 && h <= NUCLEO_TCP_MAX) ? s_fd[h - 1] : -1; }
+static esp_tls_t *tls_of(int h) { return (h >= 1 && h <= NUCLEO_TCP_MAX) ? s_tls[h - 1] : NULL; }
 
 // Only ordinary unicast addresses that are not this device: no loopback, no 0.x, no multicast or broadcast.
 static bool address_allowed(uint32_t a /* network order */)
@@ -49,8 +55,11 @@ static bool address_allowed(uint32_t a /* network order */)
 // short slices, or that receives without waiting, would otherwise starve it. Unsubscribed callers are left alone.
 static void wdt(void) { if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset(); }
 
-int nucleo_tcp_connect(const char *host, int port, int timeout_ms)
+// The checks every connection passes: permission, a sane host and port, Wi-Fi, a free slot, a name that resolves to
+// an allowed address. Returns the slot (>= 0) with *res resolved, or an error.
+static int admit(const char *host, int port, struct addrinfo **res)
 {
+    *res = NULL;
     if (!nucleo_app_net_allowed()) { ESP_LOGW(TAG, "%s: no network permission", nucleo_app_active_id() ? nucleo_app_active_id() : "?"); return NUCLEO_TCP_DENIED; }
     if (!host || !host[0] || port <= 0 || port > 65535) return NUCLEO_TCP_DENIED;
     if (!nucleo_tcp_network_up()) return NUCLEO_TCP_NONET;
@@ -60,10 +69,17 @@ int nucleo_tcp_connect(const char *host, int port, int timeout_ms)
     char ps[8]; snprintf(ps, sizeof ps, "%d", port);
     struct addrinfo hints; memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET; hints.ai_socktype = SOCK_STREAM;
+    if (getaddrinfo(host, ps, &hints, res) != 0 || !*res) { *res = NULL; return NUCLEO_TCP_NOHOST; }
+    const struct sockaddr_in *sin = (const struct sockaddr_in *)(*res)->ai_addr;
+    if (!address_allowed(sin->sin_addr.s_addr)) { freeaddrinfo(*res); *res = NULL; return NUCLEO_TCP_DENIED; }
+    return slot;
+}
+
+int nucleo_tcp_connect(const char *host, int port, int timeout_ms)
+{
     struct addrinfo *res = NULL;
-    if (getaddrinfo(host, ps, &hints, &res) != 0 || !res) return NUCLEO_TCP_NOHOST;
-    const struct sockaddr_in *sin = (const struct sockaddr_in *)res->ai_addr;
-    if (!address_allowed(sin->sin_addr.s_addr)) { freeaddrinfo(res); return NUCLEO_TCP_DENIED; }
+    const int slot = admit(host, port, &res);
+    if (slot < 0) return slot;
     const int s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (s < 0) { freeaddrinfo(res); return NUCLEO_TCP_ERROR; }
     fcntl(s, F_SETFL, fcntl(s, F_GETFL, 0) | O_NONBLOCK);
@@ -89,10 +105,57 @@ int nucleo_tcp_connect(const char *host, int port, int timeout_ms)
     return slot + 1;
 }
 
+// TLS (ABI 10): the server's certificate is checked against the firmware's CA bundle and the host name, always.
+// There is no "accept any certificate" switch: a server with a self-signed certificate is reached with plain
+// nucleo_tcp_connect. At most NUCLEO_TCP_TLS_MAX sessions at once: each costs ~30-40 KB of heap while it lives.
+// The handshake runs in steps (esp_tls's async connect) so the wait stays sliced and the watchdog is fed.
+int nucleo_tcp_connect_tls(const char *host, int port, int timeout_ms)
+{
+    int open_tls = 0;
+    for (int i = 0; i < NUCLEO_TCP_MAX; i++) if (s_tls[i]) open_tls++;
+    if (open_tls >= NUCLEO_TCP_TLS_MAX) return NUCLEO_TCP_FULL;
+    struct addrinfo *res = NULL;
+    const int slot = admit(host, port, &res);   // same rules as plain TCP (esp_tls then resolves the name itself)
+    if (slot < 0) return slot;
+    freeaddrinfo(res);
+    esp_tls_t *t = esp_tls_init();
+    if (!t) return NUCLEO_TCP_NOMEM;
+    const int budget = timeout_ms > 0 ? timeout_ms : 1;
+    esp_tls_cfg_t cfg = {
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .non_block = true,
+        .timeout_ms = budget,
+    };
+    const int64_t until = esp_timer_get_time() + (int64_t)budget * 1000;
+    int rc = 0;
+    for (;;) {
+        wdt();
+        rc = esp_tls_conn_new_async(host, (int)strlen(host), port, &cfg, t);
+        if (rc != 0 || esp_timer_get_time() > until) break;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    if (rc != 1) {
+        esp_tls_error_handle_t eh = NULL;
+        int code = 0, flags = 0;
+        if (esp_tls_get_error_handle(t, &eh) == ESP_OK && eh) esp_tls_get_and_clear_last_error(eh, &code, &flags);
+        ESP_LOGW(TAG, "tls %s:%d: %s (0x%x, cert flags 0x%x)", host, port, rc == 0 ? "timeout" : "failed", code, flags);
+        esp_tls_conn_destroy(t);
+        return rc == 0 ? NUCLEO_TCP_TIMEOUT : NUCLEO_TCP_TLS;
+    }
+    int s = -1;
+    if (esp_tls_get_conn_sockfd(t, &s) != ESP_OK || s < 0) { esp_tls_conn_destroy(t); return NUCLEO_TCP_ERROR; }
+    int one = 1; setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
+    s_fd[slot] = s;
+    s_tls[slot] = t;
+    return slot + 1;
+}
+
 bool nucleo_tcp_readable(int h, int timeout_ms)
 {
     const int s = fd_of(h);
     if (s < 0) return false;
+    esp_tls_t *t = tls_of(h);
+    if (t && esp_tls_get_bytes_avail(t) > 0) return true;   // already decrypted, waiting in the session
     int left = timeout_ms < 0 ? 0 : timeout_ms;
     do {
         const int slice = left > 100 ? 100 : left;
@@ -110,6 +173,14 @@ int nucleo_tcp_recv(int h, void *buf, int cap, int timeout_ms)
     const int s = fd_of(h);
     if (s < 0 || !buf || cap <= 0) return NUCLEO_TCP_ERROR;
     if (!nucleo_tcp_readable(h, timeout_ms)) return NUCLEO_TCP_TIMEOUT;
+    esp_tls_t *t = tls_of(h);
+    if (t) {
+        const ssize_t n = esp_tls_conn_read(t, buf, (size_t)cap);
+        if (n > 0) return (int)n;
+        if (n == 0) return NUCLEO_TCP_CLOSED;
+        // A TLS record arrives in pieces: the socket was readable, but nothing whole to hand out yet.
+        return (n == ESP_TLS_ERR_SSL_WANT_READ || n == ESP_TLS_ERR_SSL_WANT_WRITE) ? NUCLEO_TCP_TIMEOUT : NUCLEO_TCP_ERROR;
+    }
     const int n = recv(s, buf, cap, 0);
     if (n > 0) return n;
     if (n == 0) return NUCLEO_TCP_CLOSED;
@@ -124,10 +195,17 @@ int nucleo_tcp_send(int h, const void *buf, int len, int timeout_ms)
     int left = len;
     wdt();
     const int64_t until = esp_timer_get_time() + (int64_t)(timeout_ms > 0 ? timeout_ms : 1) * 1000;
+    esp_tls_t *t = tls_of(h);
     while (left > 0) {
-        const int w = send(s, p, left, 0);
-        if (w > 0) { p += w; left -= w; continue; }
-        if (w < 0 && errno != EAGAIN && errno != EWOULDBLOCK) return NUCLEO_TCP_ERROR;
+        if (t) {
+            const ssize_t w = esp_tls_conn_write(t, p, (size_t)left);
+            if (w > 0) { p += w; left -= (int)w; continue; }
+            if (w != ESP_TLS_ERR_SSL_WANT_READ && w != ESP_TLS_ERR_SSL_WANT_WRITE) return NUCLEO_TCP_ERROR;
+        } else {
+            const int w = send(s, p, left, 0);
+            if (w > 0) { p += w; left -= w; continue; }
+            if (w < 0 && errno != EAGAIN && errno != EWOULDBLOCK) return NUCLEO_TCP_ERROR;
+        }
         if (esp_timer_get_time() > until) return NUCLEO_TCP_TIMEOUT;
         fd_set wr; FD_ZERO(&wr); FD_SET(s, &wr);
         struct timeval tv = { 0, 100 * 1000 };
@@ -141,8 +219,13 @@ void nucleo_tcp_close(int h)
 {
     const int s = fd_of(h);
     if (s < 0) return;
-    shutdown(s, SHUT_RDWR);
-    close(s);
+    if (s_tls[h - 1]) {                     // the session closes its own socket
+        esp_tls_conn_destroy(s_tls[h - 1]);
+        s_tls[h - 1] = NULL;
+    } else {
+        shutdown(s, SHUT_RDWR);
+        close(s);
+    }
     s_fd[h - 1] = -1;
 }
 

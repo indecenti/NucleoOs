@@ -14,6 +14,7 @@
 #pragma once
 #include "esp_err.h"
 #include "esp_http_server.h"
+#include "driver/i2s_types.h"   // i2s_chan_handle_t (nucleo_recorder_app_open)
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -46,7 +47,7 @@ void nucleo_recorder_stream_abort(void);
 // Who holds the single mic right now (the gate behind nucleo_recorder_start's CAS). Lets a caller tell
 // "my own take is still finalizing" (REC) apart from "a web dictation stream owns it" (STREAM) instead
 // of blaming the web for every refusal.
-typedef enum { NUCLEO_MIC_IDLE = 0, NUCLEO_MIC_REC = 1, NUCLEO_MIC_STREAM = 2 } nucleo_mic_owner_t;
+typedef enum { NUCLEO_MIC_IDLE = 0, NUCLEO_MIC_REC = 1, NUCLEO_MIC_STREAM = 2, NUCLEO_MIC_APP = 3 } nucleo_mic_owner_t;
 nucleo_mic_owner_t nucleo_recorder_owner(void);
 
 // Non-blocking preempt: the physical operator at the keyboard outranks a remote web dictation. If a
@@ -54,6 +55,12 @@ nucleo_mic_owner_t nucleo_recorder_owner(void);
 // and return false; the caller then polls nucleo_recorder_owner() and starts once it reads IDLE. Returns
 // true if the mic is already free. A finalizing record-to-SD take (REC) is left alone (returns false).
 bool nucleo_recorder_release_stream(void);
+
+// A foreground app's live capture (nucleo_mic.c, ABI 10): claims the single mic as NUCLEO_MIC_APP and opens the
+// board's mic at `rate` (ESP_ERR_INVALID_STATE when a take, a stream or another app holds it). Read the channel
+// with nucleo_codec_mic_read; app_close closes it and releases the claim (a no-op when the app does not hold it).
+esp_err_t nucleo_recorder_app_open(int rate, i2s_chan_handle_t *out);
+void      nucleo_recorder_app_close(i2s_chan_handle_t rx);
 
 bool        nucleo_recorder_is_recording(void);
 // True until the mic is FULLY released (I2S RX channel closed + WAV finalized) — this lingers ~one read

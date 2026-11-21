@@ -70,6 +70,9 @@ The rules that keep an installed app working across OS updates:
    raw touch pointer (`nucleo_touch_raw`, `nucleo_touch_raw_read`, `nucleo_touch_last`), the Cardputer's screen
    readback (`nucleo_extdisp_screen_size` / `_row`), `lg::settings_list`, `cJSON_IsString` / `cJSON_IsTrue` and
    `__lshrdi3`. First needed by VNC (Remote desktop).
+   Level 10 = level 9 + the microphone (`nucleo_mic_open` / `_read` / `_level` / `_close`, below) and TLS
+   connections (`nucleo_tcp_connect_tls`). First needed by a voice-assistant client (the XiaoZhi protocol:
+   WebSocket + Opus over `wss://`).
 
 Not in v1, on purpose: the web server (`httpd_*`: a module's handlers would outlive it, and the web OS's
 catch-all route is registered last, so a late endpoint is never reached), task creation, raw radio, OTA,
@@ -88,6 +91,29 @@ whatever an app left open when it closes. A store app with `net` gets its Solo b
 decided by the store record before the module loads; the `wifi` games keep opening inline). The Store shows the
 permission before installing, and `tools/store.py` rejects a module that imports `nucleo_tcp_*` without `net`, any
 raw socket/lwIP/Wi-Fi name, or `net` below level 7 (store `docs/rules.md`, "Network, declared").
+
+**TLS (level 10).** `nucleo_tcp_connect_tls(host, port, ms)` opens the same kind of connection over TLS; `_send`,
+`_recv`, `_readable` and `_close` work on it unchanged. The certificate is **always** verified against the
+firmware's CA bundle and the host name: there is no switch to accept any certificate (a server with a self-signed
+certificate on the user's own network is reached with plain `nucleo_tcp_connect`). At most `NUCLEO_TCP_TLS_MAX` (1)
+session at once, because one costs ~30-40 KB of heap while it lives: room for it is what a Solo boot gives a `net`
+app. The handshake runs in steps (esp_tls's async connect), so the wait stays sliced and feeds the watchdog. New
+errors: `NUCLEO_TCP_TLS` (handshake or certificate refused) and `NUCLEO_TCP_NOMEM`.
+
+### Microphone (level 10)
+
+`nucleo_mic.h`: live 16-bit mono PCM at `NUCLEO_MIC_RATE` (16 kHz, the rate every board delivers: the ADV
+decimates its 48 kHz ADC to it). `nucleo_mic_open(16000)`, then `nucleo_mic_read(pcm, max, ms)` (samples, bounded
+in time, watchdog fed), `nucleo_mic_level()` (peak of the last read, 0..100), `nucleo_mic_close()`. There is one mic
+and one owner: the Voice Recorder's takes, the web dictation stream and an app claim the same mic
+(`nucleo_recorder_app_open`, owner `NUCLEO_MIC_APP`), so `open` answers `NUCLEO_MIC_BUSY` while another holds it,
+or while a sound plays. While an app holds it the speaker is off (they share the I2S WS line):
+`nucleo_audio_pcm_open`, `_pcm_write` and `_play` refuse. A voice app records, closes, then plays: push-to-talk
+through `nucleo_app_set_ptt_handler`. `nucleo_mic_open` asks `nucleo_app_mic_allowed()` (`store_apps.cpp`):
+built-in apps may; a store app only when its signed record grants `mic` (perm line `perm mic`; a record without
+the token grants nothing). The framework closes the mic when the app closes. The Store's install screen shows `mic` as "microphone"
+(`app_store.cpp`); the store's tooling must enforce it like `net` (a module importing `nucleo_mic_*` without `mic`,
+or `mic` below level 10, is rejected: store `docs/rules.md`).
 
 ### Secrets (level 7)
 
