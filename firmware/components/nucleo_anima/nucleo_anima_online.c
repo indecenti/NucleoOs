@@ -1112,7 +1112,18 @@ typedef struct {
     char key[160];
     char version[24];    // anthropic-version (Anthropic only)
     char effort[8];      // "low"|"medium"|"high"|"xhigh"|"max" (Anthropic output_config.effort; "" = medium)
+    double temperature;  // fixed sampling temperature from teacher.json "temperature" (used only if temp_set)
+    bool   temp_set;     // true when the user pinned a temperature for this provider
 } teacher_cfg_t;
+
+// Set "temperature" on an OpenAI-compatible request. A pinned teacher.json value always wins (some services
+// demand an exact one, e.g. 1). A "custom" service gets NONE unless pinned: many reject any value but their
+// own (reasoning models, SubQ), and omitting the field lets the service apply its default.
+static void req_set_temp(cJSON *req, const teacher_cfg_t *c, double dflt)
+{
+    if (c->temp_set) cJSON_AddNumberToObject(req, "temperature", c->temperature);
+    else if (strcmp(c->provider, "custom")) cJSON_AddNumberToObject(req, "temperature", dflt);
+}
 
 // Read the whole teacher.json into a HEAP buffer sized to the file (caller frees; NULL = none/unusable).
 // A multi-provider file outgrew the old fixed 1.5 KB stack read and was silently cut -> cJSON failed ->
@@ -1165,6 +1176,8 @@ static bool teacher_obj_to_cfg(cJSON *o, teacher_cfg_t *c)
     if (cJSON_IsString(k)  && k->valuestring[0])  snprintf(c->key,      sizeof c->key,      "%s", k->valuestring);
     if (cJSON_IsString(v)  && v->valuestring[0])  snprintf(c->version,  sizeof c->version,  "%s", v->valuestring);
     if (cJSON_IsString(e)  && e->valuestring[0])  snprintf(c->effort,   sizeof c->effort,   "%s", e->valuestring);
+    cJSON *t = cJSON_GetObjectItem(o, "temperature");
+    if (cJSON_IsNumber(t) && t->valuedouble >= 0 && t->valuedouble <= 2) { c->temperature = t->valuedouble; c->temp_set = true; }
     return c->key[0] != 0;
 }
 
@@ -2136,7 +2149,7 @@ static int teacher_one_shot(const teacher_cfg_t *c, const char *sys_prompt,
     } else {
         cJSON *req = cJSON_CreateObject();
         cJSON_AddStringToObject(req, "model", c->model);
-        cJSON_AddNumberToObject(req, "temperature", temp);
+        req_set_temp(req, c, temp);
         cJSON *msgs = cJSON_AddArrayToObject(req, "messages");
         cJSON *m1 = cJSON_CreateObject(); cJSON_AddStringToObject(m1, "role", "system"); cJSON_AddStringToObject(m1, "content", sys_prompt); cJSON_AddItemToArray(msgs, m1);
         cJSON *m2 = cJSON_CreateObject(); cJSON_AddStringToObject(m2, "role", "user"); cJSON_AddStringToObject(m2, "content", user_prompt); cJSON_AddItemToArray(msgs, m2);
@@ -3566,7 +3579,7 @@ static int grok_verify(const char *entity, const char *title, const char *extrac
     } else {
         cJSON *req = cJSON_CreateObject();
         cJSON_AddStringToObject(req, "model", c.model);
-        cJSON_AddNumberToObject(req, "temperature", 0);
+        req_set_temp(req, &c, 0);
         cJSON *rf = cJSON_AddObjectToObject(req, "response_format");
         cJSON_AddStringToObject(rf, "type", "json_object");
         cJSON *msgs = cJSON_AddArrayToObject(req, "messages");
@@ -3691,7 +3704,7 @@ int nucleo_anima_online_teacher(const char *input, bool en, anima_result_t *out)
     } else {
         cJSON *req = cJSON_CreateObject();
         cJSON_AddStringToObject(req, "model", c.model);
-        cJSON_AddNumberToObject(req, "temperature", 0.2);
+        req_set_temp(req, &c, 0.2);
         cJSON *rf = cJSON_AddObjectToObject(req, "response_format"); cJSON_AddStringToObject(rf, "type", "json_object");
         cJSON *msgs = cJSON_AddArrayToObject(req, "messages");
         cJSON *m1 = cJSON_CreateObject(); cJSON_AddStringToObject(m1, "role", "system"); cJSON_AddStringToObject(m1, "content", sys); cJSON_AddItemToArray(msgs, m1);
@@ -3791,7 +3804,7 @@ static char *chat_once(const teacher_cfg_t *c, const char *sys, const anima_turn
     }
     cJSON *req = cJSON_CreateObject();
     cJSON_AddStringToObject(req, "model", c->model);
-    cJSON_AddNumberToObject(req, "temperature", code_mode ? 0.2 : 0.4);
+    req_set_temp(req, c, code_mode ? 0.2 : 0.4);
     cJSON_AddNumberToObject(req, "max_tokens", max_tok);
     cJSON *msgs = cJSON_AddArrayToObject(req, "messages");
     cJSON *m1 = cJSON_CreateObject(); cJSON_AddStringToObject(m1, "role", "system"); cJSON_AddStringToObject(m1, "content", sys); cJSON_AddItemToArray(msgs, m1);
@@ -4039,7 +4052,7 @@ int nucleo_anima_online_longform(const char *topic, const char *tail, int part, 
     } else {
         cJSON *req = cJSON_CreateObject();
         cJSON_AddStringToObject(req, "model", c.model);
-        cJSON_AddNumberToObject(req, "temperature", 0.6);
+        req_set_temp(req, &c, 0.6);
         cJSON_AddNumberToObject(req, "max_tokens", max_tok);
         cJSON *msgs = cJSON_AddArrayToObject(req, "messages");
         cJSON *m1 = cJSON_CreateObject(); cJSON_AddStringToObject(m1, "role", "system");    cJSON_AddStringToObject(m1, "content", sys); cJSON_AddItemToArray(msgs, m1);

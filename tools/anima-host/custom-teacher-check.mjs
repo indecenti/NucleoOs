@@ -28,6 +28,11 @@ ok(audio && /strcmp\(top\.provider, "custom"\)/.test(audio[1]), 'the Whisper pat
 // the OpenAI-compatible wire: anything that is not "anthropic" posts to <base>/chat/completions with its own base
 ok(/snprintf\(url, sizeof url, "%s\/chat\/completions", c->base\)/.test(src), 'the OpenAI-compatible wire no longer uses the entry\'s own base');
 ok(!/strcmp\(c->provider, "custom"\)\) snprintf\(c->base/.test(src), 'a default host is substituted for a custom teacher');
+// issue #15: a "custom" service gets no temperature unless the user pinned one (some accept only their own value),
+// and every OpenAI-compatible request sets it through the one helper, never a bare constant.
+ok(/else if \(strcmp\(c->provider, "custom"\)\) cJSON_AddNumberToObject\(req, "temperature", dflt\)/.test(src), 'req_set_temp no longer skips a custom teacher');
+ok(/if \(c->temp_set\) cJSON_AddNumberToObject\(req, "temperature", c->temperature\)/.test(src), 'a pinned teacher.json temperature is no longer honoured');
+ok((src.match(/cJSON_AddNumberToObject\(req, "temperature"/g) || []).length === 2, 'a request sets "temperature" outside req_set_temp');
 
 // ---- 1. model_label, extracted and run -------------------------------------------------------------------
 const moptT = /typedef struct \{ char keyname\[\d+\]; char provider\[\d+\]; char model\[\d+\]; \} mopt_t;/.exec(src);
