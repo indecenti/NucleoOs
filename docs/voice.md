@@ -21,6 +21,17 @@ the recognizer needs a ~26 KB contiguous block on PTT, which the full OS cannot 
 With the second screen the whole app is on the 320x240 panel (touch on the content; the Cardputer is the companion
 and holds GO). `PTT` from the home screen needs the same RAM: it works where the heap allows (Solo ANIMA, always-on).
 
+### Training: three takes, averaged
+
+Teaching a word in the Voice app takes **three holds of GO** (`TRAIN_TAKES`): the stored template is the **mean** of the
+three takes (`vdsp_mean_update`, a running mean in 3.3 KB that exists only during the session), which sits closer to any
+later pronunciation than a single take does (host test: closer in 60 of 60 synthetic trials). One take per hold (a second
+burst of the same hold is ignored); a hold that captures nothing reports "too short" and the take is retried without losing
+the ones already in. The accept radius is the loose initial one (6000), widened to 1.5 x the largest distance between the
+takes when they were far apart (`vdsp_learn_radius`), never tightened: the words still tune themselves with use
+(`vdsp_radius_update`, `vdsp_consolidate`). `nucleo_voice_arm_learning_mode(word)` is still the single-take form (the web
+Voice Manager); the app uses `nucleo_voice_arm_learning_takes(word, 3)`. Tip: pick long, distinct words and few of them.
+
 ### GO held in the launcher
 
 The recognizer needs a ~26 KB contiguous block (+ its 16 KB task stack while the engine is down). The full OS cannot give

@@ -17,6 +17,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '..', '..');
 const read = (p) => readFileSync(join(repo, p), 'utf8').replace(/\r\n/g, '\n');
 const fails = [];
+let dspInfo = '';
 const ok = (cond, msg) => { if (!cond) fails.push(msg); };
 
 const VOICE_C  = read('firmware/components/nucleo_voice/nucleo_voice.c');
@@ -112,6 +113,102 @@ ok(/void nucleo_voice_set_bound_only\(bool on\)/.test(VOICE_C) && /void\s+nucleo
   ok(/s_al_dark && \(s_al == AL_OFF \|\| s_al == AL_MISS\) && !nucleo_voice_ptt_engaged\(\)\) al_dark\(false\)/.test(tk), 'the panel must come back once the engine has finished (done beep played)');
   ok(/AL_DARK_MAX_US\) al_dark\(false\)/.test(tk) && /AL_DARK_MAX_US\s+20000000/.test(APP), 'the black panel needs a hard time limit');
   ok(/if \(s_al_dark\) al_dark\(false\);/.test(APP.slice(APP.indexOf('static void on_key(int key, char ch)'), APP.indexOf('static void on_key(int key, char ch)') + 500)), 'any key must bring the panel back');
+}
+
+// ---- 4. multi-take training ----------------------------------------------------------------------------------------
+{ // wiring: the engine keeps the takes, one per hold, and never calls a kept take "too short"
+  const bh = VOICE_C.slice(VOICE_C.indexOf('static bool learn_take('), VOICE_C.indexOf('static void handle_burst('));
+  ok(/vdsp_mean_update\(\*s_learn_base, obs, s_learn_done\)/.test(bh) && /vdsp_learn_radius\(s_learn_spread, s_learn_total\)/.test(bh), 'learn_take must average the takes and take the radius from their spread');
+  ok(/if \(s_learn_total <= 1\) \{ write_tpl\(word, obs, VDSP_RADIUS_INIT\)/.test(bh), 'a single take must keep the old behaviour (the take itself, the loose initial radius)');
+  ok(/if \(!s_learn_base\) \{[^]*?write_tpl\(word, obs, VDSP_RADIUS_INIT\)/.test(bh), 'no room for the running mean must still save the take');
+  ok(/if \(s_learning_mode && s_learn_done > 0 && s_learn_take_gen == s_ptt_gen\) return;/.test(VOICE_C), 'a second burst of the same hold must not count as another take');
+  ok(/const bool took_now = s_learn_done > 0 && s_learn_take_gen == s_ptt_gen;\s*\n\s*was_learning = s_learning_mode && !took_now;/.test(VOICE_C), 'a hold that gave a take must not report "too short"');
+  ok(/s_learn_result = NUCLEO_VOICE_LEARN_PART;/.test(VOICE_C) && /s_ptt_gen\+\+;/.test(VOICE_C), 'a kept take must report PART and every hold must start a new generation');
+  ok(/static esp_err_t arm_learning\(const char \*word, int takes\)/.test(VOICE_C) && /return arm_learning\(word, -1\);/.test(VOICE_C) && /return arm_learning\(word, 1\);/.test(VOICE_C),
+    'arm_learning_mode stays the single-take form; rearm keeps the session');
+  ok(/learn_reset\(\);\s*\/\/ a half-trained word does not outlive the engine/.test(VOICE_C), 'the running mean must be freed when the engine goes down');
+  ok(/#define TRAIN_TAKES 3/.test(APP) && /nucleo_voice_arm_learning_takes\(s_rec_word, TRAIN_TAKES\)/.test(APP) && /nucleo_voice_rearm_learning\(s_rec_word\)/.test(APP),
+    'the app must train a word from TRAIN_TAKES takes and retry a take that captured nothing');
+}
+{ // the DSP maths, compiled and run
+  const MINGW = 'C:/msys64/mingw64/bin';
+  const GCC = existsSync(join(MINGW, 'gcc.exe')) ? join(MINGW, 'gcc.exe') : 'gcc';
+  const env = { ...process.env, PATH: `${MINGW};${process.env.PATH || ''}` };
+  const work = mkdtempSync(join(tmpdir(), 'voice-dsp-'));
+  try {
+    const c = String.raw`
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "nucleo_voice_dsp.h"
+static int bad = 0;
+#define CHECK(c, m) do { if (!(c)) { printf("FAIL %s (line %d)\n", m, __LINE__); bad++; } } while (0)
+static void fill(vdsp_template t, int v) { for (int i = 0; i < VDSP_CANON_LEN; i++) for (int j = 0; j < VDSP_NFEAT; j++) t[i][j] = (int16_t)v; }
+static uint32_t rs = 12345;
+static int rnd(int amp) { rs = rs * 1664525u + 1013904223u; return (int)((rs >> 8) % (2 * amp + 1)) - amp; }
+static int16_t clamp16(int v) { return (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v); }
+int main(void) {
+  static vdsp_template a, b, c3, base;
+  /* the mean of k+1 takes */
+  fill(base, 100); fill(a, 200); vdsp_mean_update(base, a, 1);
+  CHECK(base[0][0] == 150 && base[63][25] == 150, "mean of 100 and 200 is 150");
+  fill(c3, 0); vdsp_mean_update(base, c3, 2);
+  CHECK(base[10][3] == 100, "then adding a 0 take gives the mean of three (100)");
+  fill(base, -100); fill(a, -101); vdsp_mean_update(base, a, 1);
+  CHECK(base[0][0] == -101, "negative halves round away from zero (-100.5 -> -101)");
+  fill(base, 32767); fill(a, 32767); vdsp_mean_update(base, a, 4);
+  CHECK(base[0][0] == 32767, "saturated values stay saturated");
+  fill(base, -32768); fill(a, -32768); vdsp_mean_update(base, a, 4);
+  CHECK(base[0][0] == -32768, "negative saturation stays");
+  { /* running mean == true mean within 1 LSB, for 5 random takes */
+    static vdsp_template t[5]; long sum[VDSP_CANON_LEN][VDSP_NFEAT]; memset(sum, 0, sizeof sum);
+    for (int k = 0; k < 5; k++) for (int i = 0; i < VDSP_CANON_LEN; i++) for (int j = 0; j < VDSP_NFEAT; j++) { t[k][i][j] = (int16_t)rnd(3000); sum[i][j] += t[k][i][j]; }
+    memcpy(base, t[0], sizeof base);
+    for (int k = 1; k < 5; k++) vdsp_mean_update(base, t[k], k);
+    int worst = 0;
+    for (int i = 0; i < VDSP_CANON_LEN; i++) for (int j = 0; j < VDSP_NFEAT; j++) { double m = sum[i][j] / 5.0; int e = (int)(base[i][j] > m ? base[i][j] - m + 0.999 : m - base[i][j] + 0.999); if (e > worst) worst = e; }
+    CHECK(worst <= 2, "the running mean of five takes is the true mean (within rounding)");
+  }
+  /* the radius */
+  CHECK(vdsp_learn_radius(0, 1) == VDSP_RADIUS_INIT, "one take keeps the initial radius");
+  CHECK(vdsp_learn_radius(9999, 1) == VDSP_RADIUS_INIT, "one take ignores the spread");
+  CHECK(vdsp_learn_radius(2000, 3) == VDSP_RADIUS_INIT, "a tight set of takes is never tighter than the initial radius");
+  CHECK(vdsp_learn_radius(4000, 3) == VDSP_RADIUS_INIT, "1.5 x 4000 = the initial radius exactly");
+  CHECK(vdsp_learn_radius(5000, 3) == 7500, "a wide set widens it (1.5 x spread)");
+  CHECK(vdsp_learn_radius(9000, 5) == VDSP_RADIUS_MAX, "and it is clamped");
+  CHECK(vdsp_learn_radius(-5, 3) == VDSP_RADIUS_INIT, "a negative spread is harmless");
+  CHECK(vdsp_learn_radius(1 << 30, 3) == VDSP_RADIUS_MAX, "a huge spread does not overflow");
+  /* the point of it: the mean of three takes is closer to a NEW pronunciation than one take is */
+  { int wins = 0, trials = 60;
+    static vdsp_template ref, t1, t2, t3, fresh, mean;
+    for (int n = 0; n < trials; n++) {
+      for (int i = 0; i < VDSP_CANON_LEN; i++) for (int j = 0; j < VDSP_NFEAT; j++) {
+        int v = (int)(2500.0 * ((j * 7 + i * 3) % 17 - 8) / 8.0) + (i * 11 % 400);   /* a fixed "word" shape */
+        ref[i][j] = clamp16(v); t1[i][j] = clamp16(v + rnd(1500)); t2[i][j] = clamp16(v + rnd(1500)); t3[i][j] = clamp16(v + rnd(1500));
+        fresh[i][j] = clamp16(v + rnd(1500));
+      }
+      memcpy(mean, t1, sizeof mean); vdsp_mean_update(mean, t2, 1); vdsp_mean_update(mean, t3, 2);
+      if (vdsp_dtw(mean, fresh) < vdsp_dtw(t1, fresh)) wins++;
+    }
+    CHECK(wins >= trials * 9 / 10, "the mean of three takes is closer to a new pronunciation than a single take (>= 90% of trials)");
+    printf("INFO mean closer in %d/%d trials\n", wins, trials);
+  }
+  if (!bad) printf("ALL OK\n");
+  return bad ? 1 : 0;
+}
+`;
+    const cfile = join(work, 'dsp-test.c'), exe = join(work, 'dsp-test' + (process.platform === 'win32' ? '.exe' : ''));
+    writeFileSync(cfile, c);
+    const dsp = join(repo, 'firmware/components/nucleo_voice');
+    const cc = spawnSync(GCC, ['-std=gnu11', '-O1', '-Wall', '-I', dsp, cfile, join(dsp, 'nucleo_voice_dsp.c'), '-o', exe, '-lm'], { encoding: 'utf8', env });
+    if (cc.error || cc.status !== 0) fails.push('the DSP does not compile on the host:\n' + (cc.stderr || cc.stdout || (cc.error && cc.error.message)));
+    else {
+      const run = spawnSync(exe, [], { encoding: 'utf8', env });
+      for (const l of (run.stdout || '').split('\n')) if (l.startsWith('FAIL')) fails.push('dsp: ' + l.slice(5));
+      const info = /INFO ([^\n]*)/.exec(run.stdout || '');
+      if (run.status === 0) dspInfo = info ? info[1] : 'ok'; else if (!fails.some((f) => f.startsWith('dsp:'))) fails.push('dsp test exited ' + run.status);
+    }
+  } finally { rmSync(work, { recursive: true, force: true }); }
 }
 
 // ---- 3. languages: TR5 has exactly five string arguments --------------------------------------------------------
@@ -222,4 +319,4 @@ if (from >= 0 && to > from) {
 }
 
 if (fails.length) { console.error('[voice-app] FAIL\n - ' + fails.join('\n - ')); process.exit(1); }
-console.log(`[voice-app] OK: bindings ${ran ? '22 checks' : 'not run'}, ${calls.length} TR5 strings x 5 languages, Solo wiring + dispatch order`);
+console.log(`[voice-app] OK: bindings ${ran ? '22 checks' : 'not run'}, DSP mean/radius (${dspInfo}), ${calls.length} TR5 strings x 5 languages, Solo wiring + dispatch order`);

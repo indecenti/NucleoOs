@@ -119,6 +119,7 @@ static pick_t *s_pk = nullptr;
 static int     s_pk_n = 0, s_pk_sel = 0, s_pk_scroll = 0;
 
 // Train-tab state
+#define TRAIN_TAKES 3        // a word is the mean of this many takes: closer to any later pronunciation than one take is
 enum RecStep { RS_IDLE, RS_WAITING_FN, RS_DONE, RS_TOO_SHORT };
 static RecStep s_rec_step  = RS_IDLE;
 static char    s_rec_word[32] = "";
@@ -214,6 +215,18 @@ static void unbind_selected(void)
     if (s_sel >= s_tpl_count || !s_t[s_sel].app[0]) return;
     nucleo_voice_binding_set(s_t[s_sel].name, "");
     s_t[s_sel].app[0] = 0;
+}
+
+static int takes_kept(void) { int done = 0, total = 0; nucleo_voice_learn_progress(&done, &total); return done; }
+
+// "Take 2 of 3" while a word is being trained (the take being waited for, 1-based).
+static const char *take_label(char *out, int cap)
+{
+    int done = 0, total = TRAIN_TAKES;
+    nucleo_voice_learn_progress(&done, &total);
+    if (done >= total) done = total - 1;
+    snprintf(out, cap, TR5("Ripetizione %d di %d", "Take %d of %d", "Toma %d de %d", "Prise %d sur %d", "Aufnahme %d von %d"), done + 1, total);
+    return out;
 }
 
 static void clear_bench(void) { s_have_m = s_have_r = false; s_recog = 0; }
@@ -340,6 +353,7 @@ static void tick(void)
         nucleo_voice_learn_t lr = nucleo_voice_take_learn_result();
         if (lr == NUCLEO_VOICE_LEARN_OK)             { s_rec_step = RS_DONE;      scan_tpls(); }
         else if (lr == NUCLEO_VOICE_LEARN_TOO_SHORT) { s_rec_step = RS_TOO_SHORT; }
+        // NUCLEO_VOICE_LEARN_PART: one take kept, the engine stays armed; the card shows the next take number
         nucleo_app_request_draw();   // also keeps the pulsing-mic animation alive (~5x/s)
     }
 
@@ -447,7 +461,10 @@ static void on_key(int key, char ch)
             nucleo_ui_input(TR5("Nome parola (es: anima)", "Word name (e.g. anima)", "Palabra (ej: anima)", "Nom du mot (ex: anima)", "Wortname (z.B. anima)"), word, sizeof(word), 0);
             if (!word[0]) { nucleo_app_request_draw(); return; }
             snprintf(s_rec_word, sizeof(s_rec_word), "%s", word);
-            nucleo_voice_arm_learning_mode(s_rec_word);
+            nucleo_voice_arm_learning_takes(s_rec_word, TRAIN_TAKES);
+            s_rec_step = RS_WAITING_FN;
+        } else if (s_rec_step == RS_TOO_SHORT && takes_kept() > 0) {
+            nucleo_voice_rearm_learning(s_rec_word);   // a take captured nothing: try THAT take again, keep the ones already in
             s_rec_step = RS_WAITING_FN;
         } else if (s_rec_step == RS_DONE || s_rec_step == RS_TOO_SHORT) {
             s_rec_step = RS_IDLE;                    // any key resets
@@ -565,7 +582,7 @@ static void draw_train(int top_y)
         d.setTextSize(1); d.setTextColor(ACC, LINE); d.setCursor(16, y + 30);
         d.print(TR5("1. Premi Invio e scrivi nome", "1. Press Enter, type a name", "1. Pulsa INTRO, escribe nom", "1. Appuyez ENTREE, tapez nom", "1. Druecke ENTER, gib Namen"));
         d.setTextColor(DIM, LINE); d.setCursor(16, y + 46);
-        d.print(TR5("2. Tieni premuto GO e parla", "2. Hold GO and speak", "2. Manten GO y habla", "2. Appuyez GO et parlez", "2. Halte GO und sprich"));
+        d.print(TR5("2. Tieni GO e parla (3 volte)", "2. Hold GO, speak (3 times)", "2. Manten GO y habla (3 veces)", "2. Tenez GO, parlez (3 fois)", "2. GO halten, sprich (3 Mal)"));
         d.setTextColor(DIM, LINE); d.setCursor(16, y + 62);
         d.print(TR5("100% Offline (nessun WAV)", "100% offline (no WAV)", "100% Sin WAV", "100% Hors ligne (no WAV)", "100% Offline (kein WAV)"));
         break;
@@ -582,6 +599,7 @@ static void draw_train(int top_y)
         d.print(TR5("Parola:", "Word:", "Palabra:", "Mot:", "Wort:"));
         d.setTextColor(ACC, box); d.setTextSize(2); d.setCursor(16, y + 44);
         d.print(s_rec_word);
+        { char tk[40]; d.setTextSize(1); d.setTextColor(MUTED, box); d.setCursor(16, y + 68); d.print(take_label(tk, sizeof tk)); }
         // Mic icon pulses ONLY while truly capturing (real feedback); a static ring while it waits.
         if (listening) {
             int64_t t = esp_timer_get_time() / 200000;
@@ -813,15 +831,16 @@ static void lg_tab_train(int yb, int Wd, int Hd)
     const bool listening = s_rec_step == RS_WAITING_FN && nucleo_voice_is_listening();
     unsigned short box = LINE, tc = FG, ring = DIM;
     const char *t1, *l1, *l2;
+    char tkb[40];
     switch (s_rec_step) {
     case RS_IDLE:
         t1 = TR5("Nuova parola", "New word", "Nueva palabra", "Nouveau mot", "Neues Wort");
         l1 = TR5("Tocca qui e scrivi il nome", "Tap here and type the name", "Toca aqui y escribe el nombre", "Touchez ici, tapez le nom", "Tippe hier, gib den Namen ein");
-        l2 = TR5("Poi tieni premuto GO e parla", "Then hold GO and speak", "Luego manten GO y habla", "Puis tenez GO et parlez", "Dann halte GO und sprich"); ring = ACC; break;
+        l2 = TR5("Poi tieni GO e parla, 3 volte", "Then hold GO and speak, 3 times", "Luego manten GO y habla, 3 veces", "Puis tenez GO, parlez, 3 fois", "Dann halte GO, sprich, 3 Mal"); ring = ACC; break;
     case RS_WAITING_FN:
         if (listening) { box = REC_BG; tc = ACC2; }
         t1 = listening ? TR5("IN ASCOLTO...", "LISTENING...", "ESCUCHANDO...", "ECOUTE...", "HOERT...") : TR5("TIENI GO e parla", "HOLD GO & speak", "MANTEN GO y habla", "TIENS GO et parle", "HALTE GO & sprich");
-        l1 = TR5("Parola:", "Word:", "Palabra:", "Mot :", "Wort:"); l2 = s_rec_word;
+        l1 = take_label(tkb, sizeof tkb); l2 = s_rec_word;      // "Take 2 of 3" over the word
         if (listening) { int64_t t = esp_timer_get_time() / 200000; ring = (t & 1) ? C_RED : ACC2; }
         break;
     case RS_DONE:
@@ -962,7 +981,12 @@ static void draw_companion(void)
                      : s_rec_step == RS_DONE ? TR5("Salvata", "Saved", "Guardada", "Enregistre", "Gespeichert")
                      : s_rec_step == RS_TOO_SHORT ? TR5("Riprova", "Try again", "Reintenta", "Reessayez", "Nochmal")
                      : TR5("Scrivi il nome", "Type the name", "Escribe el nombre", "Tapez le nom", "Namen eingeben"), 8, y + 18);
-        if (s_rec_word[0]) { d.setFont(&fonts::Font0); d.setTextColor(FG, BG); d.drawString(s_rec_word, 8, y + 44); }
+        if (s_rec_word[0]) {
+            char cl[64], tk[40];
+            if (s_rec_step == RS_WAITING_FN) snprintf(cl, sizeof cl, "%s  %s", s_rec_word, take_label(tk, sizeof tk));
+            else                             snprintf(cl, sizeof cl, "%s", s_rec_word);
+            d.setFont(&fonts::Font0); d.setTextColor(FG, BG); d.drawString(cl, 8, y + 44);
+        }
         lg::comp_keys(s_rec_step == RS_IDLE ? TR5("INVIO scrivi il nome  TAB schede", "ENTER type the name  TAB tabs", "INTRO escribe el nombre  TAB", "ENTREE tapez le nom  TAB", "ENTER Namen eingeben  TAB")
                                             : TR5("TIENI GO per registrare", "HOLD GO to record", "MANTEN GO para grabar", "TENEZ GO pour enregistrer", "GO halten zum Aufnehmen"));
     } else if (s_tab == TAB_TEST) {

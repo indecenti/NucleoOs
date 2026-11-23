@@ -77,8 +77,17 @@ typedef enum {
     NUCLEO_VOICE_LEARN_NONE = 0,   // nothing happened since the last poll
     NUCLEO_VOICE_LEARN_OK,         // template captured + saved
     NUCLEO_VOICE_LEARN_TOO_SHORT,  // PTT released with too little audio (or learn timed out)
+    NUCLEO_VOICE_LEARN_PART,       // one take of a multi-take word kept; more are wanted (the engine stays armed)
 } nucleo_voice_learn_t;
 nucleo_voice_learn_t nucleo_voice_take_learn_result(void);
+
+// Multi-take training: the word is the MEAN of `takes` takes (1..5), one take per push-to-talk hold; the radius comes
+// from how far apart the takes were. The engine stays armed between takes (a PART result each time), and a final OK
+// says the word was saved. A hold that captured nothing reports TOO_SHORT and the progress is kept: rearm (keeps
+// the takes already in) to try that take again. arm_learning_mode(word) is the single-take form, as before.
+esp_err_t nucleo_voice_arm_learning_takes(const char *word, int takes);
+esp_err_t nucleo_voice_rearm_learning(const char *word);
+void      nucleo_voice_learn_progress(int *done, int *total);   // takes kept so far, takes wanted
 
 // Last per-word match telemetry (DTW distances). `seq` increments on every new match,
 // so a poller can detect a fresh one. Returns false until the first match of the session.

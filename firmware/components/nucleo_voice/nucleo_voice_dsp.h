@@ -74,6 +74,16 @@ void      vdsp_consolidate(vdsp_template tpl, const vdsp_template obs, int alpha
 #define VDSP_RADIUS_INIT  6000    // loose starting radius for a freshly-trained word
 int32_t   vdsp_radius_update(int32_t radius, int32_t obs_dist);
 
+// ── Multi-take training ─────────────────────────────────────────────────────────────────────────────────────────
+// A word trained from several takes is their MEAN: it sits closer to any later pronunciation than one take does.
+// vdsp_mean_update folds one more take into the running mean `base`, which already holds `k` takes (k >= 1); the
+// result is the exact mean of k+1 takes, rounded to nearest (halves away from zero), saturated to int16.
+void      vdsp_mean_update(vdsp_template base, const vdsp_template obs, int k);
+// The accept radius to store for a word trained from `takes` takes whose largest distance to the running mean was
+// `spread`. One take: the loose VDSP_RADIUS_INIT (as before). Several: never tighter than that (a day-to-day voice
+// varies more than one session does), but wider when the takes themselves were far apart (1.5 x spread), clamped.
+int32_t   vdsp_learn_radius(int32_t spread, int takes);
+
 // ── Test-only hooks (used by tools/voice-host) ───────────────────────────────
 void      vdsp_fft(float *re, float *im, int n);                       // in-place radix-2
 void      vdsp_logmel_frame(vdsp_ctx *c, const int16_t *pcm400, float out[VDSP_NMEL]);

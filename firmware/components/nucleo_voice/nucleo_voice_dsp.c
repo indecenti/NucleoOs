@@ -279,6 +279,32 @@ int32_t vdsp_dtw(const vdsp_template A, const vdsp_template B)
     return cost / L;   // per-frame-averaged L1 distance
 }
 
+void vdsp_mean_update(vdsp_template base, const vdsp_template obs, int k)
+{
+    if (k < 1) k = 1;
+    const int32_t n = k + 1, half = n / 2;
+    for (int i = 0; i < VDSP_CANON_LEN; i++)
+        for (int j = 0; j < VDSP_NFEAT; j++) {
+            int32_t sum = (int32_t)base[i][j] * k + (int32_t)obs[i][j];
+            int32_t v = (sum >= 0 ? sum + half : sum - half) / n;      // round to nearest, halves away from zero
+            if (v >  32767) v =  32767;
+            if (v < -32768) v = -32768;
+            base[i][j] = (int16_t)v;
+        }
+}
+
+int32_t vdsp_learn_radius(int32_t spread, int takes)
+{
+    int32_t r = VDSP_RADIUS_INIT;
+    if (takes > 1 && spread > 0) {
+        int64_t wide = (int64_t)spread * 3 / 2;
+        if (wide > r) r = (int32_t)(wide > VDSP_RADIUS_MAX ? VDSP_RADIUS_MAX : wide);
+    }
+    if (r < VDSP_RADIUS_MIN) r = VDSP_RADIUS_MIN;
+    if (r > VDSP_RADIUS_MAX) r = VDSP_RADIUS_MAX;
+    return r;
+}
+
 void vdsp_consolidate(vdsp_template tpl, const vdsp_template obs, int alpha_q)
 {
     if (alpha_q < 0) alpha_q = 0;

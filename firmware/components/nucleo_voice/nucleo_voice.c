@@ -136,6 +136,13 @@ static void voice_task(void *arg);
 static void voice_recompute(void);
 static void voice_hold_set(uint32_t bit, bool on);
 static bool        s_learning_mode        = false;
+// Multi-take training (engine task owns the data; the arm functions only set the plan and the `fresh` request).
+#define VOICE_LEARN_MAX_TAKES 5
+static volatile int  s_learn_total = 1, s_learn_done = 0;   // takes wanted · takes kept
+static volatile bool s_learn_fresh = false;                  // a new session was armed: the engine drops the old mean
+static vdsp_template *s_learn_base = NULL;                   // the running mean (3.3 KB, only while a session is open)
+static int32_t       s_learn_spread = 0;                     // largest distance of a take to the running mean
+static uint32_t      s_ptt_gen = 0, s_learn_take_gen = 0;    // one take per hold: the hold that gave the last take
 static char        s_learning_word[32]    = {0};
 
 static vdsp_ctx   *s_ctx                  = NULL;   // ~7 KB precomputed tables (cache)
@@ -635,11 +642,49 @@ static void semantic_dispatch(const char *tokens[], int ntok)
 // blocks the loop while I2S DMA is live (a mid-PTT burst boundary lands during the
 // user's deliberate pause, so its match reads only drop silence, never speech).
 // ---------------------------------------------------------------------------
+// Forget the open training session (engine task only).
+static void learn_reset(void)
+{
+    free(s_learn_base); s_learn_base = NULL;
+    s_learn_spread = 0; s_learn_done = 0;
+}
+
+// One take of the word being trained: fold it into the running mean, remember how far it was from it, and when the
+// last take is in save the mean with a radius from that spread. True when the word was saved, false when more takes
+// are wanted. One take = the old behaviour (the take itself, the loose initial radius).
+static bool learn_take(const char *word, const vdsp_template obs)
+{
+    if (s_learn_fresh) { free(s_learn_base); s_learn_base = NULL; s_learn_spread = 0; s_learn_fresh = false; }
+    if (s_learn_done > 0 && !s_learn_base) s_learn_done = 0;          // the engine went down mid-session: start over
+    if (s_learn_total <= 1) { write_tpl(word, obs, VDSP_RADIUS_INIT); learn_reset(); return true; }
+    if (!s_learn_base) {
+        s_learn_base = (vdsp_template *)malloc(sizeof(vdsp_template));
+        if (!s_learn_base) { write_tpl(word, obs, VDSP_RADIUS_INIT); learn_reset(); return true; }   // no room: this take alone
+    }
+    if (s_learn_done == 0) {
+        memcpy(*s_learn_base, obs, sizeof(vdsp_template));
+        s_learn_spread = 0;
+    } else {
+        int32_t dist = vdsp_dtw(*s_learn_base, obs);
+        if (dist > s_learn_spread) s_learn_spread = dist;
+        vdsp_mean_update(*s_learn_base, obs, s_learn_done);
+    }
+    s_learn_done++;
+    if (s_learn_done < s_learn_total) return false;
+    const int32_t radius = vdsp_learn_radius(s_learn_spread, s_learn_total);
+    write_tpl(word, *s_learn_base, radius);
+    ESP_LOGW(TAG, "trained '%s' from %d takes (spread=%ld radius=%ld)", word, s_learn_total, (long)s_learn_spread, (long)radius);
+    learn_reset();
+    return true;
+}
+
 static void handle_burst(const vdsp_template obs, const char *tokens[], int *ntok, bool final)
 {
     // Atomic consume of the learn arm (word+mode+deadline travel together — the armer writes them
     // from another task/core, see arm_learning_mode). SD write + publish stay OUTSIDE the critical.
     char lw[sizeof(s_learning_word)]; bool learning;
+    // One take per hold: a second burst of the same hold (a cough after the word) is not another take.
+    if (s_learning_mode && s_learn_done > 0 && s_learn_take_gen == s_ptt_gen) return;
     portENTER_CRITICAL(&s_intro_mux);
     learning = s_learning_mode;
     if (learning) {
@@ -648,10 +693,19 @@ static void handle_burst(const vdsp_template obs, const char *tokens[], int *nto
     }
     portEXIT_CRITICAL(&s_intro_mux);
     if (learning) {
-        write_tpl(lw, obs, VDSP_RADIUS_INIT);
-        nucleo_event_publish("voice/learned", "{\"status\":\"ok\"}");
-        s_learn_result = NUCLEO_VOICE_LEARN_OK;   // native trainer polls this to advance its UI
-        voice_hold_set(VH_LEARN, false);          // one-shot: drop the transient hold
+        s_learn_take_gen = s_ptt_gen;
+        if (learn_take(lw, obs)) {
+            nucleo_event_publish("voice/learned", "{\"status\":\"ok\"}");
+            s_learn_result = NUCLEO_VOICE_LEARN_OK;   // native trainer polls this to advance its UI
+            voice_hold_set(VH_LEARN, false);          // one-shot: drop the transient hold
+        } else {                                      // more takes wanted: stay armed for the next hold
+            portENTER_CRITICAL(&s_intro_mux);
+            s_learning_mode = true;
+            s_learn_deadline_us = esp_timer_get_time() + VOICE_LEARN_TTL_US;
+            portEXIT_CRITICAL(&s_intro_mux);
+            nucleo_event_publish("voice/learned", "{\"status\":\"part\"}");
+            s_learn_result = NUCLEO_VOICE_LEARN_PART;
+        }
         return;
     }
 
@@ -715,6 +769,7 @@ static void voice_free_all(void)
     if (s_scan) { free(s_scan);          s_scan = NULL; }
     if (s_win)  { free(s_win);           s_win  = NULL; }
     if (s_ctx)  { vdsp_ctx_free(s_ctx);  s_ctx  = NULL; }
+    learn_reset();                         // a half-trained word does not outlive the engine
 }
 
 // Lazy-allocate the per-session buffers + cache. Returns false on OOM.
@@ -874,6 +929,7 @@ static void voice_task(void *arg)
                 portEXIT_CRITICAL(&s_live_mux);
                 nucleo_event_publish("voice/state", "{\"listening\":true}");
                 rms_max = 0;
+                s_ptt_gen++;
                 ESP_LOGW(TAG, "PTT start (noise_floor=%d)", noise_floor);
             } else {
                 ESP_LOGE(TAG, "mic open failed");
@@ -907,7 +963,10 @@ static void voice_task(void *arg)
 
             bool was_learning;
             portENTER_CRITICAL(&s_intro_mux);
-            was_learning = s_learning_mode;
+            // A hold that just gave a take of a multi-take word leaves the engine armed for the next one: that
+            // is not "too short".
+            const bool took_now = s_learn_done > 0 && s_learn_take_gen == s_ptt_gen;
+            was_learning = s_learning_mode && !took_now;
             if (was_learning) { s_learning_mode = false; s_learn_deadline_us = 0; }
             portEXIT_CRITICAL(&s_intro_mux);
             if (was_learning) {
@@ -1147,9 +1206,12 @@ void nucleo_voice_suspend(bool suspend)
     voice_recompute();
 }
 
-esp_err_t nucleo_voice_arm_learning_mode(const char *word)
+// takes < 0 keeps the session in progress (a re-arm after a take that captured nothing); otherwise it opens a new
+// session of `takes` takes (clamped to 1..VOICE_LEARN_MAX_TAKES) and the engine drops any old running mean.
+static esp_err_t arm_learning(const char *word, int takes)
 {
     if (!word || !word[0]) return ESP_ERR_INVALID_ARG;
+    if (takes > VOICE_LEARN_MAX_TAKES) takes = VOICE_LEARN_MAX_TAKES;
     // Two armers exist (httpd voice_learn_post + native trainer) and the voice task consumes on
     // core 1: word+mode+deadline must travel as one unit or the consumer can read a half-written
     // label (corrupt .tpl) / a torn 64-bit deadline. Short critical section, log outside.
@@ -1158,8 +1220,21 @@ esp_err_t nucleo_voice_arm_learning_mode(const char *word)
     s_learning_word[sizeof(s_learning_word) - 1] = '\0';
     s_learning_mode = true;
     s_learn_deadline_us = esp_timer_get_time() + VOICE_LEARN_TTL_US;
+    if (takes >= 0) {
+        s_learn_total = takes < 1 ? 1 : takes;
+        s_learn_done = 0;
+        s_learn_fresh = true;
+    }
     portEXIT_CRITICAL(&s_intro_mux);
     voice_hold_set(VH_LEARN, true);   // ensure the engine is up to capture the next PTT
-    ESP_LOGI(TAG, "Learning mode armed for word: '%s'", word);
+    ESP_LOGI(TAG, "Learning mode armed for word: '%s' (%d take%s)", word, (int)s_learn_total, s_learn_total == 1 ? "" : "s");
     return ESP_OK;
+}
+esp_err_t nucleo_voice_arm_learning_mode(const char *word)             { return arm_learning(word, 1); }
+esp_err_t nucleo_voice_arm_learning_takes(const char *word, int takes) { return arm_learning(word, takes); }
+esp_err_t nucleo_voice_rearm_learning(const char *word)                { return arm_learning(word, -1); }
+void nucleo_voice_learn_progress(int *done, int *total)
+{
+    if (done)  *done  = s_learn_done;
+    if (total) *total = s_learn_total;
 }
