@@ -227,7 +227,7 @@ Type `nucleo-01.local` in any browser on your Wi-Fi and the Cardputer itself ser
 
 ### Install
 1. Burn this image (same file for Cardputer and Cardputer ADV).
-2. On first boot the setup wizard joins your Wi-Fi and downloads the SD card content (web desktop, apps) by itself, or copy `nucleoos-{full}-sd.zip` from the GitHub release to a FAT32 microSD.
+2. On first boot the setup wizard joins your Wi-Fi and downloads the SD card content (web desktop, apps) by itself, or copy the `-sd.zip` of the [latest release](https://github.com/indecenti/NucleoOs/releases/latest) to a FAT32 microSD (the same version as the image).
 3. Open the address shown on the screen in your browser.
 
 Free for noncommercial use (PolyForm Noncommercial 1.0.0); commercial use needs a license. Includes security-testing tools: authorized testing, research and education only.
