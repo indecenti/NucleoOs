@@ -6,6 +6,39 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.8.8] — 2026-11-23
+
+### Added
+- **XiaoZhi, a voice assistant, in the Store** (native channel, needs this firmware): hold GO, speak, release, and the
+  answer is spoken back with its text on screen. It speaks the open XiaoZhi protocol: the public xiaozhi.me service
+  (bind the device with the 6-digit code it shows) or a server of your own, such as xiaozhi-esp32-server on a PC
+  (press `s` and type its `ws://` address). `r` replays the last answer, `;` `.` scroll the conversation; with the
+  external panel the panel shows the conversation and the Cardputer the microphone. Your voice goes only to the
+  server you chose.
+- **Native app ABI level 10: the microphone and TLS for store apps.** `nucleo_mic_*` gives a store app live 16 kHz
+  audio through the system's single microphone owner, only with the new "mic" permission, which the Store shows
+  before installing; `nucleo_tcp_connect_tls` opens a connection whose certificate is always verified. A voice app
+  gets its Solo boot with a 20 KB task.
+- **One Voice app to teach, bind and test words**, in its own Solo boot where the recognizer has room. Each word is
+  learned from three takes and their average, so it is recognised more reliably, and a word can open an app.
+- **Hold GO in the launcher to talk**: the device restarts into the Voice app already listening (the full OS has
+  no room for the recognizer, so GO used to do nothing).
+- **Touch sliders**: brightness and volume in the Control Center, and the alarm's level, follow the finger on the
+  external panel; a drag that starts on a slider is the slider's, never an arrow or Back.
+
+### Changed
+- **The screensaver clock no longer flickers** without the off-screen canvas: it paints the screen once, then only
+  the parts that change.
+- **The IR transmitter starts when it is first needed**, so the web IR remote works after a Web Client Solo boot
+  too, and the native IR app follows favourites saved from the browser while it is open.
+- **NucleoConnect is one 1.1 MB program** that runs on any Windows 10 (1903 or later) or 11, with nothing to install.
+
+### Fixed
+- **`;` `.` `,` `/` type in text fields**: an SSH host such as 192.168.1.5, a file name or a password can now
+  contain them (they were read as arrows, and a comma closed the app). With Fn or Ctrl they are still arrows.
+- **ANIMA works with more OpenAI-compatible services**: a custom teacher gets no temperature unless
+  `teacher.json` pins one, since some services accept only their own.
+
 ## [0.8.7] — 2026-11-09
 
 ### Added
