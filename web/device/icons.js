@@ -238,12 +238,6 @@ export function drawIcon(g, id, cx, cy, s) {
       break;
     }
 
-    case 'voicelab':
-      g.frr(cx - s, cy - s * 0.8, 2 * s, s * 1.25, s * 0.3);
-      g.tri(cx - s * 0.5, cy + s * 0.35, cx - s * 0.5, cy + s, cx, cy + s * 0.4);
-      for (let i = -1; i <= 1; i++) g.fc(cx + i * s * 0.5, cy - s * 0.18, T * 0.5, g.bg);
-      break;
-
     case 'info': case 'Connect':
       g.fc(cx, cy + s * 0.7, T * 0.85);
       g.tri(cx - s * 0.55, cy + s * 0.15, cx + s * 0.55, cy + s * 0.15, cx, cy + s * 0.55);
@@ -557,7 +551,7 @@ export function drawIcon(g, id, cx, cy, s) {
 // The id list this set covers, for the gallery and for sanity checks.
 export const ICON_IDS = [
   'clock', 'anima', 'calc', 'files', 'calendar', 'notepad', 'usb', 'usbweb', 'usbkbd', 'music', 'video', 'Media',
-  'photos', 'recorder', 'micspec', 'voicelab', 'info', 'Connect', 'sysmon', 'System', 'radio', 'remote',
+  'photos', 'recorder', 'micspec', 'info', 'Connect', 'sysmon', 'System', 'radio', 'remote',
   'ir', 'qr', 'notify', 'torch', 'theme', 'wifi', 'link', 'swarm', 'ssh', 'ethernet', 'beacon', 'wifiatk',
   'evilportal', 'sentinel', 'fido', 'airspace', 'Security', 'Games', 'reactor', 'pong', 'tanks', 'stelle',
   'giardino', 'slots', 'Tools', 'Office', 'device', 'poker',
