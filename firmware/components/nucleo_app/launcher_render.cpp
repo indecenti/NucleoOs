@@ -224,8 +224,7 @@ static const struct { const char *id, *it, *en, *es, *fr, *de; } APP_NAME_TR[] =
     { "usb",         "Unita USB",           "USB Drive",      "Disco USB",      "Disque USB",       "USB-Disk" },
     { "usbweb",      "Web via USB",         "Web via USB",    "Web por USB",    "Web via USB",      "Web ueber USB" },
     { "usbkbd",      "Tastiera USB",        "USB Keyboard",   "Teclado USB",    "Clavier USB",      "USB-Tastatur" },
-    { "voice",       "Trainer vocale",      "Voice Trainer",  "Entrenador voz", "Coach vocal",      "Sprachtrainer" },
-    { "voicelab",    "Laboratorio voce",    "Voice Lab",      "Lab de voz",     "Labo vocal",       "Sprachlabor" },
+    { "voice",       "Voce",                "Voice",          "Voz",            "Voix",             "Sprache" },
     { "weather",     "Meteo",               "Weather",        "Tiempo",         "Meteo",            "Wetter" },
     { "wifi",        "Impostazioni",        "Settings",       "Ajustes",        "Reglages",         "Einstellungen" },
 };
@@ -577,11 +576,6 @@ static void ui_icon(lgfx::v1::LGFXBase *g, int cx, int cy, int r, const char *id
     } else if (!strcmp(id, "micspec")) {
         static const float mh[5] = { 0.55f, 1.0f, 0.4f, 0.85f, 0.6f };
         for (int i = 0; i < 5; i++) IBX(cx - s + i * (2 * s / 5.0f) + Tk * 0.2f, cy + s - 2 * s * mh[i], Tk, 2 * s * mh[i], col);
-
-    } else if (!strcmp(id, "voicelab")) {
-        IRR(cx - s, cy - s * 0.8f, 2 * s, s * 1.25f, s * 0.3f, col);
-        ITR(cx - s * 0.5f, cy + s * 0.35f, cx - s * 0.5f, cy + s, cx, cy + s * 0.4f, col);
-        for (int i = -1; i <= 1; i++) IFC(cx + i * s * 0.5f, cy - s * 0.18f, Tk * 0.5f, bg);
 
     } else if (!strcmp(id, "sysmon")) {
         static const float sh[3] = { 0.5f, 1.0f, 0.7f };

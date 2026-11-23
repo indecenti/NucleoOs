@@ -165,6 +165,13 @@ extern "C" int  nucleo_app_solo_app(void) { return s_solo_app; }   // SOLO_ANIMA
 // Per-profile policy (owned here, not hardcoded in main.c): only ANIMA Solo needs speech (TTS + voice/PTT).
 // The Recorder Solo (and any future non-speech profile) skips them to free heap for the cloud TLS.
 extern "C" bool nucleo_app_solo_needs_speech(void) { return s_solo_app == SOLO_ANIMA; }
+// The Voice app (train, bind, test words) needs the recognizer engine in their Solo boot, but NOT TTS:
+// the engine's PTT gate wants a ~26 KB contiguous block and its ANIMA worker a 30 KB stack, which only the
+// fresh Solo heap (~32 KB largest) can give — the full OS leaves ~18 KB (issue #14).
+extern "C" bool nucleo_app_solo_needs_voice(void)
+{
+    return s_solo_app == SOLO_APPID && !strcmp(s_solo_id, "voice");
+}
 // Generic Solo target (a heavy game via NX_SOLO, not ANIMA/Recorder): main.c registers ALL builtins in this
 // case so the run loop's launch_id(s_solo_id) finds the game (registration is just pointers — cheap; the
 // RAM win is from skipping httpd/mDNS, not from registering fewer apps). No speech/TTS brought up.
@@ -449,6 +456,14 @@ void nucleo_app_register(const nucleo_app_def_t *app)
 
 // Read access for the menu builder (plain C++ linkage; see launcher_menu.cpp).
 int                     nucleo_app_count(void) { return s_app_count; }
+// id + registry name of app i (the Voice app's "open with" picker); false when out of range.
+extern "C" bool nucleo_app_info_at(int i, const char **id, const char **title)
+{
+    if (i < 0 || i >= s_app_count) return false;
+    if (id)    *id    = s_apps[i].id;
+    if (title) *title = s_apps[i].name;
+    return true;
+}
 
 // Apps installed from the store (store_apps.cpp) live in the TAIL of the registry, after every built-in
 // app: replacing them as a block never moves a built-in's index (the app in the foreground, the Store, is
@@ -510,7 +525,6 @@ extern "C" void nucleo_register_payloads(void);
 extern "C" void nucleo_register_weather(void);
 
 extern "C" void nucleo_register_voice(void);
-extern "C" void nucleo_register_voicelab(void);
 extern "C" void nucleo_register_ssh(void);
 extern "C" void nucleo_register_wifi(void);
 extern "C" void nucleo_register_mail(void);   // SMTP mail client (Gmail/Outlook/Yahoo/iCloud)
@@ -627,7 +641,7 @@ void nucleo_app_register_builtins(void)
     // Messaging: device-to-device / mail
     nucleo_register_mail(); nucleo_register_link(); nucleo_register_swarm();
     // System (settings, device, voice control)
-    nucleo_register_wifi(); nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme(); nucleo_register_notify(); nucleo_register_voice(); nucleo_register_voicelab(); nucleo_register_updates();
+    nucleo_register_wifi(); nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme(); nucleo_register_notify(); nucleo_register_voice(); nucleo_register_updates();
     // Security (authorized testing)
     nucleo_register_evilportal(); nucleo_register_wifiatk(); nucleo_register_beacon(); nucleo_register_sniffer(); nucleo_register_ethernet(); nucleo_register_ble(); nucleo_register_sentinel(); nucleo_register_airspace(); nucleo_register_presence(); nucleo_register_store(); nucleo_register_fido(); nucleo_register_payloads();
 }

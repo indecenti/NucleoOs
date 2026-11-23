@@ -104,6 +104,14 @@ bool nucleo_voice_last_result(nucleo_voice_result_t *out);
 void nucleo_voice_set_test_mode(bool on);
 bool nucleo_voice_test_mode(void);
 
+// ── Word -> app bindings ─────────────────────────────────────────────────────────────────────────────────────
+// A trained word can be bound to an app id: when the recognized sentence IS that word, the engine opens the app
+// directly (no ANIMA round trip, so it also works where the ANIMA worker does not fit). Stored in
+// /system/voice/bindings.json as {"word":"app-id"}, matched case-insensitively. In test mode nothing is launched,
+// but the result still reports "launch <app>". set() with an empty app removes the binding.
+bool      nucleo_voice_binding_get(const char *word, char *app, size_t cap);
+esp_err_t nucleo_voice_binding_set(const char *word, const char *app);
+
 #ifdef __cplusplus
 }
 #endif

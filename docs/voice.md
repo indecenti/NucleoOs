@@ -5,6 +5,29 @@ browser Vosk path). Speaker-dependent, fully offline, no PSRAM. It is what the
 **Voice Manager** web app trains via `POST /api/voice/learn` + the `voice/learned`
 WebSocket event.
 
+## Native app: Voice (train, bind, test)
+
+One app, `voice` (it replaces the former Voice Trainer + Voice Lab). It opens in a **Solo boot** (`NX_SOLO | NX_WIFI`):
+the recognizer needs a ~26 KB contiguous block on PTT, which the full OS cannot give (~18 KB largest block there,
+~40 KB in the Solo boot), and Solo has no radio, so it runs fully offline. Four tabs (all strings in it/en/es/fr/de):
+
+| Tab | What it does |
+|---|---|
+| COMMANDS | the trained words, each with the app it opens and its reliability this session. Enter = pick the app (picker over every registered app), U = unbind, R = re-train, Del = delete (also drops its binding) |
+| TRAIN | name a word, hold GO (350 ms) and say it |
+| TEST | hold GO and speak: the word, a confidence verdict + bar, and what would happen. **Test mode** (default) recognizes but does not act; **E** switches to **run** mode where a bound word really opens its app. The mode chip is always visible |
+| INFO | word count, routing, always-on |
+
+With the second screen the whole app is on the 320x240 panel (touch on the content; the Cardputer is the companion
+and holds GO). `PTT` from the home screen needs the same RAM: it works where the heap allows (Solo ANIMA, always-on).
+
+### Word -> app bindings
+
+`/system/voice/bindings.json` = `{"word":"app-id"}`, matched case-insensitively against the recognized sentence
+(`nucleo_voice_binding_get/set`). When the sentence IS a bound word the engine opens that app directly with
+`nucleo_app_launch_id` — no ANIMA round trip, so no 30 KB worker (which the tight heap cannot always spare). Any other
+sentence still goes to ANIMA as before. Test mode never launches; the result still reports "would open <app>".
+
 ## Pipeline (`nucleo_voice_dsp.c` + `nucleo_voice.c`)
 
 Hold **FN (G0)** and speak. Per spoken word ("burst"):

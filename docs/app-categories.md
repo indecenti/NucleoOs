@@ -35,7 +35,7 @@ line runs between apps that *reach another party* and apps that *bridge/​contr
 | **Tools** | one-shot **gadgets/utilities** | qr, torch, weather, ir, alarm |
 | **System** | **device settings, status, display upkeep** | wifi (Impostazioni), theme, info, sysmon, screensaver, pixel-fix, notify |
 | **Hardware** | **IMU sensor** instruments | level, goniometer, pedometer |
-| **Voice** | **voice-engine** training/diagnostics | voice, voicelab |
+| **Voice** | **voice-engine** training, word-to-app binding, testing | voice |
 | **Security** | authorized **offensive/testing** tools | ble, beacon, evilportal, ethernet, payloads, sniffer, wifiatk |
 | **Games** | play | (12 titles) — opens the GameFront front-end |
 
@@ -77,7 +77,7 @@ pulled OUT of the generic `Connect` bridge category into it.
 | Tools | 5 | qr, torch, weather, ir, alarm (+ anima, hoisted) |
 | Communication | 3 | mail, link, swarm — **grows with LoRa & other radios** |
 | Hardware | 3 | goniometer, level, pedometer |
-| Voice | 2 | voice, voicelab |
+| Voice | 1 | voice |
 
 Distinct categories: **10 = MAX_CATS (10)** — the launcher is now at its category cap.
 **Zero `.bss` growth** (no new capacity; the taxonomy just uses all 10 slots). No single-app
@@ -120,8 +120,8 @@ top-level use appears.
   only touched native. Unifying them (map native→web, or one shared list) is a separate
   cross-cutting change (schema + every web manifest). Flagged so it is a conscious decision.
 - **`alarm` placement.** Uses IMU + mic (sensor-like) but reads as a gadget; left in Tools.
-- **`Voice` (2 apps).** Small but a distinct use (voice-engine trainer + lab); kept separate
-  rather than folded into System/Tools.
+- **`Voice` (1 app).** Small but a distinct use (voice engine: train words, bind each to an app, test);
+  kept separate rather than folded into System/Tools.
 
 **Resolved:** `Hardware → Sensori` — done at the display layer (localized label), so the category id
 and chip glyph are unchanged while the tile reads "Sensori" (IT) / "Sensors" (EN).

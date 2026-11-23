@@ -61,6 +61,7 @@ extern void nucleo_register_anima(void);
 extern void nucleo_register_recorder(void);   // Recorder Solo: dedicated boot for heavy cloud transcribe/summarize
 extern int  nucleo_app_solo_app(void);        // which Solo profile (1=ANIMA, 2=Recorder) is active
 extern bool nucleo_app_solo_needs_speech(void); // only ANIMA Solo brings up TTS+voice; others skip them
+extern bool nucleo_app_solo_needs_voice(void);  // Voice Trainer / Voice Lab Solo: the recognizer engine only (no TTS)
 extern bool nucleo_app_solo_is_generic(void);   // generic Solo (heavy game via NX_SOLO): register all builtins
 extern uint32_t nucleo_app_solo_stack(void);    // its task stack when the app asked for more (voice apps), else 0
 extern bool nucleo_app_solo_is_server(void);    // Web Client server-Solo: keep httpd + auth up, skip the rest
@@ -746,7 +747,7 @@ void app_main(void)
 #endif
     // AVCEB voice engine: PTT (FN key) → DTW template match → nucleo_anima_query() → action.
     // Initialized after anima (needs anima_try_lock) and after SD (loads .tpl templates).
-    if ((!solo || nucleo_app_solo_needs_speech()) && !setup_pending && nucleo_voice_init() != ESP_OK)   // SKIP in non-speech Solo + lean first-boot setup
+    if ((!solo || nucleo_app_solo_needs_speech() || nucleo_app_solo_needs_voice()) && !setup_pending && nucleo_voice_init() != ESP_OK)   // SKIP in non-speech Solo + lean first-boot setup
         ESP_LOGW(TAG, "voice engine init failed (mic busy?)");
     bootmark("voice");
 

@@ -42,6 +42,7 @@
 #include "nucleo_ui.h"
 #include "nucleo_codec.h"   // board-aware mic HAL (PDM original / ES8311 ADC on ADV)
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -399,6 +400,67 @@ static bool voice_query_offthread(const char *q, anima_result_t *out)
 }
 
 // ---------------------------------------------------------------------------
+// Word -> app bindings. {"word":"app-id"} in bindings.json next to the templates, small by design (a few
+// dozen bytes per word, at most 20 words), read whole on demand and freed at once — nothing stays resident.
+// ---------------------------------------------------------------------------
+#define VOICE_BIND_PATH TPL_PATH "/bindings.json"
+#define VOICE_BIND_MAX  2048
+
+static cJSON *bind_load(void)
+{
+    FILE *f = fopen(VOICE_BIND_PATH, "r");
+    if (!f) return NULL;
+    long n = (fseek(f, 0, SEEK_END) == 0) ? ftell(f) : -1; fseek(f, 0, SEEK_SET);
+    if (n <= 0 || n > VOICE_BIND_MAX) { fclose(f); return NULL; }
+    char *b = (char *)malloc((size_t)n + 1);
+    if (!b) { fclose(f); return NULL; }
+    size_t got = fread(b, 1, (size_t)n, f); fclose(f); b[got] = 0;
+    cJSON *r = cJSON_Parse(b); free(b);
+    if (r && !cJSON_IsObject(r)) { cJSON_Delete(r); r = NULL; }
+    return r;
+}
+
+bool nucleo_voice_binding_get(const char *word, char *app, size_t cap)
+{
+    if (app && cap) app[0] = 0;
+    if (!word || !word[0] || !app || !cap) return false;
+    cJSON *r = bind_load();
+    if (!r) return false;
+    bool ok = false;
+    for (cJSON *it = r->child; it; it = it->next)
+        if (it->string && cJSON_IsString(it) && it->valuestring[0] && !strcasecmp(it->string, word)) {
+            strlcpy(app, it->valuestring, cap); ok = true; break;
+        }
+    cJSON_Delete(r);
+    return ok;
+}
+
+esp_err_t nucleo_voice_binding_set(const char *word, const char *app)
+{
+    if (!word || !word[0]) return ESP_ERR_INVALID_ARG;
+    cJSON *r = bind_load();
+    if (!r) r = cJSON_CreateObject();
+    if (!r) return ESP_ERR_NO_MEM;
+    cJSON_DeleteItemFromObject(r, word);                       // case-insensitive: replaces whatever was bound
+    if (app && app[0]) cJSON_AddStringToObject(r, word, app);
+    char *txt = cJSON_PrintUnformatted(r);
+    cJSON_Delete(r);
+    if (!txt) return ESP_ERR_NO_MEM;
+    mkdir(TPL_PATH, 0775);
+    const char *tmp = TPL_PATH "/bindings.tmp";
+    FILE *f = fopen(tmp, "w");
+    esp_err_t e = ESP_FAIL;
+    if (f) {
+        size_t n = strlen(txt);
+        bool wrote = fwrite(txt, 1, n, f) == n;
+        wrote = (fclose(f) == 0) && wrote;
+        if (wrote) { remove(VOICE_BIND_PATH); e = (rename(tmp, VOICE_BIND_PATH) == 0) ? ESP_OK : ESP_FAIL; }
+    }
+    free(txt);
+    return e;
+}
+
+// ---------------------------------------------------------------------------
 // Semantic Fusion: fuse the recognized words into a sentence, resolve it with
 // ANIMA, then EITHER route to a connected web client OR act locally (launch app /
 // speak). In test mode the result is recorded but NOT executed (no side effects).
@@ -413,6 +475,19 @@ static void semantic_dispatch(const char *tokens[], int ntok)
         strncat(sentence, tokens[i], sizeof(sentence) - strlen(sentence) - 1);
     }
     ESP_LOGI(TAG, "Semantic fusion: '%s'", sentence);
+
+    // A trained word bound to an app opens it directly: no ANIMA round trip (and so no 30 KB worker), which is
+    // what makes "say the word, the app opens" work on the tight Solo heap. Test mode only reports it.
+    char bapp[32];
+    if (nucleo_voice_binding_get(sentence, bapp, sizeof bapp)) {
+        bool launched = false;
+        if (!s_test_mode) launched = nucleo_app_launch_id(nucleo_app_native_id(bapp));
+        ESP_LOGI(TAG, "Bound word '%s' -> app '%s' (%s)", sentence, bapp,
+                 s_test_mode ? "test mode, not launched" : launched ? "launched" : "app not found");
+        store_result(sentence, ANIMA_ACT_LAUNCH, bapp, true, launched);
+        return;
+    }
+
 
     if (!nucleo_anima_try_lock()) {
         ESP_LOGW(TAG, "Anima busy, voice command dropped");
