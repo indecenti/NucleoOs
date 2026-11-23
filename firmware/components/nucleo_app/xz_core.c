@@ -466,7 +466,7 @@ void xz_talk(bool on)
         free(s_pcm); s_pcm = NULL;
         if (V.rec_ms < 400) { set_state(XZ_IDLE, "too short: hold while you speak"); return; }
         set_state(XZ_ENCODING, "encoding");
-        s_total = V.rec_ms / 60; s_done = 0;
+        s_total = V.rec_ms / 60; s_done = 0; V.progress = 0;
     }
 }
 
@@ -512,8 +512,9 @@ static void encode_step(void)
         if (len > 0) { const uint8_t l2[2] = { (uint8_t)len, (uint8_t)(len >> 8) }; fwrite(l2, 1, 2, s_pkts); fwrite(pkt, 1, (size_t)len, s_pkts); }
         s_done++;
     }
-    V.progress = s_total ? (int)(s_done * 100 / s_total) : 100;
-    V.seq++;
+    const int pe = s_total ? (int)(s_done * 100 / s_total) : 100;
+    if (pe / 10 != V.progress / 10) V.seq++;             // redraw in steps of 10 %
+    V.progress = pe;
     if (s_rec_end || s_done >= s_total + 1) {
         files_close();
         codec_free();
@@ -625,7 +626,7 @@ static void finish_exchange(void)
 {
     files_close();
     ws_close();
-    if (s_reply_audio) { set_state(XZ_PLAYING, "speaking"); s_done = 0; }
+    if (s_reply_audio) { s_done = 0; V.progress = 0; set_state(XZ_PLAYING, "speaking"); }
     else set_state(XZ_IDLE, V.user[0] ? "no spoken answer" : "nothing heard");
 }
 
@@ -660,12 +661,14 @@ static void play_step(void)
         s_pkts = fopen(p, "rb");
         struct stat sb; s_total = stat(p, &sb) == 0 ? sb.st_size : 1;
         if (!s_pkts) { codec_free(); fail("SD card", 0); return; }
-        if (nucleo_audio_pcm_open_ex(RATE, 1, 2 * FRAME) != 0) { files_close(); codec_free(); fail("speaker busy", 0); return; }
+        // The deepest queue the driver gives (8 x 480 frames = 240 ms): the UI draws between two polls, and a
+        // shallow queue ran dry while it did (heard as crackle).
+        if (nucleo_audio_pcm_open_ex(RATE, 1, 3840) != 0) { files_close(); codec_free(); fail("speaker busy", 0); return; }
         s_pcm_open = true;
         heap_mark();
     }
     uint8_t pkt[1276];
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {                        // 240 ms a poll: the queue stays full (write blocks when it is)
         uint8_t l2[2];
         int len = 0;
         if (fread(l2, 1, 2, s_pkts) == 2) len = l2[0] | l2[1] << 8;
@@ -685,7 +688,8 @@ static void play_step(void)
         if (n > 0) nucleo_audio_pcm_write(s_pcm, (size_t)n * sizeof(int16_t));
     }
     const int pr = (int)(s_done * 100 / (s_total ? s_total : 1));
-    if (pr != V.progress) { V.progress = pr; V.seq++; }
+    if (pr / 25 != V.progress / 25) V.seq++;             // a redraw every quarter, not every frame: drawing costs audio time
+    V.progress = pr;
 }
 
 bool xz_poll(void)

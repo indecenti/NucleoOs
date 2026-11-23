@@ -84,39 +84,108 @@ static void talk_toggle(void)
     nucleo_app_request_draw();
 }
 
+// ---- drawing without flicker -------------------------------------------------------------------------------------
+// The app draws straight to the screens (no canvas: its 31 KB are the codec's). So nothing is cleared and redrawn
+// unless it changed: a "page" (setup, activation, conversation) is repainted whole only when its text changes or the
+// framework asks for a frame on its own; the meter, the seconds and the progress repaint only the microphone's ring
+// and the status line, each over its own pixels.
+static uint32_t fnv(uint32_t h, const char *s) { for (; s && *s; s++) h = (h ^ (uint8_t)*s) * 16777619u; return h; }
+
+static uint32_t page_key(const xz_view_t *v)
+{
+    const uint32_t h = 2166136261u;
+    if (s_editing || v->state == XZ_SETUP) return fnv(fnv(h, "setup"), s_edit);
+    if (v->state == XZ_ACTIVATE) return fnv(fnv(fnv(h, "act"), v->code), v->status);
+    return fnv(fnv(fnv(h, "talk"), v->user), v->reply);
+}
+
+static unsigned short mic_color(const xz_view_t *v)
+{
+    return v->state == XZ_RECORDING ? REC : v->state == XZ_PLAYING ? OK : ACC;
+}
+
+static int isqrt(int n) { int r = 0; while ((r + 1) * (r + 1) <= n) r++; return r; }
+
+// The annulus ri < radius <= ro in one colour, scanline by scanline (no gaps, no pixel drawn twice).
+static void ring(int cx, int cy, int ri, int ro, unsigned short col)
+{
+    if (ro <= ri) return;
+    for (int dy = -ro; dy <= ro; dy++) {
+        const int xo = isqrt(ro * ro - dy * dy);
+        const int xi = (dy > -ri && dy < ri) ? isqrt(ri * ri - dy * dy) + 1 : 0;
+        if (xi == 0) d.drawFastHLine(cx - xo, cy + dy, 2 * xo + 1, col);
+        else if (xo >= xi) {
+            d.drawFastHLine(cx - xo, cy + dy, xo - xi + 1, col);
+            d.drawFastHLine(cx + xi, cy + dy, xo - xi + 1, col);
+        }
+    }
+}
+
+// The microphone: the disc and its glyph only when its colour changes (or on a whole repaint); the meter ring around
+// it every time, glow then background out to the largest ring it can have.
+static void mic(int cx, int cy, int r, int grow, const xz_view_t *v, bool whole, unsigned short *last)
+{
+    const unsigned short c = mic_color(v);
+    if (whole || c != *last) {
+        d.fillCircle(cx, cy, r, c);
+        const int t = r > 30 ? 3 : 2;
+        d.fillRoundRect(cx - r / 4, cy - r / 2, r / 2, r * 2 / 3, r / 4, THEME_BG);
+        for (int o = 0; o < t; o++) {                                                 // the stand: a U under it
+            d.drawLine(cx - r * 2 / 5 + o, cy - r / 8, cx - r * 2 / 5 + o, cy + r / 5, THEME_BG);
+            d.drawLine(cx + r * 2 / 5 - o, cy - r / 8, cx + r * 2 / 5 - o, cy + r / 5, THEME_BG);
+            d.drawLine(cx - r * 2 / 5, cy + r / 5 + o, cx + r * 2 / 5, cy + r / 5 + o, THEME_BG);
+        }
+        d.fillRect(cx - t / 2, cy + r / 5 + t, t, r / 5, THEME_BG);
+        *last = c;
+    }
+    const int g = v->state == XZ_RECORDING ? v->level * grow / 100 : 0;
+    ring(cx, cy, r, r + g, (unsigned short)(REC & 0x7BEF));
+    ring(cx, cy, r + g, r + grow + 1, THEME_BG);
+}
+
+// One line of text centred in a box: the text over its own background, the rest of the box cleared around it.
+static void line_box(int x, int y, int w, int h, const char *t, unsigned short fg)
+{
+    d.setTextDatum(top_left);
+    d.setTextColor(fg, THEME_BG);
+    char f[80]; lg::fit(f, sizeof f, t, w);
+    const int tw = d.textWidth(f), tx = x + (w - tw) / 2;
+    d.fillRect(x, y, tx - x, h, THEME_BG);
+    d.drawString(f, tx, y);
+    d.fillRect(tx + tw, y, x + w - tx - tw, h, THEME_BG);
+}
+
 static const char *state_line(const xz_view_t *v)
 {
     static char line[96];
     switch (v->state) {
     case XZ_RECORDING: snprintf(line, sizeof line, "%d.%d s", v->rec_ms / 1000, v->rec_ms % 1000 / 100); return line;
-    case XZ_ENCODING: case XZ_PLAYING: snprintf(line, sizeof line, "%s %d%%", v->status, v->progress); return line;
+    case XZ_ENCODING: case XZ_PLAYING: snprintf(line, sizeof line, "%s %d%%", v->status, v->progress / 10 * 10); return line;
     default: return v->status;
     }
 }
 
 // ---- the Cardputer (240x135) -----------------------------------------------------------------------------------
-static void draw_mic(int cx, int cy, int r, const xz_view_t *v)
-{
-    const unsigned short c = v->state == XZ_RECORDING ? REC : v->state == XZ_PLAYING ? OK : ACC;
-    const int rr = v->state == XZ_RECORDING ? r + v->level * r / 160 : r;
-    d.fillCircle(cx, cy, rr + 2, THEME_BG);
-    d.fillCircle(cx, cy, rr, c);
-    d.fillRoundRect(cx - r / 4, cy - r / 2, r / 2, r * 2 / 3, r / 4, THEME_BG);       // the microphone glyph
-    for (int o = 0; o < 2; o++) {                                                     // the stand: a U under it
-        d.drawLine(cx - r / 2 + o, cy - r / 8, cx - r / 2 + o, cy + r / 8, THEME_BG);
-        d.drawLine(cx + r / 2 - o, cy - r / 8, cx + r / 2 - o, cy + r / 8, THEME_BG);
-        d.drawLine(cx - r / 2, cy + r / 8 + o, cx + r / 2, cy + r / 8 + o, THEME_BG);
-    }
-    d.fillRect(cx - 1, cy + r / 3, 2, r / 5, THEME_BG);
-}
+static uint32_t s_c_key = 0, s_c_seq = 0;
+static unsigned short s_c_mic = 0;
+static bool s_c_valid = false;
 
 static void draw(void)
 {
     const xz_view_t *v = xz_view();
     const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     const bool comp = nucleo_app_two_screens();
-    d.fillRect(0, top, 240, h, THEME_BG);
-    int y = comp ? lg::comp_head("XiaoZhi", ACC) : top + 2;
+    const uint32_t key = page_key(v);
+    // Whole: the page changed, or a frame nobody in this app asked for (seq unchanged: the framework repaints).
+    const bool whole = !s_c_valid || key != s_c_key || v->seq == s_c_seq;
+    s_c_key = key; s_c_seq = v->seq; s_c_valid = true;
+    int y = top + 2;
+    if (whole) {
+        d.fillRect(0, top, 240, h, THEME_BG);
+        if (comp) y = lg::comp_head("XiaoZhi", ACC);
+    } else if (comp) {
+        y = lg::comp_head("XiaoZhi", ACC);                   // same pixels as before: no visible change
+    }
     d.setTextDatum(top_left);
     if (s_editing || v->state == XZ_SETUP) {
         d.setFont(&fonts::Font2); d.setTextColor(ACC, THEME_BG); d.drawString(tr(T_SETUP), 6, y); y += 18;
@@ -127,21 +196,24 @@ static void draw(void)
         const char *t = s_edit; while (*t && d.textWidth(t) > 220) t++;
         snprintf(shown, sizeof shown, "%s_", t);
         d.setTextColor(THEME_FG, lg::card()); d.drawString(shown, 9, y + 7);
+        if (comp && whole) lg::comp_keys(tr(T_HINT));
         return;
     }
     if (v->state == XZ_ACTIVATE) {
+        if (!whole) return;
         d.setFont(&fonts::Font0); d.setTextColor(THEME_FG, THEME_BG);
         d.drawString(tr(T_BIND), 6, y + 2);
-        lg::font(3); d.setTextDatum(top_center); d.setTextColor(ACC, THEME_BG);   // the hero face, exported by the kit
+        lg::font(3); d.setTextDatum(top_center); d.setTextColor(ACC, THEME_BG);
         d.drawString(v->code, 120, y + 20);
         d.setFont(&fonts::Font0); d.setTextColor(THEME_MUTED, THEME_BG); d.drawString(v->status, 120, y + 66);
+        d.setTextDatum(top_left);
         return;
     }
-    // the microphone on the left, the conversation on the right
-    draw_mic(34, y + 34, 24, v);
-    d.setFont(&fonts::Font0); d.setTextDatum(top_center); d.setTextColor(THEME_MUTED, THEME_BG);
-    d.drawString(state_line(v), 34, y + 64);
-    d.setTextDatum(top_left);
+    // the microphone on the left (its meter grows at most 10 px: it never reaches the text at x 72)
+    mic(34, y + 34, 24, 10, v, whole, &s_c_mic);
+    d.setFont(&fonts::Font0);
+    line_box(0, y + 72, 68, 8, state_line(v), THEME_MUTED);
+    if (!whole) return;
     int ty = y;
     if (v->user[0]) {
         d.setFont(&fonts::Font0); d.setTextColor(THEME_MUTED, THEME_BG);
@@ -161,74 +233,81 @@ static void draw(void)
 
 // ---- the panel (320 x 210 under the system bar, 320 x 240 without it) -------------------------------------------
 static int s_ph = 210;
-static const int CX = 92, R = 56;
+static const int CX = 92, R = 56, GROW = 20;
+static uint32_t s_l_key = 0, s_l_seq = 0;
+static unsigned short s_l_mic = 0;
+static xz_state_t s_l_state = XZ_SETUP;
+static bool s_l_valid = false;
 
-static void lg_paint(void *)
+static void lg_paint(bool whole)
 {
     const xz_view_t *v = xz_view();
     const int H = s_ph;
-    d.fillRect(0, 0, 320, H, THEME_BG);
     if (s_editing || v->state == XZ_SETUP || v->state == XZ_ACTIVATE) {
-        lg::panel(10, 10, 300, H - 20);
-        d.setTextDatum(top_center);
-        if (v->state == XZ_ACTIVATE && !s_editing) {
-            lg::font(0); d.setTextColor(THEME_FG, lg::card()); d.drawString(tr(T_BIND), 160, 40);
-            lg::font(3); d.setTextColor(ACC, lg::card()); d.drawString(v->code, 160, 80);
-            lg::font(4); d.setTextColor(THEME_MUTED, lg::card()); d.drawString(v->status, 160, 140);
-        } else {
-            lg::font(1); d.setTextColor(ACC, lg::card()); d.drawString(tr(T_SETUP), 160, 30);
-            lg::font(0); d.setTextColor(THEME_FG, lg::card()); d.drawString(tr(T_PRESET), 160, 70);
-            d.setTextColor(THEME_MUTED, lg::card()); d.drawString(tr(T_TYPE), 160, 96);
-            char shown[100]; snprintf(shown, sizeof shown, "%s_", s_edit);
-            char fitted[100]; lg::fit(fitted, sizeof fitted, shown, 270);
-            d.setTextColor(THEME_FG, lg::card()); d.drawString(fitted, 160, 130);
+        if (whole) {
+            d.fillRect(0, 0, 320, H, THEME_BG);
+            lg::panel(10, 10, 300, H - 20);
+            d.setTextDatum(top_center);
+            if (v->state == XZ_ACTIVATE && !s_editing) {
+                lg::font(0); d.setTextColor(THEME_FG, lg::card()); d.drawString(tr(T_BIND), 160, 40);
+                lg::font(3); d.setTextColor(ACC, lg::card()); d.drawString(v->code, 160, 80);
+                lg::font(4); d.setTextColor(THEME_MUTED, lg::card()); d.drawString(v->status, 160, 140);
+            } else {
+                lg::font(1); d.setTextColor(ACC, lg::card()); d.drawString(tr(T_SETUP), 160, 30);
+                lg::font(0); d.setTextColor(THEME_FG, lg::card()); d.drawString(tr(T_PRESET), 160, 70);
+                d.setTextColor(THEME_MUTED, lg::card()); d.drawString(tr(T_TYPE), 160, 96);
+                char shown[100]; snprintf(shown, sizeof shown, "%s_", s_edit);
+                char fitted[100]; lg::fit(fitted, sizeof fitted, shown, 270);
+                d.setTextColor(THEME_FG, lg::card()); d.drawString(fitted, 160, 130);
+            }
+            d.setTextDatum(top_left);
         }
-        d.setTextDatum(top_left);
         lg::field(0, 0, 320, H);                             // a tap on the setup card = preset 1
         return;
     }
     const int cy = H / 2;
-    const unsigned short c = v->state == XZ_RECORDING ? REC : v->state == XZ_PLAYING ? OK : ACC;
-    if (v->state == XZ_RECORDING) d.fillCircle(CX, cy, R + 4 + v->level * 18 / 100, (unsigned short)(REC & 0x7BEF));
-    d.fillCircle(CX, cy, R, c);
-    d.fillRoundRect(CX - 12, cy - 30, 24, 40, 12, THEME_BG);
-    for (int o = 0; o < 3; o++) {                                                     // the stand: a U under it
-        d.drawLine(CX - 22 + o, cy - 8, CX - 22 + o, cy + 12, THEME_BG);
-        d.drawLine(CX + 22 - o, cy - 8, CX + 22 - o, cy + 12, THEME_BG);
-        d.drawLine(CX - 22, cy + 12 + o, CX + 22, cy + 12 + o, THEME_BG);
+    if (whole) d.fillRect(0, 0, 320, H, THEME_BG);
+    mic(CX, cy, R, GROW, v, whole, &s_l_mic);
+    lg::font(4);
+    line_box(CX - 80, cy - R - GROW - 12, 160, 10, state_line(v), THEME_MUTED);
+    if (whole || v->state != s_l_state) {                    // what a tap does, under the microphone
+        lg::font(0);
+        const char *under = v->state == XZ_RECORDING ? tr(T_TAPSEND) : (v->state == XZ_IDLE || v->state == XZ_ERROR) ? tr(T_TAPTALK) : "";
+        line_box(CX - 80, cy + R + GROW + 2, 160, 16, under, THEME_MUTED);
+        if (v->heap_block) {                                 // heap at the last phase change (the field numbers)
+            char m[40]; snprintf(m, sizeof m, "heap %u/%u KB", (unsigned)(v->heap_free / 1024), (unsigned)(v->heap_block / 1024));
+            lg::font(4); line_box(4, H - 12, 150, 10, m, THEME_MUTED);
+        }
+        s_l_state = v->state;
     }
-    d.fillRect(CX - 2, cy + 18, 4, 12, THEME_BG);
-    lg::font(0); d.setTextDatum(top_center); d.setTextColor(THEME_MUTED, THEME_BG);
-    const char *under = v->state == XZ_RECORDING ? tr(T_TAPSEND) : (v->state == XZ_IDLE || v->state == XZ_ERROR) ? tr(T_TAPTALK) : "";
-    d.drawString(under, CX, cy + R + 8);
-    lg::font(4); d.drawString(state_line(v), CX, cy - R - 16);
-    // the conversation
-    const int X = 172, W = 140;
-    lg::panel(X - 6, 8, W + 10, H - 16);
-    d.setTextDatum(top_left);
-    int y = 16;
-    if (v->user[0]) {
-        lg::font(4); d.setTextColor(THEME_MUTED, lg::card()); d.drawString(tr(T_YOU), X, y); y += 10;
-        lg::font(0); d.setTextColor(THEME_FG, lg::card()); y += 16 * lg::wrap(v->user, X, y, W, 16, 3) + 6;
-    }
-    if (v->reply[0]) {
-        lg::font(0); d.setTextColor(ACC, lg::card());
-        lg::wrap(v->reply, X, y, W, 16, (H - 24 - y) / 16);
-    }
-    if (v->heap_block) {                                     // the prototype's numbers: heap at the last phase
-        char m[40]; snprintf(m, sizeof m, "heap %u/%u", (unsigned)(v->heap_free / 1024), (unsigned)(v->heap_block / 1024));
-        lg::font(4); d.setTextColor(THEME_MUTED, THEME_BG); d.drawString(m, 6, H - 12);
+    if (whole) {                                             // the conversation
+        const int X = 172, W = 140;
+        lg::panel(X - 6, 8, W + 10, H - 16);
+        d.setTextDatum(top_left);
+        int y = 16;
+        if (v->user[0]) {
+            lg::font(4); d.setTextColor(THEME_MUTED, lg::card()); d.drawString(tr(T_YOU), X, y); y += 10;
+            lg::font(0); d.setTextColor(THEME_FG, lg::card()); y += 16 * lg::wrap(v->user, X, y, W, 16, 3) + 6;
+        }
+        if (v->reply[0]) {
+            lg::font(0); d.setTextColor(ACC, lg::card());
+            lg::wrap(v->reply, X, y, W, 16, (H - 24 - y) / 16);
+        }
     }
     lg::field(CX - R - 8, cy - R - 8, 2 * R + 16, 2 * R + 16);   // the microphone itself is the touch target
 }
 
 static void draw_large(void)
 {
-    s_ph = d.height() > 0 && d.height() <= 240 ? d.height() : 210;
+    const int ph = d.height() > 0 && d.height() <= 240 ? d.height() : 210;
+    const xz_view_t *v = xz_view();
+    const uint32_t key = page_key(v);
+    const bool whole = !s_l_valid || key != s_l_key || v->seq == s_l_seq || ph != s_ph;
+    s_ph = ph; s_l_key = key; s_l_seq = v->seq; s_l_valid = true;
     // Straight to the panel, not lg::frame: frame composes through the shared canvas and would take back the
     // 31 KB block this app gave up for the codec.
     nucleo_touch_clear();
-    lg_paint(nullptr);
+    lg_paint(whole);
     nucleo_touch_commit();
 }
 
@@ -291,6 +370,7 @@ static void on_enter(void)
 {
     read_lang();
     s_editing = false; s_edit[0] = 0;
+    s_c_valid = s_l_valid = false;                           // the first frame on each screen is whole
     // The 31 KB off-screen canvas would hold the heap's largest block, and the Opus encoder needs 24.6 KB in one
     // piece: draw straight to the panel instead (like ANIMA), every draw repaints what it shows.
     nucleo_app_release_buffers();
