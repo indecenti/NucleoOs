@@ -30,7 +30,7 @@
 #include <string.h>
 #include "cJSON.h"
 
-static const unsigned short ACC = 0x2E7F, REC = 0xF8A6, OK = 0x47EA, WHITE = 0xFFFF;
+static const unsigned short ACC = 0x2E7F, REC = 0xF8A6, OK = 0x47EA, GLYPH = 0xFFFF;
 
 // ---- language (settings.json -> ui.language; nucleo_tr5 is not in the ABI) --------------------------------------
 static int s_lang = 1;                                      // 0 it, 1 en, 2 es, 3 fr, 4 de
@@ -152,16 +152,16 @@ static void ring(int cx, int cy, int ri, int ro, unsigned short col, bool lower 
 static void mic_glyph(int cx, int cy, int r, unsigned short disc)
 {
     const int cw = r * 9 / 20 | 1, ch = r * 4 / 5, top = cy - r * 11 / 20;       // the capsule
-    d.fillRoundRect(cx - cw / 2, top, cw, ch, cw / 2, WHITE);
+    d.fillRoundRect(cx - cw / 2, top, cw, ch, cw / 2, GLYPH);
     const int slot = r > 30 ? 2 : 1;
     for (int i = 1; i <= 3; i++) d.fillRect(cx - cw / 4, top + ch * i / 5, cw / 2 + 1, slot, disc);
     const int hy = top + ch / 2, hr = r * 9 / 20, ht = r > 30 ? 3 : 2;          // the holder: a lower half ring
-    ring(cx, hy, hr - ht, hr, WHITE, true);
-    d.fillRect(cx - hr, hy - r / 10, ht, r / 10, WHITE);                        // its two arms up to mid-capsule
-    d.fillRect(cx + hr - ht + 1, hy - r / 10, ht, r / 10, WHITE);
+    ring(cx, hy, hr - ht, hr, GLYPH, true);
+    d.fillRect(cx - hr, hy - r / 10, ht, r / 10, GLYPH);                        // its two arms up to mid-capsule
+    d.fillRect(cx + hr - ht + 1, hy - r / 10, ht, r / 10, GLYPH);
     const int sy = hy + hr, sh = r / 5;                                         // stem and foot
-    d.fillRect(cx - ht / 2, sy, ht, sh, WHITE);
-    d.fillRoundRect(cx - r * 3 / 10, sy + sh, r * 3 / 5, ht + 1, ht / 2 + 1, WHITE);
+    d.fillRect(cx - ht / 2, sy, ht, sh, GLYPH);
+    d.fillRoundRect(cx - r * 3 / 10, sy + sh, r * 3 / 5, ht + 1, ht / 2 + 1, GLYPH);
 }
 
 // The microphone: the disc and its glyph only when its colour changes (or on a whole repaint); the meter ring around
