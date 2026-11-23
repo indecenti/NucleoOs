@@ -41,6 +41,8 @@ extern "C" const char *nucleo_app_active_id(void) { return s_app ? s_app->id : n
 extern "C" void nucleo_app_set_tab_handler(void (*fn)(void)) { s_tab = fn; }
 extern "C" void nucleo_app_set_back_handler(bool (*fn)(int)) { s_back = fn; }
 extern "C" void nucleo_app_set_poll_handler(bool (*fn)(void)) { s_poll = fn; }
+static bool (*s_typing)(void);
+extern "C" void nucleo_app_set_typing_handler(bool (*fn)(void)) { s_typing = fn; }
 extern "C" void nucleo_app_set_ptt_handler(void (*)(bool)) {}
 extern "C" void nucleo_app_set_direct_draw(bool) {}
 extern "C" void nucleo_app_set_fullscreen(bool on) { s_fullscreen = on; }
@@ -83,6 +85,7 @@ extern "C" void nucleo_touch_add_scroll(int x, int y, int w, int h, int, int, ch
     s_t[s_tn++] = { x, y, w, h, 0, 0, true }; s_tsn++;
 }
 extern "C" void nucleo_touch_add_pad(int x, int y, int w, int h, int step) { nucleo_touch_add_scroll(x, y, w, h, step, 0, 0, 0, 0); }
+extern "C" void nucleo_touch_add_slider(int x, int y, int w, int h) { nucleo_touch_add(x, y, w, h, NK_CHAR, NUCLEO_TOUCH_FIELD); }
 extern "C" void nucleo_touch_commit(void) { memcpy(s_tc, s_t, sizeof s_t); s_tcn = s_tn; }
 
 // ---- driving the app -----------------------------------------------------------------------------------------
@@ -90,6 +93,7 @@ static void tick(int n) { while (n-- > 0) { g_host.now_us += 200000; if (s_app &
 static void key(int k, char ch = 0)
 {
     g_host.now_us += 400000;
+    if (s_typing && s_typing()) { nucleo_key_t nk = { k, ch }; nucleo_kbd_legend_typed(&nk); k = nk.key; }   // as the run loop does
     if ((k == NK_BACK || k == NK_LEFT) && s_back && s_back(k)) return;
     if (k == NK_TAB && s_tab) { s_tab(); return; }
     if (s_app && s_app->on_key) s_app->on_key(k, ch);

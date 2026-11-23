@@ -484,6 +484,7 @@ static bool on_poll(void)
     return changed;
 }
 
+static bool typing_now(void) { return s_editing || xz_view()->state == XZ_SETUP; }   // server URL/host: ; . , / are characters
 static void on_enter(void)
 {
     read_lang();
@@ -495,6 +496,7 @@ static void on_enter(void)
     nucleo_app_set_direct_draw(true);
     xz_init(NUCLEO_SD_MOUNT "/data/xiaozhi", LOCALE[s_lang]);
     nucleo_app_set_back_handler(on_back);
+    nucleo_app_set_typing_handler(typing_now);
     nucleo_app_set_ptt_handler(on_ptt);
     nucleo_app_set_poll_handler(on_poll);
     nucleo_app_set_hint(tr(T_HINT));

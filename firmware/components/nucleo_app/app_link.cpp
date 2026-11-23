@@ -723,6 +723,11 @@ static void on_tick(void) {
     if (dyn) nucleo_app_request_draw();
 }
 
+static bool typing_now(void) {                // the CMD tab's input line (while no command waits for confirmation)
+    if (s_tab != T_CMD) return false;
+    char p[8], f[8];
+    return !nlink_svc_cmd_pending(p, sizeof p, f, sizeof f);
+}
 static void on_enter(void) {
     s_en = !nucleo_i18n_is_it();          // follow the system language (English floor for es/fr/de)
     s_tab = T_SEND; s_sel = -1; s_clen = 0; s_cbuf[0] = 0;
@@ -730,6 +735,7 @@ static void on_enter(void) {
     if (!s_ent) s_ent = (Ent *)calloc(ENT_MAX, sizeof *s_ent);   // heap-resident only while open; ZERO RAM at boot
     nucleo_app_set_tab_handler(page_tab);     // TAB pages the tabs (the "tab system")
     nucleo_app_set_back_handler(on_back);
+    nucleo_app_set_typing_handler(typing_now);
     if (!nlink_svc_start()) { toast("ESP-NOW non avviato", "ESP-NOW failed"); return; }
     nlink_svc_listen(NLINK_PROTO_NUCLEO);     // always ready to receive
     nlink_svc_discover(NLINK_PROTO_NUCLEO);

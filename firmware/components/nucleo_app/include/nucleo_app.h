@@ -122,6 +122,12 @@ void nucleo_app_set_ptt_handler(void (*fn)(bool on));
 // duplicate-frame redraws ANTI-FLICKER.md #4 warns about. Set in on_enter; auto-cleared on open/close.
 void nucleo_app_set_poll_handler(bool (*fn)(void));
 
+// An app with a text field registers this (in on_enter; auto-cleared on open/close): fn() returns true while a
+// text field has the focus. Then the bare keys ; . , / reach on_key as the characters they print (NK_CHAR), not as
+// arrows, so a host "192.168.1.5", a file name "a.txt" or "ls ./x" can be typed; Fn/Ctrl + the key is still the
+// arrow. Without it those four keys are arrows (and "," closes the app).
+void nucleo_app_set_typing_handler(bool (*fn)(void));
+
 // An app that has released the shared canvas (ANIMA frees it for its index + online worker) pins
 // itself to DIRECT drawing: the run loop then never lazily re-acquires the 32 KB canvas, which
 // would otherwise eat the very RAM the app freed. The app's on_draw must self-clear only the

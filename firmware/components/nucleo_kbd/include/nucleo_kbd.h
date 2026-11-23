@@ -56,6 +56,17 @@ bool nucleo_kbd_shift_latched(void);      // peek (to show an "Aa" badge)
 bool nucleo_kbd_take_shift_tap(void);     // consume: true = shift the character being typed
 char nucleo_kbd_shifted(char c);          // the layout's shifted form of an unshifted char ('a'->'A', '1'->'!')
 
+// The keys printed ; . , / arrive as the four arrows (ch = the printed char). While a text field is being
+// edited they must be TYPED: a bare press (no Fn/Ctrl) becomes {NK_CHAR, ch}; Fn/Ctrl+key stays the arrow.
+// The run loop applies this for apps that register nucleo_app_set_typing_handler(); returns true if converted.
+static inline bool nucleo_kbd_legend_typed(nucleo_key_t *k)
+{
+    const char lg = k->key == NK_UP ? ';' : k->key == NK_DOWN ? '.' : k->key == NK_LEFT ? ',' : k->key == NK_RIGHT ? '/' : 0;
+    if (!lg || k->ch != lg || (nucleo_kbd_mods() & (NK_MOD_FN | NK_MOD_CTRL))) return false;
+    k->key = NK_CHAR;
+    return true;
+}
+
 // The ADV's system I2C bus (the TCA8418 keyboard owns the 8/9 master). Returned as void*
 // to avoid forcing the i2c driver header on every includer — cast to i2c_master_bus_handle_t.
 // NULL on the original Cardputer (GPIO-matrix keyboard) or before init. Shared with the

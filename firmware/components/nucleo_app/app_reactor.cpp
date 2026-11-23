@@ -1030,6 +1030,7 @@ static bool poll(void)
     s_anim++;
     return true;
 }
+static bool typing_now(void) { return s_screen == ST_NAME; }   // the high-score name: ; . , / are characters there
 static void on_enter(void)
 {
     game_text_open("reactor");
@@ -1040,6 +1041,7 @@ static void on_enter(void)
     s_screen = ST_MENU; s_anim = 0; s_menu.sel = 0; s_menu.pos = 0; s_newrank = -1;
     s_now = s_last = s_frame = esp_timer_get_time() / 1000;
     nucleo_app_set_back_handler(on_back);
+    nucleo_app_set_typing_handler(typing_now);
     nucleo_app_set_poll_handler(poll);
     set_hint();
     sfx(9);                                                        // opening sting — also confirms audio is alive

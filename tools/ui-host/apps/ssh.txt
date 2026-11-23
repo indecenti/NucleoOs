@@ -4,6 +4,8 @@
 @sd data/ssh/keys/id_rsa -----BEGIN OPENSSH PRIVATE KEY----- (demo)
 form
 filled    t:server.lan ENTER t:user
-keyauth   D D R
+keyauth   TAB TAB R
+# bare ; . , / are typed in a text field (they are arrows only with Fn/Ctrl): host 192.168.1.5, user a.b, then "," in it
+dots      t:192 D t:168 D t:1 D t:5 ENTER t:a D t:b L t:c
 # shell: a fictional connected session (host-only seed via the c:~ sentinel) to exercise the panel terminal.
 shell     c:~

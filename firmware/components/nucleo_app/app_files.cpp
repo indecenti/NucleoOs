@@ -221,6 +221,7 @@ static void update_hint(void);      // forward
 static bool files_on_back(int key); // forward (LEFT/BACK handler, defined after on_key)
 static void files_on_tab(void);     // forward (TAB = the quick-panel, defined with the two-screen code)
 
+static bool typing_now(void) { return s_input_mode || (s_tab_open && s_tab_page == 1); }   // rename / new folder / search: "a.txt" is typeable
 static void enter(void)
 {
     nucleo_app_set_direct_draw(true);
@@ -231,6 +232,7 @@ static void enter(void)
     strcpy(s_path, "/"); scan(); sd_refresh();
     if (s_hist) hist_load();
     nucleo_app_set_back_handler(files_on_back);
+    nucleo_app_set_typing_handler(typing_now);
     nucleo_app_set_tab_handler(files_on_tab);
     update_hint();
 }

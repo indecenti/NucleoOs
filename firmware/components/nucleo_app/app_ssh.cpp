@@ -353,6 +353,15 @@ static void do_complete() {
 }
 
 // ── keys ──
+// ; . , / are typed (host 192.168.1.5, nodered.my.host, ./script, passwords) while a text field has the focus: the
+// run loop turns the bare keys into characters via typing_now() (nucleo_app_set_typing_handler); Fn/Ctrl+key = arrow.
+static char *form_text(int *cap) {               // the text buffer the current form field edits (null = not a text field)
+    if (s_field == 0) { *cap = sizeof s_host; return s_host; }
+    if (s_field == 1) { *cap = sizeof s_user; return s_user; }
+    if (s_auth == AUTH_PW && s_field == 3) { *cap = sizeof s_pass; return s_pass; }
+    if (s_auth == AUTH_KEY && s_field == 4) { *cap = sizeof s_passph; return s_passph; }
+    *cap = 0; return nullptr;
+}
 static void form_key(int key, char ch) {
     int nf = form_nfields();
     if (nucleo_touch_is_row(key, ch)) {                 // panel: tap a field to edit it; tap past the last = Connect
@@ -363,12 +372,7 @@ static void form_key(int key, char ch) {
         s_dirty = true; nucleo_app_request_draw(); return;
     }
     // resolve the editable target for the current field
-    char *txt = nullptr; int cap = 0;
-    if (s_field == 0) { txt = s_host; cap = sizeof s_host; }
-    else if (s_field == 1) { txt = s_user; cap = sizeof s_user; }
-    else if (s_field == 2) { /* auth toggle, no text */ }
-    else if (s_auth == AUTH_PW && s_field == 3) { txt = s_pass; cap = sizeof s_pass; }
-    else if (s_auth == AUTH_KEY && s_field == 4) { txt = s_passph; cap = sizeof s_passph; }
+    int cap = 0; char *txt = form_text(&cap);
     if (key == NK_DOWN || key == NK_TAB) { s_field = (s_field + 1) % nf; }
     else if (key == NK_UP) { s_field = (s_field + nf - 1) % nf; }
     else if (key == NK_RIGHT) {
@@ -445,11 +449,16 @@ static void on_key(int key, char ch) {
     if (key == NK_DOWN)  { if (s_histPos >= 0 && s_histPos < s_histN - 1) { s_histPos++; line_set(s_hist[s_histPos]); } else { s_histPos = -1; line_clear(); } s_dirty = true; nucleo_app_request_draw(); return; }
     if (key == NK_RIGHT) { if (s_cur_x < s_linelen) s_cur_x++; s_dirty = true; nucleo_app_request_draw(); return; }
 }
+static bool typing_now() {
+    if (s_manual) return false;
+    if (s_state == ST_SHELL) return true;
+    int cap = 0; return s_state == ST_FORM && form_text(&cap) != nullptr;
+}
 static bool back_handler(int key) {
     if (s_manual) { s_manual = false; s_dirty = true; nucleo_app_request_draw(); return true; }
     if (s_state == ST_SHELL) {
         if (nucleo_kbd_mods() & NK_MOD_FN) return false;        // Fn+Esc / Fn+Left → close the app
-        if (key == NK_LEFT) { if (s_cur_x > 0) s_cur_x--; s_dirty = true; nucleo_app_request_draw(); return true; }
+        if (key == NK_LEFT) { if (s_cur_x > 0) s_cur_x--; s_dirty = true; nucleo_app_request_draw(); return true; }   // Ctrl+, (a bare "," is typed)
         line_clear(); s_dirty = true; nucleo_app_request_draw(); return true;   // Esc clears the line
     }
     if (s_state == ST_FORM && key == NK_LEFT) {                 // Left in the form = toggle/cycle (mirror of Right)
@@ -480,12 +489,12 @@ static const char *form_field(int i, char *val, int cap) {
     int n = strlen(pw), k = 0; for (; k < n && k < cap - 1; k++) val[k] = '*'; val[k] = 0;
     return lab;
 }
-static const char *const HELP_IT[] = { "Invio  esegui comando", "Su/Giu  cronologia", "Tab  completa (cmd+storia)",
-    "Sin/Des  cursore", "Esc  cancella riga", "Fn+Su/Giu  scorri output", "Fn+Z  zoom font",
+static const char *const HELP_IT[] = { "Invio  esegui comando", "Ctrl+Su/Giu  cronologia", "Tab  completa (cmd+storia)",
+    "Ctrl+Sin/Des  cursore", "Esc  cancella riga", "Fn+Su/Giu  scorri output", "Fn+Z  zoom font",
     "Fn+H  guida", "Fn+Esc  esci", "Auth: Password o Chiave", "Chiavi in /sd/data/ssh/keys",
     "host key fidata al 1o uso", "(no editor full-screen)", nullptr };
-static const char *const HELP_EN[] = { "Enter  run command", "Up/Down  history", "Tab  complete (cmd+hist)",
-    "Left/Right  cursor", "Esc  clear line", "Fn+Up/Down  scroll output", "Fn+Z  zoom font",
+static const char *const HELP_EN[] = { "Enter  run command", "Ctrl+Up/Down  history", "Tab  complete (cmd+hist)",
+    "Ctrl+Left/Right  cursor", "Esc  clear line", "Fn+Up/Down  scroll output", "Fn+Z  zoom font",
     "Fn+H  help", "Fn+Esc  quit", "Auth: Password or Key", "Keys in /sd/data/ssh/keys",
     "host key trusted on 1st use", "(no full-screen editors)", nullptr };
 static void draw_form() {
@@ -731,6 +740,7 @@ static void on_enter() {
     scan_keys(); hist_load();
     nucleo_app_set_hint(s_en ? "arrows/Tab  </>auth/key  Enter go  Fn+H" : "frecce/Tab  </>auth  invio vai  Fn+H");
     nucleo_app_set_back_handler(back_handler);
+    nucleo_app_set_typing_handler(typing_now);
     nucleo_app_set_tab_handler(ssh_tab);
     nucleo_app_request_draw();
 }

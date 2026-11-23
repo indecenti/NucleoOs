@@ -110,6 +110,17 @@ static void cc_scene(std::initializer_list<int> keys)
     for (int i = 0; i < 40 && launcher_render_control_center_animating(); i++) launcher_render_control_center();
 }
 
+// A finger dragging the focused brightness knob: one full paint, then only the incremental repaints the device makes
+// per step (large: direct to the panel). Whatever a move leaves behind (a bitten focus ring, a stray knob) stays.
+static void cc_drag_scene(void)
+{
+    cc_scene({ NK_DOWN });
+    for (int k : { NK_RIGHT, NK_RIGHT, NK_LEFT, NK_LEFT, NK_LEFT, NK_LEFT, NK_RIGHT, NK_LEFT, NK_LEFT }) {
+        launcher_render_control_center_key(k, 0);
+        launcher_render_control_center();
+    }
+}
+
 static int item_index(const char *id)   // the visible-list index of an item of the current menu
 {
     for (int i = 0; i < launcher_visible_count(); i++) if (!strcmp(launcher_nth_visible(i)->id, id)) return i;
@@ -175,6 +186,7 @@ static const Scene SCENES[] = {
     { "companion-find",  [] { type("cal"); launcher_render_companion(&d); } },
     { "cc",          [] { cc_scene({}); } },
     { "cc-bright",   [] { cc_scene({ NK_DOWN }); } },                              // brightness card centred
+    { "cc-drag",     [] { cc_drag_scene(); } },                                    // the knob moved step by step, incremental
     { "cc-xbright",  [] { cc_scene({ NK_DOWN, NK_DOWN }); } },                     // ADV: the second screen's brightness
     { "cc-volume",   [] { cc_scene({ NK_DOWN, NK_DOWN, NK_DOWN }); } },            // scrolled to mid-column
     { "cc-web",      [] { cc_scene({ NK_DOWN, NK_DOWN, NK_DOWN, NK_DOWN, NK_RIGHT }); } },  // bottom: IP + pairing PIN
@@ -191,6 +203,7 @@ extern "C" void nucleo_app_register(const nucleo_app_def_t *a) { if (s_live_n < 
 extern "C" void nucleo_app_set_tab_handler(void (*fn)(void)) { s_tab = fn; }
 extern "C" void nucleo_app_set_back_handler(bool (*fn)(int)) { s_back = fn; }
 extern "C" unsigned int nucleo_app_repaint_gen(void) { return s_gen; }
+extern "C" void nucleo_app_set_typing_handler(bool (*)(void)) {}   // the gallery (gallery.cpp) drives key conversion
 extern "C" bool nucleo_app_launch_id(const char *) { return false; }
 extern "C" void nucleo_app_set_dynamic(const nucleo_app_def_t *defs, int n) {   // store apps: append to the live table
     for (int i = 0; i < n && s_live_n < 8; i++) s_live[s_live_n++] = defs[i];
@@ -528,7 +541,7 @@ static const Scene *find_scene(const char *surface, const char *scene)
 
 static const char *const LARGE_SCENES[] = { "home", "home-row3", "home-end", "home-minute", "games-drag", "cat-office", "cat-media", "cat-games", "cat-games-end", "search-set", "search-none",
                                               "menu", "menu-store", "menu-info", "menu-confirm",
-                                              "cc", "cc-xbright", "cc-volume", "cc-web", "cc-restart" };
+                                              "cc", "cc-drag", "cc-xbright", "cc-volume", "cc-web", "cc-restart" };
 
 static void list_all(void)
 {

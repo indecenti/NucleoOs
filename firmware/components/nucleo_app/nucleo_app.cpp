@@ -678,6 +678,7 @@ static bool s_torch = false;               // global flashlight overlay active (
 static int  s_torch_prev_bright = 100;     // brightness to restore when the torch overlay closes
 static void (*s_app_tab)(void) = nullptr;  // foreground app's TAB handler (else Control Center)
 static bool (*s_app_back)(int key) = nullptr; // foreground app's Back/Esc/Left interceptor (gets the key; else close_app)
+static bool (*s_app_typing)(void) = nullptr;  // foreground app's "a text field has the focus" query (; . , / are typed)
 static bool s_app_direct = false;          // app freed the shared canvas -> draw direct, don't re-acquire
 static bool s_cc_canvas_borrowed = false;  // CC re-acquired the canvas from a direct-draw app; release on close
 static bool s_app_fullscreen = false;      // app reclaims the hint-bar rows: blit clipped to H, footer not drawn
@@ -911,6 +912,7 @@ static void open_app_def(const nucleo_app_def_t *def)
         return;
     }
     s_app_tab = nullptr;                        // each app starts without a TAB claim; on_enter may set one
+    s_app_typing = nullptr;
     s_app_back = nullptr; s_app_direct = false; s_app_fullscreen = false; s_app_keep_awake = false; // ...nor a Back claim / direct-draw / fullscreen pin; on_enter may set them
     s_app_ptt = nullptr;                        // ...nor a GO-hold (PTT) claim; the recorder sets it on_enter
     s_app_poll = nullptr;                       // ...nor a per-loop data poll; a live app (mic spectrum) sets it on_enter
@@ -1033,7 +1035,7 @@ static void launch_by_id(const char *id)
     s_active = -1;                                        // nothing in the foreground while a module may be swapped
     // Every hook the outgoing app set dies with it HERE, not only if the incoming one opens: loading a native
     // app may unmap the outgoing one's code, and a hook left behind would jump into it.
-    s_app_tab = nullptr; s_app_back = nullptr; s_app_poll = nullptr; s_app_ptt = nullptr; s_g0_app_ptt = nullptr;
+    s_app_tab = nullptr; s_app_back = nullptr; s_app_typing = nullptr; s_app_poll = nullptr; s_app_ptt = nullptr; s_g0_app_ptt = nullptr;
     if (is_dynamic(idx)) nucleo_store_app_prepare(&s_apps[idx]);   // a native app: load its module now
     s_active = idx; s_stub = nullptr;
     open_app_def(&s_apps[idx]);
@@ -1141,7 +1143,7 @@ static void close_app(void)
     // in nucleo_screen() covers the slower cases.
     for (int i = 0; i < 6 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(25));
     s_app_tab = nullptr;                        // app gone -> TAB returns to the Control Center
-    s_app_back = nullptr; s_app_direct = false; // ...Back returns to close, drawing back to buffered
+    s_app_back = nullptr; s_app_typing = nullptr; s_app_direct = false; // ...Back returns to close, drawing back to buffered
     if (s_app_fullscreen) { s_app_fullscreen = false; s_hint_dirty = true; } // restore the footer on app close
     s_app_keep_awake = false;
     nucleo_touch_raw(false);                    // ...the panel's touch back to targets and gestures
@@ -1208,6 +1210,7 @@ void nucleo_app_set_tab_handler(void (*fn)(void)) { s_app_tab = fn; }
 void nucleo_app_set_back_handler(bool (*fn)(int key)) { s_app_back = fn; }
 void nucleo_app_set_ptt_handler(void (*fn)(bool on)) { s_app_ptt = fn; }
 void nucleo_app_set_poll_handler(bool (*fn)(void)) { s_app_poll = fn; }
+void nucleo_app_set_typing_handler(bool (*fn)(void)) { s_app_typing = fn; }
 void nucleo_app_set_direct_draw(bool on)
 {
     s_app_direct = on;
@@ -2419,6 +2422,9 @@ void nucleo_app_run(void)
         static nucleo_key_t s_held = { NK_NONE, 0 };
         nucleo_key_t nk = s_held.key != NK_NONE ? s_held : nucleo_kbd_read();
         s_held = nucleo_key_t{ NK_NONE, 0 };
+        // A text field has the focus: bare ; . , / are the characters they print, not arrows (nor the Left that
+        // closes the app). Fn/Ctrl + the key stays the arrow.
+        if (s_active >= 0 && s_app_typing && !s_gamefront && s_app_typing()) nucleo_kbd_legend_typed(&nk);
         if (nk.key != NK_NONE) {
             last_act = now;                      // any key counts as activity (resets the idle screen-off timer)
             // Capture: Fn+P is an OS-wide screenshot -> a real full-frame image in /data/Screenshots
