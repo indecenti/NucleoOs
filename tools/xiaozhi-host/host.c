@@ -146,6 +146,11 @@ int main(int argc, char **argv)
     DeleteFileA("build/xiaozhi-host/xz/config.json");
     int fails = 0;
 #define CHECK(c, what) do { if (c) printf("ok   %s\n", what); else { printf("FAIL %s\n", what); fails++; } } while (0)
+    { char f[128];   // the service's UTF-8 as the screens' ASCII
+      xz_text_fold("\xC3\xA8 perch\xC3\xA9 citt\xC3\xA0, \xC3\x88 cos\xC3\xAC: \xE2\x80\x9Cs\xC3\xAC\xE2\x80\x9D \xE2\x80\x94 Espa\xC3\xB1" "a \xC3\xA7" "a \xF0\x9F\x98\x80!", f, sizeof f);
+      printf("  fold: %s\n", f);
+      CHECK(!strcmp(f, "e' perche' citta', E' cosi': \"si'\" - Espana ca !"), "accents folded the Italian way");
+      xz_text_fold("citt\xC3\xA0", f, 6); CHECK(!strcmp(f, "citta"), "fold never overruns its buffer"); }
     xz_init("build/xiaozhi-host/xz", "en-US");
     CHECK(xz_view()->state == XZ_SETUP, "no configuration: setup");
     char url[96]; snprintf(url, sizeof url, "http://127.0.0.1:%d/xiaozhi/ota/", port);

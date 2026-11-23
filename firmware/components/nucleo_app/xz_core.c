@@ -536,6 +536,47 @@ static void encode_step(void)
     }
 }
 
+// The screens' fonts are ASCII. The service's text is UTF-8 (Italian: e', perche', citta'), so it is folded as it
+// arrives: an accented vowel keeps its accent as the apostrophe Italian writes without an accented keyboard (e', a',
+// o'; E'), other Latin-1 letters lose their mark (n, c, u), typographic quotes, dashes and the ellipsis become
+// ASCII, anything else (emoji, CJK) is dropped. Like the system's app_ui_ascii_fold, which ABI 10 does not export
+// (and which drops the accent). dst and src may not overlap; dst always ends with 0.
+void xz_text_fold(const char *src, char *dst, int cap)
+{
+    int o = 0;
+    const unsigned char *s = (const unsigned char *)src;
+    while (*s && o < cap - 1) {
+        const unsigned char c = *s;
+        if (c < 0x80) { dst[o++] = (char)c; s++; continue; }
+        if (c == 0xC3 && s[1] >= 0x80 && s[1] <= 0xBF) {      // Latin-1 supplement: U+00C0..U+00FF
+            const unsigned char d2 = s[1];
+            char r = 0; bool mark = false;
+            static const char UP[] = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYTs";   // U+00C0..U+00DF
+            static const char LO[] = "aaaaaaaceeeeiiiidnooooo/ouuuuyty";   // U+00E0..U+00FF
+            if (d2 < 0xA0) r = UP[d2 - 0x80]; else r = LO[d2 - 0xA0];
+            // grave and acute vowels: the apostrophe carries the accent (\xC3\xA0 a, \xA8/\xA9 e, \xAC/\xAD i, ...)
+            const unsigned char lo = d2 >= 0xA0 ? d2 - 0x20 : d2;
+            mark = lo == 0x80 || lo == 0x81 || lo == 0x88 || lo == 0x89 || lo == 0x8C || lo == 0x8D ||
+                   lo == 0x92 || lo == 0x93 || lo == 0x99 || lo == 0x9A;
+            if (d2 == 0x9F) { r = 's'; }                       // sharp s
+            if (r) dst[o++] = r;
+            if (mark && o < cap - 1) dst[o++] = '\'';
+            s += 2; continue;
+        }
+        if (c == 0xE2 && s[1] == 0x80 && s[2]) {               // general punctuation
+            const unsigned char d3 = s[2];
+            if (d3 == 0x98 || d3 == 0x99) dst[o++] = '\'';
+            else if (d3 == 0x9C || d3 == 0x9D) dst[o++] = '"';
+            else if (d3 == 0x93 || d3 == 0x94) dst[o++] = '-';
+            else if (d3 == 0xA6 && o < cap - 3) { dst[o++] = '.'; dst[o++] = '.'; dst[o++] = '.'; }
+            s += 3; continue;
+        }
+        s++;
+        while ((*s & 0xC0) == 0x80) s++;                       // any other codepoint: skipped whole
+    }
+    dst[o] = 0;
+}
+
 static void handle_json(const char *txt)
 {
     cJSON *o = cJSON_Parse(txt);
@@ -544,6 +585,8 @@ static void handle_json(const char *txt)
     const char *text = cJSON_GetStringValue(cJSON_GetObjectItem(o, "text"));
     const char *state = cJSON_GetStringValue(cJSON_GetObjectItem(o, "state"));
     if (!type) type = "";
+    char folded[512];
+    if (text) { xz_text_fold(text, folded, sizeof folded); text = folded; }
     if (!strcmp(type, "stt") && text) snprintf(V.user, sizeof V.user, "%s", text);
     else if (!strcmp(type, "llm")) {
         const char *em = cJSON_GetStringValue(cJSON_GetObjectItem(o, "emotion"));

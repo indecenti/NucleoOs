@@ -35,8 +35,8 @@ extern "C" void ui_host_scene(int n)
         set(XZ_RECORDING, "listening"); V.rec_ms = 2300; V.level = 70; break;
     case 2:                                                  // a conversation: two turns before, this one done
         turn("Che ore sono?", "Sono le dieci e venti di domenica mattina.");
-        turn("Mi dici in una frase cos'e un ornitorinco?",
-             "Un ornitorinco e un mammifero semiacquatico australiano che depone uova e ha un becco simile a quello di un'anatra.");
+        turn("Mi dici in una frase cos'e' un ornitorinco?",
+             "Un ornitorinco e' un mammifero semiacquatico australiano che depone uova e ha un becco simile a quello di un'anatra.");
         snprintf(V.user, sizeof V.user, "E che cosa mangia di solito?");
         snprintf(V.reply, sizeof V.reply, "Mangia soprattutto piccoli animali d'acqua dolce: larve di insetti, gamberetti e "
                  "vermi, che trova frugando sul fondo con il becco a occhi chiusi.");

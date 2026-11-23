@@ -57,6 +57,7 @@ void xz_talk(bool on);                             // push-to-talk: start / stop
 bool xz_replay(void);                              // play the last answer again (false: none, or busy)
 bool xz_set_server(const char *url);               // https://.../ota/ (activation) or ws(s)://... (direct)
 void xz_forget(void);                              // drop the saved connection and identity (new activation)
+void xz_text_fold(const char *src, char *dst, int cap);   // UTF-8 -> the fonts' ASCII (e', citta')
 
 #ifdef __cplusplus
 }
