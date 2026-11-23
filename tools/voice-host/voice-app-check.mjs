@@ -56,6 +56,64 @@ ok(/void nucleo_voice_set_bound_only\(bool on\)/.test(VOICE_C) && /void\s+nucleo
   ok(/nucleo_voice_binding_set\(s_t\[s_sel\]\.name, ""\)/.test(APP), 'deleting a word must drop its binding');
 }
 
+// ---- 2b. GO held in the launcher -> Voice app in Solo, listening by itself ------------------------------------------
+{
+  const gs = NUCLEO.indexOf('if (gpio_get_level(GPIO_NUM_0) == 0 && !s_g0_eat');
+  const ge = NUCLEO.indexOf('// Drain pending reminders.', gs);
+  ok(gs > 0 && ge > gs, 'the GO handler block was not found in nucleo_app.cpp');
+  const go = NUCLEO.slice(gs, ge);
+  const rel = go.indexOf('// released');
+  ok(rel > 0, 'the GO release branch was not found');
+  const hold = go.slice(0, rel), released = go.slice(rel);
+  // GPIO0 is the boot-mode strapping pin: the reboot may only start once GO is RELEASED
+  ok(!/solo_listen_launch\(\)/.test(hold), 'the reboot into the Voice app must never start while GO is still held (GPIO0 strapping pin)');
+  ok(/solo_listen_launch\(\)/.test(released) && /else if \(g0_solo_listen\)/.test(released), 'releasing GO must start the Voice app reboot when a hold could not host the recognizer');
+  ok(/nucleo_app_release_buffers\(\);\s*\n\s*if \(!s_solo_active && !nucleo_voice_ptt_possible\(\)\)/.test(hold),
+    'the hold must ask nucleo_voice_ptt_possible() AFTER giving the canvas back, and never inside a Solo boot');
+  ok(/g0_solo_listen = true;/.test(hold) && /nucleo_voice_ptt\(true\);/.test(hold), 'the hold keeps the in-place voice session when the heap can host it');
+  ok(/nucleo_app_set_brightness\(s_brightness\);/.test(hold.slice(hold.indexOf('g0_solo_listen = true;') - 400, hold.indexOf('g0_solo_listen = true;'))), 'the blank must be undone before asking the user to release GO');
+  const sl = NUCLEO.slice(NUCLEO.indexOf('static void solo_listen_launch(void)'), NUCLEO.indexOf('static void solo_listen_launch(void)') + 700);
+  ok(/nucleo_app_wifi_skip_next_boot\(\);/.test(sl) && /s_solo_listen = SOLO_LISTEN_MAGIC;/.test(sl) && /nucleo_app_solo_request_id\("voice"\);/.test(sl),
+    'solo_listen_launch must skip the radio, set the one-shot mark and request the voice app\'s Solo boot');
+  ok(/if \(esp_reset_reason\(\) != ESP_RST_SW\) \{ s_solo_req = 0; s_solo_listen = 0; return false; \}/.test(NUCLEO), 'a cold or crash boot must clear the listen mark');
+  ok(/nucleo_app_solo_listen_take\(void\)\s*\n\{\s*\n\s*if \(!s_solo_active \|\| s_solo_app != SOLO_APPID \|\| strcmp\(s_solo_id, "voice"\) \|\| s_solo_listen != SOLO_LISTEN_MAGIC\) return false;\s*\n\s*s_solo_listen = 0;/.test(NUCLEO),
+    'the listen mark must be honoured only by the voice app in a Solo boot, and only once');
+  ok(/bool nucleo_voice_ptt_possible\(void\)/.test(VOICE_C) && /VOICE_PTT_MIN_BLOCK \+ up/.test(VOICE_C) && /VOICE_PTT_MIN_FREE \+ up/.test(VOICE_C) && /if \(!nucleo_voice_ptt_possible\(\)\) \{/.test(VOICE_C),
+    'the engine gate and the UI check must be the same function, raised by the task stack while the engine is down');
+  const tk = APP.slice(APP.indexOf('static void tick(void)'), APP.indexOf('// ── Input'));
+  ok(/AL_WAIT[^]*?nucleo_voice_ptt\(true\)[^]*?AL_LISTEN/.test(tk) && /nucleo_voice_ptt\(false\); s_al = AL_MISS/.test(tk) && /nucleo_voice_ptt\(false\); s_al = AL_OFF/.test(tk),
+    'the auto-listen must start a capture, end it after the first word, and give up after the time limit');
+  ok(/AL_LIMIT_US\s+9000000/.test(APP), 'the auto-listen needs a hard time limit');
+  ok(/if \(nucleo_app_solo_listen_take\(\)\) \{[^]*?set_live\(true\);[^]*?s_al = AL_WAIT/.test(APP), 'entering with the listen mark must switch to run mode and arm the auto-listen');
+  ok(/if \(s_al == AL_LISTEN \|\| s_al == AL_TAIL\) nucleo_voice_ptt\(false\);/.test(APP.slice(APP.indexOf('static void exit_app(void)'), APP.indexOf('static void tick(void)'))), 'leaving the app must not leave a capture armed');
+}
+
+// ---- 2c. a spoken word that is not the whole sentence, and ANIMA from another app's Solo boot ----------------------
+{
+  const at = VOICE_C.indexOf('static void semantic_dispatch');
+  const body = VOICE_C.slice(at, VOICE_C.indexOf('\n}\n', at));
+  ok(/for \(int i = 0; i < ntok && !bword; i\+\+\)\s*\n\s*if \(nucleo_voice_binding_get\(tokens\[i\], bapp, sizeof bapp\)\) bword = tokens\[i\];/.test(body),
+    'a bound word must also be found among the recognized words of the sentence ("open anima")');
+  const ms = NUCLEO.slice(NUCLEO.indexOf('static bool maybe_solo_launch(int idx)'), NUCLEO.indexOf('static bool maybe_solo_launch(int idx)') + 1400);
+  ok(/s_solo_active && s_solo_app == SOLO_APPID && !strcmp\(s_apps\[idx\]\.id, "anima"\)\) \{\s*\n\s*launcher_capture_return\(\);\s*\n\s*nucleo_anima_solo_request\(\);/.test(ms)
+     && ms.indexOf('nucleo_anima_solo_request();') < ms.indexOf('if (s_solo_active || idx < 0) return false;'),
+    'ANIMA opened from another app\'s Solo boot must reboot into its own Solo profile (it needs a 26 KB task and the radio), before the "already Solo" early return');
+}
+
+// ---- 2d. the panel is black while the app listens by itself, and always comes back ------------------------------------
+{
+  const al = APP.slice(APP.indexOf('static void al_dark(bool on)'), APP.indexOf('static bool listening_now(void)'));
+  ok(/nucleo_ui_set_brightness\(0\)/.test(al) && /nucleo_app_set_brightness\(nucleo_app_brightness\(\)\)/.test(al),
+    'al_dark must blank with the raw backlight and restore the STORED percent through the app layer (never overwrite the user\'s level)');
+  ok(/al_dark\(true\);/.test(APP.slice(APP.indexOf('static void enter(void)'), APP.indexOf('static void exit_app(void)'))), 'entering with the listen mark must blank the panel');
+  ok(/al_dark\(false\);\s*\n\s*if \(s_al == AL_LISTEN/.test(APP.slice(APP.indexOf('static void exit_app(void)'), APP.indexOf('static void tick(void)'))),
+    'leaving the app must give the backlight back FIRST (an app opened by the word replaces this one)');
+  const tk = APP.slice(APP.indexOf('static void tick(void)'), APP.indexOf('// ── Input'));
+  ok(/s_al_dark && \(s_al == AL_OFF \|\| s_al == AL_MISS\) && !nucleo_voice_ptt_engaged\(\)\) al_dark\(false\)/.test(tk), 'the panel must come back once the engine has finished (done beep played)');
+  ok(/AL_DARK_MAX_US\) al_dark\(false\)/.test(tk) && /AL_DARK_MAX_US\s+20000000/.test(APP), 'the black panel needs a hard time limit');
+  ok(/if \(s_al_dark\) al_dark\(false\);/.test(APP.slice(APP.indexOf('static void on_key(int key, char ch)'), APP.indexOf('static void on_key(int key, char ch)') + 500)), 'any key must bring the panel back');
+}
+
 // ---- 3. languages: TR5 has exactly five string arguments --------------------------------------------------------
 function tr5Calls(src) {
   const out = [];

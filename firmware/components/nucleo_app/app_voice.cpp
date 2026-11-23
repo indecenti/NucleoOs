@@ -70,6 +70,7 @@ extern "C" int nucleo_ws_client_count(void);
 int                nucleo_app_count(void);
 extern "C" bool    nucleo_app_info_at(int i, const char **id, const char **title);
 extern "C" const char *launcher_app_localized_name(const char *id);
+extern "C" bool nucleo_app_solo_listen_take(void);   // nucleo_app.cpp: the one-shot "listen by yourself" mark of this Solo boot
 
 // ── Confidence tiers (mirror apps/voice-manager/www/app.js classify()) ─────────────────────────────────────────
 static const unsigned short TIER_COL[5] = { MUTED, C_DEB, C_DIS, C_BUO, C_OTT };
@@ -168,6 +169,7 @@ static void scan_tpls(void)
             if (len >= (int)sizeof t->name) len = (int)sizeof t->name - 1;
             memcpy(t->name, e->d_name, len);
             nucleo_voice_binding_get(t->name, t->app, sizeof t->app);
+            ESP_LOGW("voice", "word '%s' -> app '%s'", t->name, t->app[0] ? t->app : "(none)");   // visible at the default log level
             for (int k = 0; k < old_n; k++) if (!strcmp(old[k].name, t->name)) { t->tier = old[k].tier; break; }
             s_tpl_count++;
         }
@@ -215,6 +217,36 @@ static void unbind_selected(void)
 }
 
 static void clear_bench(void) { s_have_m = s_have_r = false; s_recog = 0; }
+
+// Hands-free listening. GO held in the launcher on a heap too small for the recognizer reboots into this app's Solo
+// boot with a one-shot mark: the app starts a capture by itself (the engine plays its "ready" chime), ends it shortly
+// after the first recognized word or after a time limit, and the engine then opens the word's app (run mode).
+enum { AL_OFF = 0, AL_WAIT, AL_LISTEN, AL_TAIL, AL_MISS };
+static int     s_al = AL_OFF;
+static int64_t s_al_t = 0;
+static int     s_al_recog0 = 0;
+#define AL_START_US    200000     // a moment for the engine task to be up before the capture starts
+#define AL_DARK_MAX_US 20000000   // safety: the panel is never left black longer than this
+#define AL_TAIL_US     700000     // after the first word: a moment for a second one, then end the capture
+#define AL_LIMIT_US   9000000     // nothing recognized in this long: give up and say so
+
+// While it listens by itself the panel is black, as in a GO-hold session: the ready chime and the done beep are the
+// feedback, and the backlight is the biggest draw. The user's stored level is never touched (only the raw backlight);
+// it comes back when the engine has finished (after the done beep), on any key, when the app is left (an app opened
+// by the word replaces this one: its on_exit runs first) and, as a net, after AL_DARK_MAX_US.
+static bool    s_al_dark = false;
+static int64_t s_al_dark_t = 0;
+static void al_dark(bool on)
+{
+    if (on == s_al_dark) return;
+    s_al_dark = on;
+    if (on) { s_al_dark_t = esp_timer_get_time(); nucleo_ui_set_brightness(0); }
+    else    { nucleo_app_set_brightness(nucleo_app_brightness()); nucleo_app_request_draw(); }   // the stored percent, through the app layer
+}
+static bool listening_now(void) { return nucleo_voice_is_listening() || s_al == AL_WAIT || s_al == AL_LISTEN; }
+static const char *listen_label(void) { return TR5("In ascolto...", "Listening...", "Escuchando...", "Ecoute...", "Hoere zu..."); }
+static const char *say_label(void)    { return TR5("di' la parola", "say the word", "di la palabra", "dites le mot", "sag das Wort"); }
+static const char *miss_label(void)   { return TR5("Nessuna parola. Tieni GO.", "No word heard. Hold GO.", "Sin palabra. Manten GO.", "Rien entendu. Tenez GO.", "Nichts gehoert. GO halten."); }
 
 static void set_tab(int t)
 {
@@ -270,12 +302,22 @@ static void enter(void)
     nucleo_voice_result_t r; s_seen_result = nucleo_voice_last_result(&r) ? r.seq : 0;
     if (!s_t) s_t = (tpl_t *)calloc(MAX_TPLS, sizeof(tpl_t));
     scan_tpls();
+    s_al = AL_OFF;
+    if (nucleo_app_solo_listen_take()) {   // booted by "GO held in the launcher": listen by itself, in run mode
+        s_tab = TAB_TEST;
+        set_live(true);
+        s_al = AL_WAIT; s_al_t = esp_timer_get_time();
+        al_dark(true);
+    }
 }
 
 static void exit_app(void)
 {
     pick_close();
     s_rec_step = RS_IDLE;
+    al_dark(false);
+    if (s_al == AL_LISTEN || s_al == AL_TAIL) nucleo_voice_ptt(false);
+    s_al = AL_OFF;
     nucleo_voice_set_test_mode(false);   // restore normal dispatch for the rest of the OS
     nucleo_voice_set_bound_only(false);
     // Release the app hold. The engine frees its 16 KB UNLESS the user explicitly
@@ -316,6 +358,21 @@ static void tick(void)
         s_seen_result = r.seq; s_r = r; s_have_r = true; changed = true;
     }
     if (changed) nucleo_app_request_draw();
+
+    if (s_al != AL_OFF && s_al != AL_MISS) {
+        const int64_t now = esp_timer_get_time();
+        if (s_al == AL_WAIT) {
+            if (now - s_al_t >= AL_START_US) { s_al_recog0 = s_recog; nucleo_voice_ptt(true); s_al = AL_LISTEN; s_al_t = now; }
+        } else if (s_al == AL_LISTEN) {
+            if (s_recog > s_al_recog0)          { s_al = AL_TAIL; s_al_t = now; }
+            else if (now - s_al_t >= AL_LIMIT_US) { nucleo_voice_ptt(false); s_al = AL_MISS; }
+        } else if (s_al == AL_TAIL && now - s_al_t >= AL_TAIL_US) {
+            nucleo_voice_ptt(false); s_al = AL_OFF;
+        }
+        nucleo_app_request_draw();            // keeps the listening pulse alive
+    }
+    if (s_al_dark && (s_al == AL_OFF || s_al == AL_MISS) && !nucleo_voice_ptt_engaged()) al_dark(false);   // done beep played
+    if (s_al_dark && esp_timer_get_time() - s_al_dark_t >= AL_DARK_MAX_US) al_dark(false);                 // net
 }
 
 // ── Input ─────────────────────────────────────────────────────────────────────
@@ -323,6 +380,8 @@ static const char *pk_label(int i, void *) { return (i >= 0 && i < s_pk_n) ? s_p
 
 static void on_key(int key, char ch)
 {
+    if (s_al == AL_MISS) s_al = AL_OFF;                                           // any key clears "no word heard"
+    if (s_al_dark) al_dark(false);                                                // ...and brings the panel back
     if (key == NK_CHAR && ch >= 1 && ch <= TAB_N) { set_tab(ch - 1); return; }   // panel tab tap: keys 1..4
 
     // The "open with" picker owns every key while it is up.
@@ -604,9 +663,15 @@ static void draw_test(int top_y)
 
     if (!s_have_m) {
         d.fillRoundRect(8, y, W - 16, 64, 8, PANEL);
-        d.setTextSize(2); d.setTextColor(ACC, PANEL); d.setCursor(16, y + 6); d.print(TR5("Tieni GO", "Hold GO", "Manten GO", "Tenez GO", "Halte GO"));
-        d.setTextColor(FG, PANEL); d.setCursor(16, y + 26); d.print(TR5("e parla", "and speak", "y habla", "et parlez", "und sprich"));
-        d.setTextSize(1); d.setTextColor(MUTED, PANEL); d.setCursor(16, y + 48);
+        if (listening_now()) {
+            d.setTextSize(2); d.setTextColor(ACC2, PANEL); d.setCursor(16, y + 6); d.print(listen_label());
+            d.setTextColor(FG, PANEL); d.setCursor(16, y + 26); d.print(say_label());
+        } else {
+            d.setTextSize(2); d.setTextColor(ACC, PANEL); d.setCursor(16, y + 6); d.print(TR5("Tieni GO", "Hold GO", "Manten GO", "Tenez GO", "Halte GO"));
+            d.setTextColor(FG, PANEL); d.setCursor(16, y + 26); d.print(TR5("e parla", "and speak", "y habla", "et parlez", "und sprich"));
+        }
+        d.setTextSize(1); d.setTextColor(s_al == AL_MISS ? ACC2 : MUTED, PANEL); d.setCursor(16, y + 48);
+        if (s_al == AL_MISS) d.print(miss_label()); else
         d.print(s_live ? TR5("Modo ESEGUI: apre le app.", "RUN mode: opens the apps.", "Modo EJECUTA: abre apps.", "Mode EXECUTE: ouvre.", "AUSFUEHREN: oeffnet.")
                        : TR5("Modo prova: NON agisce.", "Test mode: does NOT act.", "Modo prueba: NO actua.", "Mode test: N'agit PAS.", "Testmodus: handelt NICHT."));
         d.setTextColor(DIM, BG); d.setCursor(8, top_y + nucleo_app_content_height() - 14);
@@ -790,11 +855,11 @@ static void lg_tab_test(int yb, int Wd, int Hd)
     d.drawString(ml, bx + bw - mw - 10 + mw / 2, by + 19); d.setTextDatum(top_left);
 
     if (!s_have_m) {
-        lg::font(2); d.setTextColor(ACC, PANEL); d.setTextDatum(top_center);
-        d.drawString(TR5("Tieni GO e parla", "Hold GO & speak", "Manten GO y habla", "Tenez GO et parlez", "Halte GO & sprich"), cx, by + 40);
+        lg::font(2); d.setTextColor(listening_now() ? ACC2 : ACC, PANEL); d.setTextDatum(top_center);
+        d.drawString(listening_now() ? listen_label() : TR5("Tieni GO e parla", "Hold GO & speak", "Manten GO y habla", "Tenez GO et parlez", "Halte GO & sprich"), cx, by + 40);
         char ln[64];
-        lg::font(0); d.setTextColor(FG, PANEL);
-        lg::fit(ln, sizeof ln, s_live ? TR5("Modo ESEGUI: una parola collegata apre la sua app.", "RUN mode: a bound word opens its app.", "Modo EJECUTA: la palabra abre su app.", "Mode EXECUTE : le mot ouvre son app.", "AUSFUEHREN: Wort oeffnet seine App.")
+        lg::font(0); d.setTextColor(s_al == AL_MISS ? ACC2 : FG, PANEL);
+        lg::fit(ln, sizeof ln, s_al == AL_MISS ? miss_label() : s_live ? TR5("Modo ESEGUI: una parola collegata apre la sua app.", "RUN mode: a bound word opens its app.", "Modo EJECUTA: la palabra abre su app.", "Mode EXECUTE : le mot ouvre son app.", "AUSFUEHREN: Wort oeffnet seine App.")
                                       : TR5("Modo prova: riconosce ma NON agisce.", "Test mode: recognizes but does NOT act.", "Modo prueba: reconoce pero NO actua.", "Mode test : reconnait sans agir.", "Testmodus: erkennt, handelt NICHT."), bw - 24);
         d.drawString(ln, cx, by + 76);
         d.setTextColor(MUTED, PANEL);
@@ -906,8 +971,8 @@ static void draw_companion(void)
             d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG); d.drawString(s_m.word, 8, y + 18);
             d.setFont(&fonts::Font0); d.setTextColor(c.col, BG); d.drawString(tier_name(c.tier), 8, y + 44);
         } else {
-            d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(nucleo_voice_is_listening() ? C_DIS : ACC, BG);
-            d.drawString(nucleo_voice_is_listening() ? TR5("Parla ora!", "Speak now!", "Habla ya!", "Parlez !", "Sprich jetzt!") : TR5("Tieni GO e parla", "Hold GO & speak", "Manten GO y habla", "Tenez GO et parlez", "Halte GO & sprich"), 8, y + 20);
+            d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(listening_now() ? C_DIS : ACC, BG);
+            d.drawString(listening_now() ? TR5("Parla ora!", "Speak now!", "Habla ya!", "Parlez !", "Sprich jetzt!") : TR5("Tieni GO e parla", "Hold GO & speak", "Manten GO y habla", "Tenez GO et parlez", "Halte GO & sprich"), 8, y + 20);
         }
         d.setFont(&fonts::Font0); d.setTextColor(s_live ? ACC2 : MUTED, BG); d.drawString(mode_label(), W - 8 - (int)strlen(mode_label()) * 6, y + 2);
         lg::comp_keys(TR5("TIENI GO  E modo  C pulisci", "HOLD GO  E mode  C clear", "MANTEN GO  E modo  C limpia", "TENEZ GO  E mode  C efface", "GO halten  E Modus  C leeren"));

@@ -131,6 +131,7 @@ static TaskHandle_t s_task               = NULL; // NULL=down, PENDING=creating
 static volatile bool s_run               = false;
 static portMUX_TYPE s_life_mux           = portMUX_INITIALIZER_UNLOCKED;
 static int64_t      s_learn_deadline_us  = 0;
+#define VOICE_TASK_STACK 16384   // the engine task's own stack: carved out of the heap BEFORE its buffers
 static void voice_task(void *arg);
 static void voice_recompute(void);
 static void voice_hold_set(uint32_t bit, bool on);
@@ -475,21 +476,27 @@ static void semantic_dispatch(const char *tokens[], int ntok)
         if (i) strncat(sentence, " ", sizeof(sentence) - strlen(sentence) - 1);
         strncat(sentence, tokens[i], sizeof(sentence) - strlen(sentence) - 1);
     }
-    ESP_LOGI(TAG, "Semantic fusion: '%s'", sentence);
+    ESP_LOGW(TAG, "Semantic fusion: '%s'", sentence);
 
     // A trained word bound to an app opens it directly: no ANIMA round trip (and so no 30 KB worker), which is
     // what makes "say the word, the app opens" work on the tight Solo heap. Test mode only reports it.
+    // The whole sentence first (a word trained with a space in its name), then each recognized word on its own: "open
+    // anima" with only "anima" trained, or a stray word the matcher took for "anima", still opens the app.
     char bapp[32];
-    if (nucleo_voice_binding_get(sentence, bapp, sizeof bapp)) {
+    const char *bword = NULL;
+    if (nucleo_voice_binding_get(sentence, bapp, sizeof bapp)) bword = sentence;
+    else for (int i = 0; i < ntok && !bword; i++)
+        if (nucleo_voice_binding_get(tokens[i], bapp, sizeof bapp)) bword = tokens[i];
+    if (bword) {
         bool launched = false;
         if (!s_test_mode) launched = nucleo_app_launch_id(nucleo_app_native_id(bapp));
-        ESP_LOGI(TAG, "Bound word '%s' -> app '%s' (%s)", sentence, bapp,
+        ESP_LOGW(TAG, "Bound word '%s' (sentence '%s') -> app '%s' (%s)", bword, sentence, bapp,
                  s_test_mode ? "test mode, not launched" : launched ? "launched" : "app not found");
         store_result(sentence, ANIMA_ACT_LAUNCH, bapp, true, launched);
         return;
     }
     if (s_bound_only) {   // no TTS and no ANIMA worker here: an unbound sentence does nothing, and says so
-        ESP_LOGI(TAG, "Bound-only: '%s' is not a bound word, ignored", sentence);
+        ESP_LOGW(TAG, "Bound-only: '%s' is not a bound word, ignored", sentence);
         store_result(sentence, ANIMA_ACT_NONE, "", false, false);
         return;
     }
@@ -532,12 +539,12 @@ static void semantic_dispatch(const char *tokens[], int ntok)
     // Test mode: record what WOULD happen and stop — no launch, no TTS, no WS routing.
     if (s_test_mode) {
         store_result(sentence, r.action, disp, true, false);
-        ESP_LOGI(TAG, "→ test mode: '%s' intent='%s' (not executed)", sentence, r.intent);
+        ESP_LOGW(TAG, "→ test mode: '%s' intent='%s' (not executed)", sentence, r.intent);
         return;
     }
 
     int ws_clients = nucleo_ws_client_count();
-    ESP_LOGI(TAG, "Intent='%s' action=%d arg='%s' ws_clients=%d",
+    ESP_LOGW(TAG, "Intent='%s' action=%d arg='%s' ws_clients=%d",
              r.intent, r.action, r.arg, ws_clients);
 
     if (ws_clients > 0) {
@@ -557,7 +564,7 @@ static void semantic_dispatch(const char *tokens[], int ntok)
         if (r.action == ANIMA_ACT_LAUNCH) {
             const char *nat = nucleo_app_native_id(r.arg);   // id registro ("media-player") -> nativo ("music")
             launched = nucleo_app_launch_id(nat);
-            ESP_LOGI(TAG, "→ Local launch '%s' (native '%s'): %s", r.arg, nat, launched ? "ok" : "not found");
+            ESP_LOGW(TAG, "→ Local launch '%s' (native '%s'): %s", r.arg, nat, launched ? "ok" : "not found");
             if (!launched) ESP_LOGW(TAG, "App non trovata");
         } else if (r.action == ANIMA_ACT_SYSTEM || r.action == ANIMA_ACT_ANSWER) {
             ESP_LOGI(TAG, "→ Local result: %.*s", 80, r.reply);
@@ -651,7 +658,7 @@ static void handle_burst(const vdsp_template obs, const char *tokens[], int *nto
     int32_t second = INT32_MAX;
     bool found = false;
     int32_t best = tpl_match_sd(obs, &second, &found);
-    if (!found) return;
+    if (!found) { ESP_LOGW(TAG, "burst: no template found on the card"); return; }
 
     bool ceil_ok   = best <= VOICE_ABS_CEILING;
     bool radius_ok = best <= s_win_radius;
@@ -659,7 +666,7 @@ static void handle_burst(const vdsp_template obs, const char *tokens[], int *nto
                      ((int64_t)best * VOICE_MARGIN_NUM <= (int64_t)second * VOICE_MARGIN_DEN);
 
     if (!ceil_ok || !(radius_ok || margin_ok)) {
-        ESP_LOGD(TAG, "no match (best=%ld second=%ld radius=%ld)",
+        ESP_LOGW(TAG, "no match (best=%ld second=%ld radius=%ld)",
                  (long)best, (long)second, (long)s_win_radius);
         return;
     }
@@ -668,7 +675,7 @@ static void handle_burst(const vdsp_template obs, const char *tokens[], int *nto
         tokens[*ntok] = s_tokbuf[*ntok];
         (*ntok)++;
         live_append(s_win_label);
-        ESP_LOGI(TAG, "match '%s' best=%ld second=%ld radius=%ld",
+        ESP_LOGW(TAG, "match '%s' best=%ld second=%ld radius=%ld",
                  s_win_label, (long)best, (long)second, (long)s_win_radius);
     }
     // Telemetry for on-device threshold/health inspection (web + /api/logs).
@@ -722,6 +729,19 @@ static bool voice_ensure_ready(void)
     return true;
 }
 
+// Can a push-to-talk session start on THIS heap? The same bars the engine task enforces on a PTT press: the
+// arbiter idle, a contiguous block for the accumulator, enough total for the buffers. Asked by the UI loop BEFORE
+// it commits to a voice session, when the engine task may not exist yet: its own 16 KB stack is carved out of the
+// heap first, so the bars are raised by that much (they are the plain bars once the engine is up). False in the
+// full OS (measured: 15 KB largest block, 45 KB free); true in a Solo boot.
+bool nucleo_voice_ptt_possible(void)
+{
+    const size_t up = (s_task && s_task != VOICE_TASK_PENDING) ? 0 : VOICE_TASK_STACK;
+    return !nucleo_arb_busy() &&
+           heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) >= VOICE_PTT_MIN_BLOCK + up &&
+           heap_caps_get_free_size(MALLOC_CAP_INTERNAL) >= VOICE_PTT_MIN_FREE + up;
+}
+
 // ---------------------------------------------------------------------------
 // Voice Task
 // ---------------------------------------------------------------------------
@@ -735,6 +755,7 @@ static void voice_task(void *arg)
     i2s_chan_handle_t rx         = NULL;
     bool              ptt_active = false;
     bool              have_burst = false;
+    int               rms_max    = 0;     // loudest chunk of this PTT: tells a deaf mic from a rejected word
     int               silence_ms = 0;
     int               noise_floor = VAD_NOISE_INIT;   // adaptive VAD, reset per PTT
     const char       *tokens[16];
@@ -802,9 +823,7 @@ static void voice_task(void *arg)
             // heap bars when the RAM was free — letting PTT grab ~24 KB contiguous + ~38 KB total
             // mid-handshake starves it past its own gate. No chime = the "not ready" cue (the
             // chime is the start-talking signal); the user just presses again in a moment.
-            if (nucleo_arb_busy() ||
-                heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < VOICE_PTT_MIN_BLOCK ||
-                heap_caps_get_free_size(MALLOC_CAP_INTERNAL) < VOICE_PTT_MIN_FREE) {
+            if (!nucleo_voice_ptt_possible()) {
                 ESP_LOGW(TAG, "PTT refused: arbiter/heap busy (block %u, free %u)",
                          (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
                          (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
@@ -854,7 +873,8 @@ static void voice_task(void *arg)
                 s_live_sentence[0] = '\0';
                 portEXIT_CRITICAL(&s_live_mux);
                 nucleo_event_publish("voice/state", "{\"listening\":true}");
-                ESP_LOGI(TAG, "PTT start (noise_floor=%d)", noise_floor);
+                rms_max = 0;
+                ESP_LOGW(TAG, "PTT start (noise_floor=%d)", noise_floor);
             } else {
                 ESP_LOGE(TAG, "mic open failed");
                 voice_hold_set(VH_PTT, false);   // don't keep the engine pinned on a failed open
@@ -909,7 +929,7 @@ static void voice_task(void *arg)
             // Guard: if GO was pressed AGAIN while we were recognizing (semantic_dispatch can be
             // slow), keep the hold so the engine survives and serves the new press immediately.
             if (!s_ptt_on) voice_hold_set(VH_PTT, false);
-            ESP_LOGI(TAG, "PTT end, tokens=%d", ntokens);
+            ESP_LOGW(TAG, "PTT end, tokens=%d max_rms=%d", ntokens, rms_max);
             continue;
         }
 
@@ -924,8 +944,10 @@ static void voice_task(void *arg)
             int thr = noise_floor * VAD_MULT;
             if (thr < VAD_RMS_MIN) thr = VAD_RMS_MIN;
             if (thr > VAD_RMS_MAX) thr = VAD_RMS_MAX;
+            if (rms > rms_max) rms_max = rms;
             if (rms >= thr) {
                 silence_ms = 0;
+                if (!have_burst) ESP_LOGW(TAG, "burst start (rms=%d thr=%d)", rms, thr);
                 vdsp_acc_push(s_acc, s_pcm, n);
                 have_burst = true;
             } else {
@@ -969,7 +991,7 @@ static void voice_recompute(void)
     if (need_create) {
         // Pinned to core 1 (real-time audio convention; nucleo_audio's player is there
         // too) so I2S capture + MFCC + DTW stay off core 0's Wi-Fi/lwIP/httpd.
-        if (xTaskCreatePinnedToCore(voice_task, "voice_task", 16384, NULL, 4, NULL, 1) != pdPASS) {
+        if (xTaskCreatePinnedToCore(voice_task, "voice_task", VOICE_TASK_STACK, NULL, 4, NULL, 1) != pdPASS) {
             portENTER_CRITICAL(&s_life_mux); s_task = NULL; portEXIT_CRITICAL(&s_life_mux);
             ESP_LOGE(TAG, "voice task create failed");
         } else {

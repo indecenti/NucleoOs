@@ -32,6 +32,11 @@ void nucleo_voice_request(bool on);
 // longer polls the button itself, so a torch-tap and a talk-hold can never both fire on one press.
 void nucleo_voice_ptt(bool on);
 
+// True when a push-to-talk session can start on this heap right now (the engine's own admission bars, raised by its
+// task stack while the engine is down). The UI loop asks it before blanking the screen for a voice session: when it
+// is false (the full OS), it reboots into the Voice app instead of starting a session that would be refused.
+bool nucleo_voice_ptt_possible(void);
+
 // Exclusive-mode temporary suspend: frees the engine without clearing holders, and
 // restores it on suspend(false) only if a holder is still present.
 void nucleo_voice_suspend(bool suspend);

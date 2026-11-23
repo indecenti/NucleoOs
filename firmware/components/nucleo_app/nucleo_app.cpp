@@ -105,6 +105,17 @@ extern "C" bool nucleo_app_wifi_skip_take(void)
     s_wifi_skip_once = 0;
     return true;
 }
+// "Hold GO in the launcher" on a heap that cannot host the recognizer (the full OS) reboots into the Voice app's
+// Solo boot and asks it to start listening by itself: this one-shot RTC mark rides the warm reboot. Magic-guarded
+// (RTC_NOINIT is garbage on a cold boot), cleared on any non-software reset, and honoured only by the voice app.
+#define SOLO_LISTEN_MAGIC 0x4C535354u   // 'LSST'
+RTC_NOINIT_ATTR static uint32_t s_solo_listen;
+extern "C" bool nucleo_app_solo_listen_take(void)
+{
+    if (!s_solo_active || s_solo_app != SOLO_APPID || strcmp(s_solo_id, "voice") || s_solo_listen != SOLO_LISTEN_MAGIC) return false;
+    s_solo_listen = 0;                      // consumed: a later entry of the app does not listen by itself
+    return true;
+}
 // Did the PREVIOUS boot run the Web Client server-Solo profile? A crash lands in the full OS (see the
 // ESP_RST_SW gate in nucleo_anima_solo_pending), so the reset reason ALONE can't tell whether server-Solo
 // itself failed or the full OS did. Blanket-suppressing server-Solo after ANY crash was the bug: it stranded
@@ -154,7 +165,7 @@ extern "C" bool nucleo_anima_solo_pending(void)
     // Honor the Solo latch ONLY on a clean software reboot (our esp_restart). A COLD boot / brownout leaves
     // RTC_NOINIT as garbage (could match a magic -> spurious Solo), and a PANIC/WDT during Solo would else
     // re-enter Solo -> reboot loop. ESP_RST_SW gates both: a crash lands in the FULL OS, deterministically.
-    if (esp_reset_reason() != ESP_RST_SW) { s_solo_req = 0; return false; }
+    if (esp_reset_reason() != ESP_RST_SW) { s_solo_req = 0; s_solo_listen = 0; return false; }
     if (s_solo_req == ANIMA_SOLO_MAGIC) { s_solo_req = 0; s_solo_active = true; s_solo_app = SOLO_ANIMA; }   // consume once, latch
     else if ((s_solo_req & 0xFFFFFF00u) == SOLO_MAGIC_BASE) { s_solo_app = (int)(s_solo_req & 0xFF); s_solo_req = 0; s_solo_active = true; }
     if (s_solo_active && s_solo_app == SOLO_REMOTE) s_server_solo_mark = SERVER_SOLO_MARK;   // this boot IS server-Solo
@@ -928,6 +939,13 @@ static void open_app_def(const nucleo_app_def_t *def)
 // ALREADY in Solo — the Solo boot's own open of the target must run for real, not reboot again (else loop).
 static bool maybe_solo_launch(int idx)
 {
+    // ANIMA runs on its own Solo profile (a 26 KB task, the radio up): opened from ANOTHER app's Solo boot (the Voice app
+    // listening for a word) it would run on that boot's 8 KB task with no radio, so reboot into ITS Solo instead.
+    if (idx >= 0 && s_solo_active && s_solo_app == SOLO_APPID && !strcmp(s_apps[idx].id, "anima")) {
+        launcher_capture_return();
+        nucleo_anima_solo_request();                       // never returns
+        return true;
+    }
     if (s_solo_active || idx < 0) return false;
     // A store app opens inline, except a NATIVE game: it gets the same fresh-heap Solo boot as a built-in one
     // (main.c syncs the store apps in that boot so launch_id finds it; the id must fit the RTC slot).
@@ -969,6 +987,17 @@ static bool maybe_solo_launch(int idx)
     nucleo_native_trace(a->id, "solo reboot");
     nucleo_app_solo_request_id(a->id);   // never returns (warm reboot into Solo)
     return true;
+}
+// GO held in the launcher on a heap that cannot host the recognizer: reboot into the Voice app's Solo boot (a fresh
+// heap, no radio: ~40 KB contiguous) with the one-shot "listen by yourself" mark. Called when GO is RELEASED, never
+// while it is held: GPIO0 is the chip's boot-mode strapping pin and must be high when the reset happens.
+static void solo_listen_launch(void)
+{
+    nucleo_app_wifi_skip_next_boot();       // the radio would halve the block the recognizer needs
+    s_solo_listen = SOLO_LISTEN_MAGIC;
+    launcher_capture_return();               // the return boot restores the launcher where it was
+    nucleo_native_trace("voice", "solo listen reboot");
+    nucleo_app_solo_request_id("voice");     // never returns
 }
 extern "C" void nucleo_settings_search_preset(const char *q);   // app_wifi.cpp
 extern "C" void nucleo_settings_onboard(void);                  // app_wifi.cpp: next open = first-boot network step
@@ -2048,6 +2077,7 @@ void nucleo_app_run(void)
     gpio_config(&g0cfg);
     int64_t g0_down_ms = 0; int64_t g0_cooldown_ms = 0;
     bool    g0_ptt = false;                    // this press already crossed into a talk-hold (PTT engaged)
+    bool    g0_solo_listen = false;            // this hold could not start a voice session here: on release, reboot into the Voice app
     // (the app PTT handler latched for a GO hold is s_g0_app_ptt, file scope: an app switch can drop it)
     int64_t g0_dark_since = 0;                 // when the PTT low-power blank started (safety-timeout anchor)
 
@@ -2295,13 +2325,28 @@ void nucleo_app_run(void)
                     s_voice_dark = true; g0_dark_since = now;
                     nucleo_ui_set_brightness(0);                   // backlight off; the stored level (s_brightness) is untouched
                     if (!s_app_direct) nucleo_app_release_buffers();
-                    nucleo_voice_ptt(true);                        // engine up + "ready" chime, then it captures
+                    if (!s_solo_active && !nucleo_voice_ptt_possible()) {
+                        // Even with the canvas given back this heap cannot host the recognizer (the full OS keeps ~15 KB
+                        // contiguous, it needs 26 KB + its task stack): starting it would be refused silently. Undo the
+                        // blank and tell the user to release: the Voice app's Solo boot has the room and listens by itself.
+                        s_voice_dark = false;
+                        nucleo_app_set_brightness(s_brightness);
+                        d.fillScreen(BG);
+                        s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true; s_remote_force = true;
+                        g0_solo_listen = true;
+                        snprintf(s_notify_title, sizeof s_notify_title, "%s", "Voice");
+                        snprintf(s_notify_body, sizeof s_notify_body, "%s", TR5("Rilascia GO: avvio l'ascolto", "Release GO: starting to listen", "Suelta GO: empiezo a escuchar", "Relachez GO : j'ecoute", "GO loslassen: Zuhoeren startet"));
+                        s_notify_show = true; s_notify_at = now;
+                    } else {
+                        nucleo_voice_ptt(true);                    // engine up + "ready" chime, then it captures
+                    }
                 }
             }
         } else {                                               // released
             if (g0_down_ms) ESP_LOGW("g0", "up after %d ms ptt=%d cooldown=%d", (int)(now - g0_down_ms), (int)g0_ptt, (int)(now < g0_cooldown_ms));
             if (g0_ptt) {
                 if (s_g0_app_ptt) { s_g0_app_ptt(false); s_g0_app_ptt = nullptr; }  // app PTT (recorder): stop + end cue
+                else if (g0_solo_listen) { g0_solo_listen = false; g0_ptt = false; g0_down_ms = 0; solo_listen_launch(); }   // never returns
                 else            { nucleo_voice_ptt(false); }                  // voice PTT → recognize (screen dark until end beep)
                 g0_ptt = false;
             } else if (g0_down_ms != 0 && now - g0_down_ms >= 30 && now >= g0_cooldown_ms) {

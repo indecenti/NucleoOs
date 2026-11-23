@@ -21,6 +21,19 @@ the recognizer needs a ~26 KB contiguous block on PTT, which the full OS cannot 
 With the second screen the whole app is on the 320x240 panel (touch on the content; the Cardputer is the companion
 and holds GO). `PTT` from the home screen needs the same RAM: it works where the heap allows (Solo ANIMA, always-on).
 
+### GO held in the launcher
+
+The recognizer needs a ~26 KB contiguous block (+ its 16 KB task stack while the engine is down). The full OS cannot give
+it (measured on an ADV: 15 KB largest block, 45 KB free, so a PTT there was refused silently), so a hold of GO (350 ms) in
+the launcher asks `nucleo_voice_ptt_possible()` after giving the canvas back. Where the heap can host it (a Solo boot, an
+always-on engine) the session starts in place as before. Where it cannot, the screen says "release GO" and **on release**
+the device reboots into the Voice app's Solo boot (`solo_listen_launch`, one-shot RTC mark, radio off): the app switches to
+run mode and starts the capture by itself (the engine plays its "ready" chime), ends it ~0.7 s after the first recognized
+word or after 9 s, and a bound word opens its app. The panel stays black while it listens (the chime and the done beep are the
+feedback; the stored brightness is never touched) and comes back when the engine is done, on any key, or after 20 s at most. A word
+opened inside this Solo boot replaces the app (its on_exit restores the backlight first); ANIMA, which has its own Solo profile, reboots into it. Esc returns to the full OS. The reboot happens on release, never while
+GO is held: GO is GPIO0, the chip's boot-mode strapping pin. Expect ~7 s from release to listening (the Solo boot).
+
 ### Word -> app bindings
 
 `/system/voice/bindings.json` = `{"word":"app-id"}`, matched case-insensitively against the recognized sentence
