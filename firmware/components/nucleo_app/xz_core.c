@@ -604,8 +604,12 @@ static void exchange_step(void)
         const int len = l2[0] | l2[1] << 8;
         if (len <= 0 || len > (int)sizeof pkt || fread(pkt, 1, (size_t)len, f) != (size_t)len) break;
         ok = ws_send(2, pkt, len);
+        // Paced at twice real time: servers queue the audio and decode it on another thread (xiaozhi-esp32-server
+        // does), so a burst followed at once by "stop" can find nothing decoded yet. The wait also feeds the watchdog.
+        nucleo_tcp_readable(s_tcp, 30);
     }
     if (f) fclose(f);
+    nucleo_tcp_readable(s_tcp, 1000);                    // and a second for the server to drain before "stop"
     cJSON *st = msg("listen");
     cJSON_AddStringToObject(st, "state", "stop");
     if (!ok || !ws_text(st)) { ws_close(); fail("send failed", 0); return; }
