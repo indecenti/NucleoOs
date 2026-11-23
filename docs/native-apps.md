@@ -128,9 +128,25 @@ XiaoZhi protocol (github.com/78/xiaozhi-esp32): the public service (activation c
 server of one's own by its `ws://` address. Push-to-talk, half duplex, one phase at a time so the heavy parts never
 share the heap: record (PCM to the SD card) -> encode (encoder 24.6 KB + a 16 KB pseudostack) -> exchange (WebSocket;
 TLS for the public service; the answer's Opus packets to the SD card) -> play (decoder 17.9 KB + 8 KB). The module:
-text 181 KB + rodata 37 KB of the 256 KB scratch, 1.9 KB RAM. Identity: a random UUID and a random locally
-administered MAC, kept in secrets, never the radio's own MAC. Host test: `npm run xiaozhi:test` (a whole session
-against `tools/xiaozhi-host/fake_server.py`: activation, a 3 s question, the answer echoed back and played).
+text 185 KB + rodata 38 KB of the 256 KB scratch, 7 KB RAM (the last four turns included). Identity: a random UUID
+and a random locally administered MAC, kept in secrets, never the radio's own MAC. Host tests: `npm run xiaozhi:test`
+(a whole session against `tools/xiaozhi-host/fake_server.py`: activation, a 3 s question, the answer echoed back and
+played at 48 kHz, replay, history) and the gallery (`npm run ui:apps -- --app xiaozhi`, a stand-in core).
+
+Lessons from the ADV (2026-11-23, against a local xiaozhi-esp32-server):
+- **Play at 48 kHz.** The ES8311 has no MCLK wire and clocks right only at 48 kHz: at 16 kHz a 10.3 s answer played
+  in 7.9 s, broken up. The answer is decoded straight at 48 kHz (Opus's own rate, same decoder memory) into a
+  240 ms-deep queue; the app logs "played N ms of audio in M ms" (9480 / 9479 on the ADV).
+- **No canvas.** The 31 KB off-screen canvas held the heap's largest block, which the encoder needs (24.6 KB in one
+  piece): the app releases it and draws straight to both screens, and so never calls `lg::frame` (which takes the
+  canvas back). Without a canvas a full repaint flickers, so only what changed is repainted (the microphone's
+  ring, the status line); a page is repainted whole only when its text changes.
+- **Pace the question.** xiaozhi-esp32-server decodes incoming audio on a queue: frames sent in a burst followed at
+  once by `listen stop` found nothing decoded. The client sends at twice real time and waits a second before stop.
+- **Wait for Wi-Fi.** The Solo boot joins Wi-Fi in the background; the network steps wait for it.
+- Measured turn on the ADV (a 6.8 s question, a 9.5 s answer): heap 73-82 KB free, the 31.7 KB block intact in every
+  phase; 22 s from the release of GO to the first word (encode 3.2 s, connect + send 5.3 s, server 13.5 s with
+  Vosk + Gemini + Edge TTS and the whole answer received first). Streaming would cut most of it (future work).
 
 ### Secrets (level 7)
 
