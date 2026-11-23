@@ -371,13 +371,17 @@ static int compact_top(const struct tm *tm)
 // ==== the Cardputer ALONE: the whole HUD on 240x135 ===============================================================
 // One canvas, one blit per frame (Technique 1), so the beam and the glitch are safe here. The bottom line turns
 // every 5 s through the telemetry, the network and today's next event, so the little screen carries all of it.
-static void clock_frame(void)                        // pure: draws the state, never moves it
+// `direct`: drawn straight on the panel (no canvas) inside a clip rectangle: no beam and no glitch there (they sweep
+// the whole screen), the background is the clip's own black + grid.
+static void clock_frame(bool direct = false)         // pure: draws the state, never moves it
 {
     d.fillRect(0, 0, W, H, 0x0000);
     hud_grid(0, 0, W, H, 8);
-    const int beam = (int)((cl_frame * 2) % (uint32_t)(H + 40)) - 20;   // the slow scan beam
-    d.drawFastHLine(0, beam - 1, W, CK_GRID);
-    d.drawFastHLine(0, beam, W, CK_DIM);
+    if (!direct) {
+        const int beam = (int)((cl_frame * 2) % (uint32_t)(H + 40)) - 20;   // the slow scan beam
+        d.drawFastHLine(0, beam - 1, W, CK_GRID);
+        d.drawFastHLine(0, beam, W, CK_DIM);
+    }
 
     const time_t t = time(NULL);
     const struct tm *tm = localtime(&t);
@@ -396,7 +400,7 @@ static void clock_frame(void)                        // pure: draws the state, n
     d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(CK_TX); d.drawString("SEC", sx + 2, dy + 2);
     d.setTextSize(4); d.setTextColor(CK_MG); d.drawString(sec2, sx, dy + 16);
     hud_scanlines(dx - 4, dy - 2, dw + sw + 16, dh + 4, 3);
-    hud_glitch(dx, dy, 1, dw, dh, hh, mm);
+    if (!direct) hud_glitch(dx, dy, 1, dw, dh, hh, mm);
 
     const int ry = dy + dh + 11, rw = dw + sw + 8;
     hud_ticks(dx, ry, rw, 4, ss);
@@ -436,6 +440,55 @@ static void clock_frame(void)                        // pure: draws the state, n
         d.setTextColor(CK_HI); d.drawString(ev, x + 6, by + 2);
         d.setTextDatum(top_right); d.setTextColor(CK_TX); d.drawString(u, W - 4, by + 2); d.setTextDatum(top_left);
     }
+}
+
+// ---- the same HUD when the canvas is lost (direct draw): repainted by rectangles, never a whole-screen clear -----
+// The canvas is a 32 KB block the OS may not have (a web client, a decoder, a fragmented heap). Clearing and redrawing
+// the whole 240x135 straight on the ST7789 ten times a second was the screensaver's flicker. Here the screen is
+// painted whole once (start, a new minute/day/event, a repaint the OS asks for); after that only the rectangles whose
+// content changed are repainted: the dots (every frame, 40x4 px), the colon, the seconds, the rail, the bottom line.
+static struct { bool ok; unsigned gen; int key, sec, page, dot; bool colon; char sig[96]; } dm;
+
+static void clock_clip_paint(int x, int y, int w, int h)
+{
+    d.setClipRect(x, y, w, h);
+    clock_frame(true);
+    d.clearClipRect();
+}
+
+static void clock_direct(void)
+{
+    const time_t t = time(NULL);
+    const struct tm *tm = localtime(&t);
+    const int key = tm ? (tm->tm_yday * 1440 + tm->tm_hour * 60 + tm->tm_min) : 0, ss = tm ? tm->tm_sec : 0;
+    const bool colon = (cl_frame - cl_sec_frame) < 5;
+    const int pages = cl_has_ev ? 3 : 2, page = (int)((t / 5) % pages);
+    const int dot = (int)(cl_frame % 14u) < 8 ? (int)(cl_frame % 14u) : 14 - (int)(cl_frame % 14u);
+    char sig[96];                                        // what the slow parts show: a change repaints the screen
+    snprintf(sig, sizeof sig, "%d|%d|%s|%s|%d", tm ? tm->tm_yday * 10 + (tm->tm_year + 1900 >= 2024) : -1, cl_has_ev, cl_ev_t, cl_ev_x, cl_bat);
+    const unsigned gen = nucleo_app_repaint_gen();
+
+    d.setFont(&fonts::Font7); d.setTextSize(1);
+    const int dw = d.textWidth("88:88"), dh = 48, sw = 52, rule = 13;
+    const int dx = (W - dw - sw - 8) / 2, dy = rule + 9, sx = dx + dw + 8, xc = dx + d.textWidth("88"), cw = d.textWidth(":");
+    const int ry = dy + dh + 11, rw = dw + sw + 8, by = canvas_h() - 14;
+
+    if (!dm.ok || gen != dm.gen || strcmp(sig, dm.sig)) {
+        clock_clip_paint(0, 0, W, canvas_h());
+        dm.ok = true; dm.gen = gen; dm.key = key; dm.sec = ss; dm.colon = colon; dm.page = page; dm.dot = dot;
+        snprintf(dm.sig, sizeof dm.sig, "%s", sig);
+        return;
+    }
+    if (key != dm.key)   { clock_clip_paint(dx - 3, dy - 2, dw + 6, dh + 4); dm.key = key; }
+    if (colon != dm.colon) { clock_clip_paint(xc - 2, dy - 2, cw + 4, dh + 4); dm.colon = colon; }
+    const bool sec_changed = ss != dm.sec;
+    if (sec_changed) {
+        clock_clip_paint(sx, dy + 14, sw, 36);           // the seconds digits
+        clock_clip_paint(dx - 1, ry - 3, rw + 2, 10);    // the seconds rail
+        dm.sec = ss;
+    }
+    if (sec_changed || page != dm.page) { clock_clip_paint(0, by - 4, W, canvas_h() - (by - 4)); dm.page = page; }
+    if (dot != dm.dot) { clock_clip_paint(126, 4, 40, 4); dm.dot = dot; }
 }
 
 // ==== two screens, the Cardputer: the deck's status (no time, no date: the panel has them) ========================
@@ -674,8 +727,27 @@ static void stars_step(void)
         if (--st[i].z == 0 || !star_at(i, &sx, &sy)) stars_reset(i);
 }
 
+static struct { int16_t x, y; uint8_t sz; } st_prev[NSTARS];   // direct path: what each star last drew
+static bool st_prev_ok = false;
+
 static void stars_frame(void)                        // pure: black sky + the projected stars
 {
+    if (s_vw == W && !nucleo_app_is_buffered()) {    // no canvas: black the old stars' pixels only, never the whole sky
+        if (!st_prev_ok) { d.fillRect(0, 0, s_vw, s_vh, 0x0000); memset(st_prev, 0, sizeof st_prev); st_prev_ok = true; }
+        for (int i = 0; i < NSTARS; i++)
+            if (st_prev[i].sz) { d.fillRect(st_prev[i].x, st_prev[i].y, st_prev[i].sz, st_prev[i].sz, 0x0000); st_prev[i].sz = 0; }
+        int sx, sy;
+        for (int i = 0; i < NSTARS; i++) {
+            if (st[i].z >= ZMAX || !star_at(i, &sx, &sy)) continue;
+            const int bright = ((ZMAX - (int)st[i].z) * 255) / ZMAX;
+            const uint16_t col = (st[i].z <= 6) ? d.color565(bright, bright, 255) : d.color565(bright, bright, bright);
+            const int sz = 1 + (st[i].z <= 4);
+            d.fillRect(sx, sy, sz, sz, col);
+            st_prev[i].x = (int16_t)sx; st_prev[i].y = (int16_t)sy; st_prev[i].sz = (uint8_t)sz;
+        }
+        return;
+    }
+    st_prev_ok = false;
     d.fillRect(0, 0, s_vw, s_vh, 0x0000);
     const int big = s_vw > W ? 1 : 0;                // the panel's stars are a pixel larger
     int sx, sy;
@@ -813,7 +885,7 @@ static void effect_step(void)
 static void effect_draw(void *)
 {
     switch (g_mode) {
-        case MODE_CLOCK: if (s_vw > W) panel_paint(nullptr); else clock_frame(); break;
+        case MODE_CLOCK: if (s_vw > W) panel_paint(nullptr); else if (nucleo_app_is_buffered()) clock_frame(); else clock_direct(); break;
         case MODE_STARS: stars_frame(); break;
         case MODE_FIRE:  fire_frame();  break;
         default:         d.fillRect(0, 0, s_vw, s_vh, 0x0000);   // off: a black panel (the Cardputer's backlight is off)
@@ -843,6 +915,8 @@ static void saver_start(void)
         fire_init();
     }
     pn.ok = false;                                   // the panel's clock: painted whole on its first frame
+    dm.ok = false; st_prev_ok = false;               // the direct-draw paths too
+    if (!big && g_mode != MODE_OFF) nucleo_screen_acquire();   // prefer the canvas: one blit per frame, no tearing
     s_frame_us = esp_timer_get_time();
     nucleo_app_request_draw();  // force the first frame immediately
 }
