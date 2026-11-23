@@ -162,6 +162,7 @@ static portMUX_TYPE s_intro_mux           = portMUX_INITIALIZER_UNLOCKED;
 static volatile nucleo_voice_learn_t s_learn_result = NUCLEO_VOICE_LEARN_NONE;
 static nucleo_voice_match_t  s_last_match  = {0};
 static nucleo_voice_result_t s_last_result = {0};
+static volatile bool s_bound_only         = false;  // run mode on a Solo boot: only bound words act (see nucleo_voice_set_bound_only)
 static volatile bool s_test_mode          = false;  // recognize but don't execute (native "Voce" console)
 
 bool nucleo_voice_is_listening(void) { return s_is_listening; }
@@ -485,6 +486,11 @@ static void semantic_dispatch(const char *tokens[], int ntok)
         ESP_LOGI(TAG, "Bound word '%s' -> app '%s' (%s)", sentence, bapp,
                  s_test_mode ? "test mode, not launched" : launched ? "launched" : "app not found");
         store_result(sentence, ANIMA_ACT_LAUNCH, bapp, true, launched);
+        return;
+    }
+    if (s_bound_only) {   // no TTS and no ANIMA worker here: an unbound sentence does nothing, and says so
+        ESP_LOGI(TAG, "Bound-only: '%s' is not a bound word, ignored", sentence);
+        store_result(sentence, ANIMA_ACT_NONE, "", false, false);
         return;
     }
 
@@ -1089,6 +1095,7 @@ bool nucleo_voice_last_result(nucleo_voice_result_t *out)
 }
 
 void nucleo_voice_set_test_mode(bool on) { s_test_mode = on; }
+void nucleo_voice_set_bound_only(bool on) { s_bound_only = on; }
 bool nucleo_voice_test_mode(void)        { return s_test_mode; }
 
 // Manual on/off pin (Voice app STATUS tab). Sticky until explicitly cleared.

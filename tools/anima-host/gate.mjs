@@ -448,6 +448,11 @@ const gates = [
     // own name, cut to the row, never "OpenAI"/"Groq"), and the source rules: provider kept as written, no Whisper on
     // a custom top level, the OpenAI-compatible wire on the entry's own base.
     ok: (code) => code === 0, summary: (o) => (o.match(/\[custom-teacher\][^\n]*/) || [lastLine(o)])[0] },
+  { name: 'voice-app', cmd: 'node', args: ['tools/voice-host/voice-app-check.mjs'],
+    // The one Voice app (train / bind / test, issue #14): the real word->app bindings code compiled and run (set, get,
+    // case, replace, remove, corrupt / oversize files), the Solo wiring, the dispatch order (bound word, then bound-only,
+    // then ANIMA), and every TR5 string carrying all five device languages.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[voice-app\][^\n]*/) || [lastLine(o)])[0] },
   { name: 'offline-installer', cmd: 'node', args: ['--test', 'tools/anima-host/forge-model-store.test.mjs', 'tools/anima-host/forge-install-flow.test.mjs', 'tools/anima-host/forge-install-integration.test.mjs', 'tools/anima-host/forge-model-url-map.test.mjs', 'tools/anima-host/forge-local-models.test.mjs'],
     // First-class regression guard for the OFFLINE-MODEL INSTALLER (apps/anima/www/forge — the "scarica dal
     // Cardputer → gira offline nel browser" core path). Two suites: the download CONTROLLER's hard invariants

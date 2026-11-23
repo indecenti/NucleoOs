@@ -1,12 +1,17 @@
-# Voice Trainer: template list + detail (MODELLI), the big training card (ADDESTRA), status (INFO).
-# Fictional voice templates on the card so the list and detail card are exercised. TAB cycles the tabs.
-# The capture states (listening / saved / error) need the real engine + GO, so the host shows the idle card.
-@sd system/voice/registratore.tpl offline-template
+# Voice: the commands list + detail card (COMANDI), the app picker (Invio), the big training card (ADDESTRA), the test
+# bench in test and run mode (PROVA) and status (INFO). TAB cycles the tabs.
+# Fictional trained words on the card; voice_stubs.cpp gives the app registry for the picker and binds "anima" to an app.
+# A live match needs the real recognizer + GO, so the host shows the idle bench; the capture states likewise.
+@sd system/voice/anima.tpl offline-template
 @sd system/voice/musica.tpl offline-template
 @sd system/voice/orologio.tpl offline-template
 @sd system/voice/torcia.tpl offline-template
-modelli
-pick      D
+@host voice_stubs.cpp
+comandi
+picker    ENTER
+picker2   ENTER D D
 delconf   c:d
-record    TAB
-status    TAB TAB
+addestra  TAB
+prova     TAB TAB
+prova-run TAB TAB c:e
+info      TAB TAB TAB

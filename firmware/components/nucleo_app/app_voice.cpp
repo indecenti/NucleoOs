@@ -230,6 +230,7 @@ static void set_live(bool on)
 {
     s_live = on;
     nucleo_voice_set_test_mode(!on);   // test mode ON = recognize but DON'T act
+    nucleo_voice_set_bound_only(on);   // run mode: only a bound word acts (no TTS / ANIMA worker in the Solo boot)
     nucleo_app_request_draw();
 }
 
@@ -262,6 +263,7 @@ static void enter(void)
     s_tab = TAB_CMD; s_sel = 0; s_confirm_del = false; s_pick = false;
     s_live = false; clear_bench();
     nucleo_voice_set_test_mode(true);   // recognize but DON'T act until the user switches to run mode (E)
+    nucleo_voice_set_bound_only(false);
     nucleo_voice_request(true);         // hold the lazy engine up while training/testing here
     // Don't replay a stale match/result left over from a previous session.
     nucleo_voice_match_t m;  s_seen_match  = nucleo_voice_last_match(&m)  ? m.seq : 0;
@@ -275,6 +277,7 @@ static void exit_app(void)
     pick_close();
     s_rec_step = RS_IDLE;
     nucleo_voice_set_test_mode(false);   // restore normal dispatch for the rest of the OS
+    nucleo_voice_set_bound_only(false);
     // Release the app hold. The engine frees its 16 KB UNLESS the user explicitly
     // pinned "always listen" (INFO tab) — that opt-in survives leaving the app.
     nucleo_voice_request(false);
@@ -446,7 +449,8 @@ static const char *tl_label(int i, void *) { return (s_t && i >= 0 && i < s_tpl_
 static const char *tl_right(int i, void *)
 {
     if (!s_t || i < 0 || i >= s_tpl_count) return "";
-    return s_t[i].app[0] ? app_label(s_t[i].app) : tier_name(s_t[i].tier);
+    if (s_t[i].app[0]) return app_label(s_t[i].app);
+    return s_t[i].tier ? tier_name(s_t[i].tier) : "";   // untested words stay quiet: no "untested" on every row
 }
 static unsigned short tl_color(int i, void *)
 {
@@ -721,7 +725,7 @@ static void lg_tab_cmds(int yb, int Wd, int Hd)
     lg_mic(px + 24, by + 16, 16, ACC, BG);
     nucleo_touch_add(px + 4, by - 6, 44, 44, NK_CHAR, 'r');
     if (t->app[0]) {
-        lg::button(px + 54, by, pw - 54 - 50, 32, TR5("Scollega", "Unbind", "Desvincular", "Delier", "Loesen"), LINE, FG, NK_CHAR, 'u');
+        lg::button(px + 54, by, pw - 54 - 50, 32, TR5("Togli", "Unbind", "Quitar", "Delier", "Loesen"), LINE, FG, NK_CHAR, 'u');
     }
     nucleo_touch_add(px, py, pw, ph - 48, NK_ENTER, 0);   // the rest of the card: pick the app
     if (s_confirm_del) {                                  // modal: only its own two buttons take taps (first target wins)
@@ -731,7 +735,7 @@ static void lg_tab_cmds(int yb, int Wd, int Hd)
         lg::font(1); d.setTextColor(C_RED, LINE); d.drawString(TR5("Eliminare la parola?", "Delete the word?", "Borrar la palabra?", "Supprimer le mot ?", "Wort loeschen?"), cx + 16, cy + 12);
         lg::font(0); d.setTextColor(FG, LINE); char dn[40]; lg::fit(dn, sizeof dn, s_t[s_sel].name, cw - 32); d.drawString(dn, cx + 16, cy + 40);
         const int bw = (cw - 48) / 2;
-        lg::button(cx + 16, cy + chh - 46, bw, 34, "No", s_del_yes ? LINE : ACC, s_del_yes ? FG : BG, NK_CHAR, 'n');
+        lg::button(cx + 16, cy + chh - 46, bw, 34, TR5("No", "No", "No", "Non", "Nein"), s_del_yes ? LINE : ACC, s_del_yes ? FG : BG, NK_CHAR, 'n');
         lg::button(cx + 32 + bw, cy + chh - 46, bw, 34, TR5("Elimina", "Delete", "Borrar", "Supprimer", "Loeschen"), s_del_yes ? C_RED : LINE, 0xFFFF, NK_CHAR, 'y');
     }
 }
@@ -788,12 +792,15 @@ static void lg_tab_test(int yb, int Wd, int Hd)
     if (!s_have_m) {
         lg::font(2); d.setTextColor(ACC, PANEL); d.setTextDatum(top_center);
         d.drawString(TR5("Tieni GO e parla", "Hold GO & speak", "Manten GO y habla", "Tenez GO et parlez", "Halte GO & sprich"), cx, by + 40);
+        char ln[64];
         lg::font(0); d.setTextColor(FG, PANEL);
-        d.drawString(s_live ? TR5("Modo ESEGUI: una parola collegata apre la sua app.", "RUN mode: a bound word opens its app.", "Modo EJECUTA: la palabra abre su app.", "Mode EXECUTE : le mot ouvre son app.", "AUSFUEHREN: Wort oeffnet seine App.")
-                            : TR5("Modo prova: riconosce ma NON agisce.", "Test mode: recognizes but does NOT act.", "Modo prueba: reconoce pero NO actua.", "Mode test : reconnait sans agir.", "Testmodus: erkennt, handelt NICHT."), cx, by + 76);
+        lg::fit(ln, sizeof ln, s_live ? TR5("Modo ESEGUI: una parola collegata apre la sua app.", "RUN mode: a bound word opens its app.", "Modo EJECUTA: la palabra abre su app.", "Mode EXECUTE : le mot ouvre son app.", "AUSFUEHREN: Wort oeffnet seine App.")
+                                      : TR5("Modo prova: riconosce ma NON agisce.", "Test mode: recognizes but does NOT act.", "Modo prueba: reconoce pero NO actua.", "Mode test : reconnait sans agir.", "Testmodus: erkennt, handelt NICHT."), bw - 24);
+        d.drawString(ln, cx, by + 76);
         d.setTextColor(MUTED, PANEL);
-        d.drawString(s_tpl_count > 0 ? TR5("Pronuncia una parola addestrata.", "Say a trained word.", "Di una palabra entrenada.", "Dites un mot appris.", "Sag ein gelerntes Wort.")
-                                     : TR5("Nessuna parola: vai su Addestra.", "No word: go to Train.", "Sin palabra: ve a Entrenar.", "Aucun mot : Entrainer.", "Kein Wort: gehe zu Lernen."), cx, by + 98);
+        lg::fit(ln, sizeof ln, s_tpl_count > 0 ? TR5("Pronuncia una parola addestrata.", "Say a trained word.", "Di una palabra entrenada.", "Dites un mot appris.", "Sag ein gelerntes Wort.")
+                                               : TR5("Nessuna parola: vai su Addestra.", "No word: go to Train.", "Sin palabra: ve a Entrenar.", "Aucun mot : Entrainer.", "Kein Wort: gehe zu Lernen."), bw - 24);
+        d.drawString(ln, cx, by + 98);
         d.setTextDatum(top_left);
         const int my = by + bh - 30;                    // the mic: pulses while GO is held on the Cardputer
         if (nucleo_voice_is_listening()) {

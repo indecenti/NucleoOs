@@ -111,6 +111,10 @@ bool nucleo_voice_test_mode(void);
 // but the result still reports "launch <app>". set() with an empty app removes the binding.
 bool      nucleo_voice_binding_get(const char *word, char *app, size_t cap);
 esp_err_t nucleo_voice_binding_set(const char *word, const char *app);
+// Bound-only run mode (the Voice app's RUN mode, on a Solo boot that has no TTS and no room for the ANIMA worker):
+// a sentence that is NOT a bound word is recorded as "no command" and nothing else happens: no ANIMA query, no
+// speech, no launch. Off by default; the Voice app sets it with run mode and clears it on exit.
+void      nucleo_voice_set_bound_only(bool on);
 
 #ifdef __cplusplus
 }
