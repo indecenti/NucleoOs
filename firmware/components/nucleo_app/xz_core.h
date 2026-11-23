@@ -32,8 +32,8 @@ typedef enum {
 typedef struct {
     xz_state_t state;
     char status[72];      // one short line: what is happening or what went wrong
-    char user[192];       // what the service heard (stt)
-    char reply[320];      // what it says (tts sentence_start, the last ones)
+    char user[192];       // what the service heard (stt), this turn
+    char reply[768];      // what it says (tts sentence_start, joined), this turn
     char code[16];        // activation code to type on the service's console
     char emotion[16];     // llm emotion ("happy", "thinking"...)
     char server[96];      // the configured server (OTA or ws URL), for the settings line
@@ -44,11 +44,17 @@ typedef struct {
     uint32_t seq;         // bumps on every change, for redraw
 } xz_view_t;
 
+// The turns before this one, oldest first (the UI scrolls through them). Kept in RAM only, for this session.
+#define XZ_HISTORY 4
+typedef struct { char user[192]; char reply[768]; } xz_turn_t;
+int xz_history(const xz_turn_t **turns);           // how many, and the array
+
 void xz_init(const char *dir, const char *lang);   // data folder (config, takes), "en-US"...
 void xz_shutdown(void);                            // closes everything (app exit)
 const xz_view_t *xz_view(void);
 bool xz_poll(void);                                // one bounded step; true when the view changed
 void xz_talk(bool on);                             // push-to-talk: start / stop recording
+bool xz_replay(void);                              // play the last answer again (false: none, or busy)
 bool xz_set_server(const char *url);               // https://.../ota/ (activation) or ws(s)://... (direct)
 void xz_forget(void);                              // drop the saved connection and identity (new activation)
 

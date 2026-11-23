@@ -25,7 +25,11 @@
 extern char *global_stack, *scratch_ptr;
 
 #define RATE         16000
-#define FRAME        960            // 60 ms at 16 kHz: what we send, and what one received frame decodes to
+#define FRAME        960            // 60 ms at 16 kHz: what we record and send
+// The answer is decoded and played at 48 kHz: Opus's own rate (no resampling in the decoder) and the only rate the
+// ADV's ES8311 clocks right without an MCLK wire (at 16 kHz a 10.3 s answer played in 7.9 s: fast and broken up).
+#define OUT_RATE     48000
+#define OUT_FRAME    2880           // 60 ms at 48 kHz; a packet holds at most 120 ms (2 frames)
 #define MAX_REC_MS   15000
 #define ENC_PSEUDO   (16 * 1024)    // measured peak 12.6 KB for a 60 ms VOIP frame at complexity 0
 #define DEC_PSEUDO   (8 * 1024)     // measured peak 5.5 KB
@@ -47,6 +51,10 @@ static long s_total, s_done;                            // encode / play progres
 static int64_t s_t0, s_next_poll;
 static uint8_t *s_ws_buf;                               // WS_MAX + 1, while a WebSocket is open
 static bool s_reply_audio, s_pcm_open, s_answer_done, s_rec_end;
+static xz_turn_t s_hist[XZ_HISTORY];
+static int s_nhist;
+static int64_t s_play_t0;
+static long s_play_samples;
 
 static int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
 static void wdt(void) { esp_task_wdt_reset(); }
@@ -456,6 +464,12 @@ void xz_talk(bool on)
         if (e) { files_close(); fail(e == NUCLEO_MIC_DENIED ? "no microphone permission" : "microphone busy", e); return; }
         s_pcm = (int16_t *)malloc(FRAME * sizeof(int16_t));
         if (!s_pcm) { nucleo_mic_close(); files_close(); fail("no memory", 0); return; }
+        if (V.user[0] || V.reply[0]) {                   // the last turn joins the history
+            if (s_nhist == XZ_HISTORY) { memmove(s_hist, s_hist + 1, sizeof s_hist[0] * (XZ_HISTORY - 1)); s_nhist--; }
+            snprintf(s_hist[s_nhist].user, sizeof s_hist[0].user, "%s", V.user);
+            snprintf(s_hist[s_nhist].reply, sizeof s_hist[0].reply, "%s", V.reply);
+            s_nhist++;
+        }
         V.user[0] = V.reply[0] = V.emotion[0] = 0;
         V.rec_ms = 0; V.level = 0;
         s_t0 = now_ms();
@@ -536,8 +550,7 @@ static void handle_json(const char *txt)
         if (em) snprintf(V.emotion, sizeof V.emotion, "%s", em);
     } else if (!strcmp(type, "tts") && state) {
         if (!strcmp(state, "sentence_start") && text) {  // keep the newest sentences that fit
-            const size_t have = strlen(V.reply), add = strlen(text);
-            if (have + add + 2 >= sizeof V.reply) V.reply[0] = 0;
+            // Joined as they come; a very long answer keeps its beginning (the rest is still spoken).
             if (V.reply[0]) strncat(V.reply, " ", sizeof V.reply - strlen(V.reply) - 1);
             strncat(V.reply, text, sizeof V.reply - strlen(V.reply) - 1);
         } else if (!strcmp(state, "stop")) {
@@ -653,18 +666,19 @@ static void play_step(void)
 {
     if (!s_dec) {
         s_dec = (OpusDecoder *)malloc((size_t)opus_decoder_get_size(1));
-        s_pcm = (int16_t *)malloc(2 * FRAME * sizeof(int16_t));
+        s_pcm = (int16_t *)malloc(2 * OUT_FRAME * sizeof(int16_t));
         if (!s_dec || !s_pcm || !pseudo_take(DEC_PSEUDO)) { codec_free(); fail("no memory to play", (int)V.heap_block); return; }
         pseudo_point();
-        opus_decoder_init(s_dec, RATE, 1);              // whatever rate the server encoded at, decoded to 16 kHz
+        opus_decoder_init(s_dec, OUT_RATE, 1);          // whatever rate the server encoded at
         char p[96]; path(p, sizeof p, "reply.opu");
         s_pkts = fopen(p, "rb");
         struct stat sb; s_total = stat(p, &sb) == 0 ? sb.st_size : 1;
         if (!s_pkts) { codec_free(); fail("SD card", 0); return; }
         // The deepest queue the driver gives (8 x 480 frames = 240 ms): the UI draws between two polls, and a
         // shallow queue ran dry while it did (heard as crackle).
-        if (nucleo_audio_pcm_open_ex(RATE, 1, 3840) != 0) { files_close(); codec_free(); fail("speaker busy", 0); return; }
+        if (nucleo_audio_pcm_open_ex(OUT_RATE, 1, 3840) != 0) { files_close(); codec_free(); fail("speaker busy", 0); return; }
         s_pcm_open = true;
+        s_play_t0 = now_ms(); s_play_samples = 0;
         heap_mark();
     }
     uint8_t pkt[1276];
@@ -677,15 +691,17 @@ static void play_step(void)
             nucleo_audio_pcm_close(); s_pcm_open = false;
             codec_free();
             V.progress = 100;
+            // The check that found the 16 kHz bug: the audio's length against the time it took to play.
+            ESP_LOGW("xiaozhi", "played %ld ms of audio in %ld ms", s_play_samples * 1000 / OUT_RATE, (long)(now_ms() - s_play_t0));
             set_state(XZ_IDLE, "ready");
             return;
         }
         s_done += len + 2;
         pseudo_point();
-        const int n = opus_decode(s_dec, pkt, len, s_pcm, 2 * FRAME, 0);
+        const int n = opus_decode(s_dec, pkt, len, s_pcm, 2 * OUT_FRAME, 0);
         wdt();
         if (!pseudo_intact()) { files_close(); nucleo_audio_pcm_close(); s_pcm_open = false; codec_free(); fail("codec scratch overrun", 0); return; }
-        if (n > 0) nucleo_audio_pcm_write(s_pcm, (size_t)n * sizeof(int16_t));
+        if (n > 0) { nucleo_audio_pcm_write(s_pcm, (size_t)n * sizeof(int16_t)); s_play_samples += n; }
     }
     const int pr = (int)(s_done * 100 / (s_total ? s_total : 1));
     if (pr / 25 != V.progress / 25) V.seq++;             // a redraw every quarter, not every frame: drawing costs audio time
@@ -709,6 +725,19 @@ bool xz_poll(void)
 }
 
 const xz_view_t *xz_view(void) { return &V; }
+
+int xz_history(const xz_turn_t **turns) { if (turns) *turns = s_hist; return s_nhist; }
+
+bool xz_replay(void)
+{
+    if (V.state != XZ_IDLE && V.state != XZ_ERROR) return false;
+    char p[96]; path(p, sizeof p, "reply.opu");
+    struct stat sb;
+    if (stat(p, &sb) != 0 || sb.st_size < 3) return false;
+    s_done = 0; V.progress = 0;
+    set_state(XZ_PLAYING, "speaking");
+    return true;
+}
 
 static void start_from_config(void)
 {

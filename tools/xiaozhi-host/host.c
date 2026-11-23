@@ -95,12 +95,12 @@ void nucleo_mic_close(void) { s_mic_open = 0; }
 void nucleo_mic_close_all(void) { s_mic_open = 0; }
 
 // ---- speaker: a WAV --------------------------------------------------------------------------------------------
-static FILE *s_wav; static long s_wav_bytes; static double s_wav_energy;
+static FILE *s_wav; static long s_wav_bytes; static double s_wav_energy; static int s_wav_rate = 16000;
 esp_err_t nucleo_audio_pcm_open_ex(int rate, int ch, int q)
 {
     (void)q; if (s_mic_open) return ESP_ERR_INVALID_STATE;
     s_wav = fopen("build/xiaozhi-host/reply.wav", "wb");
-    const uint8_t hdr[44] = { 0 }; fwrite(hdr, 1, 44, s_wav); s_wav_bytes = 0; (void)rate; (void)ch;
+    const uint8_t hdr[44] = { 0 }; fwrite(hdr, 1, 44, s_wav); s_wav_bytes = 0; s_wav_energy = 0; s_wav_rate = rate; (void)ch;
     return ESP_OK;
 }
 esp_err_t nucleo_audio_pcm_write(const int16_t *pcm, size_t bytes)
@@ -112,7 +112,7 @@ esp_err_t nucleo_audio_pcm_write(const int16_t *pcm, size_t bytes)
 void nucleo_audio_pcm_close(void)
 {
     if (!s_wav) return;
-    uint8_t h[44]; const uint32_t rate = 16000, br = 32000, ds = (uint32_t)s_wav_bytes, rs = ds + 36;
+    uint8_t h[44]; const uint32_t rate = (uint32_t)s_wav_rate, br = rate * 2, ds = (uint32_t)s_wav_bytes, rs = ds + 36;
     memcpy(h, "RIFF", 4); memcpy(h + 4, &rs, 4); memcpy(h + 8, "WAVEfmt ", 8);
     const uint32_t f16 = 16; const uint16_t pcm1 = 1, ch = 1, ba = 2, bits = 16;
     memcpy(h + 16, &f16, 4); memcpy(h + 20, &pcm1, 2); memcpy(h + 22, &ch, 2); memcpy(h + 24, &rate, 4);
@@ -162,10 +162,18 @@ int main(int argc, char **argv)
     CHECK(strstr(xz_view()->reply, "fake XiaoZhi") != NULL, "tts sentence shown");
     CHECK(!strcmp(xz_view()->emotion, "happy"), "emotion");
     CHECK(run_until(XZ_IDLE, 20000), "answer played, ready again");
-    printf("  reply: %ld bytes of PCM (%.1f s), rms %.0f\n", s_wav_bytes, s_wav_bytes / 32000.0,
+    printf("  reply: %ld bytes of PCM at %d Hz (%.1f s), rms %.0f\n", s_wav_bytes, s_wav_rate, s_wav_bytes / (2.0 * s_wav_rate),
            s_wav_bytes ? sqrt(s_wav_energy / (s_wav_bytes / 2)) : 0);
-    CHECK(s_wav_bytes > 32000 * 2, "the answer is longer than 2 s");
+    CHECK(s_wav_rate == 48000, "the answer plays at 48 kHz (the ES8311's own rate)");
+    CHECK(s_wav_bytes > 2L * s_wav_rate * 2, "the answer is longer than 2 s");
     CHECK(s_wav_bytes ? sqrt(s_wav_energy / (s_wav_bytes / 2)) > 1000 : 0, "the answer is not silence");
+    const long first = s_wav_bytes;
+    CHECK(xz_replay() && xz_view()->state == XZ_PLAYING, "replay: the last answer again");
+    CHECK(run_until(XZ_IDLE, 20000) && s_wav_bytes == first, "replay played the same answer");
+    xz_talk(true); while (xz_view()->rec_ms < 1000) { xz_poll(); } xz_talk(false);
+    { const xz_turn_t *h; const int n = xz_history(&h);
+      CHECK(n == 1 && !strcmp(h[0].user, "hello nucleo") && strstr(h[0].reply, "fake XiaoZhi"), "the first turn moved to the history"); }
+    run_until(XZ_IDLE, 20000);
     // a reload keeps the binding: no activation, straight to the service
     xz_shutdown();
     xz_init("build/xiaozhi-host/xz", "en-US");

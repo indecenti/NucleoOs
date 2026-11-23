@@ -102,7 +102,7 @@ def ws_session(c, hdr):
                 if m.get('state') == 'start':
                     listening = True
                 elif m.get('state') == 'stop':
-                    report['frames_up'] = len(frames)
+                    report['frames_up'] = max(report['frames_up'], len(frames))   # the longest question of the session
                     ws_send(c, 1, json.dumps({'session_id': 's-42', 'type': 'stt', 'text': 'hello nucleo'}).encode())
                     ws_send(c, 1, json.dumps({'session_id': 's-42', 'type': 'llm', 'emotion': 'happy', 'text': ':)'}).encode())
                     ws_send(c, 1, json.dumps({'session_id': 's-42', 'type': 'tts', 'state': 'start'}).encode())

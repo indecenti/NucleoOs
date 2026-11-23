@@ -1,0 +1,10 @@
+# XiaoZhi: ready, listening, a conversation, speaking, waiting, the server choice, the activation code, scrolled up
+@host stubs/xiaozhi_core.cpp
+ready      host:0
+listening  host:1
+talk       host:2
+speaking   host:3
+waiting    host:6
+setup      host:4
+activate   host:5
+scrolled   host:2 U U U
