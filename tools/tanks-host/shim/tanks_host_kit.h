@@ -12,6 +12,7 @@ void nucleo_touch_commit(void) {}
 void nucleo_touch_add(int, int, int, int, int, char) {}
 void nucleo_touch_add_scroll(int, int, int, int, int, int, char, int, char) {}
 void nucleo_touch_add_pad(int, int, int, int, int) {}
+void nucleo_touch_add_slider(int, int, int, int) {}
 namespace lg {
 void font(int) {}
 void fit(char *out, size_t n, const char *s, int) { snprintf(out, n, "%s", s ? s : ""); }

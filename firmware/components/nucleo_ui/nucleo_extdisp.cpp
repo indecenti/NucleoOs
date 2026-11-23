@@ -444,7 +444,7 @@ struct TouchCtx {
     extdisp_frame_t frame;
     char status1[32];
     // Touch targets (nucleo_touch.h): the set being built by the UI task, and the published one.
-    struct Target { int16_t x, y, w, h; int16_t key; char ch; };
+    struct Target { int16_t x, y, w, h; int16_t key; char ch; bool slide; };   // slide: nucleo_touch_add_slider
     Target tgt_build[NUCLEO_TOUCH_MAX], tgt[NUCLEO_TOUCH_MAX];
     uint8_t ntgt_build, ntgt;
     // Scroll areas (nucleo_touch_add_scroll), built and published with the targets.
@@ -650,6 +650,10 @@ void touch_task(void *)
     bool was_down = false, wake_hold = false, solo_seen = false;
     ScrollTrack sc = {};
     bool was_scroll = false;
+    // The control this touch started on (a list row aside): its drag never becomes arrows. A slider follows it.
+    bool on_ctl = false, slide_on = false;
+    TouchCtx::Target slide = {};
+    int slide_x = -1;
     int64_t t_down = 0;
     bool raw_down = false; int raw_up_n = 0, raw_x = -1, raw_y = -1;
     for (;;) {
@@ -777,6 +781,19 @@ void touch_task(void *)
                 ext_unlock();
                 if (sc.on) { sc.last = ay; sc.acc = 0; sc.hn = 0; sc.lastx = ax; sc.accx = 0; }
             }
+            on_ctl = slide_on = false; slide_x = -1;
+            if (to_screen(solo_seen, sx, sy, &ax, &ay)) {
+                ext_lock();
+                for (int t = 0; t < s_tc->ntgt; t++) {
+                    const TouchCtx::Target &r = s_tc->tgt[t];
+                    if (ax < r.x || ax >= r.x + r.w || ay < r.y || ay >= r.y + r.h) continue;
+                    on_ctl = !nucleo_touch_is_row(r.key, r.ch);
+                    if (r.slide) { slide = r; slide_on = true; }
+                    break;
+                }
+                ext_unlock();
+            }
+            if (slide_on) sc.on = false;              // a slider inside a scroll area is still the slider's touch
             if (s_cfg.diag) ESP_LOGW(TAG, "touch DOWN #%d raw x=%d y=%d -> %d,%d", s_presses, rx, ry, sx, sy);
         } else if (!g.down && was_down && s_cfg.diag) {
             ESP_LOGW(TAG, "touch UP after %d ms (moved %d,%d)", (int)((esp_timer_get_time() - t_down) / 1000),
@@ -785,6 +802,17 @@ void touch_task(void *)
         // Only a real contact sample moves the "where the finger is": the release is debounced over a few
         // EMPTY samples (sx, sy = 0 there), and a tap's meaning is read from this position after it lifts.
         if (g.down && on) { s_last_x = sx; s_last_y = sy; }
+        // A slider: the value where the finger is, at the press and at every pixel column it moves to; y stays on the
+        // track's row so a finger drifting off it still drives this slider.
+        int fx, fy;
+        if (slide_on && g.down && on && to_screen(solo_seen, sx, sy, &fx, &fy)) {
+            fx = fx < slide.x ? slide.x : fx >= slide.x + slide.w ? slide.x + slide.w - 1 : fx;
+            if (fx != slide_x) {
+                slide_x = fx;
+                s_tap_x = fx; s_tap_y = slide.y + slide.h / 2;
+                if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ NK_CHAR, (char)NUCLEO_TOUCH_FIELD });
+            }
+        }
         if (sc.on && g.down && on) {                 // the finger moves the content, 1:1 (past the tap slop)
             const int ay = solo_seen ? sy - s_hud_h : (s_tc->frame.fh > 0 ? (sy - s_tc->frame.oy) * 135 / s_tc->frame.fh : sy);
             const int ax = solo_seen ? sx : (s_tc->frame.fw > 0 ? (sx - s_tc->frame.ox) * 240 / s_tc->frame.fw : sx);
@@ -813,6 +841,7 @@ void touch_task(void *)
         was_scroll = sc.on;
         for (int i = 0; i < n; i++) {
             if (s_cfg.diag) ESP_LOGW(TAG, "touch -> %s", ev_name(ev[i]));
+            if (slide_on) continue;                   // the slider had this touch: delivered while it moved
             // A hold on a large screen's row or tile (even inside a scroll area): that screen's menu for it.
             if (solo_seen && ev[i] == EXT_EV_BACK && !g.moved && g.down) {
                 const int ty = s_last_y - s_hud_h;
@@ -832,6 +861,9 @@ void touch_task(void *)
                     continue;
                 }
             }
+            if (on_ctl && (ev[i] == EXT_EV_UP || ev[i] == EXT_EV_DOWN || ev[i] == EXT_EV_LEFT || ev[i] == EXT_EV_RIGHT))
+                continue;                             // a drag that began on a control never moves the selection
+            if (on_ctl && ev[i] == EXT_EV_ENTER && g.moved) continue;   // ...and lifting after it is not a tap
             if (scroll_touch && ev[i] != EXT_EV_ENTER) continue;    // a scroll's drag / hold is not an arrow or Back
             if (scroll_touch && ev[i] == EXT_EV_ENTER && g.moved) continue;
             if (ev[i] == EXT_EV_CALIBRATE) {
@@ -1318,7 +1350,14 @@ extern "C" void nucleo_touch_add_pad(int x, int y, int w, int h, int step)
 extern "C" void nucleo_touch_add(int x, int y, int w, int h, int key, char ch)
 {
     if (!s_tc || s_tc->ntgt_build >= NUCLEO_TOUCH_MAX || w <= 0 || h <= 0) return;
-    s_tc->tgt_build[s_tc->ntgt_build++] = TouchCtx::Target{ (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h, (int16_t)key, ch };
+    s_tc->tgt_build[s_tc->ntgt_build++] = TouchCtx::Target{ (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h, (int16_t)key, ch, false };
+}
+
+extern "C" void nucleo_touch_add_slider(int x, int y, int w, int h)
+{
+    if (!s_tc || s_tc->ntgt_build >= NUCLEO_TOUCH_MAX || w <= 0 || h <= 0) return;
+    s_tc->tgt_build[s_tc->ntgt_build++] = TouchCtx::Target{ (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h,
+                                                            (int16_t)NK_CHAR, (char)NUCLEO_TOUCH_FIELD, true };
 }
 
 extern "C" void nucleo_touch_commit(void)

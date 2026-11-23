@@ -2,7 +2,8 @@
 //
 // While it draws, a screen marks the rectangles that mean something ("this card = key '3'", "this label =
 // UP"). A tap inside one delivers that key; a tap anywhere else stays the generic gesture (Enter), drags
-// stay arrows. Coordinates are the screen's own: 240x135 for a compact screen (mirrored 1:1 or fitted 4/3),
+// stay arrows — except a drag that STARTS on a target: that touch belongs to the control and never moves the
+// selection (no arrows; lifting after a drag is not a tap). Coordinates are the screen's own: 240x135 for a compact screen (mirrored 1:1 or fitted 4/3),
 // the panel's 320x240 for a large one (on_draw_large), where a tap outside every target falls back to the
 // large surface's zones (top = back, sides = left/right, centre = Enter).
 // The run loop brackets every foreground frame with clear/commit, so an app only calls nucleo_touch_add()
@@ -67,6 +68,12 @@ void nucleo_touch_add_pad(int x, int y, int w, int h, int step);
 typedef struct { bool down; short x, y; unsigned int ms; } nucleo_touch_raw_t;
 void nucleo_touch_raw(bool on);
 bool nucleo_touch_raw_read(nucleo_touch_raw_t *ev);
+
+// Sliders: a field (NK_CHAR NUCLEO_TOUCH_FIELD, read with nucleo_touch_last()) that FOLLOWS the finger. A touch that
+// starts inside delivers the field key on the tap and again on every step of a drag, with x where the finger is and
+// y held inside the rect (a finger drifting off the track still drives it). The drag is the slider's alone: never
+// arrows, Back or a scroll.
+void nucleo_touch_add_slider(int x, int y, int w, int h);
 
 #ifdef __cplusplus
 }

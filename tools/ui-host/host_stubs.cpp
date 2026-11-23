@@ -164,4 +164,5 @@ extern "C" void nucleo_touch_add(int, int, int, int, int, char) {}
 extern "C" void nucleo_touch_commit(void) {}
 extern "C" void nucleo_touch_add_scroll(int, int, int, int, int, int, char, int, char) {}
 extern "C" void nucleo_touch_add_pad(int, int, int, int, int) {}
+extern "C" void nucleo_touch_add_slider(int, int, int, int) {}
 extern "C" bool nucleo_kbd_inject(nucleo_key_t) { return true; }   // a tapped row opening itself: no ring on the host

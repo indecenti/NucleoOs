@@ -1832,7 +1832,9 @@ static const int CC_CAP_H = 16;                                // one caption li
 #define CC_TRK_X    (lr_large() ? 16 : 12)                      // slider track in its card
 #define CC_TRK_W    (lr_large() ? 288 : 212)
 #define CC_TRK_H    (lr_large() ? 8 : 6)
-#define CC_TRK_DY   (lr_large() ? 26 : 24)
+// Large: the focused knob (r 9 + 2 px shadow, lifted as r 10 at cy+1) spans card rows 19..39, between the caption
+// band (2..17) and the focus ring (40..41) - lower and every move would bite the ring.
+#define CC_TRK_DY   (lr_large() ? 24 : 24)
 #define CC_CAL_W    76                                          // large: the [Calibra] pill right of the panel's track
 // A slider's track width: on the large panel the second screen's track leaves room for its Calibrate pill.
 static int cc_trk_w(int line) { return (line == CL_XBRIGHT && lr_large() && cc_cal_ok()) ? CC_TRK_W - CC_CAL_W - 10 : CC_TRK_W; }
@@ -2289,12 +2291,13 @@ template <typename T> static void cc_slider(T *g, int k, int oy, bool full)
         ui_glyph(g, glyph, CC_X0 + 10, y + 2 + CC_CAP_H / 2, 6, ink, BG);
     }
     cc_card_caption(g, line, CC_X0 + 22, y + 2, full);
-    if (k == 2 && lr_large() && cc_cal_ok() && full && cc_band_visible(cy - 11, 22)) {   // [Calibra]: the panel's touch
+    if (k == 2 && lr_large() && cc_cal_ok() && full && cc_band_visible(cy - 9, 20)) {   // [Calibra]: the panel's touch
+        // Below the caption band: the percentage repaints that band on every slider step and would eat the pill's top.
         const int px = CC_X0 + CC_XW - 6 - CC_CAL_W;
-        g->fillRoundRect(px, cy - 13, CC_CAL_W, 21, 10, LINE);
+        g->fillRoundRect(px, cy - 9, CC_CAL_W, 20, 10, LINE);
         g->setFont(&fonts::Font2); g->setTextSize(1); g->setTextColor(FG, LINE);
         const char *cl = TR5("Calibra", "Calibrate", "Calibrar", "Calibrer", "Kalibr.");
-        g->setCursor(px + (CC_CAL_W - (int)g->textWidth(cl)) / 2, cy - 11); g->print(cl);
+        g->setCursor(px + (CC_CAL_W - (int)g->textWidth(cl)) / 2, cy - 7); g->print(cl);
         g->setFont(&fonts::Font0);
     }
     if (k == 2 && !cc_xbri_ok()) { s_ccs.sl_glyph[k] = glyph; s_ccs.sl_ink[k] = ink; return; }   // LED on 5 V: no slider
@@ -2392,8 +2395,9 @@ template <typename T> static void cc_paint(T *g, bool full, int vh)
         if (cc_line_on(CL_XBRIGHT) && cc_cal_ok())                             // [Calibra] (before the card's field)
             nucleo_touch_add(CC_X0 + CC_XW - 10 - CC_CAL_W, CC_BODY_Y + cc_card_y(CL_XBRIGHT) - s_cc_scroll, CC_CAL_W + 10,
                              cc_card_h(CL_XBRIGHT), NK_CHAR, '0');
-        for (int line = CL_BRIGHT; line <= CL_VOLUME; line++)                  // sliders: tap where the value goes
-            if (cc_line_on(line)) nucleo_touch_add(CC_X0, CC_BODY_Y + cc_card_y(line) - s_cc_scroll, CC_XW, cc_card_h(line), NK_CHAR, NUCLEO_TOUCH_FIELD);
+        for (int line = CL_BRIGHT; line <= CL_VOLUME; line++)                  // sliders: the value follows the finger
+            if (cc_line_on(line) && (line != CL_XBRIGHT || cc_xbri_ok()))
+                nucleo_touch_add_slider(CC_X0, CC_BODY_Y + cc_card_y(line) - s_cc_scroll, CC_XW, cc_card_h(line));
         oy = CC_BODY_Y + cc_card_y(CL_SHORT) - s_cc_scroll;
         for (int i = 0; i < CC_NSHORT; i++)
             nucleo_touch_add(CC_X0 + i * CC_SHORT_P, oy, CC_SHORT_P, cc_card_h(CL_SHORT), NK_CHAR, (char)('1' + CC_NTILES + i));

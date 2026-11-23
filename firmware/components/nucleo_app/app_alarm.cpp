@@ -1019,7 +1019,7 @@ static void lp_settings(int y0)
     s_sl_w = 0;
     if (k == lg::ROW_SLIDER) {                                       // the picked level: tap its slider (before the rows: it wins)
         s_sl_x = 4 + 9; s_sl_w = LW - 14 - 21; s_sl_y = ry + rh / 2 - 2; s_sl_h = rh / 2 + 2;
-        nucleo_touch_add(0, s_sl_y, LW, s_sl_h, NK_CHAR, NUCLEO_TOUCH_FIELD);
+        nucleo_touch_add_slider(0, s_sl_y, LW, s_sl_h);             // the level follows the finger
     } else if (k == lg::ROW_CYCLE) {                                 // the picked value: tap < = back, > = on
         lg::font(1);
         const int rx = LW - 6 - 4 - 12, tw = d.textWidth(aset_right(s_set_sel)), vc = rx - 12 - tw / 2;
