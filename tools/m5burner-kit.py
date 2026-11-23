@@ -213,17 +213,23 @@ def build_brand_cover(version, dst):
 
 
 # The first line is all most people read in the catalog: lead with what no other Cardputer firmware does.
-DESCRIPTION = """**Turn your Cardputer into a real computer:** a full desktop in your browser, 50+ native apps and games, and an AI assistant that works offline.
+# Only what a user can get today: an app goes in here once it is in the published Store.
+DESCRIPTION = """**Turn your Cardputer into a real computer:** a full desktop in your browser, 50+ native apps and games, an app Store, voice control and an AI assistant that works offline.
 
 Type `nucleo-01.local` in any browser on your Wi-Fi and the Cardputer itself serves you a desktop: files, spreadsheet, paint, terminal, SSH, music and video, 40+ apps. In your hands, a fast launcher with big readable fonts and **ANIMA**, an assistant that answers, calculates, sets timers and opens apps with no cloud at all.
 
 ### Highlights
-- **ANIMA offline assistant** in English and Italian (it can also use a model on your PC or in the cloud)
+- **ANIMA offline assistant** in English and Italian (it can also use a model on your PC or in the cloud: Claude or any OpenAI-compatible service)
+- **App Store on the device**, two channels: native apps and games installed to the SD card without reflashing (Game Boy, Game Gear / Master System and NES emulators, Tanks, Pinball, Brawler, Poker, Remote desktop (VNC), Converter, XiaoZhi...), and web apps for the browser desktop. Every package is signed.
+- **Voice**: hold GO and speak; teach your own voice commands that open apps; **XiaoZhi** voice assistant from the Store (the xiaozhi.me service or your own server)
+- **Second screen on the Cardputer ADV**: an optional 320x240 touch panel on the EXT header (ILI9341 / ST7789V + XPT2046). Apps and the launcher get their own layout with direct touch, and the Cardputer becomes a companion
+- **Games gallery** with box art, favorites and recent games
 - **Web desktop** served by the device: 40+ apps in any browser on your network
-- **50+ native apps and games**: Game Boy and Game Gear emulator, Tanks, Pinball, music and video player, voice recorder, IR remote, Wi-Fi and BLE tools
+- **Languages**: device in English, Italiano, Espanol, Francais and Deutsch; the web desktop also in Simplified Chinese (简体中文)
+- **From your computer**: the `nucleo` command line (`npm install -g @nucleoos/cli`) and NucleoConnect for Windows
+- **Themes** including Cyberdeck, and a HUD clock screensaver
 - **One binary for Cardputer and Cardputer ADV**: the board is detected at boot
-- **5 languages**: EN, IT, ES, FR, DE
-- **Safe A/B updates** with automatic rollback; also runs as a guest under M5Launcher
+- **Safe, signed A/B updates** with automatic rollback; also runs as a guest under M5Launcher
 
 ### Install
 1. Burn this image (same file for Cardputer and Cardputer ADV).
